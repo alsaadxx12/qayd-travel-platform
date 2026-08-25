@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "postinstall": "cd backend && npm install && npx prisma generate",
-    "build": "cd backend && npm run build"
+    "build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
