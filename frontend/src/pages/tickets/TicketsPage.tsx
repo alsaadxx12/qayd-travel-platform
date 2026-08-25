@@ -428,7 +428,11 @@ export const TicketsPage: React.FC = () => {
     if (clearExisting) setTickets([]);
 
     try {
-      const ticketData = await ticketsApi.getFlights();
+      const ticketData = await ticketsApi.getFlights({
+        limit: 150,
+        dateFrom: dateFrom ? new Date(dateFrom.getFullYear(), dateFrom.getMonth(), dateFrom.getDate()).toISOString() : undefined,
+        dateTo: dateTo ? new Date(dateTo.getFullYear(), dateTo.getMonth(), dateTo.getDate(), 23, 59, 59, 999).toISOString() : undefined,
+      });
       const dbTickets = Array.isArray(ticketData) ? ticketData : [];
 
       // Separate Refunds & Flight Tickets
@@ -478,7 +482,7 @@ export const TicketsPage: React.FC = () => {
       isFetchingRef.current = false;
       setTicketsLoading(false);
     }
-  }, [language]);
+  }, [language, dateFrom, dateTo]);
 
   useEffect(() => {
     reloadTicketsFromApi(true);

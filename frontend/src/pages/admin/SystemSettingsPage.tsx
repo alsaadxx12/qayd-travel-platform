@@ -703,7 +703,7 @@ export const SystemSettingsPage: React.FC = () => {
       await savePrintTemplate('payment_methods_mapping', { mappings: paymentMappings }, 'ربط طرق الدفع بالصناديق');
       showSuccessNotification(
         'تم حفظ ربط طرق الدفع',
-        'تم حفظ وتثبيت ربط طرق الدفع بالصناديق والحسابات بنجاح في قاعدة البيانات Supabase'
+        'تم حفظ وتثبيت ربط طرق الدفع بالصناديق والحسابات بنجاح في قاعدة البيانات'
       );
     } catch (err) {
       showErrorNotification('خطأ في الحفظ', 'تعذر حفظ ربط طرق الدفع في قاعدة البيانات');
@@ -3010,7 +3010,7 @@ export const SystemSettingsPage: React.FC = () => {
                   </div>
                   <div className="space-y-0.5">
                     <div className="text-base font-black text-emerald-100 tabular-nums font-mono">
-                      {dbInfo?.tableStats?.length || 58} <span className="text-xs font-bold text-emerald-300">جدول</span>
+                      {dbInfo?.tableStats?.length ?? 0} <span className="text-xs font-bold text-emerald-300">جدول</span>
                     </div>
                     <div className="text-[10px] text-emerald-200 font-medium">
                       هيكل البيانات والكيانات المحاسبية
@@ -3037,12 +3037,12 @@ export const SystemSettingsPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-0.5">
                     <span className="text-[10px] text-slate-500 font-bold">مزود الخدمة والبيئة</span>
-                    <div className="font-bold text-slate-900 text-xs">{dbInfo?.provider || 'Supabase Managed Cloud'}</div>
+                    <div className="font-bold text-slate-900 text-xs">{dbInfo?.provider || '—'}</div>
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-0.5">
                     <span className="text-[10px] text-slate-500 font-bold">عنوان الخادم (Host)</span>
-                    <div className="font-mono font-bold text-slate-900 text-xs truncate" dir="ltr">{dbInfo?.host || 'aws-0-eu-central-1.pooler.supabase.com'}</div>
+                    <div className="font-mono font-bold text-slate-900 text-xs truncate" dir="ltr">{dbInfo?.host || '—'}</div>
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-0.5">

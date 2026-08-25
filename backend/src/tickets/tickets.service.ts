@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { parseListLimit, parseOptionalDate } from '../common/list-query';
 import { IsOptional, IsString, IsBoolean, IsNumber, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
@@ -236,6 +237,94 @@ export class TicketsService {
 
   constructor(private prisma: PrismaService) {}
 
+  private ticketListSelect() {
+    return {
+      id: true,
+      invoiceNumber: true,
+      issueDate: true,
+      travelDate: true,
+      returnDate: true,
+      customerName: true,
+      customerId: true,
+      customerAccountId: true,
+      employeeName: true,
+      entryEmployee: true,
+      modifiedByEmployee: true,
+      cashbox: true,
+      currency: true,
+      exchangeRate: true,
+      paymentType: true,
+      supplierAccount: true,
+      supplierAccountName: true,
+      supplierId: true,
+      supplierAccountId: true,
+      tripType: true,
+      airline: true,
+      airlineId: true,
+      travelClass: true,
+      pnr: true,
+      route: true,
+      discountType: true,
+      discountValue: true,
+      discountAmount: true,
+      totalSell: true,
+      totalBuy: true,
+      netSell: true,
+      netBuy: true,
+      profit: true,
+      notes: true,
+      agentName: true,
+      reference: true,
+      status: true,
+      paymentMethod: true,
+      receivingCashbox: true,
+      cashboxAccountId: true,
+      isAudited: true,
+      auditedBy: true,
+      auditedAt: true,
+      branchId: true,
+      companyId: true,
+      createdAt: true,
+      updatedAt: true,
+      passengers: {
+        select: {
+          id: true,
+          name: true,
+          ticketType: true,
+          ticketNumber: true,
+          documentNumber: true,
+          pnr: true,
+          fareBuy: true,
+          fareSell: true,
+          tax1: true,
+          tax2: true,
+          charge: true,
+          percentage: true,
+          status: true,
+        },
+      },
+      customer: { select: { id: true, nameAr: true, accountId: true } },
+      supplier: { select: { id: true, nameAr: true, accountId: true } },
+      airlineRef: { select: { id: true, code: true, nameAr: true, nameEn: true } },
+      cashboxAccount: { select: { id: true, nameAr: true } },
+      branch: { select: { id: true, nameAr: true } },
+    } satisfies Prisma.TicketSelect;
+  }
+
+  private ticketListWindow(limit?: string, dateFrom?: string, dateTo?: string) {
+    const take = parseListLimit(limit);
+    const from = parseOptionalDate(dateFrom);
+    const to = parseOptionalDate(dateTo);
+    const issueDate =
+      from || to
+        ? {
+            ...(from ? { gte: from } : {}),
+            ...(to ? { lte: to } : {}),
+          }
+        : undefined;
+    return { take, issueDate };
+  }
+
   private async resolveTicketRelations(
     companyId: string,
     dto: Record<string, any>,
@@ -435,8 +524,13 @@ export class TicketsService {
     return { OR: [{ branchId: resolvedBranchId }] };
   }
 
-  async findFlights(companyId: string, branchId?: string) {
-    const cacheKey = `${companyId}:${branchId || 'ALL'}:FLIGHTS`;
+  async findFlights(
+    companyId: string,
+    branchId?: string,
+    listQuery?: { limit?: string; dateFrom?: string; dateTo?: string },
+  ) {
+    const { take, issueDate } = this.ticketListWindow(listQuery?.limit, listQuery?.dateFrom, listQuery?.dateTo);
+    const cacheKey = `${companyId}:${branchId || 'ALL'}:FLIGHTS:${take}:${listQuery?.dateFrom || ''}:${listQuery?.dateTo || ''}`;
     const cached = this.ticketsCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       return cached.data;
@@ -445,6 +539,7 @@ export class TicketsService {
     const branchScope = await this.buildBranchScopeWhere(companyId, branchId);
     const whereClause: Prisma.TicketWhereInput = {
       companyId,
+      ...(issueDate ? { issueDate } : {}),
       AND: [
         ...(branchScope ? [branchScope] : []),
         {
@@ -470,29 +565,31 @@ export class TicketsService {
     const data = await this.prisma.ticket.findMany({
       where: whereClause,
       relationLoadStrategy: 'join',
-      include: {
-        passengers: true,
-        customer: { select: { id: true, code: true, nameAr: true, accountId: true } },
-        supplier: { select: { id: true, code: true, nameAr: true, accountId: true } },
-        airlineRef: { select: { id: true, code: true, nameAr: true, nameEn: true, logo: true } },
-        cashboxAccount: { select: { id: true, code: true, nameAr: true } },
-        branch: { select: { id: true, code: true, nameAr: true } },
-      },
+      select: this.ticketListSelect(),
       orderBy: { createdAt: 'desc' },
+      take,
     });
 
     this.ticketsCache.set(cacheKey, { data, timestamp: Date.now() });
     return data;
   }
 
-  async findAll(companyId: string, branchId?: string) {
-    const cacheKey = `${companyId}:${branchId || 'ALL'}`;
+  async findAll(
+    companyId: string,
+    branchId?: string,
+    listQuery?: { limit?: string; dateFrom?: string; dateTo?: string },
+  ) {
+    const { take, issueDate } = this.ticketListWindow(listQuery?.limit, listQuery?.dateFrom, listQuery?.dateTo);
+    const cacheKey = `${companyId}:${branchId || 'ALL'}:${take}:${listQuery?.dateFrom || ''}:${listQuery?.dateTo || ''}`;
     const cached = this.ticketsCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       return cached.data;
     }
 
-    const whereClause: any = { companyId };
+    const whereClause: Prisma.TicketWhereInput = {
+      companyId,
+      ...(issueDate ? { issueDate } : {}),
+    };
     if (branchId && branchId !== 'ALL') {
       const mainBranch = await this.prisma.branch.findFirst({
         where: { companyId, isMain: true },
@@ -511,23 +608,23 @@ export class TicketsService {
 
     const data = await this.prisma.ticket.findMany({
       where: whereClause,
-      include: {
-        passengers: true,
-        customer: { select: { id: true, code: true, nameAr: true, accountId: true } },
-        supplier: { select: { id: true, code: true, nameAr: true, accountId: true } },
-        airlineRef: { select: { id: true, code: true, nameAr: true, nameEn: true, logo: true } },
-        cashboxAccount: { select: { id: true, code: true, nameAr: true } },
-        branch: { select: { id: true, code: true, nameAr: true } },
-      },
+      relationLoadStrategy: 'join',
+      select: this.ticketListSelect(),
       orderBy: { createdAt: 'desc' },
+      take,
     });
 
     this.ticketsCache.set(cacheKey, { data, timestamp: Date.now() });
     return data;
   }
 
-  async findVisas(companyId: string, branchId?: string) {
-    const cacheKey = `${companyId}:${branchId || 'ALL'}:VISAS`;
+  async findVisas(
+    companyId: string,
+    branchId?: string,
+    listQuery?: { limit?: string; dateFrom?: string; dateTo?: string },
+  ) {
+    const { take, issueDate } = this.ticketListWindow(listQuery?.limit, listQuery?.dateFrom, listQuery?.dateTo);
+    const cacheKey = `${companyId}:${branchId || 'ALL'}:VISAS:${take}:${listQuery?.dateFrom || ''}:${listQuery?.dateTo || ''}`;
     const cached = this.ticketsCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       return cached.data;
@@ -536,6 +633,7 @@ export class TicketsService {
     const branchScope = await this.buildBranchScopeWhere(companyId, branchId);
     const canonicalWhereClause: Prisma.TicketWhereInput = {
       companyId,
+      ...(issueDate ? { issueDate } : {}),
       AND: [
         ...(branchScope ? [branchScope] : []),
         {
@@ -559,67 +657,14 @@ export class TicketsService {
       ],
     };
 
-    const visaListSelect = {
-      id: true,
-      invoiceNumber: true,
-      issueDate: true,
-      travelDate: true,
-      returnDate: true,
-      customerName: true,
-      customerId: true,
-      customerAccountId: true,
-      employeeName: true,
-      entryEmployee: true,
-      modifiedByEmployee: true,
-      cashbox: true,
-      currency: true,
-      exchangeRate: true,
-      paymentType: true,
-      supplierAccount: true,
-      supplierAccountName: true,
-      supplierId: true,
-      supplierAccountId: true,
-      tripType: true,
-      airline: true,
-      airlineId: true,
-      travelClass: true,
-      pnr: true,
-      route: true,
-      discountType: true,
-      discountValue: true,
-      discountAmount: true,
-      totalSell: true,
-      totalBuy: true,
-      netSell: true,
-      netBuy: true,
-      profit: true,
-      notes: true,
-      agentName: true,
-      reference: true,
-      status: true,
-      paymentMethod: true,
-      receivingCashbox: true,
-      cashboxAccountId: true,
-      isAudited: true,
-      auditedBy: true,
-      auditedAt: true,
-      branchId: true,
-      companyId: true,
-      createdAt: true,
-      updatedAt: true,
-      passengers: true,
-      customer: { select: { id: true, code: true, nameAr: true, accountId: true } },
-      supplier: { select: { id: true, code: true, nameAr: true, accountId: true } },
-      airlineRef: { select: { id: true, code: true, nameAr: true, nameEn: true, logo: true } },
-      cashboxAccount: { select: { id: true, code: true, nameAr: true } },
-      branch: { select: { id: true, code: true, nameAr: true } },
-    } satisfies Prisma.TicketSelect;
+    const visaListSelect = this.ticketListSelect();
 
     let data = await this.prisma.ticket.findMany({
       where: canonicalWhereClause,
       relationLoadStrategy: 'join',
       select: visaListSelect,
       orderBy: { createdAt: 'desc' },
+      take,
     });
 
     // Preserve compatibility with databases created before VISA became a canonical trip type.
@@ -627,6 +672,7 @@ export class TicketsService {
       data = await this.prisma.ticket.findMany({
         where: {
           companyId,
+          ...(issueDate ? { issueDate } : {}),
           AND: [
             ...(branchScope ? [branchScope] : []),
             {
@@ -643,6 +689,7 @@ export class TicketsService {
         relationLoadStrategy: 'join',
         select: visaListSelect,
         orderBy: { createdAt: 'desc' },
+        take,
       });
     }
 

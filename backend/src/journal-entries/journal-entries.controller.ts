@@ -18,8 +18,9 @@ export class JournalEntriesController {
     @Query('status') status?: EntryStatus,
     @Query('search') search?: string,
     @Query('accountId') accountId?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.journalEntriesService.findAll(req.user.companyId, status, search, accountId);
+    return this.journalEntriesService.findAll(req.user.companyId, status, search, accountId, limit);
   }
 
   @Get(':id')

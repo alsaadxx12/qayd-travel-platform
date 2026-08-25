@@ -88,15 +88,19 @@ export class SystemService {
 
     // Parse DATABASE_URL safely
     const rawUrl = process.env.DATABASE_URL || '';
-    let host = 'Supabase Cloud (Managed PostgreSQL)';
-    let port = '5432 / 6543';
-    let poolerMode = 'Transaction Pooler (PgBouncer)';
+    let host = 'غير متاح';
+    let port = '—';
+    let poolerMode = 'غير محدد';
+    let provider = 'PostgreSQL';
 
     if (rawUrl) {
       try {
         const parsed = new URL(rawUrl.replace('postgresql://', 'http://'));
         host = parsed.hostname;
         port = parsed.port || '5432';
+        if (host.includes('supabase')) {
+          provider = 'Supabase-hosted PostgreSQL';
+        }
         if (parsed.port === '6543') {
           poolerMode = 'Transaction Pooler (Port 6543)';
         } else if (parsed.port === '5432') {
@@ -112,7 +116,7 @@ export class SystemService {
 
     return {
       status: 'HEALTHY',
-      provider: 'Supabase Managed Cloud PostgreSQL',
+      provider,
       host,
       port,
       poolerMode,

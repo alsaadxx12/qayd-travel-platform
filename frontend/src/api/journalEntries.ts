@@ -27,7 +27,7 @@ export const journalEntriesApi = {
   },
 
   getAll: async (): Promise<any[]> => {
-    return apiRequest('/journal-entries');
+    return apiRequest('/journal-entries?limit=150');
   },
 
   getByAccountId: async (accountId: string): Promise<any[]> => {

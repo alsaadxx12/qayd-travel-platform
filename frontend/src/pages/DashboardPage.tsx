@@ -206,152 +206,7 @@ export const DashboardPage: React.FC = () => {
       setTrendChartData(summary.trendChartData || []);
       setLastSyncTime(new Date().toLocaleTimeString(isAr ? 'ar-IQ' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
     } catch (error) {
-      console.warn('Dashboard summary failed; falling back to local ticket aggregation', error);
-
-      const ticketsResponse = await ticketsApi.getAll();
-      const ticketsList = Array.isArray(ticketsResponse)
-        ? ticketsResponse
-        : (ticketsResponse as any)?.data || [];
-      const now = new Date();
-      const currentActiveBranch = localStorage.getItem('active_branch_id') || localStorage.getItem('activeBranchId') || 'ALL';
-      const effectiveBranch = filters.branch && filters.branch !== 'ALL' ? filters.branch : currentActiveBranch;
-      let filterStartDate: Date | null = null;
-
-      if (filters.datePreset === 'TODAY') filterStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      else if (filters.datePreset === 'WEEK') filterStartDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      else if (filters.datePreset === 'MONTH') filterStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      else if (filters.datePreset === '3MONTHS') filterStartDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-      else if (filters.datePreset === 'YEAR') filterStartDate = new Date(now.getFullYear(), 0, 1);
-      else if (filters.datePreset === 'CUSTOM') filterStartDate = filters.dateFrom;
-
-      const mainBranch = branchesList.find((b) => b.isMain) || branchesList[0];
-      const branchFilteredTickets = ticketsList.filter((t: any) => {
-        if (!effectiveBranch || effectiveBranch === 'ALL') return true;
-        if (t.branchId) return t.branchId === effectiveBranch;
-        return mainBranch ? effectiveBranch === mainBranch.id : true;
-      });
-
-      const filteredTickets = branchFilteredTickets.filter((t: any) => {
-        if (!filterStartDate) return true;
-        const tDate = new Date(t.issueDate || t.createdAt || t.date);
-        if (filters.datePreset === 'CUSTOM' && filters.dateTo) {
-          return tDate >= filterStartDate && tDate <= new Date(filters.dateTo.getTime() + 86400000);
-        }
-        return tDate >= filterStartDate;
-      });
-
-      const opFiltered = filteredTickets.filter((t: any) => {
-        const isRef = t.tripType === 'REFUND' || t.status === 'REFUNDED' || String(t.invoiceNumber || '').startsWith('REF-');
-        if (filters.operationType === 'ALL') return true;
-        if (filters.operationType === 'REFUNDS') return isRef;
-        if (filters.operationType === 'TICKETS') return !isRef && t.tripType !== 'VISA' && t.tripType !== 'HOTEL' && t.tripType !== 'GROUP';
-        if (filters.operationType === 'VISAS') return t.tripType === 'VISA' || String(t.invoiceNumber || '').startsWith('VISA-');
-        if (filters.operationType === 'GROUPS') return t.tripType === 'GROUP';
-        if (filters.operationType === 'HOTELS') return t.tripType === 'HOTEL';
-        return true;
-      });
-
-      let audited = 0;
-      let pending = 0;
-      let unaudited = 0;
-      let regTicketsCount = 0;
-      let regSalesIQD = 0;
-      let regSalesUSD = 0;
-      let regCostIQD = 0;
-      let regCostUSD = 0;
-      let regProfitIQD = 0;
-      let regProfitUSD = 0;
-      let refTicketsCount = 0;
-      let refSalesIQD = 0;
-      let refSalesUSD = 0;
-      let refCostIQD = 0;
-      let refCostUSD = 0;
-      let refProfitIQD = 0;
-      let refProfitUSD = 0;
-
-      opFiltered.forEach((t: any) => {
-        const isUSD = (t.currency || '').toUpperCase().includes('USD') || (t.currency || '').includes('$');
-        const isRef = t.tripType === 'REFUND' || t.status === 'REFUNDED' || String(t.invoiceNumber || '').startsWith('REF-');
-        const sell = Number(t.totalSell || t.totals?.totalSell || 0);
-        const buy = Number(t.totalBuy || t.totals?.totalBuy || 0);
-        const profit = Number(t.profit !== undefined && t.profit !== null ? t.profit : (t.totals?.profit ?? (sell - buy)));
-
-        if (isRef) {
-          refTicketsCount++;
-          if (isUSD) {
-            refSalesUSD += Math.abs(sell);
-            refCostUSD += Math.abs(buy);
-            refProfitUSD += profit;
-          } else {
-            refSalesIQD += Math.abs(sell);
-            refCostIQD += Math.abs(buy);
-            refProfitIQD += profit;
-          }
-        } else {
-          regTicketsCount++;
-          if (isUSD) {
-            regSalesUSD += sell;
-            regCostUSD += buy;
-            regProfitUSD += profit;
-          } else {
-            regSalesIQD += sell;
-            regCostIQD += buy;
-            regProfitIQD += profit;
-          }
-        }
-
-        if (t.isAudited) audited++;
-        else if (t.status === 'UNDER_REVIEW') pending++;
-        else unaudited++;
-      });
-
-      setKpis({
-        salesIQD: regSalesIQD,
-        salesUSD: regSalesUSD,
-        buyCostIQD: regCostIQD,
-        buyCostUSD: regCostUSD,
-        netProfitIQD: regProfitIQD + refProfitIQD,
-        netProfitUSD: regProfitUSD + refProfitUSD,
-        refundsIQD: refSalesIQD,
-        refundsUSD: refSalesUSD,
-        auditedCount: audited,
-        pendingAuditCount: pending,
-        unauditedCount: unaudited,
-        receiptsIQD: 0,
-        receiptsUSD: 0,
-        paymentsIQD: 0,
-        paymentsUSD: 0,
-      });
-
-      setServicesData({
-        tickets: { count: regTicketsCount, salesIQD: regSalesIQD, salesUSD: regSalesUSD, costIQD: regCostIQD, costUSD: regCostUSD, profitIQD: regProfitIQD, profitUSD: regProfitUSD },
-        refunds: { count: refTicketsCount, salesIQD: refSalesIQD, salesUSD: refSalesUSD, costIQD: refCostIQD, costUSD: refCostUSD, profitIQD: refProfitIQD, profitUSD: refProfitUSD },
-        groups: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-        visas: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-        hotels: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-      });
-
-      const daysCount = filters.datePreset === 'TODAY' ? 1 : filters.datePreset === 'WEEK' ? 7 : filters.datePreset === '3MONTHS' ? 90 : filters.datePreset === 'YEAR' ? 365 : 30;
-      const trendPoints: Array<{ date: string; sales: number; purchases: number; profit: number }> = [];
-
-      for (let i = Math.min(daysCount, 30); i >= 0; i--) {
-        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-        const dayTickets = filteredTickets.filter((t: any) => {
-          const td = new Date(t.createdAt || t.date);
-          return td.getDate() === d.getDate() && td.getMonth() === d.getMonth() && td.getFullYear() === d.getFullYear();
-        });
-        const daySales = dayTickets.reduce((acc: number, t: any) => acc + (filters.currency === 'USD' ? (t.currency?.includes('USD') ? Number(t.totalSell || 0) : 0) : Number(t.totalSell || 0)), 0);
-        const dayPurchases = dayTickets.reduce((acc: number, t: any) => acc + (filters.currency === 'USD' ? (t.currency?.includes('USD') ? Number(t.totalBuy || 0) : 0) : Number(t.totalBuy || 0)), 0);
-        trendPoints.push({
-          date: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`,
-          sales: daySales,
-          purchases: dayPurchases,
-          profit: daySales - dayPurchases,
-        });
-      }
-
-      setTrendChartData(trendPoints);
-      setLastSyncTime(new Date().toLocaleTimeString(isAr ? 'ar-IQ' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
+      console.warn('Dashboard summary failed', error);
     } finally {
       setLoading(false);
     }
@@ -369,12 +224,12 @@ export const DashboardPage: React.FC = () => {
       debit: Number(v.amount || v.total || 0),
       credit: 0,
       currency: v.currency || 'IQD',
-      employee: v.createdByName || 'علي جعفر',
+      employee: v.createdBy?.name || v.createdByName || '—',
       status: isAr ? (v.isPosted ? 'مرحّل' : 'مسودة') : (v.isPosted ? 'Posted' : 'Draft'),
       path: '/vouchers',
     }));
     setRecentOperations(ops);
-  }, [filters, isAr, branchesList]);
+  }, [filters, isAr]);
 
   const fetchExchangeChartData = useCallback(async () => {
     try {

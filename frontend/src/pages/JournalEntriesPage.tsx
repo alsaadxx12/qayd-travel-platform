@@ -117,8 +117,8 @@ export const JournalEntriesPage: React.FC = () => {
     try {
       const noCacheOpt = forceRefresh ? { noCache: true } : {};
       const [data, accounts] = await Promise.all([
-        apiRequest('/api/journal-entries', noCacheOpt),
-        apiRequest('/api/accounts', noCacheOpt).catch(() => []),
+        apiRequest('/api/journal-entries?limit=150', noCacheOpt),
+        apiRequest('/api/accounts?lite=1', noCacheOpt).catch(() => []),
       ]);
 
       // Build accounts map for lookups

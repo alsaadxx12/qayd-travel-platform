@@ -1,7 +1,7 @@
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL ||
-  'https://qayd-api-r04m.onrender.com/api';
+  (import.meta.env.DEV ? '/api' : 'https://qayd-api-r04m.onrender.com/api');
 
 interface CacheEntry {
   data: any;
@@ -88,7 +88,7 @@ export async function apiRequest<T = any>(
     const {
       noCache: _noCache,
       ttl: _ttl,
-      timeoutMs = 12000,
+      timeoutMs = 8000,
       skipBranchContext: _skipBranchContext,
       ...requestOptions
     } = options;

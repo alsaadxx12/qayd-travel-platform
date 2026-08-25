@@ -21,6 +21,7 @@ import {
   IconAlertTriangle,
 } from '@tabler/icons-react';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
+import { API_BASE_URL } from '../../api/client';
 
 export interface ParsedPassenger {
   name: string;
@@ -129,7 +130,7 @@ export const SmartTicketImportModal: React.FC<SmartTicketImportModalProps> = ({
       formData.append('textContent', text);
 
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/smart-parser/parse-ticket', {
+      const res = await fetch(`${API_BASE_URL}/smart-parser/parse-ticket`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,

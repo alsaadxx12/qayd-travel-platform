@@ -114,15 +114,24 @@ export interface TicketDashboardSummary {
   trendChartData: Array<{ date: string; sales: number; purchases: number; profit: number }>;
 }
 
+function ticketListQuery(params?: { limit?: number; dateFrom?: string; dateTo?: string }): string {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params?.dateTo) query.set('dateTo', params.dateTo);
+  const qs = query.toString();
+  return qs ? `?${qs}` : '';
+}
+
 export const ticketsApi = {
-  getAll: (): Promise<TicketData[]> =>
-    apiRequest('/tickets'),
+  getAll: (params?: { limit?: number; dateFrom?: string; dateTo?: string }): Promise<TicketData[]> =>
+    apiRequest(`/tickets${ticketListQuery(params)}`),
 
-  getFlights: (): Promise<TicketData[]> =>
-    apiRequest('/tickets/flights'),
+  getFlights: (params?: { limit?: number; dateFrom?: string; dateTo?: string }): Promise<TicketData[]> =>
+    apiRequest(`/tickets/flights${ticketListQuery(params)}`),
 
-  getVisas: (): Promise<TicketData[]> =>
-    apiRequest('/tickets/visas'),
+  getVisas: (params?: { limit?: number; dateFrom?: string; dateTo?: string }): Promise<TicketData[]> =>
+    apiRequest(`/tickets/visas${ticketListQuery(params)}`),
 
   getOne: (id: string): Promise<TicketData> =>
     apiRequest(`/tickets/${id}`),

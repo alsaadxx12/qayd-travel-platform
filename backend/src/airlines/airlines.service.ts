@@ -52,7 +52,7 @@ export class AirlinesService {
     }
 
     try {
-      const supabaseUrl = process.env.SUPABASE_URL || 'https://mgsgslrjbbjwkhhmdype.supabase.co';
+      const supabaseUrl = process.env.SUPABASE_URL;
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
       const bucketName = process.env.SUPABASE_BUCKET || 'ata';
 

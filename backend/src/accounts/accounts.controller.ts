@@ -24,8 +24,15 @@ export class AccountsController {
     @Query('type') type?: AccountType,
     @Query('category') category?: AccountCategory,
     @Query('includeTrend') includeTrend?: string,
+    @Query('lite') lite?: string,
   ) {
-    return this.accountsService.findAll(req.user.companyId, type, category, includeTrend === 'true');
+    return this.accountsService.findAll(
+      req.user.companyId,
+      type,
+      category,
+      includeTrend === 'true',
+      lite === '1' || lite === 'true',
+    );
   }
 
   @Get(':id')

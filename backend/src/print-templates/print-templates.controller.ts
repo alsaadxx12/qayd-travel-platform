@@ -11,7 +11,7 @@ export class PrintTemplatesController {
   constructor(private readonly printTemplatesService: PrintTemplatesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'جلب كافة قوالب الطباعة المحفوظة للشركة من قاعدة البيانات Supabase' })
+  @ApiOperation({ summary: 'جلب كافة قوالب الطباعة المحفوظة للشركة عبر واجهة الخادم' })
   async getAllTemplates(@Req() req: any) {
     return this.printTemplatesService.getAllTemplates(req.user.companyId);
   }
@@ -23,13 +23,13 @@ export class PrintTemplatesController {
   }
 
   @Get(':docType')
-  @ApiOperation({ summary: 'جلب التصميم المعتمد الفعال لمستند معين من Supabase' })
+  @ApiOperation({ summary: 'جلب التصميم المعتمد الفعال لمستند معين' })
   async getTemplate(@Param('docType') docType: string, @Req() req: any) {
     return this.printTemplatesService.getTemplate(req.user.companyId, docType);
   }
 
   @Post()
-  @ApiOperation({ summary: 'حفظ وحفظ تصميم مخصص جديد باسم محدد في Supabase' })
+  @ApiOperation({ summary: 'حفظ تصميم مخصص جديد باسم محدد' })
   async createTemplate(@Body() body: any, @Req() req: any) {
     return this.printTemplatesService.createTemplate(
       req.user.companyId,
@@ -41,7 +41,7 @@ export class PrintTemplatesController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'تحديث تصميم مخصص موجود في Supabase' })
+  @ApiOperation({ summary: 'تحديث تصميم مخصص موجود' })
   async updateTemplate(@Param('id') id: string, @Body() body: any, @Req() req: any) {
     return this.printTemplatesService.updateTemplate(
       req.user.companyId,
@@ -59,13 +59,13 @@ export class PrintTemplatesController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'حذف تصميم محفوظ من Supabase' })
+  @ApiOperation({ summary: 'حذف تصميم محفوظ' })
   async deleteTemplate(@Param('id') id: string, @Req() req: any) {
     return this.printTemplatesService.deleteTemplate(req.user.companyId, id);
   }
 
   @Post(':docType')
-  @ApiOperation({ summary: 'حفظ وتحديث القالب المعتمد الحالي في Supabase (توافق سابق)' })
+  @ApiOperation({ summary: 'حفظ وتحديث القالب المعتمد الحالي (توافق سابق)' })
   async saveTemplate(@Param('docType') docType: string, @Body() body: any, @Req() req: any) {
     return this.printTemplatesService.saveTemplate(req.user.companyId, docType, body.config || body, body.name);
   }

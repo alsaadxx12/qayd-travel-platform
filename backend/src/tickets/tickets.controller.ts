@@ -12,9 +12,12 @@ export class TicketsController {
     @Req() req: any,
     @Query('branchId') queryBranchId?: string,
     @Headers('x-branch-id') headerBranchId?: string,
+    @Query('limit') limit?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
   ) {
     const branchId = queryBranchId || headerBranchId;
-    return this.ticketsService.findAll(req.user.companyId, branchId);
+    return this.ticketsService.findAll(req.user.companyId, branchId, { limit, dateFrom, dateTo });
   }
 
   @Get('flights')
@@ -22,9 +25,12 @@ export class TicketsController {
     @Req() req: any,
     @Query('branchId') queryBranchId?: string,
     @Headers('x-branch-id') headerBranchId?: string,
+    @Query('limit') limit?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
   ) {
     const branchId = queryBranchId || headerBranchId;
-    return this.ticketsService.findFlights(req.user.companyId, branchId);
+    return this.ticketsService.findFlights(req.user.companyId, branchId, { limit, dateFrom, dateTo });
   }
 
   @Get('stats')
@@ -59,9 +65,12 @@ export class TicketsController {
     @Req() req: any,
     @Query('branchId') queryBranchId?: string,
     @Headers('x-branch-id') headerBranchId?: string,
+    @Query('limit') limit?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
   ) {
     const branchId = queryBranchId || headerBranchId;
-    return this.ticketsService.findVisas(req.user.companyId, branchId);
+    return this.ticketsService.findVisas(req.user.companyId, branchId, { limit, dateFrom, dateTo });
   }
 
   @Get(':id')

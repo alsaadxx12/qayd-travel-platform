@@ -225,7 +225,7 @@ export const VisasPage: React.FC = () => {
     try {
       setLoading(true);
       setLoadError(null);
-      const data = await ticketsApi.getVisas();
+      const data = await ticketsApi.getVisas({ limit: 150 });
       const isVisaRecord = (ticket: any) =>
           ticket.tripType === 'VISA' ||
           ticket.invoiceNumber?.startsWith('VISA-') ||

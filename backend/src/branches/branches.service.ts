@@ -333,8 +333,11 @@ export class BranchesService {
   }
 
   async uploadBranchLogo(fileName: string, fileBase64: string): Promise<{ url: string }> {
-    const supabaseUrl = process.env.SUPABASE_URL || 'https://mgsgslrjbbjwkhhmdype.supabase.co';
+    const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+    if (!supabaseUrl || !supabaseKey) {
+      throw new BadRequestException('تخزين الشعارات غير مُعد. عيّن SUPABASE_URL ومفتاح التخزين في الخادم.');
+    }
 
     const cleanBase64 = fileBase64.replace(/^data:image\/\w+;base64,/, '');
     const buffer = Buffer.from(cleanBase64, 'base64');

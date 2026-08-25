@@ -422,8 +422,8 @@ export class AccountsService {
       this.prisma.account.findMany({
         where: { companyId },
         include: {
-          customer: true,
-          supplier: true,
+          customer: { select: { id: true, nameAr: true } },
+          supplier: { select: { id: true, nameAr: true } },
         },
         orderBy: { code: 'asc' },
       }),
@@ -667,14 +667,42 @@ export class AccountsService {
     return tree;
   }
 
-  async findAll(companyId: string, type?: AccountType, category?: AccountCategory, includeTrend = false) {
-    const cacheKey = `${companyId}:${type || ''}:${category || ''}:${includeTrend}`;
+  async findAll(
+    companyId: string,
+    type?: AccountType,
+    category?: AccountCategory,
+    includeTrend = false,
+    lite = false,
+  ) {
+    const cacheKey = `${companyId}:${type || ''}:${category || ''}:${includeTrend}:${lite ? 'lite' : 'full'}`;
     const cached = this.flatCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       return cached.data;
     }
 
     await this.ensureDefaultAccounts(companyId);
+
+    if (lite) {
+      const liteAccounts = await this.prisma.account.findMany({
+        where: {
+          companyId,
+          ...(type ? { type } : {}),
+          ...(category ? { category } : {}),
+        },
+        select: {
+          id: true,
+          code: true,
+          nameAr: true,
+          nameEn: true,
+          type: true,
+          category: true,
+          parentId: true,
+        },
+        orderBy: { code: 'asc' },
+      });
+      this.flatCache.set(cacheKey, { data: liteAccounts, timestamp: Date.now() });
+      return liteAccounts;
+    }
 
     const [accounts, journalLines, openingEntries] = await Promise.all([
       this.prisma.account.findMany({

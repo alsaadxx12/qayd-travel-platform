@@ -1287,7 +1287,7 @@ export const PrintTemplatesPage: React.FC = () => {
       await savePrintTemplate(activeDoc, currentConfig);
       localStorage.setItem('print_templates_config_v17', JSON.stringify(configs));
       showSuccessNotification(
-        'تم الحفظ في قاعدة البيانات Supabase 🗄️',
+        'تم الحفظ في قاعدة البيانات 🗄️',
         `تم حفظ ستايل وتصميم (${getDocTypeLabel(activeDoc)}) في القاعدة مباشرة بنجاح.`
       );
     } catch (e: any) {
@@ -1791,7 +1791,7 @@ export const PrintTemplatesPage: React.FC = () => {
         {/* Real Account Picker from Supabase DB (if statement active) */}
         {activeDoc === 'statement' && dbAccounts.length > 0 && (
           <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-            <span className="text-xs font-bold text-slate-700">اختر حساب حقيقي من Supabase:</span>
+            <span className="text-xs font-bold text-slate-700">اختر حساباً حقيقياً من الدليل:</span>
             <Select
               size="xs"
               className="w-64"
@@ -3191,9 +3191,9 @@ export const PrintTemplatesPage: React.FC = () => {
                         style={{ fontSize: `${fontSizes.summaryTitle || 13}px` }}
                       >
                         <IconCalculator size={18} className="text-emerald-600" />
-                        {isPreviewEn ? 'Financial Summary & Statement Closing (Live Supabase Data)' : 'الملخص المالي والختام الإجمالي للكشف (بيانات Supabase الحية)'}
+                        {isPreviewEn ? 'Financial Summary & Statement Closing (Live Data)' : 'الملخص المالي والختام الإجمالي للكشف (بيانات حية)'}
                       </span>
-                      <Badge color="emerald" size="sm" variant="filled">{isPreviewEn ? 'Linked to Supabase' : 'مربوط بـ Supabase'}</Badge>
+                      <Badge color="emerald" size="sm" variant="filled">{isPreviewEn ? 'Linked to database' : 'مربوط بقاعدة البيانات'}</Badge>
                     </div>
 
                     {/* Summary Grid or Banner depending on summaryStyle */}

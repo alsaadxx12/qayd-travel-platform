@@ -68,7 +68,23 @@ All business data displayed or modified by the application must come from the re
 * Use server-side pagination, filtering, sorting, and aggregation for large datasets.
 * Dashboard statistics must be calculated in NestJS from real Prisma queries, SQL, views, or existing aggregation endpoints — not from hardcoded frontend numbers and not from Supabase RPC invented for this project.
 
-This architecture correction is **agent guidance**. It does **not** by itself make API responses faster. Faster fetching is a separate performance task (indexes, pagination, query shape, caching TTL, connection pooling). Do not “speed up” reads by skipping NestJS.
+---
+
+## 4.1 Performance SLO — Pages And Lists Must Feel Instant (≤ 2 seconds)
+
+Target: first meaningful data on list/dashboard screens in **2 seconds or less** after the request starts (local NestJS on port 4000, Vite proxy `/api` → `localhost:4000`). Do **not** “speed up” by calling Supabase from the browser.
+
+### Known causes of delay in this codebase (fix these; do not invent a second data path)
+
+1. **Wrong API host in local dev.** `frontend/src/api/client.ts` must use same-origin `/api` in `import.meta.env.DEV` so Vite proxies to NestJS. Sending the SPA to Render while developing adds cold-start delays of tens of seconds.
+2. **Unpaged `findMany`.** Tickets, visas, journal entries, and vouchers must not dump the entire table. Default list `take` 150 (max 300) plus date/branch filters on the server. The UI paginates; the API must too.
+3. **Fat list payloads.** Never send `transferImage`, airline `logo`, or other Base64 blobs on list endpoints. Load them on the detail/editor request only.
+4. **Loading all journal lines to paint a dropdown.** Account pickers use `GET /accounts?lite=1` (names/ids only). Full balances belong on `/accounts/tree` or account profile.
+5. **Dashboard aggregating every ticket in the browser.** Use `/tickets/dashboard-summary`. On summary failure, show an error/retry — do not fall back to `GET /tickets`.
+6. **Refetch storms.** TanStack Query: `staleTime` ~30s, `retry: 0` for reads, no refetch on window focus. Deduplicate in-flight GETs (already in `apiRequest`).
+7. **Render/free-tier cold start** in production can exceed 2s on the first hit. That is hosting, not a reason to bypass NestJS.
+
+When adding a list page: server-side `limit` + filters, slim `select`, skeleton in under 2s, then fill. Detail endpoints may take longer.
 
 ---
 

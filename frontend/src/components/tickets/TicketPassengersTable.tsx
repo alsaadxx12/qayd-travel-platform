@@ -34,6 +34,7 @@ import { showSuccessNotification, showInfoNotification, showErrorNotification } 
 import { formatCurrency, getCurrencySymbol, getCurrencyLabel, parseCurrencyInput } from '../../utils/currencyUtils';
 import { extractTextFromPdf } from '../../utils/pdfTextExtractor';
 import { useLanguageStore } from '../../store/useLanguageStore';
+import { API_BASE_URL } from '../../api/client';
 
 export interface PassengerLine {
   id: string;
@@ -191,7 +192,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
       formData.append('textContent', textContent);
 
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/smart-parser/parse-ticket', {
+      const res = await fetch(`${API_BASE_URL}/smart-parser/parse-ticket`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,

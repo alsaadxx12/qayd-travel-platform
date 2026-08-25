@@ -116,7 +116,7 @@ export class PrintTemplatesService {
       docType: template.docType,
       name: template.name,
       isDefault: template.isDefault,
-      message: 'تم حفظ التصميم الجديد بنجاح في قاعدة البيانات Supabase',
+      message: 'تم حفظ التصميم الجديد بنجاح في قاعدة البيانات',
     };
   }
 
@@ -153,7 +153,7 @@ export class PrintTemplatesService {
       name: updated.name,
       docType: updated.docType,
       isDefault: updated.isDefault,
-      message: 'تم تحديث التصميم بنجاح في قاعدة البيانات Supabase',
+      message: 'تم تحديث التصميم بنجاح في قاعدة البيانات',
     };
   }
 

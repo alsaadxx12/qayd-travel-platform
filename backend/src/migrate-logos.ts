@@ -5,8 +5,11 @@ const prisma = new PrismaClient();
 async function migrateLogos() {
   console.log('🔄 Starting migration of existing Base64/SVG text logos to Supabase Bucket "ata"...');
 
-  const supabaseUrl = process.env.SUPABASE_URL || 'https://mgsgslrjbbjwkhhmdype.supabase.co';
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1nc2dzbHJqYmJqd2toaG1keXBlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTc3NTUyNCwiZXhwIjoyMTAxMzUxNTI0fQ.4_ecB84KM3dMVWzSYF-XPN9LmFTA6tY0Ne4mAeAm8Go';
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running logo migration.');
+  }
   const bucketName = 'ata';
 
   const airlines = await prisma.airline.findMany({

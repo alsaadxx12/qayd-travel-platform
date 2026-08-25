@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EntryStatus, Prisma } from '@prisma/client';
+import { parseListLimit } from '../common/list-query';
 import { IsNotEmpty, IsString, IsArray, ValidateNested, IsNumber, IsOptional, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -66,7 +67,8 @@ export class CreateJournalEntryDto {
 export class JournalEntriesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(companyId: string, status?: EntryStatus, search?: string, accountId?: string) {
+  async findAll(companyId: string, status?: EntryStatus, search?: string, accountId?: string, limit?: string) {
+    const take = parseListLimit(limit, 150, 300);
     return this.prisma.journalEntry.findMany({
       where: {
         companyId,
@@ -93,11 +95,12 @@ export class JournalEntriesService {
         postedBy: { select: { id: true, name: true } },
         lines: {
           include: {
-            account: { select: { id: true, code: true, nameAr: true, type: true } },
+            account: { select: { id: true, nameAr: true, type: true } },
           },
         },
       },
       orderBy: { createdAt: 'desc' },
+      take,
     });
   }
 

@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
     const databaseUrl = process.env.DATABASE_URL;
-    const connectionLimit = process.env.PRISMA_CONNECTION_LIMIT || '5';
+    const connectionLimit = process.env.PRISMA_CONNECTION_LIMIT || '10';
     const poolTimeout = process.env.PRISMA_POOL_TIMEOUT || '20';
     const separator = databaseUrl?.includes('?') ? '&' : '?';
     const boundedDatabaseUrl = databaseUrl && !databaseUrl.includes('connection_limit=')
