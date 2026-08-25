@@ -4,7 +4,6 @@
   "assets": {
     "directory": "./frontend/dist",
     "binding": "ASSETS",
-    "html_handling": "single-page-application",
     "not_found_handling": "single-page-application"
   }
 }
