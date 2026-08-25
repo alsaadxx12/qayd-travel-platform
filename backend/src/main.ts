@@ -11,10 +11,11 @@ async function bootstrap() {
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ limit: '50mb', extended: true }));
 
-  // Enable CORS for Frontend React app
+  // Enable CORS for Frontend React app (Dynamic Origin Reflection for credentials support)
   app.enableCors({
-    origin: '*',
+    origin: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Authorization,x-branch-id,X-Requested-With,Accept,Origin',
     credentials: true,
   });
 
