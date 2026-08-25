@@ -1,7 +1,7 @@
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL ||
-  'https://qayd-travel-platform-hkr2-tau.vercel.app/api';
+  'https://qayd-api-r04m.onrender.com/api';
 
 interface CacheEntry {
   data: any;
