@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Button, Badge, Loader, Group, SegmentedControl, TextInput, Textarea, Switch } from '@mantine/core';
 import { IconPrinter, IconFileText, IconCalculator, IconLanguage, IconFileTypePdf, IconDownload, IconBrandWhatsapp, IconMail, IconX, IconSend, IconPaperclip, IconCheck, IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { apiRequest, API_BASE_URL } from '../../api/client';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
