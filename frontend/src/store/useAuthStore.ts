@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+import { API_BASE_URL } from '../api/client';
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -124,7 +126,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { token, user } = get();
     if (!token || !user) return;
     try {
-      const response = await fetch('http://localhost:4000/api/auth/me', {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) return;

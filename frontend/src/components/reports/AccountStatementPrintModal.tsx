@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Button, Badge, Loader, Group, SegmentedControl, TextInput, Textarea, Switch } from '@mantine/core';
 import { IconPrinter, IconFileText, IconCalculator, IconLanguage, IconFileTypePdf, IconDownload, IconBrandWhatsapp, IconMail, IconX, IconSend, IconPaperclip, IconCheck, IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
 import { fetchPrintTemplate } from '../../api/printTemplates';
-import { apiRequest } from '../../api/client';
+import { apiRequest, API_BASE_URL } from '../../api/client';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 
@@ -856,7 +856,7 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
 
       const filename = `statement_${accountCode || 'report'}_${new Date().toISOString().split('T')[0]}.pdf`;
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:4000/api/pdf/generate', {
+      const response = await fetch(`${API_BASE_URL}/pdf/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1097,7 +1097,7 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
         }) || [],
       }));
 
-      const res = await fetch('http://localhost:4000/api/pdf/statement', {
+      const res = await fetch(`${API_BASE_URL}/pdf/statement`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1188,7 +1188,7 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
           }) || [],
         }));
 
-        const res = await fetch('http://localhost:4000/api/pdf/statement', {
+        const res = await fetch(`${API_BASE_URL}/pdf/statement`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
