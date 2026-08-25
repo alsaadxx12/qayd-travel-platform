@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Badge, Loader, Group, SegmentedControl, TextInput, Textarea, Switch } from '@mantine/core';
 import { IconPrinter, IconFileText, IconCalculator, IconLanguage, IconFileTypePdf, IconDownload, IconBrandWhatsapp, IconMail, IconX, IconSend, IconPaperclip, IconCheck, IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { apiRequest, API_BASE_URL } from '../../api/client';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
@@ -1075,12 +1077,50 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
       });
   }, [opened]);
 
-  const handleDirectDownloadPdf = async () => {
+  const exportDirectPdfFile = async () => {
+    const printableElement = document.getElementById('printable-statement-sheet');
+    if (!printableElement) throw new Error('NO_ELEMENT');
+
+    const canvas = await html2canvas(printableElement, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    const imgWidth = 210;
+    const pageHeight = 297;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    const filename = `كشف_حساب_${accountCode || accountName}_${new Date().toISOString().split('T')[0]}.pdf`;
+    pdf.save(filename);
+    showSuccessNotification('تم التحميل', 'تم تصدير وحفظ كشف الحساب بصيغة PDF مباشرة');
+    onClose();
+  };
+
+  const handleDownloadPdfDirect = async () => {
     setDownloading(true);
     try {
       const token = localStorage.getItem('token');
-
-      // Prepare rows for backend template
       const templateRows = rows.map(r => ({
         ...r,
         passengers: r.passengersDetail?.map(p => {
@@ -1097,138 +1137,62 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
         }) || [],
       }));
 
-      const res = await fetch(`${API_BASE_URL}/pdf/statement`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          accountName,
-          accountCode,
-          accountPhone,
-          accountEmail,
-          accountAddress,
-          startDate,
-          endDate,
-          rows: templateRows,
-          totals,
-          lang,
-          settings: {
-            ...config,
-            templatePreset: config.templatePreset || 'classic',
-            companyNameAr: config.companyName || config.companyNameAr,
-            companyNameEn: config.companyNameEn || config.companyName,
-            subtitleAr: config.subtitle || config.subtitleAr,
-            subtitleEn: config.subtitleEn || config.subtitle,
-            addressAr: config.address || config.addressAr,
-            addressEn: config.addressEn || config.address,
-            footerTextAr: config.footerText || config.footerTextAr,
-            footerTextEn: config.footerTextEn || config.footerText,
+      try {
+        const res = await fetch(`${API_BASE_URL}/pdf/statement`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-        }),
-      });
+          body: JSON.stringify({
+            accountName,
+            accountCode,
+            accountPhone,
+            accountEmail,
+            accountAddress,
+            startDate,
+            endDate,
+            rows: templateRows,
+            totals,
+            lang,
+            settings: {
+              ...config,
+              templatePreset: config.templatePreset || 'classic',
+              companyNameAr: config.companyName || config.companyNameAr,
+              companyNameEn: config.companyNameEn || config.companyName,
+              subtitleAr: config.subtitle || config.subtitleAr,
+              subtitleEn: config.subtitleEn || config.subtitle,
+              addressAr: config.address || config.addressAr,
+              addressEn: config.addressEn || config.address,
+              footerTextAr: config.footerText || config.footerTextAr,
+              footerTextEn: config.footerTextEn || config.footerText,
+            },
+          }),
+        });
 
-      if (!res.ok) {
-        // High-res client-side print fallback
-        const printableElement = document.getElementById('printable-statement-sheet');
-        if (printableElement) {
-          const printWindow = window.open('', '_blank', 'width=950,height=1100');
-          if (printWindow) {
-            printWindow.document.write(`
-              <!DOCTYPE html>
-              <html lang="${lang}" dir="${lang === 'ar' ? 'rtl' : 'ltr'}">
-                <head>
-                  <meta charset="UTF-8">
-                  <title>كشف_حساب_${accountCode || accountName}</title>
-                  <link rel="preconnect" href="https://fonts.googleapis.com">
-                  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-                  <script src="https://cdn.tailwindcss.com"></script>
-                  <style>
-                    @media print {
-                      @page { size: A4 portrait; margin: 6mm; }
-                      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                    }
-                    body { font-family: 'IBM Plex Sans Arabic', 'Tajawal', sans-serif; background: #fff; margin: 0; padding: 8px; }
-                  </style>
-                </head>
-                <body>
-                  ${printableElement.outerHTML}
-                  <script>
-                    window.onload = () => {
-                      setTimeout(() => {
-                        window.print();
-                      }, 400);
-                    };
-                  </script>
-                </body>
-              </html>
-            `);
-            printWindow.document.close();
-            showSuccessNotification('نافذة الطباعة / الحفظ', 'تم فتح نموذج الكشف للطباعة أو الحفظ المباشر كـ PDF');
-            onClose();
-            return;
-          }
-        }
-        throw new Error('PDF Generation failed');
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const filename = `كشف_حساب_${accountCode || accountName}_${new Date().toISOString().split('T')[0]}.pdf`;
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      showSuccessNotification('تم التحميل', 'تم تصدير كشف الحساب بصيغة PDF بنجاح');
-      onClose();
-    } catch (e) {
-      console.error(e);
-      // Even if fetch threw an error, trigger print fallback immediately
-      const printableElement = document.getElementById('printable-statement-sheet');
-      if (printableElement) {
-        const printWindow = window.open('', '_blank', 'width=950,height=1100');
-        if (printWindow) {
-          printWindow.document.write(`
-            <!DOCTYPE html>
-            <html lang="${lang}" dir="${lang === 'ar' ? 'rtl' : 'ltr'}">
-              <head>
-                <meta charset="UTF-8">
-                <title>كشف_حساب_${accountCode || accountName}</title>
-                <link rel="preconnect" href="https://fonts.googleapis.com">
-                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-                <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
-                <script src="https://cdn.tailwindcss.com"></script>
-                <style>
-                  @media print {
-                    @page { size: A4 portrait; margin: 6mm; }
-                    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                  }
-                  body { font-family: 'IBM Plex Sans Arabic', 'Tajawal', sans-serif; background: #fff; margin: 0; padding: 8px; }
-                </style>
-              </head>
-              <body>
-                ${printableElement.outerHTML}
-                <script>
-                  window.onload = () => {
-                    setTimeout(() => {
-                      window.print();
-                    }, 400);
-                  };
-                </script>
-              </body>
-            </html>
-          `);
-          printWindow.document.close();
-          showSuccessNotification('نافذة الطباعة / الحفظ', 'تم فتح نموذج الكشف للطباعة أو الحفظ المباشر كـ PDF');
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const filename = `كشف_حساب_${accountCode || accountName}_${new Date().toISOString().split('T')[0]}.pdf`;
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          showSuccessNotification('تم التحميل', 'تم تصدير كشف الحساب بصيغة PDF بنجاح');
           onClose();
           return;
         }
+      } catch (err) {
+        console.warn('Backend PDF endpoint error, using direct client-side PDF download:', err);
       }
+
+      // Direct client-side high-resolution PDF download (Direct file save, zero print dialogs!)
+      await exportDirectPdfFile();
+    } catch (e) {
+      console.error(e);
       showErrorNotification('خطأ في التصدير', 'تعذر تصدير ملف PDF، يرجى المحاولة لاحقاً');
     } finally {
       setDownloading(false);
@@ -1560,7 +1524,7 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
             {/* Primary Action Button: Direct PDF Download */}
             <button
               type="button"
-              onClick={handleDirectDownloadPdf}
+              onClick={handleDownloadPdfDirect}
               disabled={downloading}
               className="w-full h-12 rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-extrabold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer hover:shadow-lg active:scale-98 disabled:opacity-50"
             >
