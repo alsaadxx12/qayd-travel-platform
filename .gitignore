@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+node_modules/
+dist/
+build/
+frontend_backup/
+.system_generated/
+*.log
+

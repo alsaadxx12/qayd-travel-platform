@@ -1,0 +1,1819 @@
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
+import { apiRequest } from '../api/client';
+import { useWorkspaceStore } from '../store/useWorkspaceStore';
+import { AccountingGrid, AccountingColumnDef } from '../components/common/AccountingGrid';
+import { AccountingDateRangePicker } from '../components/common/date/AccountingDateRangePicker';
+import { AnimatedNumber } from '../components/common/AnimatedNumber';
+import { DebtAmountTraceModal } from '../components/reports/DebtAmountTraceModal';
+import { Paper, TextInput, Button, Badge, Switch, Modal, Radio, Group, Stack, Divider, Progress, Textarea, Menu } from '@mantine/core';
+import {
+  IconSearch,
+  IconFileText,
+  IconFileSpreadsheet,
+  IconUser,
+  IconPrinter,
+  IconMail,
+  IconDotsVertical,
+  IconChevronDown,
+  IconRoute,
+} from '@tabler/icons-react';
+import * as XLSX from 'xlsx';
+import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
+
+interface AccountDebtRow {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn?: string;
+  category?: string;
+  type: string;
+  debitUSD: number;
+  creditUSD: number;
+  endingBalanceUSD: number;
+  debitIQD: number;
+  creditIQD: number;
+  endingBalanceIQD: number;
+  totalDebit: number;
+  totalCredit: number;
+  endingBalance: number;
+  debtType: 'receivable' | 'payable' | 'zero';
+  debtLabel: string;
+  accountCurrency: 'USD' | 'IQD';
+}
+
+// Global in-memory cache for instant zero-latency loading (< 20ms)
+let globalAccountsCache: any[] | null = null;
+let globalEntriesCache: any[] | null = null;
+let globalTicketsCache: any[] | null = null;
+
+export const DebtsReportPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { openTab } = useWorkspaceStore();
+
+  const [accountsData, setAccountsData] = useState<any[]>(() => globalAccountsCache || []);
+  const [entriesData, setEntriesData] = useState<any[]>(() => globalEntriesCache || []);
+  const [ticketsData, setTicketsData] = useState<any[]>(() => globalTicketsCache || []);
+  const [loading, setLoading] = useState<boolean>(() => !globalAccountsCache);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Filter buttons mode: 'receivables' (ديون لنا) | 'payables' (ديون علينا) | 'all' (الكل)
+  const [filterMode, setFilterMode] = useState<'receivables' | 'payables' | 'all'>('all');
+  const [hideZeroBalances, setHideZeroBalances] = useState(true);
+
+  // Page-level Currency display switches (default: both ON)
+  const [pageShowUSD, setPageShowUSD] = useState(true);
+  const [pageShowIQD, setPageShowIQD] = useState(true);
+
+  // ── State for Bulk Batch Statement Export Modal ──
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [batchTarget, setBatchTarget] = useState<'ALL' | 'RECEIVABLES' | 'PAYABLES' | 'CUSTOM'>('ALL');
+  const [customSelectedAccIds, setCustomSelectedAccIds] = useState<string[]>([]);
+  const [includeOpening, setIncludeOpening] = useState(true);
+  const [includePrevious, setIncludePrevious] = useState(true);
+  const [hideZeroMovements, setHideZeroMovements] = useState(true);
+  const [skipZeroBalanceAccounts, setSkipZeroBalanceAccounts] = useState(true);
+  const [includeUSD, setIncludeUSD] = useState(true);
+  const [includeIQD, setIncludeIQD] = useState(true);
+  
+  const [batchStartDate, setBatchStartDate] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [batchEndDate, setBatchEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportStatusText, setExportStatusText] = useState('');
+
+  // ── State for Email Statement Modal ──
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [selectedEmailAccountIds, setSelectedEmailAccountIds] = useState<string[]>([]);
+  const [emailRecipient, setEmailRecipient] = useState('');
+  const [emailSubject, setEmailSubject] = useState('كشف حساب تفصيلي — نظام المحاسبة والذمم');
+  const [emailBody, setEmailBody] = useState('مرحباً، تجدون برفقه كشف الحساب التفصيلي للذمم المالية للفترة المحددة.');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  const [customersData, setCustomersData] = useState<any[]>([]);
+  const [debtContextMenu, setDebtContextMenu] = useState<{
+    x: number;
+    y: number;
+    row: AccountDebtRow;
+  } | null>(null);
+  const [traceAccount, setTraceAccount] = useState<AccountDebtRow | null>(null);
+  const [isTraceModalOpen, setIsTraceModalOpen] = useState(false);
+
+  // 1. Instant Real-Time Data Fetching (Zero Stale-Cache Delay)
+  const fetchDebtsData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [accs, entries, tickets, custs] = await Promise.all([
+        apiRequest('/api/accounts').catch(() => []),
+        apiRequest('/api/journal-entries').catch(() => []),
+        apiRequest('/api/tickets').catch(() => []),
+        apiRequest('/api/partners/customers').catch(() => []),
+      ]);
+
+      const validAccs = Array.isArray(accs) ? accs : [];
+      const validEntries = Array.isArray(entries) ? entries : [];
+      const validTickets = Array.isArray(tickets) ? tickets : [];
+      const validCusts = Array.isArray(custs) ? custs : [];
+
+      setAccountsData(validAccs);
+      setEntriesData(validEntries);
+      setTicketsData(validTickets);
+      setCustomersData(validCusts);
+    } catch (err) {
+      console.error('Error loading fresh debts data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDebtsData();
+  }, [fetchDebtsData]);
+
+  useEffect(() => {
+    if (!debtContextMenu) return;
+    const closeMenu = () => setDebtContextMenu(null);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenu();
+    };
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [debtContextMenu]);
+
+  // 2. Compute Debts & Balances per Account from Real Database Data
+  const debtRows = useMemo<AccountDebtRow[]>(() => {
+    if (!accountsData || accountsData.length === 0) return [];
+
+    const balanceMap: Record<
+      string,
+      { debitUSD: number; creditUSD: number; debitIQD: number; creditIQD: number }
+    > = {};
+    const accById: Record<string, any> = {};
+    const accByName: Record<string, any> = {};
+
+    accountsData.forEach((acc: any) => {
+      accById[acc.id] = acc;
+      if (acc.nameAr) accByName[acc.nameAr.trim().toLowerCase()] = acc;
+
+      const isOpeningCredit = (acc.openingNature || '').toString().toUpperCase() === 'CREDIT';
+      const openIQD = Number(acc.openingAmountIQD ?? acc.openingBalance ?? acc.initialBalance ?? 0);
+      const openUSD = Number(acc.openingAmountUSD ?? 0);
+
+      balanceMap[acc.id] = {
+        debitUSD: !isOpeningCredit && openUSD > 0 ? openUSD : 0,
+        creditUSD: isOpeningCredit && openUSD > 0 ? openUSD : 0,
+        debitIQD: !isOpeningCredit && openIQD > 0 ? openIQD : 0,
+        creditIQD: isOpeningCredit && openIQD > 0 ? openIQD : 0,
+      };
+    });
+
+    const processedVoucherNumbers = new Set<string>();
+
+    // 2.1 Process Journal Entries (O(1) instant lookup)
+    entriesData.forEach(entry => {
+      const entryStatus = String(entry.status || 'POSTED').toUpperCase();
+      if (entryStatus !== 'POSTED') return;
+      if (entry.reference && entry.reference.startsWith('OPENING-')) {
+        return; // Handled via Account opening balance to prevent duplication
+      }
+
+      const entryCurr = (entry.currency || '').toString().toUpperCase();
+      if (Array.isArray(entry.lines)) {
+        entry.lines.forEach((line: any) => {
+          const accId = line.accountId;
+          if (!accId) return;
+
+          const processedKeys = [
+            entry.reference,
+            entry.voucherNumber,
+            entry.entryNumber,
+          ].filter(Boolean);
+          processedKeys.forEach((key: string) => processedVoucherNumbers.add(key.toLowerCase()));
+
+          const lineCurr = (line.currency || entryCurr || 'IQD').toString().toUpperCase();
+          const isUSD = lineCurr.includes('USD') || lineCurr.includes('$');
+
+          if (!balanceMap[accId]) {
+            balanceMap[accId] = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
+          }
+
+          if (isUSD) {
+            balanceMap[accId].debitUSD += Number(line.debit || 0);
+            balanceMap[accId].creditUSD += Number(line.credit || 0);
+          } else {
+            balanceMap[accId].debitIQD += Number(line.debit || 0);
+            balanceMap[accId].creditIQD += Number(line.credit || 0);
+          }
+        });
+      }
+    });
+
+    // 2.2 Process tickets only when no posted journal entry already exists for the invoice
+    ticketsData.forEach((t: any) => {
+      const ticketStatus = (t.status || 'POSTED').toString().toUpperCase();
+      if (!['POSTED', 'REFUNDED'].includes(ticketStatus)) return;
+
+      const invNum = (t.invoiceNumber || t.id || '').toLowerCase();
+      if (invNum && processedVoucherNumbers.has(invNum)) return;
+
+      const rawCurr = (t.currency || t.currencyType || t.sellCurrency || 'IQD').toString().toUpperCase();
+      const isUSD = rawCurr.includes('USD') || rawCurr.includes('$');
+
+      const paymentType = (t.paymentType || '').toString().toUpperCase();
+      const isCash =
+        t.paymentMethod === 'CASH_HAND' ||
+        paymentType === 'DEBIT' ||
+        paymentType === 'CASH' ||
+        t.paymentType === 'نقدي';
+      const totalSell = Number(t.netSell || t.totalSell || 0);
+      const totalBuy = Number(t.netBuy || t.totalBuy || 0);
+
+      // A) Customer Account
+      if (t.customerName || t.customerAccountId || t.customerId) {
+        const custNameClean = (t.customerName || '').trim().toLowerCase();
+        let matchedAcc = accById[t.customerAccountId] || accById[t.customerId] || accByName[custNameClean];
+        if (!matchedAcc) {
+          const foundCust = (customersData || []).find((c: any) => c.id === t.customerName || c.code === t.customerName || c.nameAr === t.customerName);
+          if (foundCust) {
+            matchedAcc = accById[foundCust.accountId] || (foundCust.nameAr ? accByName[foundCust.nameAr.trim().toLowerCase()] : null);
+          }
+        }
+        if (matchedAcc) {
+          if (!balanceMap[matchedAcc.id]) {
+            balanceMap[matchedAcc.id] = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
+          }
+          const customerDebit = Math.max(totalSell, 0);
+          const customerCredit = Math.max(-totalSell, 0);
+          if (isUSD) {
+            balanceMap[matchedAcc.id].debitUSD += customerDebit;
+            balanceMap[matchedAcc.id].creditUSD += customerCredit;
+            if (isCash && totalSell > 0) balanceMap[matchedAcc.id].creditUSD += totalSell;
+          } else {
+            balanceMap[matchedAcc.id].debitIQD += customerDebit;
+            balanceMap[matchedAcc.id].creditIQD += customerCredit;
+            if (isCash && totalSell > 0) balanceMap[matchedAcc.id].creditIQD += totalSell;
+          }
+        }
+      }
+
+      // B) Cashbox / Master / Receiving Account (when ticket is cash)
+      if (isCash) {
+        const cbTarget = (t.paymentMethod && t.paymentMethod.trim() && t.paymentMethod.trim() !== 'CASH_HAND')
+          ? t.paymentMethod.trim()
+          : (t.receivingCashbox && t.receivingCashbox.trim())
+          ? t.receivingCashbox.trim()
+          : (t.cashbox && t.cashbox.trim())
+          ? t.cashbox.trim()
+          : null;
+        if (cbTarget) {
+          const cbClean = cbTarget.trim().toLowerCase();
+          const matchedAcc = accById[cbTarget] || accByName[cbClean] || accountsData.find((a: any) => a.id === cbTarget || a.code === cbTarget);
+          if (matchedAcc) {
+            if (!balanceMap[matchedAcc.id]) {
+              balanceMap[matchedAcc.id] = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
+            }
+            if (isUSD) balanceMap[matchedAcc.id].debitUSD += totalSell;
+            else balanceMap[matchedAcc.id].debitIQD += totalSell;
+          }
+        }
+      }
+
+      // C) Supplier Account
+      const suppName = t.supplierAccountName || t.supplierAccount;
+      if (suppName || t.supplierId) {
+        const suppNameClean = (suppName || '').trim().toLowerCase();
+        const matchedAcc = accById[t.supplierAccount] || accById[t.supplierId] || accByName[suppNameClean];
+        if (matchedAcc) {
+          if (!balanceMap[matchedAcc.id]) {
+            balanceMap[matchedAcc.id] = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
+          }
+          const supplierDebit = Math.max(-totalBuy, 0);
+          const supplierCredit = Math.max(totalBuy, 0);
+          if (isUSD) {
+            balanceMap[matchedAcc.id].debitUSD += supplierDebit;
+            balanceMap[matchedAcc.id].creditUSD += supplierCredit;
+          } else {
+            balanceMap[matchedAcc.id].debitIQD += supplierDebit;
+            balanceMap[matchedAcc.id].creditIQD += supplierCredit;
+          }
+        }
+      }
+    });
+
+    return accountsData
+      .filter((acc: any) => {
+        const category = (acc.category || '').toString().toUpperCase();
+        return !acc.isGroup && !acc.isParent && ['CUSTOMER', 'SUPPLIER'].includes(category);
+      })
+      .map((acc: any) => {
+        const dUSD = balanceMap[acc.id]?.debitUSD || 0;
+        const cUSD = balanceMap[acc.id]?.creditUSD || 0;
+        const balUSD = dUSD - cUSD;
+
+        const dIQD = balanceMap[acc.id]?.debitIQD || 0;
+        const cIQD = balanceMap[acc.id]?.creditIQD || 0;
+        const balIQD = dIQD - cIQD;
+
+        const accCurrStr = (acc.currency || '').toString().toUpperCase();
+        const isExplicitIQD = accCurrStr.includes('IQD') || accCurrStr.includes('د.ع');
+
+        const hasIQDBal = Math.abs(balIQD) > 0.01;
+        const accountCurrency: 'USD' | 'IQD' = (hasIQDBal || isExplicitIQD) ? 'IQD' : 'USD';
+
+        let debtType: 'receivable' | 'payable' | 'zero' = 'zero';
+        let debtLabel = 'متعادل';
+
+        if (balIQD > 0.01 || balUSD > 0.01) {
+          debtType = 'receivable';
+          debtLabel = 'ديون لنا (مدين)';
+        } else if (balIQD < -0.01 || balUSD < -0.01) {
+          debtType = 'payable';
+          debtLabel = 'ديون علينا (دائن)';
+        }
+
+        return {
+          id: acc.id,
+          code: acc.code || '—',
+          nameAr: acc.nameAr || 'حساب بدون اسم',
+          nameEn: acc.nameEn,
+          category: acc.category || acc.type,
+          type: acc.type || 'حساب فرعي',
+          debitUSD: dUSD,
+          creditUSD: cUSD,
+          endingBalanceUSD: balUSD,
+          debitIQD: dIQD,
+          creditIQD: cIQD,
+          endingBalanceIQD: balIQD,
+          totalDebit: dIQD || dUSD,
+          totalCredit: cIQD || cUSD,
+          endingBalance: balIQD !== 0 ? balIQD : balUSD,
+          debtType,
+          debtLabel,
+          accountCurrency,
+        };
+      });
+  }, [accountsData, entriesData, ticketsData, customersData]);
+
+  // 3. Filtered Debt Rows based on user filter toggle mode, currency switches & search
+  const filteredRows = useMemo(() => {
+    return debtRows.filter(row => {
+      // Currency Switch Filter:
+      // If ONLY USD switch is active, filter for USD accounts
+      if (pageShowUSD && !pageShowIQD && row.accountCurrency !== 'USD' && Math.abs(row.endingBalanceUSD) < 0.01) {
+        return false;
+      }
+      // If ONLY IQD switch is active, filter for IQD accounts
+      if (pageShowIQD && !pageShowUSD && row.accountCurrency !== 'IQD' && Math.abs(row.endingBalanceIQD) < 0.01) {
+        return false;
+      }
+
+      if (hideZeroBalances && Math.abs(row.endingBalance) < 0.01) {
+        return false;
+      }
+
+      if (filterMode === 'receivables' && row.debtType !== 'receivable') {
+        return false;
+      }
+      if (filterMode === 'payables' && row.debtType !== 'payable') {
+        return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchCode = row.code.toLowerCase().includes(q);
+        const matchName = row.nameAr.toLowerCase().includes(q);
+        const matchEn = (row.nameEn || '').toLowerCase().includes(q);
+        if (!matchCode && !matchName && !matchEn) return false;
+      }
+
+      return true;
+    });
+  }, [debtRows, filterMode, hideZeroBalances, searchQuery, pageShowUSD, pageShowIQD]);
+
+  // 4. Calculated Summary Metrics (Separated USD vs IQD!)
+  const summary = useMemo(() => {
+    let usdReceivables = 0;
+    let usdPayables = 0;
+    let iqdReceivables = 0;
+    let iqdPayables = 0;
+
+    debtRows.forEach(r => {
+      if (r.accountCurrency === 'IQD' || Math.abs(r.endingBalanceIQD) > 0.01) {
+        if (r.endingBalanceIQD > 0.01) iqdReceivables += r.endingBalanceIQD;
+        if (r.endingBalanceIQD < -0.01) iqdPayables += Math.abs(r.endingBalanceIQD);
+      }
+      if (r.accountCurrency === 'USD' || Math.abs(r.endingBalanceUSD) > 0.01) {
+        if (r.endingBalanceUSD > 0.01) usdReceivables += r.endingBalanceUSD;
+        if (r.endingBalanceUSD < -0.01) usdPayables += Math.abs(r.endingBalanceUSD);
+      }
+    });
+
+    return {
+      usdReceivables,
+      usdPayables,
+      netUSD: usdReceivables - usdPayables,
+      iqdReceivables,
+      iqdPayables,
+      netIQD: iqdReceivables - iqdPayables,
+    };
+  }, [debtRows]);
+
+  // Handle navigate to statement of account
+  const handleOpenStatement = useCallback((account: AccountDebtRow) => {
+    openTab({
+      id: 'reports',
+      title: 'كشف الحساب',
+      path: `/reports?accountId=${account.id}`,
+      closable: true,
+    });
+    navigate(`/reports?accountId=${account.id}`);
+  }, [navigate, openTab]);
+
+  const handleOpenAmountTrace = useCallback((account: AccountDebtRow) => {
+    setDebtContextMenu(null);
+    setTraceAccount(account);
+    setIsTraceModalOpen(true);
+  }, []);
+
+  const handleDebtContextMenu = useCallback((event: React.MouseEvent, row: AccountDebtRow) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const menuWidth = 260;
+    const menuHeight = 154;
+    const viewportPadding = 12;
+    const x = Math.max(
+      viewportPadding,
+      Math.min(event.clientX, window.innerWidth - menuWidth - viewportPadding),
+    );
+    const y = Math.max(
+      viewportPadding,
+      Math.min(event.clientY, window.innerHeight - menuHeight - viewportPadding),
+    );
+    setDebtContextMenu({ x, y, row });
+  }, []);
+
+  // Export to Excel
+  const handleExportExcel = () => {
+    const dataToExport = filteredRows.map(r => ({
+      'رقم الحساب': r.code,
+      'اسم الحساب': r.nameAr,
+      'نوع الدين': r.debtLabel,
+      'إجمالي المدين': r.totalDebit,
+      'إجمالي الدائن': r.totalCredit,
+      'المبلغ الصافي': Math.abs(r.endingBalance),
+      'الوضعية': r.endingBalance > 0 ? 'لنا' : r.endingBalance < 0 ? 'علينا' : 'متعادل',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'تقرير الديون');
+    XLSX.writeFile(wb, `Debts_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showSuccessNotification('تم التصدير', 'تم تصدير تقرير الديون بنجاح إلى ملف Excel.');
+  };
+
+  // ── Helper to calculate full statement data for a single account ──
+  const generateAccountStatementData = useCallback((targetAcc: AccountDebtRow) => {
+    const targetAccId = targetAcc.id;
+    const targetAccName = targetAcc.nameAr.trim().toLowerCase();
+
+    const start = batchStartDate ? new Date(batchStartDate) : new Date('2026-01-01');
+    const end = batchEndDate ? new Date(batchEndDate + 'T23:59:59') : new Date();
+
+    let previousBalance = 0;
+    const rawLines: any[] = [];
+    const processedVoucherNumbers = new Set<string>();
+
+    // 1. Process Journal Entries
+    entriesData.forEach((e: any) => {
+      const entryStatus = String(e.status || 'POSTED').toUpperCase();
+      if (entryStatus !== 'POSTED') return;
+      const entryDate = new Date(e.date || Date.now());
+      if (Array.isArray(e.lines)) {
+        e.lines.forEach((l: any) => {
+          if (l.accountId === targetAccId) {
+            const lineCurr = (l.currency || e.currency || 'USD').toString().toUpperCase();
+            const isIQD = lineCurr.includes('IQD') || lineCurr.includes('د.ع');
+            const isUSD = !isIQD;
+            if (isUSD && !includeUSD) return;
+            if (isIQD && !includeIQD) return;
+
+            const debit = Number(l.debit || 0);
+            const credit = Number(l.credit || 0);
+            const processedKeys = [
+              e.reference,
+              e.voucherNumber,
+              e.entryNumber,
+            ].filter(Boolean);
+            processedKeys.forEach((key: string) => processedVoucherNumbers.add(key.toLowerCase()));
+
+            if (entryDate < start) {
+              previousBalance += (debit - credit);
+            } else if (entryDate <= end) {
+              rawLines.push({
+                date: e.date,
+                entryNumber: e.entryNumber || '—',
+                voucherNumber: e.voucherNumber || '—',
+                docType: e.voucherNumber ? (e.voucherType === 'RECEIPT' ? 'سند قبض' : 'سند دفع') : 'قيد يومية',
+                description: l.description || e.description || 'حركة حساب',
+                debit,
+                credit,
+              });
+            }
+          }
+        });
+      }
+    });
+
+    // 2. Process Tickets
+    ticketsData.forEach((t: any) => {
+      const ticketStatus = (t.status || 'POSTED').toString().toUpperCase();
+      if (!['POSTED', 'REFUNDED'].includes(ticketStatus)) return;
+
+      const tDate = new Date(t.issueDate || t.createdAt || t.date || Date.now());
+      const invNum = (t.invoiceNumber || t.id || '').toLowerCase();
+      if (invNum && processedVoucherNumbers.has(invNum)) return;
+
+      const custName = (t.customerName || '').trim().toLowerCase();
+      const suppName = (t.supplierAccountName || t.supplierAccount || '').trim().toLowerCase();
+
+      const isCust = custName && (custName.includes(targetAccName) || targetAccName.includes(custName));
+      const isSupp = suppName && (suppName.includes(targetAccName) || targetAccName.includes(suppName));
+
+      if (isCust) {
+        const sellAmt = Number(t.netSell || t.totalSell || 0);
+        const debit = Math.max(sellAmt, 0);
+        const credit = Math.max(-sellAmt, 0);
+        if (tDate < start) {
+          previousBalance += debit - credit;
+        } else if (tDate <= end) {
+          rawLines.push({
+            date: t.issueDate || t.createdAt || new Date().toISOString().split('T')[0],
+            entryNumber: t.invoiceNumber || t.ticketNumber || 'تذكرة',
+            voucherNumber: t.pnr || '—',
+            docType: sellAmt < 0 ? 'استرداد تذاكر' : 'فاتورة تذاكر',
+            description: `${sellAmt < 0 ? 'استرداد تذكرة' : 'تذكرة طيران'} - PNR: ${t.pnr || '—'}`,
+            debit,
+            credit,
+          });
+        }
+      }
+
+      if (isSupp) {
+        const buyAmt = Number(t.netBuy || t.totalBuy || 0);
+        const debit = Math.max(-buyAmt, 0);
+        const credit = Math.max(buyAmt, 0);
+        if (tDate < start) {
+          previousBalance += debit - credit;
+        } else if (tDate <= end) {
+          rawLines.push({
+            date: t.issueDate || t.createdAt || new Date().toISOString().split('T')[0],
+            entryNumber: t.invoiceNumber || t.ticketNumber || 'تذكرة',
+            voucherNumber: t.pnr || '—',
+            docType: buyAmt < 0 ? 'استرداد من مورد' : 'فاتورة شراء تذاكر',
+            description: `${buyAmt < 0 ? 'استرداد من مورد' : 'شراء تذكرة طيران'} - PNR: ${t.pnr || '—'}`,
+            debit,
+            credit,
+          });
+        }
+      }
+    });
+
+    rawLines.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let running = (includeOpening || includePrevious) ? previousBalance : 0;
+    const finalLines = rawLines.map(l => {
+      running += (l.debit - l.credit);
+      return { ...l, runningBalance: running };
+    });
+
+    const totalDebit = rawLines.reduce((s, l) => s + l.debit, 0);
+    const totalCredit = rawLines.reduce((s, l) => s + l.credit, 0);
+
+    return {
+      account: targetAcc,
+      previousBalance,
+      openingBalance: previousBalance,
+      lines: finalLines,
+      totalDebit,
+      totalCredit,
+      closingBalance: running,
+    };
+  }, [entriesData, ticketsData, batchStartDate, batchEndDate, includeOpening, includePrevious, includeUSD, includeIQD]);
+
+  // Get selected accounts based on user choice
+  const getSelectedAccountsForBatch = useCallback(() => {
+    let list = debtRows;
+    if (batchTarget === 'RECEIVABLES') {
+      list = debtRows.filter(r => r.debtType === 'receivable');
+    } else if (batchTarget === 'PAYABLES') {
+      list = debtRows.filter(r => r.debtType === 'payable');
+    } else if (batchTarget === 'CUSTOM') {
+      const setIds = new Set(customSelectedAccIds);
+      list = debtRows.filter(r => setIds.has(r.id));
+    }
+    return list;
+  }, [debtRows, batchTarget, customSelectedAccIds]);
+
+  // Bulk Excel Export Handler with Progress Bar & direct download
+  const handleExportBatchExcel = async () => {
+    const targetAccounts = getSelectedAccountsForBatch();
+    if (targetAccounts.length === 0) {
+      showErrorNotification('تنبيه', 'يرجى اختيار حساب واحد على الأقل لتصدير الكشف.');
+      return;
+    }
+
+    setIsGeneratingBatch(true);
+    setExportProgress(10);
+    setExportStatusText('جاري تجميع حركات الحسابات وفلترتها...');
+
+    try {
+      await new Promise(r => setTimeout(r, 200));
+      const allRowsForExcel: any[] = [];
+
+      targetAccounts.forEach((acc, index) => {
+        const stmt = generateAccountStatementData(acc);
+        if (skipZeroBalanceAccounts && Math.abs(stmt.closingBalance) < 0.01) {
+          return;
+        }
+        if (hideZeroMovements && stmt.lines.length === 0 && Math.abs(stmt.closingBalance) < 0.01) {
+          return;
+        }
+
+        // Header block
+        allRowsForExcel.push({
+          'كود الحساب': `=== [${acc.code}] ${acc.nameAr} ===`,
+          'تاريخ الحركة': '',
+          'رقم القيد/المستند': '',
+          'نوع المستند': '',
+          'البيان والتوضيح': '',
+          'مدين ($)': '',
+          'دائن ($)': '',
+          'الرصيد التراكمي ($)': '',
+        });
+
+        if (includeOpening || includePrevious) {
+          allRowsForExcel.push({
+            'كود الحساب': acc.code,
+            'تاريخ الحركة': batchStartDate || '—',
+            'رقم القيد/المستند': '—',
+            'نوع المستند': 'رصيد افتتاحي/سابق',
+            'البيان والتوضيح': 'الرصيد المدوّر السابق للفترة',
+            'مدين ($)': stmt.previousBalance > 0 ? stmt.previousBalance : 0,
+            'دائن ($)': stmt.previousBalance < 0 ? Math.abs(stmt.previousBalance) : 0,
+            'الرصيد التراكمي ($)': stmt.previousBalance,
+          });
+        }
+
+        stmt.lines.forEach(l => {
+          allRowsForExcel.push({
+            'كود الحساب': acc.code,
+            'تاريخ الحركة': l.date ? new Date(l.date).toLocaleDateString('ar-EG') : '—',
+            'رقم القيد/المستند': l.entryNumber || l.voucherNumber || '—',
+            'نوع المستند': l.docType,
+            'البيان والتوضيح': l.description,
+            'مدين ($)': l.debit,
+            'دائن ($)': l.credit,
+            'الرصيد التراكمي ($)': l.runningBalance,
+          });
+        });
+
+        // Summary row for account
+        allRowsForExcel.push({
+          'كود الحساب': acc.code,
+          'تاريخ الحركة': 'مجموع الحساب',
+          'رقم القيد/المستند': '',
+          'نوع المستند': '',
+          'البيان والتوضيح': `إجمالي حركة الفترة: ${stmt.lines.length} حركات`,
+          'مدين ($)': stmt.totalDebit,
+          'دائن ($)': stmt.totalCredit,
+          'الرصيد التراكمي ($)': stmt.closingBalance,
+        });
+
+        allRowsForExcel.push({});
+
+        const p = Math.min(85, 10 + Math.round(((index + 1) / targetAccounts.length) * 75));
+        setExportProgress(p);
+        setExportStatusText(`معالجة حساب ${index + 1} من ${targetAccounts.length} (${acc.nameAr})...`);
+      });
+
+      setExportProgress(90);
+      setExportStatusText('جاري إنشاء وتحميل ملف Excel واختيار مكان الحفظ...');
+      await new Promise(r => setTimeout(r, 300));
+
+      const ws = XLSX.utils.json_to_sheet(allRowsForExcel);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'الكشوفات المجمعة');
+      XLSX.writeFile(wb, `Batch_Statements_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      setExportProgress(100);
+      setExportStatusText('تم التصدير وتحميل الملف بنجاح! 🚀');
+
+      setTimeout(() => {
+        setIsGeneratingBatch(false);
+        setIsBatchModalOpen(false);
+        showSuccessNotification('تم التصدير بنجاح', `تم تصدير كشوفات الحسابات المجمعة في ملف Excel بنجاح.`);
+      }, 600);
+      } catch {
+      showErrorNotification('خطأ في التصدير', 'حدث خطأ أثناء إنشاء ملف Excel المجمع.');
+      setIsGeneratingBatch(false);
+    }
+  };
+
+  // Bulk PDF Export Handler with Progress Bar & Silent iframe Print (No popup window!)
+  const handleExportBatchPDF = async () => {
+    const targetAccounts = getSelectedAccountsForBatch();
+    if (targetAccounts.length === 0) {
+      showErrorNotification('تنبيه', 'يرجى اختيار حساب واحد على الأقل لتصدير الكشف.');
+      return;
+    }
+
+    setIsGeneratingBatch(true);
+    setExportProgress(15);
+    setExportStatusText('جاري إعداد قالب كشوفات PDF المجمعة...');
+
+    try {
+      await new Promise(r => setTimeout(r, 200));
+
+      let htmlContent = `
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+          <meta charset="UTF-8" />
+          <title>كشوفات الحسابات المجمعة</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+            body { font-family: 'Cairo', sans-serif; background: #fff; color: #0f172a; margin: 0; padding: 20px; font-size: 12px; }
+            .statement-page { page-break-after: always; padding: 20px 0; }
+            .statement-page:last-child { page-break-after: auto; }
+            .header-box { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+            .title-area h1 { margin: 0; font-size: 18px; color: #0f172a; }
+            .title-area p { margin: 4px 0 0 0; color: #64748b; font-size: 11px; }
+            .acc-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+            th { background: #0f172a; color: #fff; padding: 8px 10px; text-align: right; font-size: 11px; }
+            td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; font-size: 11px; }
+            tr:nth-child(even) { background: #f8fafc; }
+            .text-left { text-align: left; }
+            .font-mono { font-family: monospace; font-weight: bold; }
+            .summary-box { background: #f1f5f9; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; font-weight: bold; }
+            .badge-green { color: #047857; background: #dcfce7; padding: 3px 10px; border-radius: 6px; }
+            .badge-red { color: #b91c1c; background: #fee2e2; padding: 3px 10px; border-radius: 6px; }
+            @media print {
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+      `;
+
+      targetAccounts.forEach((acc, index) => {
+        const stmt = generateAccountStatementData(acc);
+        if (skipZeroBalanceAccounts && Math.abs(stmt.closingBalance) < 0.01) {
+          return;
+        }
+        if (hideZeroMovements && stmt.lines.length === 0 && Math.abs(stmt.closingBalance) < 0.01) {
+          return;
+        }
+
+        htmlContent += `
+          <div class="statement-page">
+            <div class="header-box">
+              <div class="title-area">
+                <h1>كشف حساب تفصيلي</h1>
+                <p>الفترة من: ${batchStartDate || 'البداية'} إلى: ${batchEndDate || 'اليوم'}</p>
+              </div>
+              <div style="text-align: left;">
+                <div style="font-weight: 900; font-size: 16px; color: #047857;">نظام إدارة الحسابات والذمم</div>
+                <div style="font-size: 10px; color: #64748b;">تاريخ الطباعة: ${new Date().toLocaleDateString('ar-EG')}</div>
+              </div>
+            </div>
+
+            <div class="acc-card">
+              <div>
+                <strong style="font-size: 14px;">${acc.nameAr}</strong> (${acc.code})<br/>
+                <span style="font-size: 11px; color: #475569;">نوع الدين: <strong>${acc.debtLabel}</strong></span>
+              </div>
+              <div style="text-align: left;">
+                <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 2px;">الرصيد الصافي النهائي:</span>
+                <span class="${stmt.closingBalance >= 0 ? 'badge-green' : 'badge-red'} font-mono" style="font-size: 13px;">
+                  $ ${Math.abs(stmt.closingBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })} (${stmt.closingBalance >= 0 ? 'لنا' : 'علينا'})
+                </span>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>تاريخ الحركة</th>
+                  <th>رقم المستند</th>
+                  <th>نوع المستند</th>
+                  <th>البيان والتوضيح</th>
+                  <th style="text-align: left;">مدين ($)</th>
+                  <th style="text-align: left;">دائن ($)</th>
+                  <th style="text-align: left;">الرصيد التراكمي ($)</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        if (includeOpening || includePrevious) {
+          htmlContent += `
+            <tr style="background: #f1f5f9; font-weight: bold;">
+              <td>${batchStartDate || '—'}</td>
+              <td>—</td>
+              <td>رصيد مائل/سابق</td>
+              <td>الرصيد المدوّر السابق للفترة</td>
+              <td class="text-left font-mono">${stmt.previousBalance > 0 ? stmt.previousBalance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
+              <td class="text-left font-mono">${stmt.previousBalance < 0 ? Math.abs(stmt.previousBalance).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
+              <td class="text-left font-mono">${stmt.previousBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          `;
+        }
+
+        if (stmt.lines.length === 0) {
+          htmlContent += `
+            <tr>
+              <td colspan="7" style="text-align: center; color: #94a3b8; padding: 20px;">لا توجد حركات تفصيلية في هذه الفترة الزمانية.</td>
+            </tr>
+          `;
+        } else {
+          stmt.lines.forEach(l => {
+            htmlContent += `
+              <tr>
+                <td>${l.date ? new Date(l.date).toLocaleDateString('ar-EG') : '—'}</td>
+                <td class="font-mono">${l.entryNumber || l.voucherNumber || '—'}</td>
+                <td>${l.docType}</td>
+                <td>${l.description}</td>
+                <td class="text-left font-mono">${l.debit > 0 ? l.debit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
+                <td class="text-left font-mono">${l.credit > 0 ? l.credit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
+                <td class="text-left font-mono">${l.runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            `;
+          });
+        }
+
+        htmlContent += `
+              </tbody>
+            </table>
+
+            <div class="summary-box">
+              <div>إجمالي حركات الفترة: ${stmt.lines.length} حركات</div>
+              <div>مجموع المدين: $ ${stmt.totalDebit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+              <div>مجموع الدائن: $ ${stmt.totalCredit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+              <div>الرصيد الصافي: $ ${Math.abs(stmt.closingBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+            </div>
+          </div>
+        `;
+
+        const p = Math.min(80, 15 + Math.round(((index + 1) / targetAccounts.length) * 65));
+        setExportProgress(p);
+        setExportStatusText(`توليد صفحات PDF لحساب ${index + 1} من ${targetAccounts.length}...`);
+      });
+
+      htmlContent += `
+        </body>
+        </html>
+      `;
+
+      setExportProgress(90);
+      setExportStatusText('جاري تحضير خيارات طباعة وحفظ PDF...');
+
+      let iframe = document.getElementById('print-batch-iframe') as HTMLIFrameElement;
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'print-batch-iframe';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+      }
+
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (iframeDoc) {
+        iframeDoc.open();
+        iframeDoc.write(htmlContent);
+        iframeDoc.close();
+
+        setTimeout(() => {
+          setExportProgress(100);
+          setExportStatusText('تم التجهيز بنجاح! جاري اختيار مسار التصدير...');
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+
+          setTimeout(() => {
+            setIsGeneratingBatch(false);
+            setIsBatchModalOpen(false);
+            showSuccessNotification('تم التصدير', 'تم سحب الكشوفات وتوجيهها لتحديد مسار حفظ PDF.');
+          }, 800);
+        }, 500);
+      }
+      } catch {
+      showErrorNotification('خطأ في التصدير', 'حدث خطأ أثناء تجهيز ملف PDF.');
+      setIsGeneratingBatch(false);
+    }
+  };
+
+  // Handler for Email Modal Opening
+  const handleOpenEmailModal = (selectedIds: string[]) => {
+    setSelectedEmailAccountIds(selectedIds || []);
+    if (selectedIds && selectedIds.length > 0) {
+      const selectedAccs = debtRows.filter(r => selectedIds.includes(r.id));
+      if (selectedAccs.length > 0) {
+        setEmailSubject(`كشف حساب مالي: ${selectedAccs.map(a => a.nameAr).join(' ، ')}`);
+        const firstWithEmail = selectedAccs.find(a => (a as any).email || (a as any).contactEmail);
+        if (firstWithEmail) {
+          setEmailRecipient((firstWithEmail as any).email || (firstWithEmail as any).contactEmail || '');
+        }
+      }
+    } else {
+      setEmailSubject('كشف حساب تفصيلي — تقرير الذمم المالي');
+    }
+    setIsEmailModalOpen(true);
+  };
+
+  // Handler for Email Submit
+  const handleSendEmailSubmit = async () => {
+    if (!emailRecipient || !emailRecipient.trim()) {
+      showErrorNotification('تنبيه', 'يرجى إدخال عنوان البريد الإلكتروني للمستلم.');
+      return;
+    }
+
+    setIsSendingEmail(true);
+    try {
+      const selectedAccs = debtRows.filter(r => selectedEmailAccountIds.includes(r.id));
+      const targetAcc = selectedAccs[0] || { nameAr: 'كشف الذمم المالي', endingBalanceUSD: 0, endingBalanceIQD: 0 };
+      const cur = targetAcc.endingBalanceUSD ? 'USD' : 'IQD';
+      const bal = targetAcc.endingBalanceUSD || targetAcc.endingBalanceIQD || 0;
+
+      await apiRequest('/api/email/send-statement', {
+        method: 'POST',
+        body: JSON.stringify({
+          recipientEmail: emailRecipient.trim(),
+          recipientName: targetAcc.nameAr,
+          accountName: targetAcc.nameAr,
+          currency: cur,
+          currentBalance: bal,
+          subject: emailSubject,
+          customMessage: emailBody,
+          fromDate: batchStartDate ? new Date(batchStartDate).toLocaleDateString('ar-EG') : undefined,
+          toDate: batchEndDate ? new Date(batchEndDate).toLocaleDateString('ar-EG') : undefined,
+        }),
+      });
+
+      showSuccessNotification('تم إرسال البريد الإلكتروني بنجاح', `تم إرسال كشف الحساب عبر Brevo بنجاح إلى: ${emailRecipient}`);
+      setIsEmailModalOpen(false);
+      setEmailRecipient('');
+    } catch (err: any) {
+      showErrorNotification('خطأ في الإرسال', err.message || 'حدث خطأ أثناء إرسال البريد الإلكتروني عبر Brevo.');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  // 5. Define Table Grid Columns dynamically according to Currency Filters
+  const columnDefs = useMemo<AccountingColumnDef[]>(() => {
+    const cols: AccountingColumnDef[] = [
+      {
+        field: 'code',
+        headerText: 'رقم الحساب',
+        width: '100px',
+        render: (row: AccountDebtRow) => (
+          <span className="font-mono text-xs font-bold text-slate-700">{row.code}</span>
+        ),
+      },
+      {
+        field: 'nameAr',
+        headerText: 'اسم الحساب / الشريك',
+        width: '220px',
+        render: (row: AccountDebtRow) => (
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+              <IconUser size={14} />
+            </div>
+            <div>
+              <span className="font-bold text-slate-900 text-xs block leading-tight">{row.nameAr}</span>
+              {row.nameEn && <span className="text-[10px] text-slate-400 font-mono block">{row.nameEn}</span>}
+            </div>
+          </div>
+        ),
+      },
+      {
+        field: 'debtType',
+        headerText: 'نوع الدين',
+        width: '130px',
+        render: (row: AccountDebtRow) => {
+          if (row.debtType === 'receivable') {
+            return (
+              <Badge size="sm" color="emerald" variant="light" className="font-bold px-2">
+                ديون لنا (مدين)
+              </Badge>
+            );
+          }
+          if (row.debtType === 'payable') {
+            return (
+              <Badge size="sm" color="red" variant="light" className="font-bold px-2">
+                ديون علينا (دائن)
+              </Badge>
+            );
+          }
+          return (
+            <Badge size="sm" color="gray" variant="outline" className="font-bold">
+              رصيد صفري
+            </Badge>
+          );
+        },
+      },
+    ];
+
+    // ── IQD Columns ──
+    if (pageShowIQD) {
+      cols.push(
+        {
+          field: 'debitIQD',
+          headerText: 'مدين (د.ع)',
+          width: '120px',
+          render: (row: AccountDebtRow) => (
+            <span className="font-mono font-bold text-slate-800 text-xs dir-ltr block text-right">
+              {(row.debitIQD || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </span>
+          ),
+        },
+        {
+          field: 'creditIQD',
+          headerText: 'دائن (د.ع)',
+          width: '120px',
+          render: (row: AccountDebtRow) => (
+            <span className="font-mono font-bold text-slate-800 text-xs dir-ltr block text-right">
+              {(row.creditIQD || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </span>
+          ),
+        },
+        {
+          field: 'endingBalanceIQD',
+          headerText: 'صافي (د.ع)',
+          width: '160px',
+          render: (row: AccountDebtRow) => {
+            const val = row.endingBalanceIQD;
+            const absVal = Math.abs(val);
+            const formatted = absVal.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+            if (val > 0.01) {
+              return (
+                <div className="flex items-center gap-1 font-mono font-black text-xs text-emerald-700">
+                  <span className="bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                    د.ع {formatted} (لنا)
+                  </span>
+                </div>
+              );
+            }
+            if (val < -0.01) {
+              return (
+                <div className="flex items-center gap-1 font-mono font-black text-xs text-rose-700">
+                  <span className="bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                    د.ع {formatted} (علينا)
+                  </span>
+                </div>
+              );
+            }
+            return <span className="font-mono text-slate-400 text-xs">د.ع 0.00</span>;
+          },
+        }
+      );
+    }
+
+    // ── USD Columns ──
+    if (pageShowUSD) {
+      cols.push(
+        {
+          field: 'debitUSD',
+          headerText: 'مدين ($)',
+          width: '120px',
+          render: (row: AccountDebtRow) => (
+            <span className="font-mono font-bold text-slate-800 text-xs dir-ltr block text-right">
+              {(row.debitUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </span>
+          ),
+        },
+        {
+          field: 'creditUSD',
+          headerText: 'دائن ($)',
+          width: '120px',
+          render: (row: AccountDebtRow) => (
+            <span className="font-mono font-bold text-slate-800 text-xs dir-ltr block text-right">
+              {(row.creditUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </span>
+          ),
+        },
+        {
+          field: 'endingBalanceUSD',
+          headerText: 'صافي ($)',
+          width: '160px',
+          render: (row: AccountDebtRow) => {
+            const val = row.endingBalanceUSD;
+            const absVal = Math.abs(val);
+            const formatted = absVal.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+            if (val > 0.01) {
+              return (
+                <div className="flex items-center gap-1 font-mono font-black text-xs text-emerald-700">
+                  <span className="bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                    $ {formatted} (لنا)
+                  </span>
+                </div>
+              );
+            }
+            if (val < -0.01) {
+              return (
+                <div className="flex items-center gap-1 font-mono font-black text-xs text-rose-700">
+                  <span className="bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                    $ {formatted} (علينا)
+                  </span>
+                </div>
+              );
+            }
+            return <span className="font-mono text-slate-400 text-xs">$ 0.00</span>;
+          },
+        }
+      );
+    }
+
+    // Actions Column
+    cols.push({
+      field: 'actions',
+      headerText: 'إجراءات',
+      width: '225px',
+      render: (row: AccountDebtRow) => (
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="compact-xs"
+            variant="light"
+            color="orange"
+            leftSection={<IconRoute size={13} />}
+            onClick={() => handleOpenAmountTrace(row)}
+            className="font-bold text-[11px]"
+          >
+            مسار المبلغ
+          </Button>
+          <Button
+            size="compact-xs"
+            variant="light"
+            color="emerald"
+            leftSection={<IconFileText size={13} />}
+            onClick={() => handleOpenStatement(row)}
+            className="font-bold text-[11px]"
+          >
+            كشف الحساب
+          </Button>
+        </div>
+      ),
+    });
+
+    return cols;
+  }, [pageShowIQD, pageShowUSD, handleOpenAmountTrace, handleOpenStatement]);
+
+  // Render Dynamic Actions Dropdown Menu when 1 or more accounts are selected via Checkbox
+  const renderSelectedActions = (selectedIds: string[], _clearSelection: () => void) => {
+    return (
+      <Menu position="bottom-end" shadow="md" width={220} withinPortal={false}>
+        <Menu.Target>
+          <Button
+            size="xs"
+            color="emerald"
+            variant="filled"
+            leftSection={<IconChevronDown size={14} />}
+            rightSection={<IconDotsVertical size={16} />}
+            className="font-bold text-xs h-8 px-3.5 shadow-2xs rounded-lg"
+          >
+            إجراءات ({selectedIds.length})
+          </Button>
+        </Menu.Target>
+
+        <Menu.Dropdown p="xs" className="space-y-1">
+          <Menu.Item
+            leftSection={<IconFileText size={15} className="text-emerald-600" />}
+            onClick={() => {
+              setBatchTarget('CUSTOM');
+              setCustomSelectedAccIds(selectedIds);
+              setIsBatchModalOpen(true);
+            }}
+            className="font-bold text-xs"
+          >
+            سحب كشوفات الحسابات المحددة ({selectedIds.length})
+          </Menu.Item>
+
+          <Menu.Item
+            leftSection={<IconMail size={15} className="text-indigo-600" />}
+            onClick={() => handleOpenEmailModal(selectedIds)}
+            className="font-bold text-xs"
+          >
+            إرسال عبر الإيميل
+          </Menu.Item>
+
+          <Menu.Item
+            leftSection={<IconFileSpreadsheet size={15} className="text-emerald-600" />}
+            onClick={handleExportExcel}
+            className="font-bold text-xs"
+          >
+            تصدير Excel
+          </Menu.Item>
+
+          <Menu.Item
+            leftSection={<IconPrinter size={15} className="text-blue-600" />}
+            onClick={() => window.print()}
+            className="font-bold text-xs"
+          >
+            طباعة التقرير
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+    );
+  };
+
+  return (
+    <div className="p-4 md:p-6 space-y-4 max-w-[1600px] mx-auto select-none dir-rtl">
+
+      {/* ── Top Summary Metric Cards (ديون لنا / ديون علينا / الصافي) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Card 1: ديون لنا (المدينون) */}
+        <Paper p="xs" radius="lg" withBorder className="bg-white border-emerald-200/90 shadow-2xs text-center py-2.5 px-4 hover:shadow-md transition-shadow">
+          <span className="text-xs font-bold text-slate-500 block">إجمالي ديون لنا (المدينون)</span>
+          <div className="flex items-center justify-center gap-3 mt-1 font-mono font-black text-lg">
+            {pageShowUSD && (
+              <AnimatedNumber
+                value={summary.usdReceivables}
+                prefix="$"
+                className="text-emerald-700 font-extrabold"
+              />
+            )}
+            {pageShowUSD && pageShowIQD && <span className="text-slate-300">|</span>}
+            {pageShowIQD && (
+              <AnimatedNumber
+                value={summary.iqdReceivables}
+                prefix="د.ع"
+                className="text-teal-700 font-extrabold"
+              />
+            )}
+          </div>
+        </Paper>
+
+        {/* Card 2: ديون علينا (الدائنون) */}
+        <Paper p="xs" radius="lg" withBorder className="bg-white border-rose-200/90 shadow-2xs text-center py-2.5 px-4 hover:shadow-md transition-shadow">
+          <span className="text-xs font-bold text-slate-500 block">إجمالي ديون علينا (الدائنون)</span>
+          <div className="flex items-center justify-center gap-3 mt-1 font-mono font-black text-lg">
+            {pageShowUSD && (
+              <AnimatedNumber
+                value={summary.usdPayables}
+                prefix="$"
+                className="text-rose-700 font-extrabold"
+              />
+            )}
+            {pageShowUSD && pageShowIQD && <span className="text-slate-300">|</span>}
+            {pageShowIQD && (
+              <AnimatedNumber
+                value={summary.iqdPayables}
+                prefix="د.ع"
+                className="text-rose-700 font-extrabold"
+              />
+            )}
+          </div>
+        </Paper>
+
+        {/* Card 3: صافي المركز المالي للديون */}
+        <Paper p="xs" radius="lg" withBorder className="bg-white border-slate-200/90 shadow-2xs text-center py-2.5 px-4 hover:shadow-md transition-shadow">
+          <span className="text-xs font-bold text-slate-500 block">صافي المركز المالي للديون</span>
+          <div className="flex items-center justify-center gap-3 mt-1 font-mono font-black text-lg">
+            {pageShowUSD && (
+              <AnimatedNumber
+                value={Math.abs(summary.netUSD)}
+                prefix="$"
+                suffix={summary.netUSD >= 0 ? '(لنا)' : '(علينا)'}
+                className={summary.netUSD >= 0 ? 'text-emerald-700 font-extrabold' : 'text-rose-700 font-extrabold'}
+              />
+            )}
+            {pageShowUSD && pageShowIQD && <span className="text-slate-300">|</span>}
+            {pageShowIQD && (
+              <AnimatedNumber
+                value={Math.abs(summary.netIQD)}
+                prefix="د.ع"
+                suffix={summary.netIQD >= 0 ? '(لنا)' : '(علينا)'}
+                className={summary.netIQD >= 0 ? 'text-teal-700 font-extrabold' : 'text-rose-700 font-extrabold'}
+              />
+            )}
+          </div>
+        </Paper>
+      </div>
+
+      {/* ── Filter Controls Toolbar (شريط الفلترة المنظم) ── */}
+      <div className="bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
+        {/* Right Side (RTL Start): Search Input */}
+        <div className="flex items-center gap-2">
+          <TextInput
+            placeholder="بحث باسم الحساب أو الكود..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.currentTarget.value)}
+            leftSection={<IconSearch size={15} className="text-slate-400" />}
+            size="xs"
+            className="w-64"
+            styles={{ input: { borderRadius: 8, height: 36, borderColor: '#cbd5e1' } }}
+          />
+        </div>
+
+        {/* Center: Segmented Filter Pills (التبويبات في الوسط) */}
+        <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-lg border border-slate-200/80">
+          <button
+            type="button"
+            onClick={() => setFilterMode('all')}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-black transition-all cursor-pointer ${
+              filterMode === 'all'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <span>جميع الديون</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterMode('receivables')}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-black transition-all cursor-pointer ${
+              filterMode === 'receivables'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-emerald-700 hover:bg-emerald-50'
+            }`}
+          >
+            <span>ديون لنا (المدينون)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterMode('payables')}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-black transition-all cursor-pointer ${
+              filterMode === 'payables'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-rose-700 hover:bg-rose-50'
+            }`}
+          >
+            <span>ديون علينا (الدائنون)</span>
+          </button>
+        </div>
+
+        {/* Left Side (RTL End): Currency Display Switches & Zero Balance Switch */}
+        <div className="flex items-center gap-2">
+          {/* Currency Display Switches Box */}
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg h-9">
+            <button
+              type="button"
+              onClick={() => {
+                setPageShowUSD(true);
+                setPageShowIQD(true);
+              }}
+              className={`px-2 py-0.5 rounded text-[11px] font-extrabold border transition-all cursor-pointer ${
+                pageShowUSD && pageShowIQD
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+              }`}
+              title="تفعيل وتحديث عرض كلا العملتين"
+            >
+              كلا العملتين
+            </button>
+
+            <div className="flex items-center gap-1">
+              <Switch
+                size="xs"
+                color="emerald"
+                checked={pageShowUSD}
+                onChange={(e) => {
+                  const val = e.currentTarget.checked;
+                  if (!val && !pageShowIQD) return;
+                  setPageShowUSD(val);
+                }}
+                className="cursor-pointer"
+              />
+              <span className="text-xs font-bold text-slate-700 whitespace-nowrap">دولار ($)</span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Switch
+                size="xs"
+                color="emerald"
+                checked={pageShowIQD}
+                onChange={(e) => {
+                  const val = e.currentTarget.checked;
+                  if (!val && !pageShowUSD) return;
+                  setPageShowIQD(val);
+                }}
+                className="cursor-pointer"
+              />
+              <span className="text-xs font-bold text-slate-700 whitespace-nowrap">دينار (د.ع)</span>
+            </div>
+          </div>
+
+          {/* Zero Balance Switch */}
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg h-9">
+            <Switch
+              size="xs"
+              color="emerald"
+              checked={hideZeroBalances}
+              onChange={(e) => setHideZeroBalances(e.currentTarget.checked)}
+              className="cursor-pointer"
+            />
+            <span className="text-xs font-bold text-slate-700 whitespace-nowrap">إخفاء الحسابات الصفرية</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main Data Grid (`AccountingGrid`) ── */}
+      <Paper p="xs" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
+        <AccountingGrid
+          data={filteredRows}
+          columnDefs={columnDefs}
+          loading={loading}
+          gridKey="debts_report_grid"
+          hideSearch={true}
+          hideFilters={true}
+          hideDateFilter={true}
+          hideHeaderCard={true}
+          customFooterSummary={
+            <div className="flex items-center flex-wrap gap-4 text-[12px] font-bold">
+              <span className="flex items-center gap-1.5 text-orange-700">
+                <IconRoute size={14} />
+                كليك يمين على أي حساب لعرض مسار المبلغ
+              </span>
+              <span className="w-px bg-slate-300 h-4"></span>
+              <span>عدد السجلات: <strong className="text-sky-700">{filteredRows.length}</strong></span>
+              <span className="w-px bg-slate-300 h-4"></span>
+              {pageShowIQD && (
+                <div className="flex items-center gap-3 bg-teal-50/70 border border-teal-200/80 px-2 py-0.5 rounded-md">
+                  <span className="text-teal-900">دينار (د.ع):</span>
+                  <span>مدين: <strong className="font-mono text-emerald-700">{summary.iqdReceivables.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                  <span>دائن: <strong className="font-mono text-rose-700">{summary.iqdPayables.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                  <span>صافي: <strong className="font-mono text-slate-900">{Math.abs(summary.netIQD).toLocaleString('en-US', { minimumFractionDigits: 2 })} {summary.netIQD >= 0 ? '(لنا)' : '(علينا)'}</strong></span>
+                </div>
+              )}
+              {pageShowUSD && (
+                <div className="flex items-center gap-3 bg-blue-50/70 border border-blue-200/80 px-2 py-0.5 rounded-md">
+                  <span className="text-blue-900">دولار ($):</span>
+                  <span>مدين: <strong className="font-mono text-emerald-700">${summary.usdReceivables.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                  <span>دائن: <strong className="font-mono text-rose-700">${summary.usdPayables.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></span>
+                  <span>صافي: <strong className="font-mono text-slate-900">${Math.abs(summary.netUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })} {summary.netUSD >= 0 ? '(لنا)' : '(علينا)'}</strong></span>
+                </div>
+              )}
+            </div>
+          }
+          renderSelectedActions={renderSelectedActions}
+          onExportExcel={handleExportExcel}
+          onOpenBatchStatements={(selectedIds) => {
+            if (selectedIds && selectedIds.length > 0) {
+              setBatchTarget('CUSTOM');
+              setCustomSelectedAccIds(selectedIds);
+            } else {
+              setBatchTarget('ALL');
+            }
+            setIsBatchModalOpen(true);
+          }}
+          onSendEmail={handleOpenEmailModal}
+          onRowContextMenu={handleDebtContextMenu}
+        />
+      </Paper>
+
+      {debtContextMenu && typeof document !== 'undefined' && createPortal(
+        <>
+          <button
+            type="button"
+            aria-label="إغلاق قائمة إجراءات الحساب"
+            className="fixed inset-0 z-[9998] cursor-default bg-transparent"
+            onMouseDown={() => setDebtContextMenu(null)}
+          />
+          <div
+            role="menu"
+            aria-label={`إجراءات الحساب ${debtContextMenu.row.nameAr}`}
+            dir="rtl"
+            className="fixed z-[9999] w-[260px] overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_45px_rgba(15,23,42,0.22)]"
+            style={{ left: debtContextMenu.x, top: debtContextMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-slate-100 px-3 py-2">
+              <span className="block truncate text-[11px] font-black text-slate-900">{debtContextMenu.row.nameAr}</span>
+              <span className="mt-0.5 block font-mono text-[9px] font-semibold text-slate-400">{debtContextMenu.row.code}</span>
+            </div>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => handleOpenAmountTrace(debtContextMenu.row)}
+              className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-right text-[11px] font-black text-orange-700 hover:bg-orange-50 focus:bg-orange-50 focus:outline-none"
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600">
+                <IconRoute size={16} />
+              </span>
+              <span>
+                <span className="block">عرض مسار المبلغ</span>
+                <span className="mt-0.5 block text-[9px] font-semibold text-slate-400">الخدمات والسندات والقيود المرتبطة</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                const row = debtContextMenu.row;
+                setDebtContextMenu(null);
+                handleOpenStatement(row);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-right text-[11px] font-bold text-slate-700 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <IconFileText size={15} />
+              </span>
+              <span>فتح كشف الحساب الكامل</span>
+            </button>
+          </div>
+        </>,
+        document.body,
+      )}
+
+      <DebtAmountTraceModal
+        opened={isTraceModalOpen}
+        account={traceAccount}
+        onClose={() => setIsTraceModalOpen(false)}
+        onOpenStatement={(account) => {
+          setIsTraceModalOpen(false);
+          handleOpenStatement(account as AccountDebtRow);
+        }}
+      />
+
+      {/* ── Modal for Bulk Batch Account Statements Export ── */}
+      <Modal
+        opened={isBatchModalOpen}
+        onClose={() => setIsBatchModalOpen(false)}
+        title={
+          <div className="flex items-center gap-2 font-black text-slate-900 text-base">
+            <IconFileText className="text-emerald-600" size={20} />
+            <span>سحب كشوفات الحسابات المجمعة — Bulk Statements</span>
+          </div>
+        }
+        size="lg"
+        centered
+        radius="lg"
+        padding="lg"
+      >
+        <Stack gap="md">
+          {/* Section 1: Target Accounts */}
+          <div>
+            <span className="text-xs font-extrabold text-slate-700 block mb-2">1. تحديد الحسابات المطلوبة لسحب الكشف:</span>
+            <Radio.Group
+              value={batchTarget}
+              onChange={(val: any) => setBatchTarget(val)}
+            >
+              <Group gap="sm">
+                <Radio value="ALL" label={`جميع الحسابات (${debtRows.length})`} />
+                <Radio value="RECEIVABLES" label="ديون لنا (المدينون)" />
+                <Radio value="PAYABLES" label="ديون علينا (الدائنون)" />
+                {customSelectedAccIds.length > 0 && (
+                  <Badge color="emerald" size="md" variant="filled" className="font-bold">
+                    محدد من الجدول ({customSelectedAccIds.length} حساب)
+                  </Badge>
+                )}
+              </Group>
+            </Radio.Group>
+          </div>
+
+          <Divider />
+
+          {/* Section 2: Date Range Single Custom Field */}
+          <div>
+            <AccountingDateRangePicker
+              startDate={batchStartDate}
+              endDate={batchEndDate}
+              label="2. النطاق الزمني للكشف (حقل مخصص من - إلى):"
+              onChange={(start, end) => {
+                setBatchStartDate(start);
+                setBatchEndDate(end);
+              }}
+            />
+          </div>
+
+          <Divider />
+
+          {/* Section 3: Financial & Currency Options */}
+          <div>
+            <span className="text-xs font-extrabold text-slate-700 block mb-2">3. خيارات الرصيد والعملة المربوطة:</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <Switch
+                size="xs"
+                color="emerald"
+                label="تضمين الرصيد الافتتاحي"
+                checked={includeOpening}
+                onChange={(e) => setIncludeOpening(e.currentTarget.checked)}
+              />
+              <Switch
+                size="xs"
+                color="emerald"
+                label="تضمين الرصيد السابق المدوّر"
+                checked={includePrevious}
+                onChange={(e) => setIncludePrevious(e.currentTarget.checked)}
+              />
+              <Switch
+                size="xs"
+                color="emerald"
+                label="عدم سحب الحسابات ذات الرصيد الصفري"
+                checked={skipZeroBalanceAccounts}
+                onChange={(e) => setSkipZeroBalanceAccounts(e.currentTarget.checked)}
+              />
+              <Switch
+                size="xs"
+                color="emerald"
+                label="إخفاء الحسابات بدون حركة صفرية"
+                checked={hideZeroMovements}
+                onChange={(e) => setHideZeroMovements(e.currentTarget.checked)}
+              />
+              <div className="col-span-1 md:col-span-2 pt-2 border-t border-slate-200/80 mt-1">
+                <span className="text-xs font-extrabold text-slate-700 block mb-2">تحديد العملة المربوطة بالكشف:</span>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-2.5">
+                  {/* Both Currencies Switch in distinct Blue color */}
+                  <div className="bg-blue-50/70 p-2.5 rounded-md border border-blue-200 flex items-center justify-between">
+                    <span className="text-xs font-black text-blue-900">كلا العملتين (USD & IQD)</span>
+                    <Switch
+                      size="xs"
+                      color="blue"
+                      checked={includeUSD && includeIQD}
+                      onChange={(e) => {
+                        const val = e.currentTarget.checked;
+                        setIncludeUSD(val);
+                        setIncludeIQD(val);
+                      }}
+                      className="cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Individual Currency Switches in Emerald color */}
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-md border border-slate-200">
+                      <span className="text-xs font-bold text-slate-800">دولار أمريكي (USD $)</span>
+                      <Switch
+                        size="xs"
+                        color="emerald"
+                        checked={includeUSD}
+                        onChange={(e) => {
+                          const val = e.currentTarget.checked;
+                          if (!val && !includeIQD) return;
+                          setIncludeUSD(val);
+                        }}
+                        className="cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-md border border-slate-200">
+                      <span className="text-xs font-bold text-slate-800">دينار عراقي (IQD د.ع)</span>
+                      <Switch
+                        size="xs"
+                        color="emerald"
+                        checked={includeIQD}
+                        onChange={(e) => {
+                          const val = e.currentTarget.checked;
+                          if (!val && !includeUSD) return;
+                          setIncludeIQD(val);
+                        }}
+                        className="cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Generation Progress Bar */}
+          {isGeneratingBatch && (
+            <div className="bg-emerald-50 border border-emerald-200/90 p-3 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs font-black text-emerald-900">
+                <span>{exportStatusText || 'جاري معالجة وتصدير الكشوفات المجمعة...'}</span>
+                <span className="font-mono">{exportProgress}%</span>
+              </div>
+              <Progress value={exportProgress} animated color="emerald" size="sm" radius="xl" />
+            </div>
+          )}
+
+          <Divider />
+
+          {/* Section 4: Action Buttons */}
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <Button
+              variant="outline"
+              color="gray"
+              onClick={() => setIsBatchModalOpen(false)}
+              size="sm"
+            >
+              إلغاء
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="filled"
+                color="emerald"
+                size="sm"
+                leftSection={<IconFileSpreadsheet size={16} />}
+                onClick={handleExportBatchExcel}
+                loading={isGeneratingBatch}
+                className="font-bold shadow-xs cursor-pointer"
+              >
+                تصدير Excel مجمع
+              </Button>
+
+              <Button
+                variant="filled"
+                color="blue"
+                size="sm"
+                leftSection={<IconPrinter size={16} />}
+                onClick={handleExportBatchPDF}
+                loading={isGeneratingBatch}
+                className="font-bold shadow-xs cursor-pointer"
+              >
+                تصدير PDF / طباعة مجمعة
+              </Button>
+            </div>
+          </div>
+        </Stack>
+      </Modal>
+
+      {/* ── Modal for Sending Account Statements via Email ── */}
+      <Modal
+        opened={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        title={
+          <div className="flex items-center gap-2 font-black text-slate-900 text-base">
+            <IconMail className="text-indigo-600" size={20} />
+            <span>إرسال كشف الحساب عبر البريد الإلكتروني — Send Email</span>
+          </div>
+        }
+        size="md"
+        centered
+        radius="lg"
+        padding="lg"
+      >
+        <Stack gap="md">
+          <TextInput
+            label="عنوان البريد الإلكتروني للمستلم:"
+            placeholder="example@company.com"
+            value={emailRecipient}
+            onChange={(e) => setEmailRecipient(e.currentTarget.value)}
+            required
+            size="xs"
+            leftSection={<IconMail size={15} className="text-slate-400" />}
+          />
+
+          <TextInput
+            label="موضوع الرسالة (Subject):"
+            value={emailSubject}
+            onChange={(e) => setEmailSubject(e.currentTarget.value)}
+            size="xs"
+          />
+
+          <Textarea
+            label="ملاحظات وتوضيحات الرسالة:"
+            rows={3}
+            value={emailBody}
+            onChange={(e) => setEmailBody(e.currentTarget.value)}
+            size="xs"
+          />
+
+          <div className="flex items-center justify-between gap-3 pt-3 border-t">
+            <Button
+              variant="outline"
+              color="gray"
+              onClick={() => setIsEmailModalOpen(false)}
+              size="sm"
+            >
+              إلغاء
+            </Button>
+
+            <Button
+              variant="filled"
+              color="indigo"
+              size="sm"
+              leftSection={<IconMail size={16} />}
+              onClick={handleSendEmailSubmit}
+              loading={isSendingEmail}
+              className="font-bold shadow-xs cursor-pointer"
+            >
+              إرسال البريد الإلكتروني الآن
+            </Button>
+          </div>
+        </Stack>
+      </Modal>
+    </div>
+  );
+};

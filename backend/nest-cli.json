@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "assets": [
+      {
+        "include": "pdf/templates/**/*.hbs",
+        "watchAssets": true
+      },
+      {
+        "include": "pdf/fonts/**/*.woff2",
+        "watchAssets": false
+      }
+    ]
+  }
+}

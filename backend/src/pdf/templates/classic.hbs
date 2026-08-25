@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>{{{fontFaceCss}}}</style>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  *, *::before, *::after {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: '{{settings.fontFamily}}', 'IBM Plex Sans Arabic', 'Tajawal', Arial, sans-serif;
+    font-size: {{#if settings.fontSize}}{{settings.fontSize}}px{{else}}10px{{/if}};
+    color: #1e293b;
+    background: #fff;
+    line-height: 1.4;
+    direction: ltr;
+    text-align: left;
+  }
+
+  /* ── Table structure for repeating header/footer ── */
+  .page-wrapper {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+  }
+  .page-header {
+    display: table-header-group;
+  }
+  .page-footer {
+    display: table-footer-group;
+  }
+  .page-body {
+    display: table-row-group;
+  }
+
+  /* ── Top Header Section ── */
+  .header-card {
+    padding: 10mm 10mm 6mm 10mm;
+    background: #fff;
+  }
+  .header-grid {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 15px;
+  }
+  
+  /* Left column: Logo & TO info */
+  .header-left {
+    flex: 1;
+  }
+  .company-logo {
+    max-height: 50px;
+    max-width: 180px;
+    object-fit: contain;
+    margin-bottom: 12px;
+  }
+  .to-label {
+    font-size: 13px;
+    font-weight: 800;
+    color: #334155;
+    margin-right: 6px;
+    display: inline-block;
+  }
+  .client-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+  }
+  .client-details {
+    font-size: 10.5px;
+    color: #334155;
+    line-height: 1.5;
+    font-weight: 600;
+  }
+  .print-date-line {
+    margin-top: 10px;
+    font-size: 10px;
+    color: #475569;
+    font-weight: 700;
+  }
+
+  /* Right column: Title & Account Summary Box */
+  .header-right {
+    width: 320px;
+    text-align: left;
+  }
+  .doc-title-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .title-bar-line {
+    width: 5px;
+    height: 42px;
+    background: {{#if settings.titleAccentColor}}{{settings.titleAccentColor}}{{else if settings.primaryColor}}{{settings.primaryColor}}{{else}}#64748b{{/if}};
+    border-radius: 2px;
+  }
+  .doc-title-text {
+    font-size: {{#if settings.docTitleSize}}{{settings.docTitleSize}}px{{else}}20px{{/if}};
+    font-weight: 900;
+    color: #0f172a;
+    line-height: 1.1;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  /* Account summary gray box */
+  .account-summary-box {
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .summary-box-title {
+    background: {{#if settings.summaryHeaderBgColor}}{{settings.summaryHeaderBgColor}}{{else}}#e2e8f0{{/if}};
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: {{#if settings.summaryHeaderTextColor}}{{settings.summaryHeaderTextColor}}{{else}}#0f172a{{/if}};
+    border-bottom: 1px solid #cbd5e1;
+  }
+  .summary-box-body {
+    padding: 8px 10px;
+    font-size: 10.5px;
+    color: #0f172a;
+    line-height: 1.6;
+  }
+  .summary-period {
+    font-weight: 800;
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 2px;
+    font-weight: 600;
+  }
+  .summary-divider {
+    height: 1px;
+    background: #475569;
+    margin: 6px 0 4px 0;
+  }
+  .summary-balance-due {
+    font-size: 11.5px;
+    font-weight: 900;
+    color: {{#if settings.balanceDueColor}}{{settings.balanceDueColor}}{{else}}#0f172a{{/if}};
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* ── Movements Table ── */
+  .movements-container {
+    padding: 0 10mm;
+  }
+  .movements-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: {{#if settings.tableFontSize}}{{settings.tableFontSize}}px{{else}}10px{{/if}};
+    border: 1px solid #cbd5e1;
+  }
+  .movements-table thead tr.col-headers {
+    background: {{#if settings.tableHeaderBgColor}}{{settings.tableHeaderBgColor}}{{else}}#e2e8f0{{/if}};
+    color: {{#if settings.tableHeaderTextColor}}{{settings.tableHeaderTextColor}}{{else}}#0f172a{{/if}};
+    font-size: {{#if settings.tableFontSize}}{{settings.tableFontSize}}px{{else}}11px{{/if}};
+    font-weight: 900;
+  }
+  .movements-table thead tr.col-headers th {
+    padding: 8px 6px;
+    text-align: left;
+    white-space: nowrap;
+    border: 1px solid #cbd5e1;
+    color: {{#if settings.tableHeaderTextColor}}{{settings.tableHeaderTextColor}}{{else}}#0f172a{{/if}} !important;
+  }
+  .movements-table thead tr.col-headers th.th-num { text-align: center; width: 3.5%; }
+  .movements-table thead tr.col-headers th.th-date { width: 13%; }
+  .movements-table thead tr.col-headers th.th-desc { width: 40.5%; }
+  .movements-table thead tr.col-headers th.th-type { text-align: center; width: 8%; }
+  .movements-table thead tr.col-headers th.th-debit { text-align: right; width: 11%; white-space: nowrap; }
+  .movements-table thead tr.col-headers th.th-credit { text-align: right; width: 11%; white-space: nowrap; }
+  .movements-table thead tr.col-headers th.th-balance { text-align: right; width: 13%; white-space: nowrap; }
+
+  .movements-table tbody tr {
+    border-bottom: 1px solid #e2e8f0;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .movements-table tbody tr:nth-child(even) {
+    background: {{#if settings.tableRowStripedColor}}{{settings.tableRowStripedColor}}{{else}}#f8fafc{{/if}};
+  }
+  .movements-table tbody td {
+    padding: 8px 7px;
+    vertical-align: middle;
+    border: 1px solid #e2e8f0;
+    color: {{#if settings.tableTextColor}}{{settings.tableTextColor}}{{else}}#0f172a{{/if}};
+    font-size: {{#if settings.tableFontSize}}{{settings.tableFontSize}}px{{else}}10px{{/if}};
+    {{#if settings.isTableBold}}font-weight: 800;{{/if}}
+  }
+  .col-num { text-align: center; color: #475569; font-weight: 700; }
+  .col-date { font-family: monospace; font-size: 9.5px; font-weight: 600; line-height: 1.3; }
+  .col-date .doc-ref-text { color: #334155; font-weight: 700; margin-top: 1px; }
+  .col-desc { line-height: 1.45; font-weight: 600; }
+  .col-desc .flight-line { font-weight: 700; color: #0f172a; }
+  .col-desc .pax-summary { font-size: 9.5px; color: #334155; font-weight: 700; margin-top: 2px; }
+  .col-desc .booking-line { font-size: 9.5px; color: #64748b; font-weight: 600; margin-top: 1px; }
+  .col-type { text-align: center; font-weight: 800; font-size: 9.5px; color: #334155; }
+  .col-debit { text-align: right; font-weight: 800; font-family: monospace; font-size: 10px; color: #0f172a; white-space: nowrap; }
+  .col-credit { text-align: right; font-weight: 800; font-family: monospace; font-size: 10px; color: #0f172a; white-space: nowrap; }
+  .col-balance { text-align: right; font-weight: 900; font-family: monospace; font-size: 10px; color: #0f172a; white-space: nowrap; }
+
+  /* Table Totals Row */
+  .movements-table tfoot tr.totals-row td {
+    background: #fff;
+    font-weight: 900;
+    font-family: monospace;
+    font-size: 10.5px;
+    border-top: 2px solid #cbd5e1;
+    padding: 8px 7px;
+  }
+  .balance-due-summary-line {
+    text-align: right;
+    padding: 10px 0;
+    font-size: 12px;
+    font-weight: 900;
+    color: #0f172a;
+  }
+
+  /* ── Fixed Page Footer ── */
+  .footer-bar-fixed {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 4mm 10mm 5mm 10mm;
+    background: #fff;
+    border-top: 1px solid #cbd5e1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1000;
+  }
+  .footer-left-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .footer-bar-accent {
+    width: 4px;
+    height: 42px;
+    background: {{#if settings.titleAccentColor}}{{settings.titleAccentColor}}{{else if settings.primaryColor}}{{settings.primaryColor}}{{else}}#64748b{{/if}};
+    border-radius: 2px;
+  }
+  .footer-contacts {
+    font-size: {{#if settings.footerFontSize}}{{settings.footerFontSize}}px{{else}}10px{{/if}};
+    line-height: 1.5;
+    color: #334155;
+    font-weight: 600;
+  }
+  .footer-contacts strong {
+    color: #475569;
+    font-weight: 800;
+  }
+  .footer-qr {
+    width: 42px;
+    height: 42px;
+  }
+</style>
+</head>
+<body>
+
+  {{#if settings.showWatermark}}
+  {{#if settings.watermarkText}}
+  <div style="position: fixed; top: 40%; left: 10%; right: 10%; text-align: center; opacity: 0.05; pointer-events: none; z-index: 0; transform: rotate(-30deg); font-size: 60px; font-weight: 900; text-transform: uppercase; color: #0f172a;">
+    {{settings.watermarkText}}
+  </div>
+  {{/if}}
+  {{/if}}
+
+  <!-- Fixed footer on every page -->
+  <div class="footer-bar-fixed">
+    <div class="footer-left-info">
+      <div class="footer-bar-accent"></div>
+      <div class="footer-contacts">
+        <div><strong>Mobile:</strong> {{#if settings.phone}}{{settings.phone}}{{else if phone}}{{phone}}{{else}}07700003377 - 07800003901{{/if}}</div>
+        <div><strong>Email:</strong> {{#if settings.email}}{{settings.email}}{{else if email}}{{email}}{{else}}Support@Fly4all.com{{/if}}</div>
+        <div><strong>Address:</strong> {{#if settings.address}}{{settings.address}}{{else if address}}{{address}}{{else}}Iraq - Baghdad{{/if}}</div>
+      </div>
+    </div>
+    {{#if settings.showQrCode}}
+    <!-- Simple QR code graphic -->
+    <div class="footer-qr">
+      <svg viewBox="0 0 100 100" width="42" height="42">
+        <rect width="100" height="100" fill="#ffffff"/>
+        <rect x="5" y="5" width="30" height="30" fill="#1e293b"/>
+        <rect x="10" y="10" width="20" height="20" fill="#ffffff"/>
+        <rect x="15" y="15" width="10" height="10" fill="#1e293b"/>
+        <rect x="65" y="5" width="30" height="30" fill="#1e293b"/>
+        <rect x="70" y="10" width="20" height="20" fill="#ffffff"/>
+        <rect x="75" y="15" width="10" height="10" fill="#1e293b"/>
+        <rect x="5" y="65" width="30" height="30" fill="#1e293b"/>
+        <rect x="10" y="70" width="20" height="20" fill="#ffffff"/>
+        <rect x="15" y="75" width="10" height="10" fill="#1e293b"/>
+        <rect x="45" y="15" width="10" height="10" fill="#1e293b"/>
+        <rect x="45" y="45" width="15" height="15" fill="#1e293b"/>
+        <rect x="65" y="45" width="10" height="10" fill="#1e293b"/>
+        <rect x="45" y="70" width="15" height="15" fill="#1e293b"/>
+        <rect x="70" y="70" width="15" height="15" fill="#1e293b"/>
+      </svg>
+    </div>
+    {{/if}}
+  </div>
+
+  <table class="page-wrapper">
+    <!-- Repeating Header -->
+    <thead class="page-header">
+      <tr><td>
+        <div class="header-card">
+          <div class="header-grid">
+            <!-- Left: Logo & TO -->
+            <div class="header-left">
+              {{#if logoUrl}}
+              <img src="{{logoUrl}}" alt="Logo" class="company-logo" />
+              {{else}}
+              <div style="font-size: 22px; font-weight: 900; color: #ef4444; margin-bottom: 8px;">FLY4ALL</div>
+              {{/if}}
+              <div class="client-name"><span class="to-label">TO:</span> {{accountName}}</div>
+              <div class="client-details">
+                Address: {{#if accountAddress}}{{accountAddress}}{{else}}-{{/if}}<br>
+                Mobile: {{#if accountPhone}}{{accountPhone}}{{else}}-{{/if}}<br>
+                Email: {{#if accountEmail}}{{accountEmail}}{{else}}-{{/if}}
+              </div>
+              <div class="print-date-line">Date : {{printDate}}</div>
+            </div>
+
+            <!-- Right: Statement Title & Account Summary Box -->
+            <div class="header-right">
+              <div class="doc-title-container">
+                <div class="title-bar-line"></div>
+                <div class="doc-title-text">STATEMENT<br>OF ACCOUNT</div>
+              </div>
+
+              <div class="account-summary-box">
+                <div class="summary-box-title">Account summary</div>
+                <div class="summary-box-body">
+                  <div class="summary-period">{{startDate}} to {{endDate}}</div>
+                  <div class="summary-row">
+                    <span>Previous Balance:</span>
+                    <span>{{t.currency}} ({{fmtNum totals.previousBalance}})</span>
+                  </div>
+                  <div class="summary-row">
+                    <span>Total credit / amount paid :</span>
+                    <span>{{t.currency}} {{fmtNum totals.totalCredit}}</span>
+                  </div>
+                  <div class="summary-row">
+                    <span>Total debit / invoiced amount :</span>
+                    <span>{{t.currency}} {{fmtNum totals.totalDebit}}</span>
+                  </div>
+                  <div class="summary-divider"></div>
+                  <div class="summary-balance-due">
+                    <span>Balance due :</span>
+                    <span>{{t.currency}} {{fmtNum totals.finalBalance}}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </td></tr>
+    </thead>
+
+    <!-- Space reservation for fixed footer -->
+    <tfoot class="page-footer">
+      <tr><td style="height: 55px;"></td></tr>
+    </tfoot>
+
+    <!-- Table Body -->
+    <tbody class="page-body">
+      <tr><td>
+        <div class="movements-container">
+          <table class="movements-table">
+            <thead>
+              <tr class="col-headers">
+                <th class="th-num">No.</th>
+                <th class="th-date">Date</th>
+                <th class="th-desc">Details</th>
+                <th class="th-type">Type</th>
+                <th class="th-debit">Debit</th>
+                <th class="th-credit">Credit</th>
+                <th class="th-balance">Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each rows}}
+              <tr>
+                <td class="col-num">{{this.rowNumber}}</td>
+                <td class="col-date">
+                  <div>{{this.date}}</div>
+                  {{#if this.docRef}}<div class="doc-ref-text">#{{this.docRef}}</div>{{/if}}
+                </td>
+                <td class="col-desc">
+                  {{#if this.isPrevRow}}
+                  <div style="font-weight: 700; text-align: center; color: #475569;">*** Previous Balance ***</div>
+                  {{else}}
+                    {{#if this.hasPnr}}
+                    <div class="flight-line">
+                      {{#if this.route}}FLIGHT, {{this.routeFrom}} to {{this.routeTo}}, Dep. {{this.date}}{{/if}}
+                      {{#if this.pnr}}, PNR:{{this.pnr}}{{/if}}
+                    </div>
+                    {{#if this.paxSummaryLine}}<div class="pax-summary">{{this.paxSummaryLine}}</div>{{/if}}
+                    {{/if}}
+                    <div>{{this.statement}}</div>
+                  {{/if}}
+                </td>
+                <td class="col-type">{{this.docType}}</td>
+                <td class="col-debit">{{#if this.debit}}{{fmtNum this.debit}} {{../t.currency}}{{/if}}</td>
+                <td class="col-credit">{{#if this.credit}}{{fmtNum this.credit}} {{../t.currency}}{{/if}}</td>
+                <td class="col-balance">({{fmtNum this.runningBalance}}) {{../t.currency}}</td>
+              </tr>
+              {{/each}}
+              {{#unless rows.length}}
+              <tr>
+                <td colspan="7" style="text-align:center; padding:30px; color:#94a3b8; font-weight:700;">No financial movements recorded for this period</td>
+              </tr>
+              {{/unless}}
+            </tbody>
+            <tfoot>
+              <tr class="totals-row">
+                <td colspan="4"></td>
+                <td style="text-align: right;">{{#if totals.totalDebit}}{{fmtNum totals.totalDebit}} {{t.currency}}{{/if}}</td>
+                <td style="text-align: right;">{{#if totals.totalCredit}}{{fmtNum totals.totalCredit}} {{t.currency}}{{/if}}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <!-- Balance Due Summary Line below table -->
+          <div class="balance-due-summary-line">
+            Balance due : {{t.currency}} {{fmtNum totals.finalBalance}}
+          </div>
+        </div>
+      </td></tr>
+    </tbody>
+  </table>
+
+</body>
+</html>
