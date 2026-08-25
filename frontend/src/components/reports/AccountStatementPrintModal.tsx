@@ -1129,7 +1129,50 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
         }),
       });
 
-      if (!res.ok) throw new Error('PDF Generation failed');
+      if (!res.ok) {
+        // High-res client-side print fallback
+        const printableElement = document.getElementById('printable-statement-sheet');
+        if (printableElement) {
+          const printWindow = window.open('', '_blank', 'width=950,height=1100');
+          if (printWindow) {
+            printWindow.document.write(`
+              <!DOCTYPE html>
+              <html lang="${lang}" dir="${lang === 'ar' ? 'rtl' : 'ltr'}">
+                <head>
+                  <meta charset="UTF-8">
+                  <title>كشف_حساب_${accountCode || accountName}</title>
+                  <link rel="preconnect" href="https://fonts.googleapis.com">
+                  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+                  <script src="https://cdn.tailwindcss.com"></script>
+                  <style>
+                    @media print {
+                      @page { size: A4 portrait; margin: 6mm; }
+                      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    }
+                    body { font-family: 'IBM Plex Sans Arabic', 'Tajawal', sans-serif; background: #fff; margin: 0; padding: 8px; }
+                  </style>
+                </head>
+                <body>
+                  ${printableElement.outerHTML}
+                  <script>
+                    window.onload = () => {
+                      setTimeout(() => {
+                        window.print();
+                      }, 400);
+                    };
+                  </script>
+                </body>
+              </html>
+            `);
+            printWindow.document.close();
+            showSuccessNotification('نافذة الطباعة / الحفظ', 'تم فتح نموذج الكشف للطباعة أو الحفظ المباشر كـ PDF');
+            onClose();
+            return;
+          }
+        }
+        throw new Error('PDF Generation failed');
+      }
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -1145,6 +1188,47 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
       onClose();
     } catch (e) {
       console.error(e);
+      // Even if fetch threw an error, trigger print fallback immediately
+      const printableElement = document.getElementById('printable-statement-sheet');
+      if (printableElement) {
+        const printWindow = window.open('', '_blank', 'width=950,height=1100');
+        if (printWindow) {
+          printWindow.document.write(`
+            <!DOCTYPE html>
+            <html lang="${lang}" dir="${lang === 'ar' ? 'rtl' : 'ltr'}">
+              <head>
+                <meta charset="UTF-8">
+                <title>كشف_حساب_${accountCode || accountName}</title>
+                <link rel="preconnect" href="https://fonts.googleapis.com">
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+                <script src="https://cdn.tailwindcss.com"></script>
+                <style>
+                  @media print {
+                    @page { size: A4 portrait; margin: 6mm; }
+                    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                  }
+                  body { font-family: 'IBM Plex Sans Arabic', 'Tajawal', sans-serif; background: #fff; margin: 0; padding: 8px; }
+                </style>
+              </head>
+              <body>
+                ${printableElement.outerHTML}
+                <script>
+                  window.onload = () => {
+                    setTimeout(() => {
+                      window.print();
+                    }, 400);
+                  };
+                </script>
+              </body>
+            </html>
+          `);
+          printWindow.document.close();
+          showSuccessNotification('نافذة الطباعة / الحفظ', 'تم فتح نموذج الكشف للطباعة أو الحفظ المباشر كـ PDF');
+          onClose();
+          return;
+        }
+      }
       showErrorNotification('خطأ في التصدير', 'تعذر تصدير ملف PDF، يرجى المحاولة لاحقاً');
     } finally {
       setDownloading(false);

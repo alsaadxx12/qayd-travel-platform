@@ -20,17 +20,24 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   private browser: puppeteer.Browser | null = null;
   private readonly logger = new Logger(PdfService.name);
 
+  private getPuppeteerArgs(): string[] {
+    return [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--single-process',
+      '--no-zygote',
+      '--no-first-run',
+      '--font-render-hinting=none',
+    ];
+  }
+
   async onModuleInit() {
     try {
       this.browser = await puppeteer.launch({
         headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--font-render-hinting=none',
-        ],
+        args: this.getPuppeteerArgs(),
       });
       this.logger.log('Puppeteer browser launched successfully');
     } catch (error) {
@@ -50,13 +57,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     if (!this.browser || !this.browser.connected) {
       this.browser = await puppeteer.launch({
         headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--font-render-hinting=none',
-        ],
+        args: this.getPuppeteerArgs(),
       });
     }
     return this.browser;
