@@ -10,6 +10,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, { code: string; title: string 
   '/refunds': { code: 'refunds.view', title: 'استرجاع التذاكر والخدمات' },
   '/reissues': { code: 'reissues.view', title: 'تغيير الحجوزات وإعادة الإصدار' },
   '/accounts': { code: 'accounts.view', title: 'شجرة الحسابات والدليل المالي' },
+  '/chart-of-accounts': { code: 'accounts.view', title: 'شجرة الحسابات والدليل المالي' },
   '/journal-entries': { code: 'journal.view', title: 'القيود اليومية المحاسبية' },
   '/vouchers': { code: 'vouchers.view', title: 'السندات المالية (قبض وصرف)' },
   '/expenses': { code: 'vouchers.view', title: 'سجل المصاريف والنثريات' },
@@ -22,6 +23,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, { code: string; title: string 
   '/external-clearings': { code: 'clearings.view', title: 'المقاصات الخارجية ومزودي الخدمات' },
   '/profits': { code: 'profits.view', title: 'الأرباح وقائمة الدخل' },
   '/reports': { code: 'reports.statement.view', title: 'كشف الحساب والتقارير' },
+  '/debts': { code: 'debts.view', title: 'تقرير الديون وأعمار الذمم' },
   '/debts-report': { code: 'debts.view', title: 'تقرير الديون وأعمار الذمم' },
   '/financial-reports': { code: 'financials.trialBalance', title: 'القوائم وميزان المراجعة' },
   '/trial-balance': { code: 'financials.trialBalance', title: 'القوائم وميزان المراجعة' },
@@ -36,11 +38,14 @@ export const ROUTE_PERMISSION_MAP: Record<string, { code: string; title: string 
   '/system-settings': { code: 'settings.view', title: 'إعدادات النظام والشركة' },
   '/subscription-settings': { code: 'subscription.view', title: 'الاشتراك والاستهلاك السحابي' },
   '/addons': { code: 'addons.view', title: 'متجر الإضافات السحابية' },
+  '/addons-store': { code: 'addons.view', title: 'متجر الإضافات السحابية' },
   '/pricing-management': { code: 'pricing.manage', title: 'إدارة وتصميم باقات الأسعار' },
   '/pricing': { code: 'pricing.view', title: 'باقات الأسعار العامة' },
+  '/feedback': { code: 'feedback.view', title: 'تذاكر الدعم والشكاوى' },
   '/feedback-tickets': { code: 'feedback.view', title: 'تذاكر الدعم والشكاوى' },
   '/help-center': { code: 'help.view', title: 'مركز المساعدة والتوثيق' },
   '/saas-admin': { code: 'saas.view', title: 'لوحة تحكم المنصة (SaaS Super Admin)' },
+  '/deleted-records': { code: 'settings.view', title: 'سجل المحذوفات' },
 };
 
 export const usePermissions = () => {

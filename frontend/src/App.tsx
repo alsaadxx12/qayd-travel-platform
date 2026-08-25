@@ -241,6 +241,14 @@ export const App: React.FC = () => {
               }
             />
             <Route
+              path="/debts-report"
+              element={
+                <PermissionRouteGuard routePath="/debts-report">
+                  <DebtsReportPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
               path="/financial-reports"
               element={
                 <PermissionRouteGuard routePath="/financial-reports">
@@ -305,6 +313,14 @@ export const App: React.FC = () => {
               }
             />
             <Route
+              path="/accounts"
+              element={
+                <PermissionRouteGuard routePath="/accounts">
+                  <ChartOfAccountsPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
               path="/chart-of-accounts"
               element={
                 <PermissionRouteGuard routePath="/chart-of-accounts">
@@ -345,6 +361,14 @@ export const App: React.FC = () => {
               }
             />
             <Route
+              path="/feedback"
+              element={
+                <PermissionRouteGuard routePath="/feedback">
+                  <FeedbackManagementPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
               path="/feedback-tickets"
               element={
                 <PermissionRouteGuard routePath="/feedback-tickets">
@@ -372,6 +396,14 @@ export const App: React.FC = () => {
               path="/addons"
               element={
                 <PermissionRouteGuard routePath="/addons">
+                  <AddonsStorePage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/addons-store"
+              element={
+                <PermissionRouteGuard routePath="/addons-store">
                   <AddonsStorePage />
                 </PermissionRouteGuard>
               }
