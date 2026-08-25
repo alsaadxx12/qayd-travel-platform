@@ -300,12 +300,24 @@ export const PrintableAccountStatementSheet: React.FC<{
         fontSize: '10.5px',
       }}
     >
-      {/* Watermark overlay */}
+      {/* Watermark overlay - SVG text with proper Arabic ligature/shaping */}
       {config.showWatermark && config.watermarkText && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-0 opacity-[0.06]">
-          <span className="text-6xl font-black text-slate-900 -rotate-30 select-none whitespace-nowrap uppercase tracking-wider">
-            {config.watermarkText}
-          </span>
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-0 select-none">
+          <svg className="w-[650px] h-[450px] opacity-[0.065]" viewBox="0 0 650 450">
+            <text
+              x="325"
+              y="225"
+              textAnchor="middle"
+              dominantBaseline="central"
+              transform="rotate(-28 325 225)"
+              fontSize="48"
+              fontWeight="900"
+              fontFamily="'IBM Plex Sans Arabic', 'Tajawal', Arial, sans-serif"
+              fill="#0f172a"
+            >
+              {config.watermarkText}
+            </text>
+          </svg>
         </div>
       )}
 
@@ -423,18 +435,20 @@ export const PrintableAccountStatementSheet: React.FC<{
                   paxSummaryStr = `${adt} ADT ${chd} CHD ${inf} INF: ${names.join(', ')}`;
                 }
 
+                const cleanRowDate = row.date ? (row.date.includes('T') ? row.date.split('T')[0] : row.date) : '';
+
                 return (
                   <tr key={idx} style={{ backgroundColor: idx % 2 === 1 ? tableRowStripedColor : '#ffffff' }}>
                     <td className="p-2 text-center font-mono border-r border-slate-200">{row.rowNumber}</td>
                     <td className="p-2 font-mono leading-tight border-r border-slate-200">
-                      <div className="font-bold text-slate-900">{row.date}</div>
+                      <div className="font-bold text-slate-900">{cleanRowDate}</div>
                       <div className="text-slate-600 text-[9px] font-bold mt-0.5">{row.docRef}</div>
                     </td>
                     <td className="p-2 text-slate-900 leading-snug border-r border-slate-200">
                       {(hasRoute || hasPnr) ? (
                         <div>
                           <div className="font-bold text-slate-900">
-                            FLIGHT, {hasRoute ? row.route : ''} , Dep. {row.date} {hasPnr ? `, PNR:${row.pnr}` : ''}
+                            FLIGHT, {hasRoute ? row.route : ''} , Dep. {cleanRowDate} {hasPnr ? `, PNR:${row.pnr}` : ''}
                           </div>
                           {paxSummaryStr && (
                             <div className="text-[9.5px] text-slate-700 font-bold mt-0.5">
