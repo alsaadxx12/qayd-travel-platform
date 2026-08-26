@@ -173,7 +173,7 @@ async function main() {
             companyId: company.id,
             tenantId: company.tenantId,
             balance: 0,
-            currency: 'IQD',
+            currency: 'MULTI',
             isSystem: item.level <= 2,
             branchScope: 'ALL_BRANCHES',
           },

@@ -1,9 +1,140 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, AccountCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ReportsService {
+  private debtsCache = new Map<string, { data: unknown; timestamp: number }>();
+  private readonly DEBTS_CACHE_TTL = 30_000;
+
   constructor(private prisma: PrismaService) {}
+
+  async getDebtsReport(companyId: string) {
+    const cached = this.debtsCache.get(companyId);
+    if (cached && Date.now() - cached.timestamp < this.DEBTS_CACHE_TTL) {
+      return cached.data;
+    }
+
+    const accounts = await this.prisma.account.findMany({
+      where: {
+        companyId,
+        isParent: false,
+        category: { in: [AccountCategory.CUSTOMER, AccountCategory.SUPPLIER] },
+      },
+      select: {
+        id: true,
+        code: true,
+        nameAr: true,
+        nameEn: true,
+        category: true,
+        type: true,
+        currency: true,
+      },
+      orderBy: { code: 'asc' },
+    });
+
+    type TotalsRow = {
+      accountId: string;
+      currency: string;
+      debit: Prisma.Decimal | number | null;
+      credit: Prisma.Decimal | number | null;
+    };
+
+    let totals: TotalsRow[] = [];
+    if (accounts.length > 0) {
+      totals = await this.prisma.$queryRaw<TotalsRow[]>(Prisma.sql`
+        SELECT
+          l."accountId" AS "accountId",
+          CASE
+            WHEN e.reference LIKE 'OPENING-USD-%' THEN 'USD'
+            WHEN l.description ILIKE '%USD%' OR e.reference ILIKE '%USD%' OR e.description ILIKE '%USD%' THEN 'USD'
+            ELSE 'IQD'
+          END AS currency,
+          SUM(l.debit) AS debit,
+          SUM(l.credit) AS credit
+        FROM journal_entry_lines l
+        INNER JOIN journal_entries e ON e.id = l."journalEntryId"
+        WHERE e."companyId" = ${companyId}
+          AND e.status = 'POSTED'
+          AND l."accountId" IN (${Prisma.join(accounts.map((account) => account.id))})
+        GROUP BY 1, 2
+      `);
+    }
+
+    const totalsByAccount = new Map<string, { debitUSD: number; creditUSD: number; debitIQD: number; creditIQD: number }>();
+    const ensureTotals = (id: string) => {
+      let current = totalsByAccount.get(id);
+      if (!current) {
+        current = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
+        totalsByAccount.set(id, current);
+      }
+      return current;
+    };
+
+    totals.forEach((row) => {
+      const bucket = ensureTotals(row.accountId);
+      const debit = Number(row.debit || 0);
+      const credit = Number(row.credit || 0);
+      if ((row.currency || '').toUpperCase() === 'USD') {
+        bucket.debitUSD += debit;
+        bucket.creditUSD += credit;
+      } else {
+        bucket.debitIQD += debit;
+        bucket.creditIQD += credit;
+      }
+    });
+
+    const rows = accounts.map((account) => {
+      const bucket = totalsByAccount.get(account.id) || {
+        debitUSD: 0,
+        creditUSD: 0,
+        debitIQD: 0,
+        creditIQD: 0,
+      };
+      const endingBalanceUSD = bucket.debitUSD - bucket.creditUSD;
+      const endingBalanceIQD = bucket.debitIQD - bucket.creditIQD;
+      const accCurrStr = (account.currency || '').toString().toUpperCase();
+      const isExplicitIQD = accCurrStr.includes('IQD') || accCurrStr.includes('د.ع');
+      const hasIQDBal = Math.abs(endingBalanceIQD) > 0.01;
+      const accountCurrency: 'USD' | 'IQD' = hasIQDBal || isExplicitIQD ? 'IQD' : 'USD';
+
+      let debtType: 'receivable' | 'payable' | 'zero' = 'zero';
+      let debtLabel = 'متعادل';
+      if (endingBalanceIQD > 0.01 || endingBalanceUSD > 0.01) {
+        debtType = 'receivable';
+        debtLabel = 'ديون لنا (مدين)';
+      } else if (endingBalanceIQD < -0.01 || endingBalanceUSD < -0.01) {
+        debtType = 'payable';
+        debtLabel = 'ديون علينا (دائن)';
+      }
+
+      return {
+        id: account.id,
+        code: account.code || '—',
+        nameAr: account.nameAr || 'حساب بدون اسم',
+        nameEn: account.nameEn,
+        category: account.category,
+        type: account.type,
+        debitUSD: bucket.debitUSD,
+        creditUSD: bucket.creditUSD,
+        endingBalanceUSD,
+        debitIQD: bucket.debitIQD,
+        creditIQD: bucket.creditIQD,
+        endingBalanceIQD,
+        totalDebit: bucket.debitIQD || bucket.debitUSD,
+        totalCredit: bucket.creditIQD || bucket.creditUSD,
+        endingBalance: endingBalanceIQD !== 0 ? endingBalanceIQD : endingBalanceUSD,
+        debtType,
+        debtLabel,
+        accountCurrency,
+      };
+    });
+
+    const payload = { rows, generatedAt: new Date().toISOString() };
+    this.debtsCache.set(companyId, { data: payload, timestamp: Date.now() });
+    return payload;
+  }
+
 
   private inferTraceCurrency(
     accountCurrency?: string | null,
@@ -485,7 +616,15 @@ export class ReportsService {
       },
       include: {
         journalEntry: {
-          select: { id: true, entryNumber: true, date: true, reference: true, description: true },
+          select: {
+            id: true,
+            entryNumber: true,
+            date: true,
+            reference: true,
+            description: true,
+            sourceType: true,
+            sourceId: true,
+          },
         },
       },
       orderBy: { journalEntry: { date: 'asc' } },
@@ -503,6 +642,8 @@ export class ReportsService {
         entryNumber: l.journalEntry.entryNumber,
         reference: l.journalEntry.reference,
         description: l.description || l.journalEntry.description,
+        sourceType: l.journalEntry.sourceType,
+        sourceId: l.journalEntry.sourceId,
         debit,
         credit,
         runningBalance,

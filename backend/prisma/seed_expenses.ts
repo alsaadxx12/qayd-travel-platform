@@ -264,7 +264,7 @@ async function seedExpensesForTenantAndCompany(tenantId: string | null, companyI
           companyId,
           tenantId,
           balance: 0,
-          currency: 'IQD',
+          currency: 'MULTI',
           isSystem: true,
           branchScope: 'ALL_BRANCHES',
         },

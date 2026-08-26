@@ -11,8 +11,8 @@ import {
   Menu,
   Modal,
   Textarea,
+  Switch,
 } from '@mantine/core';
-import { DatePickerInput } from '@mantine/dates';
 import {
   Plane,
   Check,
@@ -24,8 +24,8 @@ import {
   Copy,
   Ban,
   MoreVertical,
+  Settings,
   AlertCircle,
-  FileText,
   Sparkles,
   User,
   Building2,
@@ -44,6 +44,7 @@ import { ParsedTicketData } from './SmartTicketImportModal';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { CurrencySegmentedControl } from '../ui/CurrencySegmentedControl';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
+import { SegmentedTimePicker } from '../ui/SegmentedTimePicker';
 import { partnersApi, Customer, Supplier } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
 import { airlinesApi, AirlineItem } from '../../api/airlines';
@@ -56,6 +57,14 @@ import { formatCurrency, getCurrencySymbol, getCurrencyLabel } from '../../utils
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
+import {
+  TicketPageSettings,
+  DEFAULT_TICKET_PAGE_SETTINGS,
+  loadTicketPageSettings,
+  saveTicketPageSettings,
+  findDefaultCashCustomer,
+  customerDisplayName,
+} from '../../utils/ticketPageSettings';
 
 interface TicketInvoiceEditorWorkspaceProps {
   opened: boolean;
@@ -109,6 +118,10 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [autoMatchedCashboxName, setAutoMatchedCashboxName] = useState<string | null>(null);
   const hydratedInvoiceKeyRef = useRef<string | null>(null);
+  const defaultCustomerAppliedRef = useRef(false);
+  const [pageSettings, setPageSettings] = useState<TicketPageSettings>(() => loadTicketPageSettings());
+  const [pageSettingsOpen, setPageSettingsOpen] = useState(false);
+  const [draftPageSettings, setDraftPageSettings] = useState<TicketPageSettings>(DEFAULT_TICKET_PAGE_SETTINGS);
 
   // Passengers State
   const [passengers, setPassengers] = useState<PassengerLine[]>([
@@ -160,7 +173,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
   // Keyboard shortcut: ESC to safely request exit
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && opened && !currencySwitchModalOpen && !auditLogOpen && !cancelModalOpen && !confirmExitOpen) {
+      if (e.key === 'Escape' && opened && !currencySwitchModalOpen && !auditLogOpen && !cancelModalOpen && !confirmExitOpen && !pageSettingsOpen) {
         e.preventDefault();
         handleRequestClose();
       }
@@ -177,7 +190,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [opened, currencySwitchModalOpen, auditLogOpen, cancelModalOpen, confirmExitOpen, handleRequestClose]);
+  }, [opened, currencySwitchModalOpen, auditLogOpen, cancelModalOpen, confirmExitOpen, pageSettingsOpen, handleRequestClose]);
 
   // ── Fetch Real Business Data from APIs ──
   const { data: customersData } = useQuery({
@@ -278,6 +291,20 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     }
     return list;
   }, [customersList, accountsList]);
+
+  useEffect(() => {
+    setPageSettings(loadTicketPageSettings(user?.companyId));
+  }, [user?.companyId]);
+
+  const applyDefaultCustomer = useCallback(() => {
+    const found = findDefaultCashCustomer(allCustomerCandidates, pageSettings);
+    if (!found) {
+      if (pageSettings.defaultCustomerName) setCustomerName(pageSettings.defaultCustomerName);
+      return Boolean(pageSettings.defaultCustomerName);
+    }
+    setCustomerName(customerDisplayName(found, isAr));
+    return true;
+  }, [allCustomerCandidates, pageSettings, isAr]);
 
   const allSupplierCandidates = useMemo(() => {
     const list: any[] = [...suppliersList.filter((s: any) => s.isActive !== false && !s.isBlocked && s.overduePolicy !== 'BLOCK')];
@@ -503,52 +530,102 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     ];
   }, [paymentMethodsConfig, isAr]);
 
-  // Helper: Automatically match & set employee's assigned cashbox
   const applyEmployeeCashbox = useCallback((selectedEmpName: string, availableBoxes: any[]) => {
-    if (!selectedEmpName || availableBoxes.length === 0) return;
+    if (!selectedEmpName || availableBoxes.length === 0) return false;
 
-    const emp = employeesList.find(
-      (e: any) =>
-        e.fullName === selectedEmpName ||
-        e.name === selectedEmpName ||
-        e.username === selectedEmpName ||
-        e.email === selectedEmpName,
-    );
+    const emp = employeesList.find((e: any) => {
+      const names = [e.fullName, e.name, e.username, e.email, e.user?.name];
+      return names.some((n) => String(n || '').trim() === String(selectedEmpName).trim());
+    });
 
-    let targetCashbox: any = null;
+    const assigned = String(
+      emp?.assignedCashbox || emp?.assignedCashboxId || emp?.cashboxId || emp?.cashboxAccountId || '',
+    ).trim();
 
-    if (emp?.assignedCashbox) {
-      targetCashbox = availableBoxes.find(
-        (c: any) =>
-          c.id === emp.assignedCashbox ||
-          c.code === emp.assignedCashbox ||
-          c.nameAr === emp.assignedCashbox ||
-          c.name === emp.assignedCashbox ||
-          (c.nameAr || c.name || '').toLowerCase().includes(emp.assignedCashbox.toLowerCase()),
+    const matchBox = (boxes: any[], hint: string) => {
+      if (!hint) return null;
+      const h = hint.toLowerCase();
+      return (
+        boxes.find((c: any) => c.id === hint || c.code === hint) ||
+        boxes.find(
+          (c: any) =>
+            String(c.nameAr || '').trim() === hint ||
+            String(c.nameEn || '').trim() === hint ||
+            String(c.name || '').trim() === hint,
+        ) ||
+        boxes.find((c: any) => {
+          const label = `${c.nameAr || ''} ${c.nameEn || ''} ${c.name || ''} ${c.code || ''}`.toLowerCase();
+          return label.includes(h);
+        }) ||
+        null
       );
-    }
+    };
+
+    let targetCashbox = assigned ? matchBox(availableBoxes, assigned) : null;
 
     if (!targetCashbox) {
       const firstName = selectedEmpName.split(' ')[0];
       targetCashbox = availableBoxes.find((c: any) => {
-        const cName = (c.nameAr || c.name || '').toLowerCase();
-        return cName.includes(selectedEmpName.toLowerCase()) || (firstName.length >= 3 && cName.includes(firstName.toLowerCase()));
-      });
+        const cName = `${c.nameAr || ''} ${c.nameEn || ''} ${c.name || ''}`.toLowerCase();
+        return (
+          cName.includes(selectedEmpName.toLowerCase()) ||
+          (firstName.length >= 3 && cName.includes(firstName.toLowerCase()))
+        );
+      }) || null;
     }
 
     if (targetCashbox) {
       setReceivingCashbox(targetCashbox.id);
-      setPayingCashbox((prev) => prev || targetCashbox.id);
-      setAutoMatchedCashboxName(targetCashbox.nameAr || targetCashbox.name);
-    } else {
-      setAutoMatchedCashboxName(null);
+      setPayingCashbox(targetCashbox.id);
+      setAutoMatchedCashboxName(targetCashbox.nameAr || targetCashbox.nameEn || targetCashbox.name);
+      return true;
     }
+
+    setAutoMatchedCashboxName(null);
+    return false;
   }, [employeesList]);
+
+  const applyPageSettingsToForm = useCallback((settings: TicketPageSettings) => {
+    if (status === 'POSTED') return;
+    setCurrency(settings.defaultCurrency || 'IQD');
+    setExchangeRate(settings.defaultCurrency === 'USD' ? adoptedEx.adoptedRate || 1 : 1);
+    setPaymentType(settings.defaultPaymentType || 'نقدي');
+    setPaymentMethod(settings.defaultPaymentMethod || 'CASH_HAND');
+    if (settings.datesDefaultToday && !initialData) {
+      const today = new Date();
+      setIssueDate(today);
+      setTravelDate(new Date(today));
+    }
+    const found = findDefaultCashCustomer(allCustomerCandidates, settings);
+    if (found) {
+      setCustomerName(customerDisplayName(found, isAr));
+      defaultCustomerAppliedRef.current = true;
+    } else if (settings.defaultCustomerName) {
+      setCustomerName(settings.defaultCustomerName);
+    }
+    if (settings.linkCashboxToEmployee && employeeName) {
+      applyEmployeeCashbox(employeeName, accountsList.length ? accountsList : availableCashboxes);
+    }
+    markDirty();
+  }, [
+    status,
+    adoptedEx.adoptedRate,
+    adoptedEx.adoptedRate,
+    initialData,
+    allCustomerCandidates,
+    isAr,
+    employeeName,
+    applyEmployeeCashbox,
+    accountsList,
+    availableCashboxes,
+    markDirty,
+  ]);
 
   // Hydrate Data
   useEffect(() => {
     if (!opened) {
       hydratedInvoiceKeyRef.current = null;
+      defaultCustomerAppliedRef.current = false;
       return;
     }
 
@@ -564,6 +641,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       setInvoiceNumber(d.invoiceNumber || d.number || '');
       setIssueDate(d.issueDate ? new Date(d.issueDate) : new Date());
       setTravelDate(d.travelDate ? new Date(d.travelDate) : new Date());
+      setEntryDate(d.entryDate ? new Date(d.entryDate) : d.createdAt ? new Date(d.createdAt) : new Date());
       setCustomerName(d.customerName || d.customer || '');
       const supplierHint = d.supplierId || d.supplierAccountId || d.supplierAccount || d.supplierAccountName || d.supplierName;
       const resolvedSupplier = suppliersList.find((supplier) =>
@@ -639,10 +717,13 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     } else {
       // Create Mode: generate new invoice sequence
       const nextNum = getNextSequenceNumber('tickets');
+      const settings = loadTicketPageSettings(user?.companyId);
+      setPageSettings(settings);
       setInvoiceNumber(nextNum || `TK-${Date.now().toString().slice(-6)}`);
-      setIssueDate(new Date());
-      setTravelDate(new Date());
-      setCustomerName('');
+      const today = new Date();
+      setIssueDate(settings.datesDefaultToday ? today : new Date());
+      setTravelDate(settings.datesDefaultToday ? new Date(today) : new Date());
+      setEntryDate(new Date());
       setSupplierAccount('');
       setSupplierAccountName('');
       setAirline('');
@@ -650,10 +731,10 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       const defaultEmp = user?.name || (isAr ? 'علي جعفر' : 'Ali Jaafar');
       setEmployeeName(defaultEmp);
       setEntryEmployee(defaultEmp);
-      setCurrency('IQD');
-      setExchangeRate(1);
-      setPaymentType('نقدي');
-      setPaymentMethod('CASH_HAND');
+      setCurrency(settings.defaultCurrency || 'IQD');
+      setExchangeRate(settings.defaultCurrency === 'USD' ? adoptedEx.adoptedRate || 1 : 1);
+      setPaymentType(settings.defaultPaymentType || 'نقدي');
+      setPaymentMethod(settings.defaultPaymentMethod || 'CASH_HAND');
       setFromAirport('MHD');
       setToAirport('BGW');
       setStopovers([]);
@@ -662,9 +743,18 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       setNotes('');
       setStatus('DRAFT');
       setDiscountAmount(0);
+      defaultCustomerAppliedRef.current = false;
+      const foundCustomer = findDefaultCashCustomer(allCustomerCandidates, settings);
+      if (foundCustomer) {
+        setCustomerName(customerDisplayName(foundCustomer, isAr));
+        defaultCustomerAppliedRef.current = true;
+      } else {
+        setCustomerName(settings.defaultCustomerName || 'مسافر كاش');
+      }
 
-      // Auto-assign default employee cashbox
-      applyEmployeeCashbox(defaultEmp, accountsList);
+      if (settings.linkCashboxToEmployee) {
+        applyEmployeeCashbox(defaultEmp, accountsList);
+      }
 
       setPassengers([
         {
@@ -686,7 +776,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       setAttachments([]);
       setIsDirty(false);
     }
-  }, [opened, initialData, user, applyEmployeeCashbox, accountsList, resolveAccount, isAr]);
+  }, [opened, initialData, user, applyEmployeeCashbox, accountsList, resolveAccount, isAr, allCustomerCandidates]);
 
   // Convert legacy airline text to the registered airline ID once the list arrives.
   useEffect(() => {
@@ -698,14 +788,29 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     }
   }, [opened, airline, airlinesList.length, resolveAirline]);
 
-  // When issuing employee changes, auto-assign their cashbox
   const handleSelectEmployee = (val: string) => {
     setEmployeeName(val);
     markDirty();
-    if (paymentMethod === 'CASH_HAND') {
-      applyEmployeeCashbox(val, accountsList);
+    if (pageSettings.linkCashboxToEmployee) {
+      applyEmployeeCashbox(val, accountsList.length ? accountsList : availableCashboxes);
     }
   };
+
+  useEffect(() => {
+    if (!opened || !employeeName || !pageSettings.linkCashboxToEmployee) return;
+    const method = paymentMethodsList.find((pm: any) => pm.value === paymentMethod);
+    const target = String(method?.targetAccountId || '');
+    if (target && !['EMPLOYEE_ASSIGNED', 'RECEIVABLE', ''].includes(target) && accountsList.some((a: any) => a.id === target)) {
+      return;
+    }
+    applyEmployeeCashbox(employeeName, accountsList.length ? accountsList : availableCashboxes);
+  }, [opened, employeeName, employeesList, accountsList, availableCashboxes, paymentMethod, paymentMethodsList, applyEmployeeCashbox, pageSettings.linkCashboxToEmployee]);
+
+  useEffect(() => {
+    if (!opened || initialData || defaultCustomerAppliedRef.current) return;
+    if (!allCustomerCandidates.length) return;
+    if (applyDefaultCustomer()) defaultCustomerAppliedRef.current = true;
+  }, [opened, initialData, allCustomerCandidates, applyDefaultCustomer]);
 
   // Calculation Totals
   const totalBuy = useMemo(() => {
@@ -1092,7 +1197,14 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     if (parsedData.bookingRef) {
       setReference(parsedData.bookingRef);
     }
+    if (parsedData.currency === 'USD' || parsedData.currency === 'IQD') {
+      setCurrency(parsedData.currency);
+    }
     if (parsedData.passengers && parsedData.passengers.length > 0) {
+      const moneyOrNull = (v: any) => {
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      };
       const newRows: PassengerLine[] = parsedData.passengers.map((p: any, idx: number) => ({
         id: `p-parsed-${Date.now()}-${idx}`,
         name: p.name || '',
@@ -1100,11 +1212,11 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
         ticketNumber: p.ticketNumber || '',
         documentNumber: p.documentNumber || '',
         pnr: parsedData.pnr || pnr || '',
-        fareBuy: p.fareBuy || null,
-        fareSell: p.fareSell || null,
-        tax1: p.tax1 || 0,
-        tax2: p.tax2 || 0,
-        charge: p.charge || 0,
+        fareBuy: moneyOrNull(p.fareBuy),
+        fareSell: moneyOrNull(p.fareSell),
+        tax1: Number(p.tax1) > 0 ? Number(p.tax1) : 0,
+        tax2: Number(p.tax2) > 0 ? Number(p.tax2) : 0,
+        charge: Number(p.charge) > 0 ? Number(p.charge) : 0,
       }));
 
       if (passengers.length === 1 && !passengers[0].name.trim() && !passengers[0].ticketNumber.trim()) {
@@ -1114,9 +1226,12 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       }
     }
     markDirty();
+    const ticketCount = (parsedData.passengers || []).filter((p: any) => p.ticketNumber).length;
     showSuccessNotification(
       isAr ? 'تم الاستيراد والتحليل الذكي بنجاح' : 'Smart Import Succeeded',
-      isAr ? `تم استخراج ${parsedData.passengers?.length || 0} مسافرين والبيانات بنجاح` : `Extracted ${parsedData.passengers?.length || 0} passenger(s) successfully`,
+      isAr
+        ? `تم استخراج ${parsedData.passengers?.length || 0} مسافرين و${ticketCount} رقم تذكرة`
+        : `Extracted ${parsedData.passengers?.length || 0} passenger(s) and ${ticketCount} ticket number(s)`,
     );
   };
 
@@ -1232,7 +1347,8 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
         paymentMethod: isCashSale ? paymentMethod : null,
         receivingCashbox: isCashSale ? selectedReceivingAccount?.id || null : null,
         cashboxAccountId: isCashSale ? selectedReceivingAccount?.id || null : null,
-        cashbox: selectedPayingAccount?.id || null,
+        cashbox: selectedReceivingAccount?.id || selectedPayingAccount?.id || null,
+        entryDate: entryDate.toISOString(),
         route: fullRouteText,
         reference: reference.trim(),
         notes: notes.trim(),
@@ -1454,6 +1570,15 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
               >
                 {isAr ? 'سجل التعديلات' : 'Audit Trail Log'}
               </Menu.Item>
+              <Menu.Item
+                leftSection={<Settings size={14} />}
+                onClick={() => {
+                  setDraftPageSettings(loadTicketPageSettings(user?.companyId));
+                  setPageSettingsOpen(true);
+                }}
+              >
+                {isAr ? 'إعدادات الصفحة' : 'Page settings'}
+              </Menu.Item>
               <Menu.Divider />
               <Menu.Item
                 color="red"
@@ -1549,7 +1674,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                         {isAr ? 'معلومات الفاتورة والرحلة' : 'Invoice & Flight Information'}
                       </h3>
                       <span className="text-[11.5px] sm:text-[12.5px] text-[#6B7280] font-normal block sm:inline">
-                        {isAr ? 'حدد العميل والمورد والموظفين وطريقة التسوية' : 'Specify customer, supplier, issuing staff, and settlement method'}
+                        {isAr ? 'التواريخ وموظف الإصدار ومسار الرحلة' : 'Dates, issuing staff, and flight route'}
                       </span>
                     </div>
                   </div>
@@ -1565,141 +1690,8 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                   </div>
                 </div>
 
-                {/* 4-Column Clean Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
-                  {/* Row 1: Issue Date, Travel Date, Customer, Supplier */}
-                  <div id="field-issue-date">
-                    <SegmentedDatePicker
-                      label={isAr ? 'تاريخ الإصدار' : 'Issue Date'}
-                      required
-                      value={issueDate}
-                      onChange={(d) => {
-                        if (d) setIssueDate(d);
-                        markDirty();
-                      }}
-                      error={errors.issueDate}
-                    />
-                  </div>
-
-                  <div id="field-travel-date">
-                    <SegmentedDatePicker
-                      label={isAr ? 'تاريخ السفر' : 'Travel Date'}
-                      value={travelDate}
-                      onChange={(d) => {
-                        setTravelDate(d);
-                        markDirty();
-                      }}
-                      clearable
-                      error={errors.travelDate}
-                    />
-                  </div>
-
-                  {/* 1. Customer: Searchable Combobox */}
-                  <div id="field-customer">
-                    <SearchableCombobox
-                      label={isAr ? 'العميل' : 'Customer'}
-                      required={paymentType === 'آجل' || paymentType === 'CREDIT'}
-                      value={customerName}
-                      onChange={(val) => {
-                        const found = customersList.find((c) => c.id === val || c.code === val || c.nameAr === val || c.nameEn === val);
-                        setCustomerName(found ? (isAr ? (found.nameAr || found.nameEn) : (found.nameEn || found.nameAr)) : (val || ''));
-                        markDirty();
-                      }}
-                      options={formattedCustomersData}
-                      allowCustomValue
-                      error={errors.customerName}
-                    />
-                  </div>
-
-                  {/* 2. Supplier: Searchable Combobox */}
-                  <div id="field-supplier">
-                    <SearchableCombobox
-                      label={isAr ? 'المورد' : 'Supplier'}
-                      value={supplierAccount}
-                      onChange={(val) => {
-                        setSupplierAccount(val);
-                        const found = suppliersList.find((s) => s.id === val || s.code === val || s.nameAr === val || s.nameEn === val);
-                        setSupplierAccountName(found ? (isAr ? found.nameAr : (found.nameEn || found.nameAr)) : val);
-                        markDirty();
-                      }}
-                      options={formattedSuppliersData}
-                      error={errors.supplierAccount}
-                    />
-                  </div>
-
-                  {/* Row 2: Airline (with Logos), PNR, Issuer, Sale Type */}
-                  <div id="field-airline">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                        <span>{isAr ? 'شركة الطيران' : 'Airline'}</span>
-                      </label>
-                      <Tooltip label={isAr ? 'إدارة وإضافة شركات الطيران المسجلة في النظام' : 'Manage & Add Airlines'} position="top">
-                        <button
-                          type="button"
-                          onClick={() => setManageAirlinesModalOpened(true)}
-                          className="text-[11px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 hover:underline cursor-pointer bg-orange-50/70 hover:bg-orange-100/80 px-2 py-0.5 rounded-lg border border-orange-200/60 transition-all"
-                        >
-                          <Plus size={12} className="stroke-[2.5]" />
-                          <span>{isAr ? 'إضافة / إدارة شركات الطيران' : 'Add / Manage Airlines'}</span>
-                        </button>
-                      </Tooltip>
-                    </div>
-                    <SearchableCombobox
-                      value={airline}
-                      onChange={(val) => {
-                        setAirline(val);
-                        setErrors((current) => current.airline ? { ...current, airline: '' } : current);
-                        markDirty();
-                      }}
-                      options={formattedAirlinesData}
-                      error={errors.airline}
-                      renderOption={(opt) => (
-                        <div className="flex items-center gap-2.5 py-0.5 w-full text-xs">
-                          {opt.logo ? (
-                            <img
-                              src={opt.logo}
-                              alt={opt.nameAr || opt.value}
-                              className="w-5 h-5 object-contain rounded shrink-0"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            <div className="w-5 h-5 rounded bg-slate-100 flex items-center justify-center shrink-0 text-slate-500 font-mono text-[10px] font-bold">
-                              {opt.code || '✈'}
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between flex-1 min-w-0">
-                            <span className="font-medium text-slate-900 truncate">{opt.label}</span>
-                            {opt.code && (
-                              <span className={`font-mono text-[11px] text-slate-400 font-semibold ${isAr ? 'mr-2' : 'ml-2'}`}>
-                                {opt.code}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    />
-                  </div>
-
-                  <div id="field-pnr">
-                    <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
-                      {isAr ? 'رمز الحجز PNR' : 'PNR Code'}
-                    </label>
-                    <input
-                      type="text"
-                      dir="ltr"
-                      value={pnr}
-                      onChange={(e) => {
-                        setPnr(e.target.value.toUpperCase());
-                        markDirty();
-                      }}
-                      placeholder="6-LETTER PNR"
-                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] font-mono font-semibold text-xs text-slate-900 uppercase outline-none hover:bg-white hover:border-[#D1D5DB] focus:bg-white focus:border-[#F45A0A] focus:ring-4 focus:ring-[#F45A0A]/10 transition-all duration-150"
-                    />
-                  </div>
-
-                  {/* 4. موظف الإصدار */}
+                {/* 2-Column Grid: Employee + Entry Date & Time */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div id="field-employee">
                     <SearchableCombobox
                       label={isAr ? 'موظف الإصدار' : 'Issuing Employee'}
@@ -1714,8 +1706,72 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                     />
                   </div>
 
-                  {/* 5. نوع البيع */}
-                  <div id="field-payment-type">
+                  <div id="field-entry-date">
+                    <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
+                      {isAr ? 'تاريخ ووقت الإدخال' : 'Entry Date & Time'}
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_160px] gap-2">
+                      <SegmentedDatePicker
+                        value={entryDate}
+                        onChange={(date) => {
+                          if (!date) return;
+                          const next = new Date(date);
+                          next.setHours(entryDate.getHours(), entryDate.getMinutes(), entryDate.getSeconds(), 0);
+                          setEntryDate(next);
+                          markDirty();
+                        }}
+                        clearable={false}
+                      />
+                      <SegmentedTimePicker
+                        value={entryDate}
+                        onChange={(updated) => {
+                          setEntryDate(updated);
+                          markDirty();
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                  <section id="field-customer" className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-3.5 sm:p-5 space-y-3 font-sans">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-sky-50 text-sky-700 border border-sky-200 flex items-center justify-center shrink-0">
+                          <User size={15} />
+                        </div>
+                        <div>
+                          <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
+                            {isAr ? 'معلومات العميل' : 'Customer details'}
+                          </h4>
+                          <p className="text-[11.5px] text-[#6B7280]">
+                            {isAr ? 'العميل ونوع البيع وطريقة الاستلام والصندوق' : 'Customer, sale type, receipt method, and cashbox'}
+                          </p>
+                        </div>
+                      </div>
+                      {(paymentType === 'آجل' || paymentType === 'CREDIT') && (
+                        <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded shrink-0">
+                          {isAr ? 'مطلوب للبيع الآجل' : 'Required for credit'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <SearchableCombobox
+                      label={isAr ? 'العميل' : 'Customer'}
+                      required={paymentType === 'آجل' || paymentType === 'CREDIT'}
+                      value={customerName}
+                      onChange={(val) => {
+                        const found = customersList.find((c) => c.id === val || c.code === val || c.nameAr === val || c.nameEn === val)
+                          || allCustomerCandidates.find((c) => c.id === val || c.code === val || c.nameAr === val || c.nameEn === val);
+                        setCustomerName(found ? customerDisplayName(found, isAr) : (val || ''));
+                        markDirty();
+                      }}
+                      options={formattedCustomersData}
+                      allowCustomValue
+                      error={errors.customerName}
+                    />
+                    <div id="field-payment-type">
                     <SearchableCombobox
                       label={isAr ? 'نوع البيع' : 'Payment Term'}
                       value={paymentType}
@@ -1729,11 +1785,8 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                       ]}
                       clearable={false}
                     />
-                  </div>
-
-                  {/* Row 3: Method, Receiving Cashbox, Paying Cashbox, Reference */}
-                  {/* 6. طريقة الاستلام */}
-                  <div id="field-payment-method">
+                    </div>
+                    <div id="field-payment-method">
                     <SearchableCombobox
                       label={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
                       required={paymentType === 'نقدي' || paymentType === 'CASH'}
@@ -1742,78 +1795,182 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                         const nextMethod = val || 'CASH_HAND';
                         setPaymentMethod(nextMethod);
                         const matched = paymentMethodsList.find((pm: any) => pm.value === nextMethod);
-                        if (matched?.targetAccountId && matched.targetAccountId !== 'EMPLOYEE_ASSIGNED') {
+                        if (matched?.targetAccountId && matched.targetAccountId !== 'EMPLOYEE_ASSIGNED' && matched.targetAccountId !== 'RECEIVABLE') {
                           setReceivingCashbox(matched.targetAccountId);
-                        } else if (nextMethod === 'CASH_HAND' && employeeName) {
-                          applyEmployeeCashbox(employeeName, accountsList);
+                          setPayingCashbox(matched.targetAccountId);
+                        } else if (pageSettings.linkCashboxToEmployee && employeeName) {
+                          applyEmployeeCashbox(employeeName, accountsList.length ? accountsList : availableCashboxes);
                         }
                         markDirty();
                       }}
                       options={paymentMethodsList}
                       clearable={false}
                     />
-                  </div>
+                    </div>
+                    <div id="field-receiving-cashbox">
+                      <SearchableCombobox
+                        label={isAr ? 'صندوق استلام قيمة البيع' : 'Receiving Cashbox'}
+                        required={paymentType === 'نقدي' || paymentType === 'CASH'}
+                        value={receivingCashbox}
+                        onChange={(val) => {
+                          setReceivingCashbox(val);
+                          setPayingCashbox(val);
+                          markDirty();
+                        }}
+                        options={formattedCashboxesData}
+                        error={errors.receivingCashbox}
+                      />
+                      {pageSettings.linkCashboxToEmployee && autoMatchedCashboxName && (
+                        <p className="mt-1 text-[11px] text-emerald-700 font-medium">
+                          {isAr
+                            ? `تلقائي من صندوق الموظف: ${autoMatchedCashboxName}`
+                            : `Auto from employee cashbox: ${autoMatchedCashboxName}`}
+                        </p>
+                      )}
+                    </div>
+                    </div>
 
-                  {/* 7. صندوق استلام قيمة البيع */}
-                  <div id="field-receiving-cashbox">
+                    {/* ── Attachments (moved here from Card 3) ── */}
+                    <div className="pt-3 border-t border-slate-100">
+                      <TicketAttachmentsSection
+                        attachments={attachments}
+                        onChange={(updatedAtts) => {
+                          setAttachments(updatedAtts);
+                          markDirty();
+                        }}
+                      />
+                    </div>
+                  </section>
+
+                  <section id="field-supplier" className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-3.5 sm:p-5 space-y-3 font-sans">
+                    <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                      <div className="w-8 h-8 rounded-full bg-violet-50 text-violet-700 border border-violet-200 flex items-center justify-center shrink-0">
+                        <Building2 size={15} />
+                      </div>
+                      <div>
+                        <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
+                          {isAr ? 'معلومات المورد' : 'Supplier details'}
+                        </h4>
+                        <p className="text-[11.5px] text-[#6B7280]">
+                          {isAr ? 'المورد وشركة الطيران ورمز الحجز' : 'Supplier, airline, and PNR'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <SearchableCombobox
-                      label={isAr ? 'صندوق استلام قيمة البيع' : 'Receiving Cashbox'}
-                      required={paymentType === 'نقدي' || paymentType === 'CASH'}
-                      value={receivingCashbox}
+                      label={isAr ? 'المورد' : 'Supplier'}
+                      value={supplierAccount}
                       onChange={(val) => {
-                        setReceivingCashbox(val);
+                        setSupplierAccount(val);
+                        const found = suppliersList.find((s) => s.id === val || s.code === val || s.nameAr === val || s.nameEn === val);
+                        setSupplierAccountName(found ? (isAr ? found.nameAr : (found.nameEn || found.nameAr)) : val);
                         markDirty();
                       }}
-                      options={formattedCashboxesData}
-                      error={errors.receivingCashbox}
+                      options={formattedSuppliersData}
+                      error={errors.supplierAccount}
                     />
-                  </div>
+                    <div id="field-airline">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <span>{isAr ? 'شركة الطيران' : 'Airline'}</span>
+                        </label>
+                        <Tooltip label={isAr ? 'إدارة وإضافة شركات الطيران المسجلة في النظام' : 'Manage & Add Airlines'} position="top">
+                          <button
+                            type="button"
+                            onClick={() => setManageAirlinesModalOpened(true)}
+                            className="text-[11px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 hover:underline cursor-pointer bg-orange-50/70 hover:bg-orange-100/80 px-2 py-0.5 rounded-lg border border-orange-200/60 transition-all"
+                          >
+                            <Plus size={12} className="stroke-[2.5]" />
+                            <span>{isAr ? 'إضافة / إدارة' : 'Add / Manage'}</span>
+                          </button>
+                        </Tooltip>
+                      </div>
+                      <SearchableCombobox
+                        value={airline}
+                        onChange={(val) => {
+                          setAirline(val);
+                          setErrors((current) => current.airline ? { ...current, airline: '' } : current);
+                          markDirty();
+                        }}
+                        options={formattedAirlinesData}
+                        error={errors.airline}
+                        renderOption={(opt) => (
+                          <div className="flex items-center gap-2.5 py-0.5 w-full text-xs">
+                            {opt.logo ? (
+                              <img
+                                src={opt.logo}
+                                alt={opt.nameAr || opt.value}
+                                className="w-5 h-5 object-contain rounded shrink-0"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded bg-slate-100 flex items-center justify-center shrink-0 text-slate-500 font-mono text-[10px] font-bold">
+                                {opt.code || '✈'}
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between flex-1 min-w-0">
+                              <span className="font-medium text-slate-900 truncate">{opt.label}</span>
+                              {opt.code && (
+                                <span className={`font-mono text-[11px] text-slate-400 font-semibold ${isAr ? 'mr-2' : 'ml-2'}`}>
+                                  {opt.code}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      />
+                    </div>
+                    <div id="field-pnr">
+                      <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
+                        {isAr ? 'رمز الحجز PNR' : 'PNR Code'}
+                      </label>
+                      <input
+                        type="text"
+                        dir="ltr"
+                        value={pnr}
+                        onChange={(e) => {
+                          setPnr(e.target.value.toUpperCase());
+                          markDirty();
+                        }}
+                        placeholder="6-LETTER PNR"
+                        className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] font-mono font-semibold text-xs text-slate-900 uppercase outline-none hover:bg-white hover:border-[#D1D5DB] focus:bg-white focus:border-[#F45A0A] focus:ring-4 focus:ring-[#F45A0A]/10 transition-all duration-150"
+                      />
+                    </div>
+                    <div id="field-paying-cashbox">
+                      <SearchableCombobox
+                        label={isAr ? 'صندوق الاستلام (الدفع للمورد)' : 'Paying Cashbox (to Supplier)'}
+                        value={payingCashbox}
+                        onChange={(val) => {
+                          setPayingCashbox(val);
+                          markDirty();
+                        }}
+                        options={formattedCashboxesData}
+                        error={errors.payingCashbox}
+                      />
+                    </div>
+                    </div>
 
-                  {/* 8. صندوق دفع تكلفة الشراء */}
-                  <div id="field-paying-cashbox">
-                    <SearchableCombobox
-                      label={isAr ? 'صندوق دفع تكلفة الشراء' : 'Cost Paying Cashbox'}
-                      value={payingCashbox}
-                      onChange={(val) => {
-                        setPayingCashbox(val);
-                        markDirty();
-                      }}
-                      options={formattedCashboxesData}
-                    />
-                  </div>
-
-                  <div id="field-entry-date">
-                    <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
-                      {isAr ? 'تاريخ الإدخال' : 'Entry Date'}
-                    </label>
-                    <SegmentedDatePicker
-                      value={entryDate}
-                      onChange={(date) => {
-                        if (date) setEntryDate(date);
-                        markDirty();
-                      }}
-                      clearable={false}
-                    />
-                  </div>
+                    {/* ── Flight Route (full width below grid) ── */}
+                    <div id="field-route" className="pt-3 border-t border-slate-100">
+                      <FlightRouteSelector
+                        fromAirport={fromAirport}
+                        toAirport={toAirport}
+                        stopovers={stopovers}
+                        onChange={({ from, to, stops, fullRouteText }) => {
+                          setFromAirport(from);
+                          setToAirport(to);
+                          setStopovers(stops);
+                          setFullRouteText(fullRouteText);
+                          markDirty();
+                        }}
+                        error={errors.route}
+                      />
+                    </div>
+                  </section>
                 </div>
 
-                {/* Integrated Flight Route */}
-                <div id="field-route" className="pt-2 border-t border-slate-100">
-                  <FlightRouteSelector
-                    fromAirport={fromAirport}
-                    toAirport={toAirport}
-                    stopovers={stopovers}
-                    onChange={({ from, to, stops, fullRouteText }) => {
-                      setFromAirport(from);
-                      setToAirport(to);
-                      setStopovers(stops);
-                      setFullRouteText(fullRouteText);
-                      markDirty();
-                    }}
-                    error={errors.route}
-                  />
-                </div>
-              </div>
 
               {/* ── CARD 2: PASSENGERS & TICKETS ── */}
               <div id="field-passengers-section">
@@ -1830,84 +1987,48 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                 />
               </div>
 
-              {/* ── CARD 3: ATTACHMENTS & NOTES ── */}
+              {/* ── CARD 3: TERMS & NOTES ONLY ── */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4 font-sans">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-[#F45A0A] text-white font-bold text-sm flex items-center justify-center shrink-0">
                       3
                     </div>
                     <div>
                       <h3 className="font-bold text-[17px] text-[#111827] leading-tight">
-                        {isAr ? 'المرفقات والملاحظات' : 'Attachments & Notes'}
+                        {isAr ? 'شروط وملاحظات' : 'Terms & Notes'}
                       </h3>
                       <span className="text-[12.5px] text-[#6B7280] font-normal">
-                        {isAr ? 'إرفاق إيصالات الدفع وتدوين الشروط الخاصة' : 'Attach payment vouchers and write specific ticket terms'}
+                        {isAr ? 'تدوين الشروط الخاصة وملاحظات الفاتورة' : 'Write specific ticket terms and invoice remarks'}
                       </span>
                     </div>
                   </div>
-
-                  {(paymentMethod === 'CASH_HAND' || paymentMethod === 'CASH' || paymentMethod === 'كاش باليد (نقدي)') && (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
-                      <span>{isAr ? '✓ تم تجاوز إلزامية المرفقات (كاش باليد)' : '✓ Attachments waived (Cash in Hand)'}</span>
-                    </div>
-                  )}
+                  <span className="text-[11.5px] text-slate-400 font-normal">
+                    {isAr ? 'تظهر في الطباعة' : 'Printed on invoice'}
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-                  <div className="h-full">
-                    <TicketAttachmentsSection
-                      attachments={attachments}
-                      onChange={(updatedAtts) => {
-                        setAttachments(updatedAtts);
-                        markDirty();
-                      }}
-                    />
-                  </div>
-
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col h-full font-sans text-xs space-y-3">
-                    <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <FileText size={18} className="text-slate-600" />
-                        <h4 className="font-bold text-[15px] text-slate-900 leading-tight">
-                          {isAr ? 'شروط وملاحظات الفاتورة' : 'Invoice Terms & Remarks'}
-                        </h4>
-                      </div>
-                      <span className="text-[11.5px] text-slate-400 font-normal">
-                        {isAr ? 'تظهر في الطباعة' : 'Printed on invoice'}
-                      </span>
-                    </div>
-
-                    <div className="flex-1 flex flex-col pt-0.5">
-                      <Textarea
-                        value={notes}
-                        onChange={(e) => {
-                          setNotes(e.target.value);
-                          markDirty();
-                        }}
-                        placeholder={isAr ? 'اكتب أي شروط خاصة بالتذكرة وسياسة الاسترجاع والتعديل...' : 'Enter ticket terms, refund policy, and remarks...'}
-                        radius="md"
-                        className="flex-1 flex flex-col h-full"
-                        styles={{
-                          root: { flex: 1, display: 'flex', flexDirection: 'column' },
-                          wrapper: { flex: 1, display: 'flex', flexDirection: 'column' },
-                          input: {
-                            flex: 1,
-                            height: '100% !important',
-                            minHeight: 140,
-                            fontSize: 13,
-                            borderRadius: 9,
-                            borderColor: '#E2E6EA',
-                            backgroundColor: '#FAFAFA',
-                            padding: 12,
-                            fontFamily: 'inherit',
-                            lineHeight: 1.6,
-                          },
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => {
+                    setNotes(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder={isAr ? 'اكتب أي شروط خاصة بالتذكرة وسياسة الاسترجاع والتعديل...' : 'Enter ticket terms, refund policy, and remarks...'}
+                  radius="md"
+                  styles={{
+                    input: {
+                      minHeight: 140,
+                      fontSize: 13,
+                      borderRadius: 9,
+                      borderColor: '#E2E6EA',
+                      backgroundColor: '#FAFAFA',
+                      padding: 12,
+                      fontFamily: 'inherit',
+                      lineHeight: 1.6,
+                    },
+                  }}
+                />
               </div>
 
             </div>
@@ -2012,6 +2133,142 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       </footer>
 
       {/* ── MODALS: AUDIT LOG, CANCEL, EXIT CONFIRM, CURRENCY SWITCH ── */}
+      <Modal
+        opened={pageSettingsOpen}
+        onClose={() => setPageSettingsOpen(false)}
+        size="520px"
+        padding="md"
+        radius="lg"
+        centered
+        dir={direction}
+        title={
+          <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+            <Settings size={18} className="text-orange-600" />
+            <span>{isAr ? 'إعدادات صفحة التذاكر' : 'Ticket page settings'}</span>
+          </div>
+        }
+      >
+        <div className="space-y-4 font-sans text-xs">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-600 leading-relaxed">
+            {isAr
+              ? 'تُحفظ هذه الخيارات على هذا الجهاز وتُطبَّق تلقائياً عند إنشاء فاتورة تذاكر جديدة.'
+              : 'These options are saved on this device and applied automatically when creating a new ticket invoice.'}
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-800 mb-1.5">
+              {isAr ? 'العملة الافتراضية' : 'Default currency'}
+            </label>
+            <div className="h-9 flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-300 gap-1">
+              <button
+                type="button"
+                onClick={() => setDraftPageSettings((s) => ({ ...s, defaultCurrency: 'USD' }))}
+                className={`flex-1 h-full rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  draftPageSettings.defaultCurrency === 'USD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                $ USD
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraftPageSettings((s) => ({ ...s, defaultCurrency: 'IQD' }))}
+                className={`flex-1 h-full rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  draftPageSettings.defaultCurrency === 'IQD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                IQD
+              </button>
+            </div>
+          </div>
+
+          <SearchableCombobox
+            label={isAr ? 'العميل الافتراضي' : 'Default customer'}
+            value={draftPageSettings.defaultCustomerId || draftPageSettings.defaultCustomerName}
+            onChange={(val) => {
+              const found = allCustomerCandidates.find(
+                (c) => c.id === val || c.accountId === val || c.code === val || c.nameAr === val || c.nameEn === val || c.name === val,
+              );
+              setDraftPageSettings((s) => ({
+                ...s,
+                defaultCustomerId: found?.id || found?.accountId || '',
+                defaultCustomerName: found ? customerDisplayName(found, isAr) : (val || 'مسافر كاش'),
+              }));
+            }}
+            options={formattedCustomersData}
+            allowCustomValue
+          />
+
+          <SearchableCombobox
+            label={isAr ? 'نوع البيع الافتراضي' : 'Default sale type'}
+            value={draftPageSettings.defaultPaymentType}
+            onChange={(val) => setDraftPageSettings((s) => ({ ...s, defaultPaymentType: (val === 'آجل' ? 'آجل' : 'نقدي') }))}
+            options={[
+              { value: 'نقدي', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
+              { value: 'آجل', label: isAr ? 'آجل (ذمة العميل)' : 'Credit (On Account)' },
+            ]}
+            clearable={false}
+          />
+
+          <SearchableCombobox
+            label={isAr ? 'طريقة الاستلام الافتراضية' : 'Default receiving method'}
+            value={draftPageSettings.defaultPaymentMethod}
+            onChange={(val) => setDraftPageSettings((s) => ({ ...s, defaultPaymentMethod: val || 'CASH_HAND' }))}
+            options={paymentMethodsList}
+            clearable={false}
+          />
+
+          <Switch
+            checked={draftPageSettings.linkCashboxToEmployee}
+            onChange={(e) => setDraftPageSettings((s) => ({ ...s, linkCashboxToEmployee: e.currentTarget.checked }))}
+            label={isAr ? 'ربط صندوق الاستلام بحساب الموظف' : 'Link receiving cashbox to the issuing employee'}
+            description={isAr ? 'عند اختيار موظف الإصدار يُعبَّأ صندوقه تلقائياً' : 'Selecting the issuing employee fills their assigned cashbox'}
+            color="orange"
+            size="sm"
+          />
+
+          <Switch
+            checked={draftPageSettings.datesDefaultToday}
+            onChange={(e) => setDraftPageSettings((s) => ({ ...s, datesDefaultToday: e.currentTarget.checked }))}
+            label={isAr ? 'تاريخ الإصدار وتاريخ السفر = اليوم' : 'Issue date and travel date default to today'}
+            color="orange"
+            size="sm"
+          />
+
+          <Switch
+            checked={draftPageSettings.entryDateIncludesTime}
+            onChange={(e) => setDraftPageSettings((s) => ({ ...s, entryDateIncludesTime: e.currentTarget.checked }))}
+            label={isAr ? 'تاريخ الإدخال يشمل الوقت' : 'Entry date includes time'}
+            description={isAr ? 'يعرض حقل الوقت بجانب تاريخ الإدخال' : 'Shows a time field next to the entry date'}
+            color="orange"
+            size="sm"
+          />
+
+          <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+            <Button size="xs" variant="default" radius="md" onClick={() => setPageSettingsOpen(false)}>
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </Button>
+            <Button
+              size="xs"
+              color="orange"
+              radius="md"
+              onClick={() => {
+                saveTicketPageSettings(draftPageSettings, user?.companyId);
+                setPageSettings(draftPageSettings);
+                applyPageSettingsToForm(draftPageSettings);
+                setPageSettingsOpen(false);
+                showSuccessNotification(
+                  isAr ? 'تم حفظ إعدادات الصفحة' : 'Page settings saved',
+                  isAr ? 'ستُطبَّق هذه الإعدادات على فواتير التذاكر الجديدة وعلى المسودة الحالية.' : 'These defaults apply to new ticket invoices and the current draft.',
+                );
+              }}
+              className="bg-[#F45A0A] hover:bg-orange-600 font-bold"
+            >
+              {isAr ? 'حفظ وتطبيق' : 'Save and apply'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       <CurrencySwitchModal
         opened={currencySwitchModalOpen}
         onClose={() => setCurrencySwitchModalOpen(false)}

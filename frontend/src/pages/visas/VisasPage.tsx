@@ -61,6 +61,7 @@ import { archiveVisa } from '../../utils/deletedRecordsArchive';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useAiPageContext } from '../../hooks/useAiPageContext';
 
 const VisaInvoiceEditorWorkspace = React.lazy(() =>
   import('../../components/visas/VisaInvoiceEditorWorkspace').then((module) => ({
@@ -150,6 +151,14 @@ export const VisasPage: React.FC = () => {
   const [selectedReceiptVisa, setSelectedReceiptVisa] = useState<any | null>(null);
   const [refundWorkspaceOpen, setRefundWorkspaceOpen] = useState<boolean>(false);
   const [visaForRefund, setVisaForRefund] = useState<any | null>(null);
+
+  const openVisa = selectedVisa || selectedReceiptVisa || contextMenu?.visa || visaForRefund;
+  useAiPageContext({
+    route: '/visas',
+    entity: openVisa ? 'ticket' : undefined,
+    recordId: openVisa?.id,
+    label: openVisa?.invoiceNumber || openVisa?.pnr,
+  });
 
   // Close context menu on Escape key
   useEffect(() => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Switch, Badge, Modal, TextInput, Textarea, Button, Select } from '@mantine/core';
+import { Switch, Badge, Modal, TextInput, Textarea, Button, Select, NumberInput } from '@mantine/core';
 import {
   IconBrandWhatsapp,
   IconBuildingStore,
@@ -12,6 +12,7 @@ import {
   IconServer,
   IconRefresh,
   IconPlugConnected,
+  IconSparkles,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { showSuccessNotification, showInfoNotification, showErrorNotification } from '../utils/notifications';
@@ -20,6 +21,7 @@ import { branchesApi } from '../api/branches';
 import { tenantsApi } from '../api/tenants';
 import { useLanguageStore } from '../store/useLanguageStore';
 import { useAuthStore } from '../store/useAuthStore';
+import { aiAssistantApi, type AiBillingSnapshot } from '../api/aiAssistant';
 
 export const AddonsStorePage: React.FC = () => {
   const { language, direction } = useLanguageStore();
@@ -30,6 +32,11 @@ export const AddonsStorePage: React.FC = () => {
   const [brevoInfo, setBrevoInfo] = useState<any>(null);
   const [loadingBrevo, setLoadingBrevo] = useState(false);
   const [brevoModalOpen, setBrevoModalOpen] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [aiBilling, setAiBilling] = useState<AiBillingSnapshot | null>(null);
+  const [loadingAiBilling, setLoadingAiBilling] = useState(false);
+  const [grantInput, setGrantInput] = useState<number | string>('');
+  const [savingGrant, setSavingGrant] = useState(false);
 
   // Sender Config state
   const [senderEmailInput, setSenderEmailInput] = useState('acc2.rooda10@gmail.com');
@@ -55,6 +62,7 @@ export const AddonsStorePage: React.FC = () => {
       if (saved) return JSON.parse(saved);
     } catch {}
     return {
+      ai_copilot: true,
       whatsapp_otp: true,
       branches: true,
       database: true,
@@ -97,8 +105,22 @@ export const AddonsStorePage: React.FC = () => {
     }
   };
 
+  const fetchAiBilling = async (live = false) => {
+    setLoadingAiBilling(true);
+    try {
+      const data = await aiAssistantApi.getBilling(live);
+      setAiBilling(data);
+      if (data.allocatedUsd || data.grantUsd) setGrantInput(Number((data.allocatedUsd ?? data.grantUsd).toFixed(2)));
+    } catch (e) {
+      console.error('Failed to fetch AI billing:', e);
+    } finally {
+      setLoadingAiBilling(false);
+    }
+  };
+
   useEffect(() => {
     fetchBrevoStats();
+    fetchAiBilling();
   }, []);
 
   const handleSaveSenderConfig = async () => {
@@ -197,11 +219,65 @@ export const AddonsStorePage: React.FC = () => {
     }
   };
 
+  const formatUsd = (n?: number, known = true) => {
+    if (!known || n == null || Number.isNaN(n)) return '—';
+    if (n > 0 && n < 0.01) return `$${n.toFixed(4)}`;
+    return `$${n.toFixed(2)}`;
+  };
+
+  const handleSaveAiGrant = async () => {
+    const value = Number(grantInput);
+    if (!Number.isFinite(value) || value < 0) {
+      showErrorNotification(
+        isAr ? 'خطأ' : 'Error',
+        isAr ? 'أدخل مبلغ الرصيد المتوفر بالدولار.' : 'Enter the available credit amount in USD.'
+      );
+      return;
+    }
+    try {
+      setSavingGrant(true);
+      const data = await aiAssistantApi.setCreditGrant(value);
+      setAiBilling(data);
+      showSuccessNotification(
+        isAr ? 'تم الحفظ' : 'Saved',
+        isAr ? 'تم تحديث الرصيد المتوفر لوكيل الذكاء.' : 'AI Copilot available credit updated.'
+      );
+    } catch (err: any) {
+      showErrorNotification(
+        isAr ? 'خطأ في الحفظ' : 'Save Error',
+        err.message || (isAr ? 'تعذر حفظ الرصيد' : 'Failed to save credit')
+      );
+    } finally {
+      setSavingGrant(false);
+    }
+  };
+
   const formattedDbSize = dbUsage?.database?.physicalBytes
     ? `${(dbUsage.database.physicalBytes / (1024 * 1024)).toFixed(1)} MB`
     : 'Real-time Sync';
 
   const addonsList = [
+    {
+      id: 'ai_copilot',
+      nameEn: 'AI Copilot Agent',
+      nameAr: 'وكيل الذكاء (المستشار الذكي)',
+      description: isAr
+        ? 'وكيل قراءة وتحليل لحسابات الشركة: أرصدة، تذاكر، سندات، وقيود — عبر نموذج OpenAI.'
+        : 'Read-only accounting copilot for balances, tickets, vouchers, and journals via OpenAI.',
+      icon: IconSparkles,
+      iconColor: 'text-indigo-600',
+      iconBg: 'bg-indigo-50 border-indigo-200',
+      tagType: 'usage' as const,
+      tagLabel: isAr ? 'وكيل الذكاء' : 'AI Agent',
+      statLabel1: isAr ? 'الرصيد المخصص' : 'Allocated',
+      statVal1: formatUsd(aiBilling?.allocatedUsd ?? aiBilling?.grantUsd ?? 0, Boolean(aiBilling?.remainingKnown)),
+      statLabel2: isAr ? 'المستخدم' : 'Used',
+      statVal2: formatUsd(aiBilling?.usedMonthUsd ?? aiBilling?.usedUsd ?? 0, true),
+      statLabel3: isAr ? 'المتبقي' : 'Remaining',
+      statVal3: aiBilling?.remainingKnown ? formatUsd(aiBilling.remainingUsd) : '—',
+      isConfigurable: true,
+      manageLabel: isAr ? 'إدارة الرصيد' : 'Manage credit',
+    },
     {
       id: 'transactional_email',
       nameEn: 'Transactional Email (Brevo)',
@@ -221,6 +297,7 @@ export const AddonsStorePage: React.FC = () => {
       statLabel3: isAr ? 'الرصيد المتاح' : 'Available',
       statVal3: `${brevoInfo?.credits ?? 300}`,
       isConfigurable: true,
+      manageLabel: isAr ? 'إدارة Brevo وتجربة الإرسال' : 'Manage Brevo & Test',
     },
     {
       id: 'branches',
@@ -241,6 +318,7 @@ export const AddonsStorePage: React.FC = () => {
       statLabel3: isAr ? 'صلاحيات الفروع' : 'Permissions',
       statVal3: isAr ? 'مستقلة' : 'Isolated',
       isConfigurable: false,
+      manageLabel: '',
     },
     {
       id: 'database',
@@ -261,6 +339,7 @@ export const AddonsStorePage: React.FC = () => {
       statLabel3: isAr ? 'النسخ الاحتياطي' : 'Backups',
       statVal3: isAr ? 'يومي تلقائي' : 'Daily Auto',
       isConfigurable: false,
+      manageLabel: '',
     },
     {
       id: 'whatsapp_otp',
@@ -281,6 +360,7 @@ export const AddonsStorePage: React.FC = () => {
       statLabel3: isAr ? 'التسليم' : 'Delivery',
       statVal3: isAr ? 'فوري' : 'Instant',
       isConfigurable: false,
+      manageLabel: '',
     },
   ];
 
@@ -333,6 +413,7 @@ export const AddonsStorePage: React.FC = () => {
           const Icon = addon.icon;
           const isEnabled = enabledAddons[addon.id] ?? true;
           const isEmailAddon = addon.id === 'transactional_email';
+          const isAiAddon = addon.id === 'ai_copilot';
 
           return (
             <div
@@ -426,12 +507,15 @@ export const AddonsStorePage: React.FC = () => {
                       if (isEmailAddon) {
                         setBrevoModalOpen(true);
                         fetchBrevoStats();
+                      } else if (isAiAddon) {
+                        setAiModalOpen(true);
+                        fetchAiBilling(true);
                       }
                     }}
                     className="flex items-center gap-1.5 text-xs font-black text-orange-700 hover:text-white bg-orange-50 hover:bg-[#F45A0A] border border-orange-200/90 px-3.5 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer active:scale-95"
                   >
                     <IconPlugConnected size={15} />
-                    <span>{isAr ? 'إدارة Brevo وتجربة الإرسال' : 'Manage Brevo & Test'}</span>
+                    <span>{addon.manageLabel}</span>
                   </button>
                 ) : (
                   <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
@@ -457,11 +541,14 @@ export const AddonsStorePage: React.FC = () => {
         </div>
         <button
           type="button"
-          onClick={fetchBrevoStats}
-          disabled={loadingBrevo}
+          onClick={() => {
+            fetchBrevoStats();
+            fetchAiBilling(true);
+          }}
+          disabled={loadingBrevo || loadingAiBilling}
           className="flex items-center gap-1.5 text-xs font-black text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl cursor-pointer shadow-2xs shrink-0 transition-colors"
         >
-          <IconRefresh size={14} className={loadingBrevo ? 'animate-spin text-orange-600' : 'text-slate-500'} />
+          <IconRefresh size={14} className={loadingBrevo || loadingAiBilling ? 'animate-spin text-orange-600' : 'text-slate-500'} />
           <span>{isAr ? 'تحديث البيانات' : 'Refresh Data'}</span>
         </button>
       </div>
@@ -703,6 +790,113 @@ export const AddonsStorePage: React.FC = () => {
               </Button>
             </div>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        opened={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        size="md"
+        centered
+        radius="xl"
+        title={
+          <div className="flex items-center gap-2 text-slate-900 font-black text-sm">
+            <IconSparkles size={19} className="text-indigo-600" />
+            <span>{isAr ? 'رصيد وكيل الذكاء (OpenAI)' : 'AI Copilot Credit (OpenAI)'}</span>
+          </div>
+        }
+      >
+        <div
+          className="space-y-4 text-xs"
+          dir={direction}
+          style={{ fontFamily: isAr ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}
+        >
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="bg-indigo-50 border border-indigo-200 p-2.5 rounded-xl text-center">
+              <span className="text-[10px] text-indigo-800 font-bold block">{isAr ? 'الرصيد المخصص' : 'Allocated'}</span>
+              <strong className="text-sm text-indigo-950 font-mono block mt-0.5 tabular-nums">
+                {formatUsd(aiBilling?.allocatedUsd ?? aiBilling?.grantUsd, Boolean(aiBilling?.remainingKnown))}
+              </strong>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+              <span className="text-[10px] text-slate-500 font-bold block">{isAr ? 'استهلاك اليوم' : 'Used today'}</span>
+              <strong className="text-sm text-slate-900 font-mono block mt-0.5 tabular-nums">
+                {formatUsd(aiBilling?.usedTodayUsd ?? 0)}
+              </strong>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+              <span className="text-[10px] text-slate-500 font-bold block">{isAr ? 'هذا الشهر' : 'This month'}</span>
+              <strong className="text-sm text-slate-900 font-mono block mt-0.5 tabular-nums">
+                {formatUsd(aiBilling?.usedMonthUsd ?? aiBilling?.usedUsd ?? 0)}
+              </strong>
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl text-center">
+              <span className="text-[10px] text-emerald-800 font-bold block">{isAr ? 'المتبقي' : 'Remaining'}</span>
+              <strong className="text-sm text-emerald-900 font-mono block mt-0.5 tabular-nums">
+                {formatUsd(aiBilling?.remainingUsd, Boolean(aiBilling?.remainingKnown))}
+              </strong>
+            </div>
+          </div>
+
+          <div className="bg-orange-50/70 border border-orange-200 rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-bold text-slate-700">{isAr ? 'نسبة الاستهلاك' : 'Usage'}</span>
+            <strong className="font-mono text-sm text-orange-800 tabular-nums">
+              {(aiBilling?.usagePercent ?? 0).toFixed(1)}%
+            </strong>
+          </div>
+
+          <div className="bg-indigo-50/60 border border-indigo-200 rounded-xl p-3.5 space-y-3">
+            <p className="text-slate-700 font-bold leading-relaxed">
+              {isAr
+                ? 'OpenAI لا تعيد رقم الرصيد المتبقي مباشرة. الرصيد المخصص يُحفظ هنا، والاستهلاك يُجلب من Costs API، والمتبقي = المخصص − المستخدم. قد يتأخر ظهور التكلفة بضع دقائق.'
+                : 'OpenAI does not expose remaining prepaid credit. Allocated budget is stored here, usage comes from the Costs API, and remaining = allocated − used. Billing can lag a few minutes.'}
+            </p>
+            {aiBilling?.costsLagging && (
+              <p className="text-[11px] text-amber-800 font-bold">
+                {isAr
+                  ? 'Costs API لم يحدّث بعد؛ يظهر استهلاك تقديري من طلبات المستشار إلى حين وصول فاتورة OpenAI.'
+                  : 'Costs API has not caught up yet; showing estimated Copilot usage until OpenAI billing updates.'}
+              </p>
+            )}
+            <NumberInput
+              size="xs"
+              min={0}
+              decimalScale={2}
+              thousandSeparator=","
+              prefix="$ "
+              value={grantInput}
+              onChange={setGrantInput}
+              label={isAr ? 'الرصيد المخصص ($)' : 'Allocated budget ($)'}
+              styles={{ input: { fontFamily: 'monospace', fontWeight: 700 } }}
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                size="xs"
+                variant="default"
+                leftSection={<IconRefresh size={13} />}
+                loading={loadingAiBilling}
+                onClick={() => fetchAiBilling(true)}
+                className="font-bold"
+              >
+                {isAr ? 'تحديث الاستهلاك الآن' : 'Refresh usage now'}
+              </Button>
+              <Button
+                size="xs"
+                color="indigo"
+                loading={savingGrant}
+                leftSection={<IconCheck size={13} />}
+                onClick={handleSaveAiGrant}
+                className="font-black"
+              >
+                {isAr ? 'حفظ الرصيد المخصص' : 'Save allocated budget'}
+              </Button>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-slate-500 font-bold">
+            {isAr ? 'النموذج:' : 'Model:'} {aiBilling?.model || 'gpt-5.6-sol'}
+            {aiBilling?.lastCheckedAt ? ` • ${new Date(aiBilling.lastCheckedAt).toLocaleString()}` : ''}
+          </p>
         </div>
       </Modal>
     </div>

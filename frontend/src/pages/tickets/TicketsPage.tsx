@@ -45,6 +45,7 @@ import { showSuccessNotification, showErrorNotification, showInfoNotification } 
 import { archiveTicket } from '../../utils/deletedRecordsArchive';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
+import { useAiPageContext } from '../../hooks/useAiPageContext';
 
 // Global in-memory cache for instant zero-latency loading (0ms)
 let globalTicketsMemoryCache: any[] | null = null;
@@ -154,7 +155,7 @@ const mapInvoicesToMasterRows = (
 ) => {
   return savedInvoices.map((data, invoiceIdx) => {
     const passengers = data.passengers || data.lines || [];
-    const passCount = passengers.length;
+    const passCount = Number(data._count?.passengers ?? passengers.length);
     const firstPassenger = passengers[0]?.name || passengers[0]?.passenger || '—';
 
     const totalBuy = data.totals?.totalBuy || passengers.reduce((s: number, p: any) => s + (p.fareBuy || 0) + (p.tax1 || 0) + (p.tax2 || 0) + (p.charge || 0), 0);
@@ -217,11 +218,15 @@ const mapInvoicesToMasterRows = (
         .replace(/\s+/g, ' ')
         .trim();
       const displayName = cleanName || p.name || p.passenger || 'مسافر';
-      const pTicketNum = (p.ticketNumber || p.documentNumber || '').trim().toUpperCase();
+      const pTicketNum = String(p.ticketNumber || '').trim();
       const pName = displayName.trim().toUpperCase();
+      const ticketDigits = pTicketNum.replace(/\D/g, '');
+      const displayTicket =
+        ticketDigits.length === 13 ? `${ticketDigits.slice(0, 3)}-${ticketDigits.slice(3)}` : pTicketNum;
 
       const isRefunded =
-        (pTicketNum && refundedTicketNumbers.has(pTicketNum)) ||
+        (pTicketNum && refundedTicketNumbers.has(pTicketNum.toUpperCase())) ||
+        (ticketDigits && refundedTicketNumbers.has(ticketDigits)) ||
         (pName && refundedPassengerNames.has(pName)) ||
         p.status === 'مسترجع' ||
         p.status === 'REFUNDED' ||
@@ -230,7 +235,7 @@ const mapInvoicesToMasterRows = (
       return {
         ...p,
         displayName,
-        ticketNumber: p.ticketNumber || p.documentNumber || '',
+        ticketNumber: displayTicket,
         ticketType: p.ticketType || p.type || 'ADULT',
         isRefunded: Boolean(isRefunded),
       };
@@ -298,6 +303,14 @@ export const TicketsPage: React.FC = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [ticketToDelete, setTicketToDelete] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const openTicket = editingTicketData || selectedReceiptTicket || contextMenu?.ticket || ticketForRefund;
+  useAiPageContext({
+    route: '/tickets',
+    entity: openTicket ? 'ticket' : undefined,
+    recordId: openTicket?.id,
+    label: openTicket?.invoiceNumber || openTicket?.pnr || openTicket?.number,
+  });
 
   // Close context menu on Escape key
   useEffect(() => {
@@ -382,7 +395,7 @@ export const TicketsPage: React.FC = () => {
   });
 
   const [tickets, setTickets] = useState<any[]>(initialTickets);
-  const [ticketsLoading, setTicketsLoading] = useState<boolean>(true);
+  const [ticketsLoading, setTicketsLoading] = useState<boolean>(() => !(globalTicketsMemoryCache && globalTicketsMemoryCache.length > 0));
 
   // Filter States
   // View Mode: Summary (Aggregated Invoices) vs Detailed (Passenger-level)
@@ -391,8 +404,13 @@ export const TicketsPage: React.FC = () => {
   const [currencyFilter, setCurrencyFilter] = useState<string>('ALL'); // ALL, IQD, USD
   const [statusFilter, setStatusFilter] = useState<string>('ALL'); // ALL, DRAFT, POSTED, AUDITED, CANCELLED
   const [auditFilter, setAuditFilter] = useState<'ALL' | 'AUDITED' | 'UNAUDITED'>('ALL');
-  const [dateFrom, setDateFrom] = useState<Date | null>(() => new Date(new Date().getFullYear(), 0, 1));
-  const [dateTo, setDateTo] = useState<Date | null>(() => new Date());
+  const [dateFrom, setDateFrom] = useState<Date | null>(() => {
+    const start = new Date();
+    start.setDate(start.getDate() - 14);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  });
+  const [dateTo, setDateTo] = useState<Date | null>(null);
   const [airlineFilter, setAirlineFilter] = useState<string>('');
   const [supplierFilter, setSupplierFilter] = useState<string>('');
   const [customerFilter, setCustomerFilter] = useState<string>('');
@@ -421,44 +439,35 @@ export const TicketsPage: React.FC = () => {
   // Load the authoritative ticket list first; reference data is non-blocking.
   const isFetchingRef = React.useRef(false);
 
+  const dateFromKey = dateFrom
+    ? `${dateFrom.getFullYear()}-${dateFrom.getMonth()}-${dateFrom.getDate()}`
+    : '';
+  const dateToKey = dateTo
+    ? `${dateTo.getFullYear()}-${dateTo.getMonth()}-${dateTo.getDate()}`
+    : '';
+
   const reloadTicketsFromApi = useCallback(async (clearExisting = false) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
-    setTicketsLoading(true);
-    if (clearExisting) setTickets([]);
+    const hasRows = Boolean(globalTicketsMemoryCache && globalTicketsMemoryCache.length > 0);
+    if (!hasRows) setTicketsLoading(true);
 
     try {
       const ticketData = await ticketsApi.getFlights({
-        limit: 150,
-        dateFrom: dateFrom ? new Date(dateFrom.getFullYear(), dateFrom.getMonth(), dateFrom.getDate()).toISOString() : undefined,
-        dateTo: dateTo ? new Date(dateTo.getFullYear(), dateTo.getMonth(), dateTo.getDate(), 23, 59, 59, 999).toISOString() : undefined,
+        limit: 25,
+        dateFrom: dateFrom
+          ? new Date(dateFrom.getFullYear(), dateFrom.getMonth(), dateFrom.getDate()).toISOString()
+          : undefined,
       });
       const dbTickets = Array.isArray(ticketData) ? ticketData : [];
 
-      // Separate Refunds & Flight Tickets
-      const refundTickets = dbTickets.filter(
-        (t: any) =>
-          t.tripType === 'REFUND' ||
-          t.status === 'REFUNDED' ||
-          String(t.invoiceNumber || '').startsWith('REF-')
-      );
-
-      // The server already excludes visas. Refund rows remain available only to
-      // derive passenger refund status and are not shown as flight invoices.
-      const flightTicketsOnly = dbTickets.filter(
-        (t: any) =>
-          t.tripType !== 'REFUND' &&
-          t.status !== 'REFUNDED' &&
-          !String(t.invoiceNumber || '').startsWith('REF-')
-      );
-
       const mapped = mapInvoicesToMasterRows(
-        flightTicketsOnly.map(convertDbTicketToLocal),
+        dbTickets.map(convertDbTicketToLocal),
         globalAirlinesMemoryCache || [],
         [],
         [],
         [],
-        refundTickets
+        [],
       );
       globalTicketsMemoryCache = mapped;
       setTickets(mapped);
@@ -482,10 +491,10 @@ export const TicketsPage: React.FC = () => {
       isFetchingRef.current = false;
       setTicketsLoading(false);
     }
-  }, [language, dateFrom, dateTo]);
+  }, [language, dateFromKey, dateToKey]);
 
   useEffect(() => {
-    reloadTicketsFromApi(true);
+    reloadTicketsFromApi(false);
 
     const handleBranchChange = () => {
       reloadTicketsFromApi(true);
@@ -618,14 +627,16 @@ export const TicketsPage: React.FC = () => {
 
       // 5. Date Range Filter
       if (dateFrom && t.date) {
+        const start = new Date(dateFrom.getFullYear(), dateFrom.getMonth(), dateFrom.getDate());
         const tDate = new Date(t.date);
-        if (!isNaN(tDate.getTime()) && tDate < new Date(dateFrom.setHours(0, 0, 0, 0))) {
+        if (!isNaN(tDate.getTime()) && tDate < start) {
           return false;
         }
       }
       if (dateTo && t.date) {
+        const end = new Date(dateTo.getFullYear(), dateTo.getMonth(), dateTo.getDate(), 23, 59, 59, 999);
         const tDate = new Date(t.date);
-        if (!isNaN(tDate.getTime()) && tDate > new Date(dateTo.setHours(23, 59, 59, 999))) {
+        if (!isNaN(tDate.getTime()) && tDate > end) {
           return false;
         }
       }
@@ -719,7 +730,9 @@ export const TicketsPage: React.FC = () => {
     filteredTickets.forEach((tRow: any) => {
       const raw = tRow.rawInvoice || tRow;
       const passengersList =
-        raw.passengers && Array.isArray(raw.passengers) && raw.passengers.length > 0
+        Array.isArray(tRow.detailedPassengers) && tRow.detailedPassengers.length > 0
+          ? tRow.detailedPassengers
+          : raw.passengers && Array.isArray(raw.passengers) && raw.passengers.length > 0
           ? raw.passengers
           : [
               {
@@ -737,7 +750,7 @@ export const TicketsPage: React.FC = () => {
         const passSell = p.fareSell !== null && p.fareSell !== undefined ? Number(p.fareSell) : (Number(tRow.totalSell || 0) / (passengersList.length || 1));
         const passProfit = passSell - passBuy;
         const passName = p.name || raw.passengerName || tRow.passengerName || '—';
-        const passDoc = p.ticketNumber || raw.ticketNumber || tRow.ticketNumber || p.documentNumber || '—';
+        const passDoc = p.ticketNumber || tRow.ticketNumber || '—';
         const passType = p.ticketType || 'ADULT';
 
         list.push({

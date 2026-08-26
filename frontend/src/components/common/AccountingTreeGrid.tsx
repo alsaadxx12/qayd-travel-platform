@@ -28,6 +28,7 @@ import {
   Wallet,
   Coins,
   FileText,
+  Download,
 } from 'lucide-react';
 import { Menu, Checkbox, Tooltip, Modal, Select } from '@mantine/core';
 import { useNavigate } from 'react-router-dom';
@@ -122,10 +123,47 @@ export interface AccountNode {
   children?: AccountNode[];
 }
 
+function SelectionCheck({
+  checked,
+  indeterminate = false,
+  onToggle,
+  label,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={indeterminate ? 'mixed' : checked}
+      aria-label={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border-2 cursor-pointer ${
+        checked || indeterminate
+          ? 'bg-[#F45A0A] border-[#F45A0A] text-white'
+          : 'bg-white border-slate-400 hover:border-[#F45A0A]'
+      }`}
+    >
+      {indeterminate && !checked ? (
+        <span className="block h-0.5 w-2.5 rounded-full bg-white" />
+      ) : checked ? (
+        <Check size={12} strokeWidth={3} />
+      ) : null}
+    </button>
+  );
+}
+
 interface AccountingTreeGridProps {
   accounts: AccountNode[];
   loading?: boolean;
   onRefresh?: () => void;
+  onAccountsRemoved?: (ids: string[]) => void;
   onAddAccount?: () => void;
   onRowDoubleClick?: (account: AccountNode) => void;
   onSelectAccount?: (account: AccountNode) => void;
@@ -135,6 +173,7 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
   accounts = [],
   loading = false,
   onRefresh,
+  onAccountsRemoved,
   onAddAccount,
   onRowDoubleClick,
   onSelectAccount,
@@ -209,6 +248,10 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
   const [wizardModalOpen, setWizardModalOpen] = useState<boolean>(false);
   const [wizardMode, setWizardMode] = useState<'CREATE' | 'EDIT'>('CREATE');
   const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false);
+  const [deleteIsBulk, setDeleteIsBulk] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Helper to check branch mapping
   const doesNodeBelongToBranch = (node: AccountNode, targetBranchId: string): boolean => {
@@ -497,7 +540,7 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
     if (cols.balanceUSD && (selectedCurrency === 'ALL' || selectedCurrency === 'USD')) count++;
     if (cols.status) count++;
     if (cols.actions) count++;
-    return count || 12;
+    return (count || 12) + 1;
   }, [cols, selectedCurrency]);
 
   const rowVirtualizer = useVirtualizer({
@@ -512,24 +555,188 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
   const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
   const paddingBottom = virtualRows.length > 0 ? totalHeight - virtualRows[virtualRows.length - 1].end : 0;
 
-  const handleConfirmDelete = async () => {
-    if (!activeAccount) return;
-    const accountToDelete = activeAccount;
-    setDeleteModalOpen(false);
+  const visibleIds = useMemo(() => visibleList.map((item) => item.node.id), [visibleList]);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.some((id) => selectedIds.has(id));
 
-    try {
-      await accountsApi.delete(accountToDelete.id);
-      showSuccessNotification(
-        isAr ? 'تم حذف الحساب' : 'Account Deleted',
-        isAr ? `تم حذف الحساب (${accountToDelete.nameAr}) بنجاح.` : `Account ${accountToDelete.nameAr} was deleted.`
-      );
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
-      if (onRefresh) onRefresh();
-    } catch (err: any) {
-      if (onRefresh) onRefresh();
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const collectSelectedAccounts = useCallback(() => {
+    const collected: AccountNode[] = [];
+    const walk = (nodes: AccountNode[]) => {
+      nodes.forEach((node) => {
+        if (selectedIds.has(node.id)) collected.push(node);
+        if (node.children && node.children.length > 0) walk(node.children);
+      });
+    };
+    walk(treeData);
+    return collected;
+  }, [selectedIds, treeData]);
+
+  const exportSelectedAccounts = () => {
+    const selectedAccounts = collectSelectedAccounts();
+    if (selectedAccounts.length === 0) {
       showErrorNotification(
-        isAr ? 'فشل الحذف' : 'Delete Failed',
-        err?.message || (isAr ? 'لا يمكن حذف حساب يحتوي على حركات أو حسابات فرعية.' : 'Cannot delete account with transactions.')
+        isAr ? 'لا يوجد تحديد' : 'Nothing selected',
+        isAr ? 'حدد حساباً واحداً على الأقل للتصدير.' : 'Select at least one account to export.',
+      );
+      return;
+    }
+
+    const headerLine =
+      'المستوى,رمز الحساب,اسم الحساب,طبيعة الرصيد,نوع الحساب,الرصيد IQD,الرصيد USD';
+    const rows = selectedAccounts.map((acc) => {
+      const balIqd = Number(acc.balanceIQD ?? acc.balance ?? 0);
+      const balUsd = Number(acc.balanceUSD ?? 0);
+      return [
+        acc.level || 1,
+        acc.code,
+        `"${(acc.nameAr || '').replace(/"/g, '""')}"`,
+        acc.nature === 'DEBIT' ? 'مدين' : 'دائن',
+        `"${(acc.type || '').replace(/"/g, '""')}"`,
+        balIqd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        balUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + headerLine + '\n' + rows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `حسابات_محددة_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showSuccessNotification(
+      isAr ? 'تم التصدير' : 'Exported',
+      isAr
+        ? `تم تصدير ${selectedAccounts.length.toLocaleString('en-US')} حساباً محدداً.`
+        : `Exported ${selectedAccounts.length.toLocaleString('en-US')} selected accounts.`,
+    );
+    setContextMenu(null);
+  };
+
+  const openBulkDelete = () => {
+    if (selectedIds.size === 0) {
+      showErrorNotification(
+        isAr ? 'لا يوجد تحديد' : 'Nothing selected',
+        isAr ? 'حدد حساباً واحداً على الأقل للحذف.' : 'Select at least one account to delete.',
+      );
+      return;
+    }
+    setContextMenu(null);
+    setDeleteIsBulk(true);
+    setDeleteModalOpen(true);
+  };
+
+  const handleRowContextMenu = (event: React.MouseEvent, node: AccountNode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedIds((prev) => {
+      if (prev.has(node.id)) return prev;
+      return new Set([node.id]);
+    });
+    setContextMenu({ x: event.clientX, y: event.clientY });
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return undefined;
+    const close = () => setContextMenu(null);
+    const timer = window.setTimeout(() => {
+      window.addEventListener('click', close);
+      window.addEventListener('contextmenu', close);
+    }, 0);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('click', close);
+      window.removeEventListener('contextmenu', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [contextMenu]);
+
+  const handleConfirmDelete = async () => {
+    const selectedAccounts = collectSelectedAccounts();
+    const unsorted = deleteIsBulk
+      ? selectedAccounts
+      : activeAccount
+        ? [activeAccount]
+        : selectedAccounts;
+    const targets = [...unsorted].sort(
+      (a, b) => (b.level || 1) - (a.level || 1) || b.code.length - a.code.length,
+    );
+
+    if (targets.length === 0) return;
+    setDeleteModalOpen(false);
+    setBulkDeleting(true);
+
+    let deletedCount = 0;
+    const deletedIds: string[] = [];
+    const failures: string[] = [];
+
+    for (const account of targets) {
+      try {
+        await accountsApi.delete(account.id);
+        deletedCount += 1;
+        deletedIds.push(account.id);
+      } catch (err: unknown) {
+        const axiosMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+        const message = axiosMessage || (err instanceof Error ? err.message : '');
+        failures.push(`${account.code} — ${account.nameAr}${message ? `: ${message}` : ''}`);
+      }
+    }
+
+    setBulkDeleting(false);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      deletedIds.forEach((id) => next.delete(id));
+      return next;
+    });
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      deletedIds.forEach((id) => next.delete(id));
+      return next;
+    });
+    setActiveAccount(null);
+    setDeleteIsBulk(false);
+    if (deletedIds.length > 0 && onAccountsRemoved) {
+      onAccountsRemoved(deletedIds);
+    }
+
+    if (deletedCount > 0) {
+      showSuccessNotification(
+        isAr ? 'تم الحذف' : 'Deleted',
+        isAr
+          ? `تم حذف ${deletedCount.toLocaleString('en-US')} حساباً.`
+          : `Deleted ${deletedCount.toLocaleString('en-US')} account(s).`,
+      );
+    }
+    if (failures.length > 0) {
+      showErrorNotification(
+        isAr ? 'تعذر حذف بعض الحسابات' : 'Some accounts were not deleted',
+        failures.slice(0, 3).join(' | '),
       );
     }
   };
@@ -560,6 +767,15 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
               </button>
             )}
           </div>
+
+          {selectedIds.size > 0 && (
+            <div className="h-[38px] px-3 rounded-xl border border-[#F45A0A]/25 bg-[#FFF3E8] text-[#DD4F05] text-xs font-bold flex items-center gap-2">
+              <span className="font-mono tabular-nums lining-nums">
+                {selectedIds.size.toLocaleString('en-US')}
+              </span>
+              <span>{isAr ? 'حساب محدد — انقر يميناً للتصدير أو الحذف' : 'selected — right-click to export or delete'}</span>
+            </div>
+          )}
 
           {/* Account Type Filter */}
           <div className="w-40">
@@ -681,9 +897,23 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
       {/* ── 2. MODERN TREEGRID TABLE WITH SMOOTH VIRTUAL SCROLLING ── */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden w-full">
         <div ref={parentScrollRef} className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] min-h-[500px] w-full">
-          <table className="w-full text-xs text-start border-collapse font-sans whitespace-nowrap min-w-full">
+          <table className="w-full text-xs text-start border-collapse font-sans whitespace-nowrap min-w-[1200px]">
+            <colgroup>
+              <col style={{ width: 52, minWidth: 52 }} />
+            </colgroup>
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-700 font-bold h-[42px] whitespace-nowrap">
+                <th
+                  className="py-2.5 px-2 text-center font-bold bg-slate-50 border-e border-slate-200"
+                  style={{ width: 52, minWidth: 52, maxWidth: 52 }}
+                >
+                  <SelectionCheck
+                    checked={allVisibleSelected}
+                    indeterminate={someVisibleSelected && !allVisibleSelected}
+                    onToggle={toggleSelectAllVisible}
+                    label={isAr ? 'تحديد كل الحسابات الظاهرة' : 'Select all visible accounts'}
+                  />
+                </th>
                 {cols.code && <th className="py-2.5 px-3 text-start whitespace-nowrap font-bold w-28">{isAr ? 'رمز الحساب' : 'Code'}</th>}
                 {cols.name && <th className="py-2.5 px-3 text-start whitespace-nowrap font-bold min-w-[220px]">{isAr ? 'اسم الحساب والمسار الشجري' : 'Account Name & Path'}</th>}
                 {cols.nameEn && <th className="py-2.5 px-3 text-start whitespace-nowrap font-bold min-w-[160px]">{isAr ? 'English Name' : 'English Name'}</th>}
@@ -773,13 +1003,27 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
                     ? 'bg-white hover:bg-emerald-50/40 border-b border-slate-100/80'
                     : 'bg-white hover:bg-slate-50/80 border-b border-slate-100/80';
 
+                  const isRowSelected = selectedIds.has(node.id);
+
                   return (
                     <tr
                       key={node.id}
                       onClick={() => onSelectAccount && onSelectAccount(node)}
                       onDoubleClick={() => onRowDoubleClick && onRowDoubleClick(node)}
-                      className={`h-[42px] transition-colors cursor-pointer ${rowBgClass}`}
+                      onContextMenu={(event) => handleRowContextMenu(event, node)}
+                      className={`h-[42px] transition-colors cursor-pointer ${isRowSelected ? 'bg-[#FFF3E8] hover:bg-[#FFE6D2] border-b border-[#F45A0A]/20' : rowBgClass}`}
                     >
+                      <td
+                        className="py-2 px-2 text-center border-e border-slate-100"
+                        style={{ width: 52, minWidth: 52, maxWidth: 52 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <SelectionCheck
+                          checked={isRowSelected}
+                          onToggle={() => toggleSelected(node.id)}
+                          label={isAr ? `تحديد ${node.nameAr}` : `Select ${node.nameAr}`}
+                        />
+                      </td>
                       {/* Code */}
                       {cols.code && (
                         <td className="py-2 px-3" dir="ltr">
@@ -921,7 +1165,9 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
                       {/* Currency */}
                       {cols.currency && (
                         <td className="py-2 px-3 text-center font-mono font-bold text-slate-600">
-                          {node.currency === 'MULTI' ? 'ALL' : (node.currency || 'IQD')}
+                          {node.currency === 'MULTI' || node.currency === 'BOTH' || node.currency === 'ALL'
+                            ? 'IQD + USD'
+                            : (node.currency || 'IQD + USD')}
                         </td>
                       )}
 
@@ -1009,6 +1255,7 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
                                 leftSection={<Trash2 size={14} />}
                                 onClick={() => {
                                   setActiveAccount(node);
+                                  setDeleteIsBulk(false);
                                   setDeleteModalOpen(true);
                                 }}
                               >
@@ -1049,35 +1296,73 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
       {/* ── 4. DELETE CONFIRMATION MODAL ── */}
       <Modal
         opened={deleteModalOpen}
-        onClose={() => setDeleteModalOpen(false)}
+        onClose={() => {
+          if (!bulkDeleting) setDeleteModalOpen(false);
+        }}
         title={<span className="font-bold text-sm text-red-600">{isAr ? 'تأكيد حذف الحساب المحاسبي' : 'Confirm Account Deletion'}</span>}
         centered
         radius="lg"
       >
         <div className="space-y-4 text-xs font-sans" dir={direction}>
           <p className="text-slate-700 leading-relaxed">
-            {isAr
-              ? `هل أنت متأكد من رغبتك في حذف الحساب المحاسبي (${activeAccount?.code} — ${activeAccount?.nameAr})؟`
-              : `Are you sure you want to delete account (${activeAccount?.code} — ${activeAccount?.nameAr})?`}
+            {deleteIsBulk
+              ? isAr
+                ? `هل أنت متأكد من رغبتك في حذف ${selectedIds.size.toLocaleString('en-US')} حساباً محدداً؟ لا يمكن حذف حساب أب يحتوي على حسابات فرعية.`
+                : `Are you sure you want to delete ${selectedIds.size.toLocaleString('en-US')} selected account(s)? Parent accounts with children cannot be deleted.`
+              : isAr
+                ? `هل أنت متأكد من رغبتك في حذف الحساب المحاسبي (${activeAccount?.code} — ${activeAccount?.nameAr})؟`
+                : `Are you sure you want to delete account (${activeAccount?.code} — ${activeAccount?.nameAr})?`}
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
               onClick={() => setDeleteModalOpen(false)}
-              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 cursor-pointer"
+              disabled={bulkDeleting}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 cursor-pointer disabled:opacity-50"
             >
               {isAr ? 'إلغاء' : 'Cancel'}
             </button>
             <button
               type="button"
               onClick={handleConfirmDelete}
-              className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold cursor-pointer"
+              disabled={bulkDeleting}
+              className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold cursor-pointer disabled:opacity-50"
             >
-              {isAr ? 'تأكيد الحذف' : 'Delete'}
+              {bulkDeleting ? (isAr ? 'جارٍ الحذف...' : 'Deleting...') : isAr ? 'تأكيد الحذف' : 'Delete'}
             </button>
           </div>
         </div>
       </Modal>
+
+      {contextMenu && (
+        <div
+          className="fixed z-[400] min-w-[180px] rounded-xl border border-slate-200 bg-white shadow-lg py-1.5"
+          style={{
+            top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 120)),
+            left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 200)),
+          }}
+          dir={direction}
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-[#FFF3E8] hover:text-[#DD4F05] cursor-pointer"
+            onClick={exportSelectedAccounts}
+          >
+            <Download size={14} />
+            {isAr ? `تصدير المحدد (${selectedIds.size.toLocaleString('en-US')})` : `Export selected (${selectedIds.size.toLocaleString('en-US')})`}
+          </button>
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 cursor-pointer"
+            onClick={openBulkDelete}
+          >
+            <Trash2 size={14} />
+            {isAr ? `حذف المحدد (${selectedIds.size.toLocaleString('en-US')})` : `Delete selected (${selectedIds.size.toLocaleString('en-US')})`}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

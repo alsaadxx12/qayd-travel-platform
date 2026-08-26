@@ -418,7 +418,7 @@ export const PrintableAccountStatementSheet: React.FC<{
                 const hasPnr = row.pnr && row.pnr !== '-';
                 const hasRoute = row.route && row.route !== '-';
                 const paxDetails = row.passengersDetail && row.passengersDetail.length > 0;
-                
+
                 let paxSummaryStr = '';
                 if (paxDetails) {
                   let adt = 0, chd = 0, inf = 0;
@@ -511,16 +511,16 @@ export const PrintableAccountStatementSheet: React.FC<{
         {config.showQrCode !== false && (
           <div className="w-11 h-11 border border-slate-300 p-0.5 bg-white flex items-center justify-center">
             <svg viewBox="0 0 100 100" className="w-full h-full">
-              <rect width="100" height="100" fill="#ffffff"/>
-              <rect x="5" y="5" width="30" height="30" fill="#1e293b"/>
-              <rect x="10" y="10" width="20" height="20" fill="#ffffff"/>
-              <rect x="15" y="15" width="10" height="10" fill="#1e293b"/>
-              <rect x="65" y="5" width="30" height="30" fill="#1e293b"/>
-              <rect x="70" y="10" width="20" height="20" fill="#ffffff"/>
-              <rect x="75" y="15" width="10" height="10" fill="#1e293b"/>
-              <rect x="5" y="65" width="30" height="30" fill="#1e293b"/>
-              <rect x="10" y="70" width="20" height="20" fill="#ffffff"/>
-              <rect x="15" y="75" width="10" height="10" fill="#1e293b"/>
+              <rect width="100" height="100" fill="#ffffff" />
+              <rect x="5" y="5" width="30" height="30" fill="#1e293b" />
+              <rect x="10" y="10" width="20" height="20" fill="#ffffff" />
+              <rect x="15" y="15" width="10" height="10" fill="#1e293b" />
+              <rect x="65" y="5" width="30" height="30" fill="#1e293b" />
+              <rect x="70" y="10" width="20" height="20" fill="#ffffff" />
+              <rect x="75" y="15" width="10" height="10" fill="#1e293b" />
+              <rect x="5" y="65" width="30" height="30" fill="#1e293b" />
+              <rect x="10" y="70" width="20" height="20" fill="#ffffff" />
+              <rect x="15" y="75" width="10" height="10" fill="#1e293b" />
             </svg>
           </div>
         )}
@@ -741,7 +741,7 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
             setConfig({ ...DEFAULT_STATEMENT_CONFIG, ...res.config });
           }
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => {
           setLoading(false);
         });
@@ -1377,15 +1377,14 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
                 {sendStatus === 'completed'
                   ? (isEn ? 'Completed' : 'اكتمل')
                   : sendStatus === 'failed'
-                  ? (isEn ? 'Sending Failed' : 'فشل الإرسال')
-                  : (isEn ? 'Sending in progress...' : 'جاري الإرسال...')}
+                    ? (isEn ? 'Sending Failed' : 'فشل الإرسال')
+                    : (isEn ? 'Sending in progress...' : 'جاري الإرسال...')}
               </span>
             </div>
             <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-500 ${
-                  sendStatus === 'failed' ? 'bg-rose-500' : 'bg-orange-500'
-                }`}
+                className={`h-full transition-all duration-500 ${sendStatus === 'failed' ? 'bg-rose-500' : 'bg-orange-500'
+                  }`}
                 style={{ width: sendStatus === 'completed' ? '100%' : sendStatus === 'failed' ? '100%' : '50%' }}
               />
             </div>
@@ -1511,22 +1510,20 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
               <button
                 type="button"
                 onClick={() => setLang('ar')}
-                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                  lang === 'ar'
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${lang === 'ar'
                     ? 'bg-[#F45A0A] text-white shadow-xs'
                     : 'bg-white text-slate-700 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 🇸🇦 العربية
               </button>
               <button
                 type="button"
                 onClick={() => setLang('en')}
-                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                  lang === 'en'
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${lang === 'en'
                     ? 'bg-[#F45A0A] text-white shadow-xs'
                     : 'bg-white text-slate-700 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 🇬🇧 English
               </button>
@@ -1618,24 +1615,24 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
 
 
 
-        {/* Offscreen Sheet Container for PDF Generator HTML capturing */}
-        <div style={{ position: 'fixed', left: '-9999px', top: '-9999px', width: '780px', pointerEvents: 'none', opacity: 0 }}>
-          <div id="quick-export-sheet-wrapper">
-            <PrintableAccountStatementSheet
-              accountName={accountName}
-              accountCode={accountCode}
-              accountPhone={accountPhone}
-              accountEmail={accountEmail}
-              accountAddress={accountAddress}
-              startDate={startDate}
-              endDate={endDate}
-              rows={rows}
-              totals={totals}
-              config={config}
-              lang={lang}
-            />
-          </div>
+      {/* Offscreen Sheet Container for PDF Generator HTML capturing */}
+      <div style={{ position: 'fixed', left: '-9999px', top: '-9999px', width: '780px', pointerEvents: 'none', opacity: 0 }}>
+        <div id="quick-export-sheet-wrapper">
+          <PrintableAccountStatementSheet
+            accountName={accountName}
+            accountCode={accountCode}
+            accountPhone={accountPhone}
+            accountEmail={accountEmail}
+            accountAddress={accountAddress}
+            startDate={startDate}
+            endDate={endDate}
+            rows={rows}
+            totals={totals}
+            config={config}
+            lang={lang}
+          />
         </div>
+      </div>
     </Modal>
   );
 };

@@ -1236,7 +1236,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                           dir="ltr"
                           value={p.ticketNumber}
                           onChange={(e) => updatePassenger(p.id, 'ticketNumber', e.target.value)}
-                          placeholder="076-2300332188"
+                          placeholder={isAr ? 'رقم التذكرة' : 'Ticket number'}
                           style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
                           className="w-full h-[40px] px-3 rounded-[8px] border border-slate-200 text-xs font-mono font-bold text-[#111827] outline-none focus:border-[#F45A0A]"
                         />

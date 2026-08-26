@@ -45,7 +45,7 @@ export class CreateAccountDto {
   @IsOptional()
   parentId?: string;
 
-  @ApiPropertyOptional({ example: 'IQD', description: 'العملة' })
+  @ApiPropertyOptional({ example: 'MULTI', description: 'عملة الحساب. كل الحسابات تدعم الدينار والدولار (MULTI).' })
   @IsString()
   @IsOptional()
   currency?: string;
@@ -246,7 +246,7 @@ export class UpdateAccountDto {
 export class AccountsService {
   private treeCache = new Map<string, { data: any; timestamp: number }>();
   private flatCache = new Map<string, { data: any; timestamp: number }>();
-  private readonly CACHE_TTL = 15000; // 15 seconds
+  private readonly CACHE_TTL = 60000;
 
   public invalidateCache(companyId?: string) {
     if (companyId) {
@@ -263,6 +263,10 @@ export class AccountsService {
   }
 
   constructor(private prisma: PrismaService) {}
+
+  private resolveAccountCurrency(_value?: string | null): string {
+    return 'MULTI';
+  }
 
   private async ensureDefaultAccounts(companyId: string) {
     let company = await this.prisma.company.findUnique({ where: { id: companyId } });
@@ -401,6 +405,7 @@ export class AccountsService {
             isParent: acc.isParent,
             parentId,
             companyId: targetCompanyId,
+            currency: this.resolveAccountCurrency(),
           },
         });
         accId = created.id;
@@ -410,97 +415,110 @@ export class AccountsService {
     }
   }
 
-  async getTree(companyId: string) {
-    const cached = this.treeCache.get(companyId);
+  async getTree(companyId: string, lite = false) {
+    const cacheKey = lite ? `${companyId}:lite` : `${companyId}:full`;
+    const cached = this.treeCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       return cached.data;
     }
 
-    await this.ensureDefaultAccounts(companyId);
+    let accounts = await this.prisma.account.findMany({
+      where: { companyId },
+      orderBy: { code: 'asc' },
+    });
 
-    const [accounts, journalLineTotals, openingEntries] = await Promise.all([
-      this.prisma.account.findMany({
+    if (accounts.length === 0) {
+      await this.ensureDefaultAccounts(companyId);
+      accounts = await this.prisma.account.findMany({
         where: { companyId },
-        include: {
-          customer: { select: { id: true, nameAr: true } },
-          supplier: { select: { id: true, nameAr: true } },
-        },
         orderBy: { code: 'asc' },
-      }),
-      this.prisma.$queryRaw<Array<{
-        accountId: string;
-        currency: string;
-        debit: Prisma.Decimal | number | null;
-        credit: Prisma.Decimal | number | null;
-      }>>(Prisma.sql`
-        SELECT
-          l."accountId" AS "accountId",
-          CASE
-            WHEN UPPER(CONCAT(COALESCE(l.description, ''), ' ', COALESCE(e.description, ''), ' ', COALESCE(e.reference, ''))) LIKE '%USD%'
-              OR CONCAT(COALESCE(l.description, ''), ' ', COALESCE(e.description, ''), ' ', COALESCE(e.reference, '')) LIKE '%$%'
-              OR CONCAT(COALESCE(l.description, ''), ' ', COALESCE(e.description, ''), ' ', COALESCE(e.reference, '')) LIKE '%دولار%'
-              OR COALESCE(e.reference, '') LIKE 'OPENING-USD-%'
-            THEN 'USD'
-            ELSE 'IQD'
-          END AS currency,
-          SUM(l.debit) AS debit,
-          SUM(l.credit) AS credit
-        FROM journal_entry_lines l
-        INNER JOIN journal_entries e ON e.id = l."journalEntryId"
-        WHERE e."companyId" = ${companyId}
-          AND e.status = 'POSTED'
-        GROUP BY l."accountId", currency
-      `),
-      this.prisma.journalEntry.findMany({
-        where: {
-          OR: [{ companyId }, { companyId: 'default-company-id' }],
-          AND: [
-            {
-              OR: [
-                { reference: { startsWith: 'OPENING-' } },
-                { reference: { startsWith: 'OPEN-' } },
-                { description: { contains: 'رصيد افتتاحي' } },
-              ],
-            },
-          ],
-          status: 'POSTED',
-        },
-        include: { lines: true },
-      }),
-    ]);
-
-    // 1. Ultra-fast pre-aggregation indexing (O(N) instead of O(N*M))
-    const openingMap = new Map<string, { amountIQD: number; amountUSD: number; nature: string; date: any; notes: string }>();
-    openingEntries.forEach((e) => {
-      const entryText = `${e.reference || ''} ${e.description || ''}`.toUpperCase();
-      const isEntryUSD = entryText.includes('USD') || entryText.includes('$') || (e.reference || '').startsWith('OPENING-USD-');
-      const code = (e.reference || '').replace('OPENING-USD-', '').replace('OPENING-IQD-', '').replace('OPENING-', '').replace('OPEN-', '');
-      e.lines.forEach((l) => {
-        if (l.accountId) {
-          const lineText = `${l.description || ''} ${entryText}`.toUpperCase();
-          const isUSD = isEntryUSD || lineText.includes('USD') || lineText.includes('$');
-          const isDeb = Number(l.debit || 0) > 0;
-          const amt = isDeb ? Number(l.debit || 0) : Number(l.credit || 0);
-          let data = openingMap.get(l.accountId);
-          if (!data) {
-            data = {
-              amountIQD: 0,
-              amountUSD: 0,
-              nature: isDeb ? 'DEBIT' : 'CREDIT',
-              date: e.date,
-              notes: e.description,
-            };
-            openingMap.set(l.accountId, data);
-            if (code) openingMap.set(code, data);
-          }
-          if (isUSD) {
-            data.amountUSD = amt;
-          } else {
-            data.amountIQD = amt;
-          }
-          data.nature = isDeb ? 'DEBIT' : 'CREDIT';
-        }
       });
+    }
+
+    type TotalsRow = {
+      accountId: string;
+      currency: string;
+      debit: Prisma.Decimal | number | null;
+      credit: Prisma.Decimal | number | null;
+    };
+    type OpeningRow = {
+      accountId: string;
+      reference: string | null;
+      description: string | null;
+      date: Date;
+      debit: Prisma.Decimal | number | null;
+      credit: Prisma.Decimal | number | null;
+    };
+
+    let journalLineTotals: TotalsRow[] = [];
+    let openingRows: OpeningRow[] = [];
+
+    if (!lite) {
+      [journalLineTotals, openingRows] = await Promise.all([
+        this.prisma.$queryRaw<TotalsRow[]>(Prisma.sql`
+          SELECT
+            l."accountId" AS "accountId",
+            CASE
+              WHEN e.reference LIKE 'OPENING-USD-%' THEN 'USD'
+              WHEN l.description ILIKE '%USD%' OR e.reference ILIKE '%USD%' THEN 'USD'
+              ELSE 'IQD'
+            END AS currency,
+            SUM(l.debit) AS debit,
+            SUM(l.credit) AS credit
+          FROM journal_entry_lines l
+          INNER JOIN journal_entries e ON e.id = l."journalEntryId"
+          WHERE e."companyId" = ${companyId}
+            AND e.status = 'POSTED'
+          GROUP BY 1, 2
+        `),
+        this.prisma.$queryRaw<OpeningRow[]>(Prisma.sql`
+          SELECT
+            l."accountId" AS "accountId",
+            e.reference,
+            e.description,
+            e.date,
+            l.debit,
+            l.credit
+          FROM journal_entries e
+          INNER JOIN journal_entry_lines l ON l."journalEntryId" = e.id
+          WHERE e.status = 'POSTED'
+            AND (e."companyId" = ${companyId} OR e."companyId" = 'default-company-id')
+            AND (
+              e.reference LIKE 'OPENING-%'
+              OR e.reference LIKE 'OPEN-%'
+              OR e.description LIKE '%رصيد افتتاحي%'
+            )
+        `),
+      ]);
+    }
+
+    const openingMap = new Map<string, { amountIQD: number; amountUSD: number; nature: string; date: any; notes: string }>();
+    openingRows.forEach((l) => {
+      const entryText = `${l.reference || ''} ${l.description || ''}`.toUpperCase();
+      const isEntryUSD = entryText.includes('USD') || entryText.includes('$') || (l.reference || '').startsWith('OPENING-USD-');
+      const code = (l.reference || '').replace('OPENING-USD-', '').replace('OPENING-IQD-', '').replace('OPENING-', '').replace('OPEN-', '');
+      if (!l.accountId) return;
+      const isUSD = isEntryUSD;
+      const isDeb = Number(l.debit || 0) > 0;
+      const amt = isDeb ? Number(l.debit || 0) : Number(l.credit || 0);
+      let data = openingMap.get(l.accountId);
+      if (!data) {
+        data = {
+          amountIQD: 0,
+          amountUSD: 0,
+          nature: isDeb ? 'DEBIT' : 'CREDIT',
+          date: l.date,
+          notes: l.description || '',
+        };
+        openingMap.set(l.accountId, data);
+        if (code) openingMap.set(code, data);
+      }
+      if (isUSD) {
+        data.amountUSD = amt;
+      } else {
+        data.amountIQD = amt;
+      }
+      data.nature = isDeb ? 'DEBIT' : 'CREDIT';
     });
 
     const totalsByAccId = new Map<string, { debitIQD: number; creditIQD: number; debitUSD: number; creditUSD: number }>();
@@ -551,8 +569,8 @@ export class AccountsService {
       const effDebitUSD = totals.debitUSD + (totals.debitUSD === 0 && totals.creditUSD === 0 && openingAmountUSD > 0 ? openingAmountUSD : 0);
       const effDebitIQD = totals.debitIQD + (totals.debitIQD === 0 && totals.creditIQD === 0 && openingAmountIQD > 0 ? openingAmountIQD : 0);
 
-      const isCustActive = Boolean((acc as any).customer && (acc as any).customer.isActive !== false);
-      const isSuppActive = Boolean((acc as any).supplier && (acc as any).supplier.isActive !== false);
+      const isCustActive = acc.category === AccountCategory.CUSTOMER;
+      const isSuppActive = acc.category === AccountCategory.SUPPLIER;
 
       let derivedRole: 'CUSTOMER' | 'SUPPLIER' | 'BOTH' | 'GENERAL' = 'GENERAL';
       if (isCustActive && isSuppActive) {
@@ -564,9 +582,7 @@ export class AccountsService {
       }
 
       const isAccountBlocked = Boolean(
-        acc.overduePolicy === 'BLOCK' && (acc as any).paymentMode === 'BLOCKED' ||
-        ((acc as any).customer && !(acc as any).customer.isActive && !isSuppActive) ||
-        ((acc as any).supplier && !(acc as any).supplier.isActive && !isCustActive)
+        acc.overduePolicy === 'BLOCK' && (acc as any).paymentMode === 'BLOCKED'
       );
 
       accountDataMap.set(acc.id, {
@@ -584,7 +600,7 @@ export class AccountsService {
         parentId: acc.parentId,
         level: acc.level,
         isSystem: acc.isSystem,
-        currency: acc.currency,
+        currency: this.resolveAccountCurrency(acc.currency),
         branchScope: acc.branchScope,
         branchIds: acc.branchIds,
         phone: acc.phone,
@@ -663,7 +679,7 @@ export class AccountsService {
     }
 
     tree.forEach(aggregateNode);
-    this.treeCache.set(companyId, { data: tree, timestamp: Date.now() });
+    this.treeCache.set(cacheKey, { data: tree, timestamp: Date.now() });
     return tree;
   }
 
@@ -697,6 +713,7 @@ export class AccountsService {
           type: true,
           category: true,
           parentId: true,
+          isParent: true,
         },
         orderBy: { code: 'asc' },
       });
@@ -1049,6 +1066,7 @@ export class AccountsService {
 
     return {
       ...account,
+      currency: this.resolveAccountCurrency(account.currency),
       accountRole: derivedRole,
       isBlocked: isAccountBlocked,
       openingAmountIQD,
@@ -1101,7 +1119,7 @@ export class AccountsService {
         parentId: dto.parentId || null,
         level,
         companyId,
-        currency: dto.currency || 'IQD',
+        currency: this.resolveAccountCurrency(dto.currency),
         branchScope: dto.branchScope || 'ALL_BRANCHES',
         branchIds: dto.branchIds || [],
         phone: dto.phone || null,
@@ -1196,7 +1214,7 @@ export class AccountsService {
         ...(dto.nameEn !== undefined ? { nameEn: dto.nameEn } : {}),
         ...(dto.type ? { type: dto.type } : {}),
         ...(effectiveCategory ? { category: effectiveCategory } : {}),
-        ...(dto.currency ? { currency: dto.currency } : {}),
+        currency: this.resolveAccountCurrency(dto.currency),
         ...(dto.branchScope ? { branchScope: dto.branchScope } : {}),
         ...(dto.branchIds ? { branchIds: dto.branchIds } : {}),
         ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
@@ -1729,9 +1747,7 @@ export class AccountsService {
           else if (code.startsWith('261') || nameAr.includes('دائنون') || (item.parentCode && String(item.parentCode).startsWith('261'))) category = AccountCategory.SUPPLIER;
         }
 
-        let currency = 'IQD';
-        const rawCur = String(item.currency || item.defaultCurrency || '').toUpperCase();
-        if (rawCur.includes('USD') || rawCur.includes('DOLLAR') || rawCur.includes('$')) currency = 'USD';
+        const currency = this.resolveAccountCurrency(item.currency || item.defaultCurrency);
 
         const openingAmountIQD = Math.abs(Number(item.openingAmountIQD || item.balanceIQD || 0));
         const openingAmountUSD = Math.abs(Number(item.openingAmountUSD || item.balanceUSD || 0));
@@ -1752,7 +1768,7 @@ export class AccountsService {
           parentId,
           companyId,
           tenantId: company.tenantId,
-          balance: currency === 'USD' ? openingAmountUSD : openingAmountIQD,
+          balance: Number(openingAmountIQD || openingAmountUSD || 0),
           currency,
           isSystem: level <= 2,
           branchScope: 'ALL_BRANCHES',

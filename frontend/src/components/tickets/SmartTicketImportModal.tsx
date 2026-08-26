@@ -22,6 +22,7 @@ import {
 } from '@tabler/icons-react';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { API_BASE_URL } from '../../api/client';
+import { prepareTicketParseFormData } from '../../utils/pdfTextExtractor';
 
 export interface ParsedPassenger {
   name: string;
@@ -48,6 +49,8 @@ export interface ParsedTicketData {
   issueDate?: string;
   tripType?: 'ONE_WAY' | 'ROUND_TRIP';
   travelClass?: string;
+  flightNumber?: string;
+  currency?: string;
   aiEngineUsed?: string;
 }
 
@@ -55,51 +58,6 @@ interface SmartTicketImportModalProps {
   opened: boolean;
   onClose: () => void;
   onImport: (data: ParsedTicketData) => void;
-}
-
-/* ─── Client-side PDF Text Reader using PDFjs ─── */
-async function extractTextFromPdf(file: File): Promise<string> {
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    
-    // Load pdfjsLib from CDN dynamically if not available on window
-    if (!(window as any).pdfjsLib) {
-      await new Promise<void>((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('Failed to load PDF parser'));
-        document.head.appendChild(script);
-      });
-      if ((window as any).pdfjsLib) {
-        (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      }
-    }
-
-    if ((window as any).pdfjsLib) {
-      const pdf = await (window as any).pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      let fullText = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(' ');
-        fullText += pageText + '\n';
-      }
-      if (fullText.trim().length > 10) {
-        return fullText;
-      }
-    }
-  } catch (err) {
-    console.warn('PDFjs extraction warning:', err);
-  }
-
-  // Fallback to text reading if file is text/HTML/raw string
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve((e.target?.result as string) || '');
-    reader.readAsText(file);
-  });
 }
 
 export const SmartTicketImportModal: React.FC<SmartTicketImportModalProps> = ({
@@ -121,13 +79,7 @@ export const SmartTicketImportModal: React.FC<SmartTicketImportModalProps> = ({
     setIsAnalyzing(true);
 
     try {
-      // Extract text from PDF for sending alongside the file
-      const text = await extractTextFromPdf(file);
-
-      // Send to Backend AI Parser (OpenAI GPT-4o)
-      const formData = new FormData();
-      formData.append('ticketFile', file);
-      formData.append('textContent', text);
+      const formData = await prepareTicketParseFormData(file);
 
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/smart-parser/parse-ticket`, {
@@ -250,7 +202,7 @@ export const SmartTicketImportModal: React.FC<SmartTicketImportModalProps> = ({
               جاري تحليل التذكرة بواسطة الذكاء الاصطناعي...
             </Text>
             <Text size="xs" className="text-slate-500">
-              يتم إرسال الملف إلى محرك GPT-4o لاستخراج جميع البيانات
+              يتم قراءة حتى 4 صفحات بدقة أعلى، مع استخراج الأرقام والأسعار والمسار
             </Text>
           </Paper>
         )}
@@ -345,6 +297,25 @@ export const SmartTicketImportModal: React.FC<SmartTicketImportModalProps> = ({
                 <div className="font-mono font-bold text-slate-900 text-xs">{parsedResult.travelDate || 'غير محدد'}</div>
               </Paper>
             </div>
+            {(parsedResult.flightNumber || parsedResult.currency || parsedResult.travelClass) && (
+              <div className="flex flex-wrap gap-2 text-[11px]">
+                {parsedResult.flightNumber && (
+                  <Badge color="slate" size="sm" radius="xs" variant="light" className="font-mono">
+                    رحلة {parsedResult.flightNumber}
+                  </Badge>
+                )}
+                {parsedResult.travelClass && (
+                  <Badge color="slate" size="sm" radius="xs" variant="light">
+                    {parsedResult.travelClass}
+                  </Badge>
+                )}
+                {parsedResult.currency && (
+                  <Badge color="teal" size="sm" radius="xs" variant="light">
+                    {parsedResult.currency}
+                  </Badge>
+                )}
+              </div>
+            )}
 
             {/* Sharp Passenger Table */}
             {parsedResult.passengers && parsedResult.passengers.length > 0 && (
@@ -361,6 +332,8 @@ export const SmartTicketImportModal: React.FC<SmartTicketImportModalProps> = ({
                         <Table.Th className="text-center py-1.5 w-24">النوع</Table.Th>
                         <Table.Th className="text-right py-1.5 w-36">رقم التذكرة الإلكترونية</Table.Th>
                         <Table.Th className="text-right py-1.5 w-36">رقم الوثيقة / الجواز</Table.Th>
+                        <Table.Th className="text-center py-1.5 w-24">شراء</Table.Th>
+                        <Table.Th className="text-center py-1.5 w-24">مبيع</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -375,6 +348,8 @@ export const SmartTicketImportModal: React.FC<SmartTicketImportModalProps> = ({
                           </Table.Td>
                           <Table.Td className="font-mono font-bold text-emerald-800 text-xs">{p.ticketNumber || '-'}</Table.Td>
                           <Table.Td className="font-mono text-slate-600 text-xs">{p.documentNumber || '-'}</Table.Td>
+                          <Table.Td className="font-mono text-center text-xs">{p.fareBuy ? p.fareBuy.toLocaleString() : '-'}</Table.Td>
+                          <Table.Td className="font-mono text-center text-xs">{p.fareSell ? p.fareSell.toLocaleString() : '-'}</Table.Td>
                         </Table.Tr>
                       ))}
                     </Table.Tbody>

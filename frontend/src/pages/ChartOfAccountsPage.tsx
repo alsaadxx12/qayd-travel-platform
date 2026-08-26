@@ -14,6 +14,7 @@ import { SmartAccountWizardModal } from '../components/accounts/SmartAccountWiza
 import { ImportAccountsCsvModal } from '../components/accounts/ImportAccountsCsvModal';
 import { accountsApi } from '../api/accounts';
 import { useLanguageStore } from '../store/useLanguageStore';
+import { useAiPageContext } from '../hooks/useAiPageContext';
 import { notifications } from '@mantine/notifications';
 
 export const ChartOfAccountsPage: React.FC = () => {
@@ -24,6 +25,12 @@ export const ChartOfAccountsPage: React.FC = () => {
   const [importCsvOpen, setImportCsvOpen] = useState<boolean>(false);
   const [selectedAccount, setSelectedAccount] = useState<AccountNode | null>(null);
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
+  useAiPageContext({
+    route: '/accounts',
+    entity: selectedAccount ? 'account' : undefined,
+    recordId: selectedAccount?.id,
+    label: selectedAccount ? `${selectedAccount.code} ${selectedAccount.nameAr}` : undefined,
+  });
   const [accounts, setAccounts] = useState<AccountNode[]>(() => {
     return (window as any).__cachedAccountsTree || [];
   });
@@ -31,19 +38,52 @@ export const ChartOfAccountsPage: React.FC = () => {
     return !((window as any).__cachedAccountsTree?.length > 0);
   });
 
-  const loadAccounts = useCallback(async (forceRefresh = false) => {
-    if (forceRefresh || accounts.length === 0) setLoading(true);
+  const persistAccountsTree = useCallback((tree: AccountNode[]) => {
+    setAccounts(tree);
+    (window as any).__cachedAccountsTree = tree;
+  }, []);
+
+  const removeAccountsLocally = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const prune = (nodes: AccountNode[]): AccountNode[] =>
+      nodes
+        .filter((node) => !idSet.has(node.id))
+        .map((node) => ({
+          ...node,
+          children: node.children && node.children.length > 0 ? prune(node.children) : node.children,
+        }));
+    setAccounts((prev) => {
+      const source = ((window as unknown as { __cachedAccountsTree?: AccountNode[] }).__cachedAccountsTree) || prev;
+      const next = prune(source);
+      (window as unknown as { __cachedAccountsTree?: AccountNode[] }).__cachedAccountsTree = next;
+      return next;
+    });
+    setSelectedAccount((current) => {
+      if (current && idSet.has(current.id)) {
+        setDrawerOpen(false);
+        return null;
+      }
+      return current;
+    });
+  }, []);
+
+  const loadAccounts = useCallback(async (_forceRefresh = false) => {
+    const hasCachedTree = Boolean((window as any).__cachedAccountsTree?.length);
+    if (!hasCachedTree) setLoading(true);
     try {
-      const data = await accountsApi.getTree();
-      const tree = data || [];
-      setAccounts(tree);
-      (window as any).__cachedAccountsTree = tree;
+      const structure = await accountsApi.getTree(true);
+      persistAccountsTree(structure || []);
+      setLoading(false);
+
+      const full = await accountsApi.getTree(false);
+      persistAccountsTree(full || structure || []);
     } catch (error) {
       console.error('Error fetching accounts tree from database:', error);
     } finally {
-      if (forceRefresh || accounts.length === 0) setLoading(false);
+      setLoading(false);
     }
-  }, [accounts.length]);
+  }, [persistAccountsTree]);
 
   useEffect(() => {
     loadAccounts();
@@ -128,7 +168,7 @@ export const ChartOfAccountsPage: React.FC = () => {
             Math.abs(balIqd),
             dirIqd,
             `"${currentPath.replace(/"/g, '""')}"`,
-            acc.currency || 'Dollar',
+            'IQD + USD',
           ].join(',')
         );
 
@@ -207,7 +247,7 @@ export const ChartOfAccountsPage: React.FC = () => {
             Math.abs(balIqd),
             dirIqd,
             `"${currentPath.replace(/"/g, '""')}"`,
-            acc.currency || 'Dollar',
+            'IQD + USD',
           ].join(',')
         );
 
@@ -335,6 +375,7 @@ export const ChartOfAccountsPage: React.FC = () => {
         accounts={accounts}
         loading={loading}
         onRefresh={() => loadAccounts(true)}
+        onAccountsRemoved={removeAccountsLocally}
         onAddAccount={() => setWizardOpen(true)}
         onSelectAccount={(acc) => {
           setSelectedAccount(acc);

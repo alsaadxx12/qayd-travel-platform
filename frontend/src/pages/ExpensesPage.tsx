@@ -1,14 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Button,
-  Select,
-  TextInput,
   Textarea,
   Modal,
-  Badge,
+  Switch,
   Tooltip,
-  ActionIcon,
-  NumberInput,
 } from '@mantine/core';
 import {
   Coins,
@@ -17,13 +12,7 @@ import {
   Printer,
   Wallet,
   TrendingDown,
-  Building2,
-  FileText,
   DollarSign,
-  Coffee,
-  Fuel,
-  Wrench,
-  Wifi,
   Receipt,
   RefreshCw,
   Eye,
@@ -31,11 +20,11 @@ import {
   ChevronLeft,
   ChevronsRight,
   ChevronsLeft,
-  UserCheck,
+  AlertCircle,
+  Trash2,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../api/client';
-import { accountsApi } from '../api/accounts';
 import { employeesApi } from '../api/employees';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLanguageStore } from '../store/useLanguageStore';
@@ -43,18 +32,8 @@ import { useAdoptedExchangeRate } from '../hooks/useAdoptedExchangeRate';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { CurrencySegmentedControl } from '../components/ui/CurrencySegmentedControl';
 import { SegmentedDatePicker } from '../components/ui/SegmentedDatePicker';
-
-// Preset Expense Categories matching user's custom accounts
-const EXPENSE_PRESETS = [
-  { label: 'مصاريف ضيافة', icon: Coffee, defaultDesc: 'مصاريف ضيافة ومشروبات للمكتب', targetName: 'مصاريف ضيافة' },
-  { label: 'مصاريف المولدة', icon: Fuel, defaultDesc: 'شراء وقود واشتراك مولدة المكتب', targetName: 'مصاريف المولدة' },
-  { label: 'مصاريف إنترنت', icon: Wifi, defaultDesc: 'تسديد اشتراك شبكة الإنترنت', targetName: 'مصاريف إنترنت' },
-  { label: 'مصاريف ماء وكهرباء', icon: Building2, defaultDesc: 'تسديد فواتير الماء والكهرباء', targetName: 'مصاريف ماء وكهرباء' },
-  { label: 'مصاريف قرطاسية', icon: FileText, defaultDesc: 'شراء قرطاسية ومطبوعات مكتبية', targetName: 'مصاريف قرطاسية' },
-  { label: 'مصاريف إيجار الشركة', icon: Building2, defaultDesc: 'دفعة إيجار مقر الشركة والفرع', targetName: 'مصاريف إيجار الشركة' },
-  { label: 'مصاريف صيانة وإلكترونيات', icon: Wrench, defaultDesc: 'صيانة وشراء أجهزة وإلكترونيات', targetName: 'مصاريف صيانة وشراء الإلكترونيات' },
-  { label: 'مصاريف أخرى', icon: Coins, defaultDesc: 'مصاريف تشغيلية ونثرية متنوعة', targetName: 'مصاريف أخرى' },
-];
+import { SearchableCombobox } from '../components/ui/SearchableCombobox';
+import { FormattedNumberInput } from '../components/common/FormattedNumberInput';
 
 const getLocalIsoDate = (date = new Date()): string => {
   const year = date.getFullYear();
@@ -70,6 +49,20 @@ const toDateInputValue = (value: unknown): string => {
   if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? getLocalIsoDate() : getLocalIsoDate(parsed);
+};
+
+const isExpenseLedgerAccount = (account: {
+  id?: string;
+  type?: string;
+  code?: string;
+  isParent?: boolean;
+} | null | undefined): boolean => {
+  if (!account || account.isParent) return false;
+  if (account.type === 'EXPENSE') return true;
+  const code = String(account.code || '');
+  if (!code || code === '3' || code === '4' || code === '5') return false;
+  if (['31', '32', '33', '34', '35', '36'].includes(code)) return false;
+  return code.startsWith('3') || code.startsWith('5');
 };
 
 const splitBeneficiaryFromDescription = (value: unknown): { beneficiary: string; description: string } => {
@@ -105,16 +98,18 @@ export const ExpensesPage: React.FC = () => {
 
   // Form State
   const [expenseAccountId, setExpenseAccountId] = useState('');
-  const [isChangingCashbox, setIsChangingCashbox] = useState(false);
   const [cashboxAccountId, setCashboxAccountId] = useState('');
-  const [amount, setAmount] = useState<number | ''>('');
-  const [currency, setCurrency] = useState<'IQD' | 'USD'>('IQD');
+  const [amount, setAmount] = useState<string>('');
+  const [currency, setCurrency] = useState<'IQD' | 'USD'>('USD');
+  const [showConversion, setShowConversion] = useState(false);
+  const [expenseParentId, setExpenseParentId] = useState<string>('ALL');
   const [exchangeRate, setExchangeRate] = useState<number>(1320);
-  const [beneficiary, setBeneficiary] = useState('');
   const [reference, setReference] = useState('');
   const [description, setDescription] = useState('');
+  const [descriptionTouched, setDescriptionTouched] = useState(false);
   const [expenseDate, setExpenseDate] = useState<string>(getLocalIsoDate());
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [pendingDeleteExpense, setPendingDeleteExpense] = useState<any>(null);
 
   // Sync exchange rate on load
   useEffect(() => {
@@ -124,21 +119,25 @@ export const ExpensesPage: React.FC = () => {
   }, [adoptedEx?.adoptedRate]);
 
   // 1. Fetch Payment Vouchers (which record expenses)
-  const { data: vouchersData = [], isLoading: vouchersLoading, refetch } = useQuery({
+  const { data: vouchersData = [], isLoading: vouchersLoading, isError: vouchersError, refetch } = useQuery({
     queryKey: ['expenses-vouchers-list'],
-    queryFn: () => apiRequest('/api/payment-vouchers'),
-    staleTime: 60 * 1000,
+    queryFn: () => apiRequest('/api/payment-vouchers?limit=150'),
+    staleTime: 30 * 1000,
+    retry: 0,
+    refetchOnWindowFocus: false,
   });
 
-  // 2. Fetch Accounts
+  // Lite chart of accounts for pickers (names/ids/types only — no balances).
   const { data: accountsData = [] } = useQuery({
-    queryKey: ['flat-accounts-list'],
-    queryFn: () => accountsApi.getFlat(),
+    queryKey: ['lite-accounts-list'],
+    queryFn: () => apiRequest('/api/accounts?lite=1', { ttl: 120_000 }),
     staleTime: 5 * 60 * 1000,
+    retry: 0,
+    refetchOnWindowFocus: false,
   });
 
   // 3. Fetch employees to resolve the logged-in employee's assigned cashbox.
-  const { data: employeesData = [], isLoading: employeesLoading } = useQuery({
+  const { data: employeesData = [] } = useQuery({
     queryKey: ['employees-for-expense-cashbox'],
     queryFn: () => employeesApi.getAll().catch(() => []),
     staleTime: 5 * 60 * 1000,
@@ -156,65 +155,44 @@ export const ExpensesPage: React.FC = () => {
     return map;
   }, [accountsData]);
 
+  const accountChildCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (Array.isArray(accountsData)) {
+      accountsData.forEach((account: any) => {
+        if (account.parentId) counts.set(account.parentId, (counts.get(account.parentId) || 0) + 1);
+      });
+    }
+    return counts;
+  }, [accountsData]);
+
+  // Only postable leaves; group accounts such as "مصاريف" belong in the parent selector.
   const expenseAccounts = useMemo(() => {
     if (!Array.isArray(accountsData)) return [];
     return accountsData.filter(
-      (a: any) =>
-        !a.isParent &&
-        (a.type === 'EXPENSE' || (a.code && (a.code.startsWith('3') || a.code.startsWith('5')))) &&
-        a.code !== '3' &&
-        a.code !== '31' &&
-        a.code !== '32' &&
-        a.code !== '33' &&
-        a.code !== '34' &&
-        a.code !== '35' &&
-        a.code !== '36' &&
-        a.code !== '4' &&
-        a.code !== '5'
+      (account: any) => isExpenseLedgerAccount(account) && (accountChildCount.get(account.id) || 0) === 0,
     );
-  }, [accountsData]);
+  }, [accountsData, accountChildCount]);
 
-  // Mantine 7 Compatible Grouped Expense Accounts structure: Array<{ group: string, items: Array<{ value, label }> }>
-  const expenseSelectOptions = useMemo(() => {
-    if (!Array.isArray(expenseAccounts) || expenseAccounts.length === 0) return [];
+  const expenseAccountIds = useMemo(
+    () => new Set(expenseAccounts.map((account: { id: string }) => account.id)),
+    [expenseAccounts],
+  );
 
-    const groupsMap = new Map<string, Array<{ value: string; label: string }>>();
-
-    expenseAccounts.forEach((a: any) => {
-      let groupName = '3 - المصروفات التشغيلية';
-      if (a.parentId && allAccountsMap.has(a.parentId)) {
-        const parent = allAccountsMap.get(a.parentId);
-        if (parent.parentId && allAccountsMap.has(parent.parentId)) {
-          const grandParent = allAccountsMap.get(parent.parentId);
-          groupName = `${grandParent.nameAr || grandParent.name || ''} ── ${parent.nameAr || parent.name || ''}`;
-        } else {
-          groupName = `${parent.code ? parent.code + ' - ' : ''}${parent.nameAr || parent.name || 'مصروفات'}`;
-        }
-      } else if (a.code) {
-        if (a.code.startsWith('31')) groupName = '31 - تكاليف العاملين والرواتب';
-        else if (a.code.startsWith('32')) groupName = '32 - المستلزمات السلعية والضيافة والوقود';
-        else if (a.code.startsWith('33')) groupName = '33 - المستلزمات والخدمات والصيانة والإنترنت';
-        else if (a.code.startsWith('34')) groupName = '34 - كلفة الخدمات المشتراة';
-        else if (a.code.startsWith('35')) groupName = '35 - المصروفات التشغيلية والإيجارات';
-        else if (a.code.startsWith('36')) groupName = '36 - المصروفات غير التشغيلية';
-      }
-
-      if (!groupsMap.has(groupName)) {
-        groupsMap.set(groupName, []);
-      }
-      groupsMap.get(groupName)!.push({
-        value: a.id,
-        label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'مصروف'}`,
-      });
+  const expenseVouchers = useMemo(() => {
+    if (!Array.isArray(vouchersData)) return [];
+    return vouchersData.filter((item: any) => {
+      const accountId = item.accountId || item.account?.id;
+      if (accountId && expenseAccountIds.has(accountId)) return true;
+      return isExpenseLedgerAccount(item.account);
     });
+  }, [vouchersData, expenseAccountIds]);
 
-    const result: Array<{ group: string; items: Array<{ value: string; label: string }> }> = [];
-    groupsMap.forEach((items, group) => {
-      result.push({ group, items });
-    });
-
-    return result;
-  }, [expenseAccounts, allAccountsMap]);
+  const accountDisplayName = (account: { nameAr?: string; nameEn?: string; name?: string } | null | undefined) => {
+    if (!account) return '';
+    return isAr
+      ? (account.nameAr || account.nameEn || account.name || '')
+      : (account.nameEn || account.nameAr || account.name || '');
+  };
 
   const cashboxAccounts = useMemo(() => {
     if (!Array.isArray(accountsData)) return [];
@@ -226,6 +204,143 @@ export const ExpensesPage: React.FC = () => {
         !a.isParent
     );
   }, [accountsData]);
+
+  const expenseComboboxOptions = useMemo(() => {
+    return expenseAccounts.map((account: { id: string; nameAr?: string; nameEn?: string; name?: string; parentId?: string }) => {
+      const parent = account.parentId ? allAccountsMap.get(account.parentId) : null;
+      const label = isAr
+        ? (account.nameAr || account.nameEn || account.name || '')
+        : (account.nameEn || account.nameAr || account.name || '');
+      const parentLabel = parent
+        ? (isAr ? (parent.nameAr || parent.nameEn || parent.name || '') : (parent.nameEn || parent.nameAr || parent.name || ''))
+        : undefined;
+      return {
+        value: account.id,
+        label,
+        subLabel: parentLabel || undefined,
+      };
+    });
+  }, [expenseAccounts, allAccountsMap, isAr]);
+
+  // Every group account inside the expenses branch of the chart of accounts tree.
+  const expenseParentOptions = useMemo(() => {
+    const allOption = { value: 'ALL', label: isAr ? 'كل بنود المصاريف' : 'All expense items' };
+    if (!Array.isArray(accountsData)) return [allOption];
+
+    const groups = (accountsData as any[])
+      .filter((account: any) => {
+        const code = String(account.code || '');
+        const inExpenseBranch = account.type === 'EXPENSE' || code.startsWith('3') || code.startsWith('5');
+        const hasChildren = Boolean(account.isParent) || (accountChildCount.get(account.id) || 0) > 0;
+        return inExpenseBranch && hasChildren;
+      })
+      .sort((a: any, b: any) => String(a.code || '').localeCompare(String(b.code || '')));
+
+    return [
+      allOption,
+
+      ...groups.map((group: any) => {
+        const parent = group.parentId ? allAccountsMap.get(group.parentId) : null;
+        return {
+          value: group.id,
+          label: isAr
+            ? (group.nameAr || group.nameEn || group.name || '')
+            : (group.nameEn || group.nameAr || group.name || ''),
+          subLabel: parent
+            ? (isAr
+              ? (parent.nameAr || parent.nameEn || parent.name || '')
+              : (parent.nameEn || parent.nameAr || parent.name || ''))
+            : undefined,
+        };
+      }),
+    ];
+  }, [accountsData, allAccountsMap, accountChildCount, isAr]);
+
+  // A group selection includes every level below it, not only its direct children.
+  const modalExpenseAccounts = useMemo(() => {
+    if (expenseParentId === 'ALL') return expenseAccounts;
+    return expenseAccounts.filter((account: { parentId?: string }) => {
+      let currentParentId = account.parentId;
+      let depth = 0;
+      while (currentParentId && depth < 20) {
+        if (currentParentId === expenseParentId) return true;
+        currentParentId = allAccountsMap.get(currentParentId)?.parentId;
+        depth += 1;
+      }
+      return false;
+    });
+  }, [expenseAccounts, expenseParentId, allAccountsMap]);
+
+  // Parent group is already shown in the toolbar, so options stay as clean names only.
+  const modalExpenseOptions = useMemo(() => {
+    const allowed = new Set(modalExpenseAccounts.map((account: { id: string }) => account.id));
+    return expenseComboboxOptions
+      .filter((option) => allowed.has(option.value))
+      .map((option) => ({ value: option.value, label: option.label }));
+  }, [expenseComboboxOptions, modalExpenseAccounts]);
+
+  const cashboxComboboxOptions = useMemo(() => {
+    return cashboxAccounts.map((account: { id: string; nameAr?: string; nameEn?: string; name?: string }) => ({
+      value: account.id,
+      label: isAr
+        ? (account.nameAr || account.nameEn || account.name || '')
+        : (account.nameEn || account.nameAr || account.name || ''),
+    }));
+  }, [cashboxAccounts, isAr]);
+
+  // Suggested statement, kept in sync until the user writes their own text.
+  const suggestedDescription = useMemo(() => {
+    const expenseAccount = expenseAccountId ? allAccountsMap.get(expenseAccountId) : null;
+    const cashboxAccount = cashboxAccountId ? allAccountsMap.get(cashboxAccountId) : null;
+    if (!expenseAccount) return '';
+
+    const expenseName = isAr
+      ? (expenseAccount.nameAr || expenseAccount.nameEn || expenseAccount.name || '')
+      : (expenseAccount.nameEn || expenseAccount.nameAr || expenseAccount.name || '');
+    const cashboxName = cashboxAccount
+      ? (isAr
+        ? (cashboxAccount.nameAr || cashboxAccount.nameEn || cashboxAccount.name || '')
+        : (cashboxAccount.nameEn || cashboxAccount.nameAr || cashboxAccount.name || ''))
+      : '';
+
+    const numericAmount = Number(String(amount).replace(/,/g, '')) || 0;
+    const amountLabel = numericAmount > 0
+      ? `${numericAmount.toLocaleString('en-US')} ${currency}`
+      : '';
+
+    if (isAr) {
+      return [
+        amountLabel ? `صرف مبلغ ${amountLabel}` : 'صرف',
+        cashboxName ? `من ${cashboxName}` : '',
+        `على بند ${expenseName}`,
+      ].filter(Boolean).join(' ');
+    }
+
+    return [
+      amountLabel ? `Paid ${amountLabel}` : 'Payment',
+      cashboxName ? `from ${cashboxName}` : '',
+      `for ${expenseName}`,
+    ].filter(Boolean).join(' ');
+  }, [expenseAccountId, cashboxAccountId, amount, currency, allAccountsMap, isAr]);
+
+  useEffect(() => {
+    if (!createModalOpen || descriptionTouched || !suggestedDescription) return;
+    setDescription(suggestedDescription);
+  }, [createModalOpen, descriptionTouched, suggestedDescription]);
+
+  const frequentExpenseAccounts = useMemo(() => {
+    const usage = new Map<string, number>();
+    expenseVouchers.forEach((item: { accountId?: string; account?: { id?: string } }) => {
+      const id = item.accountId || item.account?.id;
+      if (id && expenseAccountIds.has(id)) usage.set(id, (usage.get(id) || 0) + 1);
+    });
+
+    return [...usage.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => expenseAccounts.find((account: { id: string }) => account.id === id))
+      .filter((account): account is NonNullable<typeof account> => Boolean(account))
+      .slice(0, 8);
+  }, [expenseVouchers, expenseAccounts, expenseAccountIds]);
 
   const currentEmployee = useMemo(() => {
     if (!Array.isArray(employeesData) || !user) return null;
@@ -306,16 +421,28 @@ export const ExpensesPage: React.FC = () => {
     if (!activeExpenseId && assignedEmployeeCashbox?.id) {
       setCashboxAccountId(assignedEmployeeCashbox.id);
     }
-    if (expenseAccounts.length > 0 && !expenseAccountId) {
-      setExpenseAccountId(expenseAccounts[0].id);
+    if (modalExpenseAccounts.length > 0 && !expenseAccountId) {
+      setExpenseAccountId(modalExpenseAccounts[0].id);
     }
-  }, [activeExpenseId, assignedEmployeeCashbox, expenseAccounts, expenseAccountId]);
+  }, [activeExpenseId, assignedEmployeeCashbox, modalExpenseAccounts, expenseAccountId]);
+
+  // Keep the selected expense item consistent with the chosen parent group.
+  useEffect(() => {
+    if (!expenseAccountId || expenseParentId === 'ALL') return;
+    const stillAllowed = modalExpenseAccounts.some((account: { id: string }) => account.id === expenseAccountId);
+    if (!stillAllowed) setExpenseAccountId('');
+  }, [expenseParentId, modalExpenseAccounts, expenseAccountId]);
+
+  // Mirror the chart of accounts: the parent group follows the selected expense item.
+  useEffect(() => {
+    if (!expenseAccountId) return;
+    const parentId = allAccountsMap.get(expenseAccountId)?.parentId;
+    if (parentId && parentId !== expenseParentId) setExpenseParentId(parentId);
+  }, [expenseAccountId, allAccountsMap, expenseParentId]);
 
   // Filtered Expenses List
   const filteredExpenses = useMemo(() => {
-    if (!Array.isArray(vouchersData)) return [];
-
-    return vouchersData.filter((item: any) => {
+    return expenseVouchers.filter((item: any) => {
       // 1. Search Query
       const q = searchTerm.toLowerCase().trim();
       const descMatch = item.description?.toLowerCase().includes(q);
@@ -359,15 +486,14 @@ export const ExpensesPage: React.FC = () => {
 
       return true;
     });
-  }, [vouchersData, searchTerm, selectedCategory, selectedCashbox, dateFilter]);
+  }, [expenseVouchers, searchTerm, selectedCategory, selectedCashbox, dateFilter]);
 
   const navigationExpenses = useMemo(() => {
-    if (!Array.isArray(vouchersData)) return [];
-    const byId = new Map(vouchersData.map((item: any) => [item.id, item]));
+    const byId = new Map(expenseVouchers.map((item: any) => [item.id, item]));
     return navigationExpenseIds
       .map((id) => byId.get(id))
       .filter(Boolean) as any[];
-  }, [navigationExpenseIds, vouchersData]);
+  }, [navigationExpenseIds, expenseVouchers]);
 
   // Statistics Calculations
   const stats = useMemo(() => {
@@ -377,7 +503,7 @@ export const ExpensesPage: React.FC = () => {
 
     filteredExpenses.forEach((exp: any) => {
       const amt = parseFloat(exp.amount) || 0;
-      const cur = exp.account?.currency || exp.currency || 'IQD';
+      const cur = String(exp.currency || 'IQD').toUpperCase();
       if (cur === 'USD' || cur === '$') {
         totalUSD += amt;
         totalIQD += amt * (parseFloat(exp.exchangeRate) || exchangeRate);
@@ -414,12 +540,12 @@ export const ExpensesPage: React.FC = () => {
     setActiveCashboxName('');
     setCurrentExpenseIndex(-1);
     setAmount('');
-    setCurrency('IQD');
+    setCurrency('USD');
     setExpenseAccountId(expenseAccounts[0]?.id || '');
     setCashboxAccountId(assignedEmployeeCashbox?.id || '');
-    setBeneficiary('');
     setReference('');
     setDescription('');
+    setDescriptionTouched(false);
     setExpenseDate(getLocalIsoDate());
     setFormErrors({});
   };
@@ -432,7 +558,7 @@ export const ExpensesPage: React.FC = () => {
 
   const loadExpenseIntoForm = (item: any, index: number) => {
     const parsedDescription = splitBeneficiaryFromDescription(item.description);
-    const itemCurrency = String(item.currency || item.account?.currency || 'IQD').toUpperCase();
+    const itemCurrency = String(item.currency || 'IQD').toUpperCase();
 
     setActiveExpenseId(item.id || null);
     setActiveExpenseNumber(item.voucherNumber || `PV-${String(item.id || '').slice(0, 6)}`);
@@ -443,14 +569,14 @@ export const ExpensesPage: React.FC = () => {
       ''
     );
     setCurrentExpenseIndex(index);
-    setAmount(Number(item.amount) || '');
+    setAmount(item.amount != null && item.amount !== '' ? String(Number(item.amount)) : '');
     setCurrency(itemCurrency.includes('USD') || itemCurrency.includes('$') ? 'USD' : 'IQD');
     setExchangeRate(Number(item.exchangeRate) || Number(adoptedEx?.adoptedRate) || exchangeRate);
     setExpenseAccountId(item.accountId || item.account?.id || '');
     setCashboxAccountId(item.cashboxOrBankAccountId || item.cashboxOrBankAccount?.id || '');
-    setBeneficiary(parsedDescription.beneficiary || item.supplier?.nameAr || item.supplier?.nameEn || '');
     setReference(item.reference || '');
     setDescription(parsedDescription.description);
+    setDescriptionTouched(true);
     setExpenseDate(toDateInputValue(item.date || item.createdAt));
     setFormErrors({});
   };
@@ -488,9 +614,8 @@ export const ExpensesPage: React.FC = () => {
       });
     },
     onSuccess: (_data, variables) => {
+      // Only the voucher list changes here; account lists are name/id lookups and stay valid.
       queryClient.invalidateQueries({ queryKey: ['expenses-vouchers-list'] });
-      queryClient.invalidateQueries({ queryKey: ['flat-accounts-list'] });
-      queryClient.invalidateQueries({ queryKey: ['cashbox-accounts-list'] });
       showSuccessNotification(
         variables.expenseId
           ? (isAr ? 'تم تحديث قيد المصروف' : 'Expense Updated')
@@ -499,8 +624,15 @@ export const ExpensesPage: React.FC = () => {
           ? (isAr ? 'تم حفظ التعديلات وتحديث القيد المحاسبي المرتبط' : 'Changes and linked journal entry were updated')
           : (isAr ? 'تم قيد المصروف في الحسابات وخصمه من صندوق الموظف' : 'Expense booked and deducted from employee cashbox')
       );
-      resetExpenseForm();
-      setCreateModalOpen(false);
+      // Keep the editor open so the user can post several expenses in a row.
+      setActiveExpenseId(null);
+      setActiveExpenseNumber('');
+      setCurrentExpenseIndex(-1);
+      setAmount('');
+      setDescription('');
+      setDescriptionTouched(false);
+      setReference('');
+      setFormErrors({});
     },
     onError: (err: any) => {
       showErrorNotification(
@@ -510,16 +642,29 @@ export const ExpensesPage: React.FC = () => {
     },
   });
 
-  const handleApplyPreset = (preset: (typeof EXPENSE_PRESETS)[0]) => {
-    setDescription(preset.defaultDesc);
-    const match =
-      expenseAccounts.find((a: any) => a.nameAr && a.nameAr.includes(preset.targetName)) ||
-      expenseAccounts.find((a: any) => a.nameAr && a.nameAr.includes(preset.label));
-    if (match) {
-      setExpenseAccountId(match.id);
-      setFormErrors((current) => ({ ...current, expenseAccountId: '' }));
-    }
+  const handleApplyFrequentAccount = (account: { id: string; nameAr?: string; nameEn?: string; name?: string }) => {
+    setExpenseAccountId(account.id);
+    setFormErrors((current) => ({ ...current, expenseAccountId: '' }));
   };
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: async (expenseId: string) =>
+      apiRequest(`/api/payment-vouchers/${expenseId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expenses-vouchers-list'] });
+      showSuccessNotification(
+        isAr ? 'تم حذف السند' : 'Voucher deleted',
+        isAr ? 'تم حذف قيد المصروف وعكس أثره على الأرصدة' : 'The expense entry and its balance effect were reversed',
+      );
+      setPendingDeleteExpense(null);
+    },
+    onError: (err: any) => {
+      showErrorNotification(
+        isAr ? 'تعذر حذف السند' : 'Delete failed',
+        err.message || (isAr ? 'حدث خطأ أثناء حذف قيد المصروف' : 'An error occurred while deleting the expense'),
+      );
+    },
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -553,10 +698,8 @@ export const ExpensesPage: React.FC = () => {
       exchangeRate: currency === 'USD' ? exchangeRate : 1,
       accountId: expenseAccountId,
       cashboxOrBankAccountId: cashboxAccountId,
-      reference: reference.trim(),
-      description: beneficiary.trim()
-        ? `[المدفوع له: ${beneficiary.trim()}] ${description.trim()}`
-        : description.trim(),
+      reference: reference.trim() || undefined,
+      description: description.trim(),
       status: 'POSTED',
     };
 
@@ -566,359 +709,319 @@ export const ExpensesPage: React.FC = () => {
   const selectedCashboxAccount: any = Array.isArray(accountsData)
     ? (accountsData as any[]).find((account: any) => account.id === cashboxAccountId)
     : null;
-  const selectedCashboxName =
-    selectedCashboxAccount?.nameAr ||
-    selectedCashboxAccount?.nameEn ||
-    selectedCashboxAccount?.name ||
-    activeCashboxName ||
-    (isAr ? 'صندوق غير محدد' : 'Unspecified cashbox');
+  const selectedCashboxName = accountDisplayName(selectedCashboxAccount) || activeCashboxName || (isAr ? 'صندوق غير محدد' : 'Unspecified cashbox');
+
+  const fieldClassNames = {
+    label: '!font-bold !text-slate-800 text-[12.5px] mb-[7px]',
+    input: 'h-[46px] rounded-[11px] border-[#E5E7EB] bg-[#FAFAFA] font-semibold',
+  };
 
   return (
-    <div className="p-6 space-y-6 max-w-[1550px] mx-auto font-sans" dir={direction}>
-      {/* ── HEADER & ACTIONS ── */}
-      <div className="flex items-center justify-between flex-wrap gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-200 shadow-2xs">
-            <Coins size={26} strokeWidth={2.2} />
+    <div className="p-5 md:p-6 space-y-5 max-w-[1750px] mx-auto w-full select-none font-sans" dir={direction}>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-xl bg-orange-50 text-[#F45A0A] border border-orange-200/80 flex items-center justify-center font-bold shadow-xs shrink-0">
+            <Coins size={24} />
           </div>
           <div>
-            <h1 className="text-xl font-black text-slate-900 leading-tight">
-              {isAr ? 'سجل المصاريف والنثريات' : 'Expenses & Operating Ledger'}
-            </h1>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-xl font-black text-slate-900 leading-tight tracking-tight">
+                {isAr ? 'سجل المصاريف والنثريات' : 'Expenses & Operating Ledger'}
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black font-mono tabular-nums lining-nums bg-orange-50 text-[#F45A0A] border border-orange-200/80">
+                <span>{stats.count.toLocaleString('en-US')}</span>
+                <span className="text-[11.5px] font-sans font-bold">{isAr ? 'سند' : 'vouchers'}</span>
+              </span>
+            </div>
+            <p className="text-xs font-normal text-slate-500 mt-1">
               {isAr
-                ? 'إدارة وتقييد مصروفات الفرع بالدينار والدولار مع الترحيل المحاسبي الفوري'
-                : 'Manage and post branch operational expenses with multi-currency support'}
+                ? 'تقييد مصروفات الفرع بالدينار والدولار مع الترحيل المحاسبي الفوري من صندوق الموظف'
+                : 'Post branch expenses in IQD and USD with immediate accounting from the employee cashbox'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <Button
-            variant="default"
-            size="sm"
-            leftSection={<RefreshCw size={14} className={vouchersLoading ? 'animate-spin' : ''} />}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
             onClick={() => refetch()}
-            className="rounded-xl font-bold h-10 border-slate-200 text-slate-700"
+            disabled={vouchersLoading}
+            className="h-10 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-2xs disabled:opacity-50"
           >
-            {isAr ? 'تحديث السجل' : 'Refresh'}
-          </Button>
-
-          <Button
-            size="sm"
-            color="orange"
-            variant="filled"
-            leftSection={<Plus size={16} />}
+            <RefreshCw size={15} className={vouchersLoading ? 'animate-spin text-[#F45A0A]' : 'text-slate-500'} />
+            <span>{isAr ? 'تحديث' : 'Refresh'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="h-10 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-2xs"
+          >
+            <Printer size={15} className="text-slate-500" />
+            <span>{isAr ? 'طباعة' : 'Print'}</span>
+          </button>
+          <button
+            type="button"
             onClick={openNewExpense}
-            className="bg-[#F45A0A] hover:bg-[#dd4f05] rounded-xl font-black h-10 px-5 text-white shadow-xs cursor-pointer"
+            className="h-10 px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer hover:shadow-md"
           >
-            {isAr ? '+ تسجيل مصروف جديد' : '+ New Expense'}
-          </Button>
+            <Plus size={16} strokeWidth={2.5} />
+            <span>{isAr ? 'مصروف جديد' : 'New Expense'}</span>
+          </button>
         </div>
       </div>
 
-      {/* ── STATS METRIC CARDS ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total IQD */}
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-500 block mb-1">
-              {isAr ? 'إجمالي المصاريف (IQD)' : 'Total Expenses (IQD)'}
-            </span>
-            <span className="text-xl font-black font-mono text-slate-900 block">
-              {stats.totalIQD.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-xs font-sans text-[#F45A0A]">د.ع</span>
+            <span className="text-xs font-bold text-slate-500 block mb-1">{isAr ? 'إجمالي المصاريف (IQD)' : 'Total Expenses (IQD)'}</span>
+            <span className="text-xl font-extrabold font-mono tabular-nums lining-nums text-slate-900 block">
+              {stats.totalIQD.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              <span className="text-xs font-sans text-[#F45A0A] mx-1.5">IQD</span>
             </span>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
-            <Coins size={22} />
+          <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-200">
+            <Coins size={20} />
           </div>
         </div>
-
-        {/* Total USD */}
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-500 block mb-1">
-              {isAr ? 'إجمالي المصاريف (USD)' : 'Total Expenses (USD)'}
-            </span>
-            <span className="text-xl font-black font-mono text-emerald-600 block">
-              ${stats.totalUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className="text-xs font-bold text-slate-500 block mb-1">{isAr ? 'إجمالي المصاريف (USD)' : 'Total Expenses (USD)'}</span>
+            <span className="text-xl font-extrabold font-mono tabular-nums lining-nums text-slate-900 block">
+              {stats.totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span className="text-xs font-sans text-[#F45A0A] mx-1.5">USD</span>
             </span>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-            <DollarSign size={22} />
+          <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-200">
+            <DollarSign size={20} />
           </div>
         </div>
-
-        {/* Top Expense Category */}
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold text-slate-500 block mb-1">
-              {isAr ? 'أعلى بند صرف' : 'Top Expense Item'}
-            </span>
-            <span className="text-sm font-black text-slate-800 truncate max-w-[160px] block" title={stats.topCategory}>
-              {stats.topCategory}
-            </span>
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="min-w-0">
+            <span className="text-xs font-bold text-slate-500 block mb-1">{isAr ? 'أعلى بند صرف' : 'Top Expense Item'}</span>
+            <span className="text-sm font-extrabold text-slate-800 truncate block" title={stats.topCategory}>{stats.topCategory}</span>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-            <TrendingDown size={22} />
+          <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-200 shrink-0">
+            <TrendingDown size={20} />
           </div>
         </div>
-
-        {/* Operations Count */}
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-slate-500 block mb-1">
-              {isAr ? 'عدد العمليات المسجلة' : 'Recorded Vouchers'}
-            </span>
-            <span className="text-xl font-black font-mono text-slate-900 block">
-              {stats.count} <span className="text-xs font-sans text-slate-500">{isAr ? 'سند' : 'entries'}</span>
+            <span className="text-xs font-bold text-slate-500 block mb-1">{isAr ? 'عدد العمليات المسجلة' : 'Recorded Vouchers'}</span>
+            <span className="text-xl font-extrabold font-mono tabular-nums lining-nums text-slate-900 block">
+              {stats.count.toLocaleString('en-US')}
+              <span className="text-xs font-sans text-slate-500 ms-1">{isAr ? 'سند' : 'entries'}</span>
             </span>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-            <Receipt size={22} />
+          <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-200">
+            <Receipt size={20} />
           </div>
         </div>
       </div>
 
-      {/* ── FILTER TOOLBAR ── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          {/* Search Box */}
-          <div className="relative min-w-[260px] flex-1">
-            <TextInput
-              placeholder={isAr ? 'بحث برقم السند، البيان، أو اسم الحساب...' : 'Search by voucher#, description, or account...'}
+      {vouchersError && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} />
+            <span>{isAr ? 'تعذر تحميل سجل المصاريف من الخادم.' : 'Could not load the expenses ledger from the server.'}</span>
+          </div>
+          <button type="button" onClick={() => refetch()} className="h-8 px-3 rounded-xl bg-white border border-red-200 text-red-700 font-bold cursor-pointer">
+            {isAr ? 'إعادة المحاولة' : 'Retry'}
+          </button>
+        </div>
+      )}
+
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs">
+        <div className="flex items-end justify-between flex-wrap gap-3">
+          <div className="relative min-w-[240px] flex-1">
+            <Search size={15} className="absolute top-1/2 -translate-y-1/2 start-3.5 text-slate-400 pointer-events-none" />
+            <input
+              type="search"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              leftSection={<Search size={16} className="text-slate-400" />}
-              radius="lg"
-              size="sm"
-              styles={{
-                input: {
-                  borderColor: '#E2E8F0',
-                  fontSize: '12.5px',
-                  backgroundColor: '#F8FAFC',
-                },
-              }}
+              placeholder={isAr ? 'بحث برقم السند أو البيان أو اسم الحساب...' : 'Search voucher, description, or account...'}
+              className="w-full h-[46px] ps-10 pe-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white focus:bg-white focus:border-[#F45A0A] outline-none text-sm font-medium"
             />
           </div>
-
-          {/* Category Filter */}
-          <div className="w-48">
-            <Select
-              placeholder={isAr ? 'كل بنود المصاريف' : 'All Categories'}
+          <div className="w-full sm:w-56">
+            <SearchableCombobox
               value={selectedCategory}
               onChange={(val) => setSelectedCategory(val || 'ALL')}
-              data={[
-                { value: 'ALL', label: isAr ? '📌 كل بنود المصاريف' : 'All Categories' },
-                ...expenseAccounts.map((a: any) => ({
-                  value: a.id,
-                  label: a.nameAr || a.name || a.code,
-                })),
+              options={[
+                { value: 'ALL', label: isAr ? 'كل بنود المصاريف' : 'All categories' },
+                ...expenseComboboxOptions,
               ]}
-              size="sm"
-              radius="lg"
-              styles={{ input: { fontSize: '12px' } }}
+              placeholder={isAr ? 'كل بنود المصاريف' : 'All categories'}
+              clearable={false}
             />
           </div>
-
-          {/* Cashbox Filter */}
-          <div className="w-44">
-            <Select
-              placeholder={isAr ? 'كل الصناديق' : 'All Cashboxes'}
+          <div className="w-full sm:w-52">
+            <SearchableCombobox
               value={selectedCashbox}
               onChange={(val) => setSelectedCashbox(val || 'ALL')}
-              data={[
-                { value: 'ALL', label: isAr ? '🏦 كل الصناديق والبنوك' : 'All Cashboxes' },
-                ...cashboxAccounts.map((a: any) => ({
-                  value: a.id,
-                  label: a.nameAr || a.name || a.code,
-                })),
+              options={[
+                { value: 'ALL', label: isAr ? 'كل الصناديق والبنوك' : 'All cashboxes' },
+                ...cashboxComboboxOptions,
               ]}
-              size="sm"
-              radius="lg"
-              styles={{ input: { fontSize: '12px' } }}
+              placeholder={isAr ? 'كل الصناديق' : 'All cashboxes'}
+              clearable={false}
             />
           </div>
-
-          {/* Date Period Switcher */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
-            <button
-              type="button"
-              onClick={() => setDateFilter('TODAY')}
-              className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                dateFilter === 'TODAY' ? 'bg-white text-[#F45A0A] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {isAr ? 'اليوم' : 'Today'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDateFilter('WEEK')}
-              className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                dateFilter === 'WEEK' ? 'bg-white text-[#F45A0A] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {isAr ? 'هذا الأسبوع' : 'This Week'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDateFilter('MONTH')}
-              className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                dateFilter === 'MONTH' ? 'bg-white text-[#F45A0A] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {isAr ? 'هذا الشهر' : 'This Month'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setDateFilter('ALL')}
-              className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                dateFilter === 'ALL' ? 'bg-white text-[#F45A0A] shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {isAr ? 'الكل' : 'All'}
-            </button>
+          <div className="flex items-center bg-slate-50 p-1 rounded-xl border border-slate-200">
+            {([
+              { id: 'TODAY' as const, label: isAr ? 'اليوم' : 'Today' },
+              { id: 'WEEK' as const, label: isAr ? 'الأسبوع' : 'Week' },
+              { id: 'MONTH' as const, label: isAr ? 'الشهر' : 'Month' },
+              { id: 'ALL' as const, label: isAr ? 'الكل' : 'All' },
+            ]).map((period) => (
+              <button
+                key={period.id}
+                type="button"
+                onClick={() => setDateFilter(period.id)}
+                className={`h-8 px-3 text-xs font-bold rounded-lg cursor-pointer ${
+                  dateFilter === period.id ? 'bg-white text-[#C2410C] border border-orange-200 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {period.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* ── EXPENSES DATA TABLE ── */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Receipt size={18} className="text-[#F45A0A]" />
-            <span className="font-black text-slate-900 text-sm">
-              {isAr ? 'قائمة سندات المصاريف المسجلة' : 'Recorded Expense Vouchers'}
+            <span className="font-extrabold text-slate-900 text-sm">
+              {isAr ? 'قائمة سندات المصاريف' : 'Expense vouchers'}
             </span>
-            <Badge color="orange" variant="light" size="sm" className="font-mono font-bold">
-              {filteredExpenses.length} {isAr ? 'سند' : 'records'}
-            </Badge>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-black font-mono tabular-nums lining-nums bg-orange-50 text-[#F45A0A] border border-orange-200">
+              {filteredExpenses.length.toLocaleString('en-US')}
+            </span>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse text-xs">
-            <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold text-[11.5px]">
+          <table className="w-full text-start border-collapse text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold text-[11.5px]">
               <tr>
-                <th className="p-3 text-center w-12">#</th>
+                <th className="p-3 text-center w-12 font-mono tabular-nums lining-nums">#</th>
                 <th className="p-3">{isAr ? 'رقم السند' : 'Voucher #'}</th>
                 <th className="p-3 text-center">{isAr ? 'التاريخ' : 'Date'}</th>
-                <th className="p-3">{isAr ? 'بند المصروف' : 'Expense Account'}</th>
-                <th className="p-3">{isAr ? 'البيان والتفاصيل' : 'Description / Notes'}</th>
-                <th className="p-3">{isAr ? 'صندوق الصرف' : 'Paid From'}</th>
+                <th className="p-3">{isAr ? 'بند المصروف' : 'Expense account'}</th>
+                <th className="p-3">{isAr ? 'البيان' : 'Description'}</th>
+                <th className="p-3">{isAr ? 'صندوق الصرف' : 'Paid from'}</th>
                 <th className="p-3 text-center">{isAr ? 'المبلغ' : 'Amount'}</th>
                 <th className="p-3 text-center">{isAr ? 'الحالة' : 'Status'}</th>
-                <th className="p-3 text-center w-28">{isAr ? 'الإجراءات' : 'Actions'}</th>
+                <th className="p-3 text-center w-24">{isAr ? 'إجراءات' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredExpenses.length === 0 ? (
+              {vouchersLoading && filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center text-slate-400 font-medium">
+                  <td colSpan={9} className="p-10 text-center text-slate-500 font-medium">
+                    <RefreshCw size={18} className="inline-block animate-spin text-[#F45A0A] me-2" />
+                    {isAr ? 'جارٍ تحميل السجل...' : 'Loading ledger...'}
+                  </td>
+                </tr>
+              ) : filteredExpenses.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-12 text-center">
                     <div className="max-w-xs mx-auto space-y-3">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-                        <Coins size={24} />
+                      <div className="w-12 h-12 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center mx-auto text-[#F45A0A]">
+                        <Coins size={22} />
                       </div>
-                      <p className="text-sm font-bold text-slate-700">
-                        {isAr ? 'لا توجد مصاريف مسجلة مطابقة' : 'No matching expenses found'}
+                      <p className="text-sm font-extrabold text-slate-800">
+                        {isAr ? 'لا توجد مصاريف مطابقة' : 'No matching expenses'}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {isAr ? 'يمكنك البدء بإضافة مصروف جديد بالضغط على زر "تسجيل مصروف جديد"' : 'Click New Expense to create one'}
+                        {isAr ? 'ابدأ بتسجيل مصروف جديد من الزر أعلاه.' : 'Start by recording a new expense.'}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredExpenses.map((item: any, idx: number) => {
-                  const amt = parseFloat(item.amount) || 0;
-                  const itemCur = item.currency || 'IQD';
-                  const itemDate = new Date(item.date || item.createdAt);
+                filteredExpenses.map((item: { id: string; amount?: number | string; currency?: string; date?: string; createdAt?: string; voucherNumber?: string; reference?: string; description?: string; status?: string; exchangeRate?: number | string; account?: { nameAr?: string; nameEn?: string; name?: string }; cashboxOrBankAccount?: { nameAr?: string; nameEn?: string; name?: string } }, idx: number) => {
+                  const amt = parseFloat(String(item.amount)) || 0;
+                  const itemCur = String(item.currency || 'IQD').toUpperCase().includes('USD') ? 'USD' : 'IQD';
+                  const itemDate = new Date(item.date || item.createdAt || Date.now());
+                  const descParts = splitBeneficiaryFromDescription(item.description);
 
                   return (
-                    <tr key={item.id} className="hover:bg-orange-50/20 transition-colors font-sans">
-                      <td className="p-3 text-center text-slate-400 font-mono font-bold">{idx + 1}</td>
-                      <td className="p-3 font-mono font-black text-slate-900 text-xs">
-                        {item.voucherNumber || `PV-${item.id.slice(0, 6)}`}
-                        {item.reference && (
-                          <span className="block text-[10px] text-slate-400 font-normal">
-                            مرجع: {item.reference}
-                          </span>
-                        )}
+                    <tr key={item.id} className="hover:bg-orange-50/30 transition-colors">
+                      <td className="p-3 text-center text-slate-400 font-mono font-extrabold tabular-nums lining-nums">{(idx + 1).toLocaleString('en-US')}</td>
+                      <td className="p-3 font-mono font-extrabold tabular-nums lining-nums text-slate-900">
+                        {item.voucherNumber || `PV-${String(item.id).slice(0, 6)}`}
+                        {item.reference ? (
+                          <span className="block text-[10px] text-slate-400 font-semibold">{item.reference}</span>
+                        ) : null}
                       </td>
-                      <td className="p-3 text-center font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                      <td className="p-3 text-center font-mono font-extrabold tabular-nums lining-nums text-[11px] text-slate-600 whitespace-nowrap">
                         {itemDate.toLocaleDateString('en-GB')}
                       </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900 text-xs">
-                            {item.account?.nameAr || item.account?.name || (isAr ? 'مصروف عام' : 'General Expense')}
-                          </span>
-                          {item.account?.code && (
-                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                              {item.account.code}
-                            </span>
-                          )}
-                        </div>
+                      <td className="p-3 font-bold text-slate-900">
+                        {accountDisplayName(item.account) || (isAr ? 'مصروف عام' : 'General expense')}
                       </td>
                       <td className="p-3 max-w-[280px]">
-                        <p className="text-slate-700 font-medium text-xs truncate" title={item.description}>
-                          {item.description || '—'}
+                        <p className="text-slate-700 font-medium truncate" title={descParts.description || item.description}>
+                          {descParts.beneficiary ? `${descParts.beneficiary} · ` : ''}
+                          {descParts.description || '—'}
                         </p>
                       </td>
                       <td className="p-3">
-                        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                          <Wallet size={13} className="text-slate-400" />
-                          <span>
-                            {item.cashboxOrBankAccount?.nameAr ||
-                              item.cashboxOrBankAccount?.name ||
-                              (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox')}
-                          </span>
+                        <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                          <Wallet size={13} className="text-[#F45A0A] shrink-0" />
+                          <span>{accountDisplayName(item.cashboxOrBankAccount) || (isAr ? 'صندوق غير محدد' : 'Unspecified cashbox')}</span>
                         </div>
                       </td>
                       <td className="p-3 text-center">
-                        <span className="font-mono font-black text-sm text-slate-900 block">
-                          {amt.toLocaleString()} <span className="text-[11px] font-bold text-[#F45A0A]">{itemCur}</span>
+                        <span className="font-mono font-extrabold tabular-nums lining-nums text-sm text-slate-900 block">
+                          {amt.toLocaleString('en-US')}
+                          <span className="text-[11px] text-[#F45A0A] mx-1.5">{itemCur}</span>
                         </span>
-                        {itemCur === 'USD' && (
-                          <span className="text-[10px] font-mono text-slate-400 block">
-                            ≈ {(amt * (parseFloat(item.exchangeRate) || exchangeRate)).toLocaleString()} د.ع
-                          </span>
-                        )}
                       </td>
                       <td className="p-3 text-center">
-                        <Badge
-                          size="xs"
-                          variant="light"
-                          color={item.status === 'POSTED' ? 'emerald' : item.status === 'CANCELLED' ? 'red' : 'gray'}
-                          className="font-bold"
-                        >
-                          {item.status === 'POSTED' ? (isAr ? 'معتمد ومرحل' : 'Posted') : item.status}
-                        </Badge>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-bold border ${
+                          item.status === 'POSTED'
+                            ? 'bg-orange-50 text-[#C2410C] border-orange-200'
+                            : item.status === 'CANCELLED'
+                              ? 'bg-red-50 text-red-700 border-red-200'
+                              : 'bg-slate-50 text-slate-600 border-slate-200'
+                        }`}>
+                          {item.status === 'POSTED' ? (isAr ? 'مرحّل' : 'Posted') : (item.status || '—')}
+                        </span>
                       </td>
-                      <td className="p-3 text-center">
+                      <td className="p-3">
                         <div className="flex items-center justify-center gap-1">
-                          <Tooltip label={isAr ? 'فتح القيد والتنقل بين السجلات' : 'Open and browse records'}>
-                            <ActionIcon
-                              size="sm"
-                              variant="light"
-                              color="orange"
+                          <Tooltip label={isAr ? 'فتح القيد' : 'Open record'}>
+                            <button
+                              type="button"
                               onClick={() => openExpenseRecord(item)}
-                              className="rounded-lg"
+                              className="h-8 w-8 rounded-lg border border-slate-200 bg-white hover:bg-orange-50 hover:border-orange-200 text-slate-600 hover:text-[#F45A0A] flex items-center justify-center cursor-pointer"
                               aria-label={isAr ? `فتح القيد ${item.voucherNumber || ''}` : `Open ${item.voucherNumber || 'expense'}`}
                             >
                               <Eye size={14} />
-                            </ActionIcon>
+                            </button>
                           </Tooltip>
-                          <Tooltip label={isAr ? 'طباعة سند الصرف' : 'Print Voucher'}>
-                            <ActionIcon
-                              size="sm"
-                              variant="light"
-                              color="gray"
+                          <Tooltip label={isAr ? 'طباعة سند الصرف' : 'Print voucher'}>
+                            <button
+                              type="button"
                               onClick={() => window.print()}
-                              className="rounded-lg hover:text-[#F45A0A]"
+                              className="h-8 w-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 flex items-center justify-center cursor-pointer"
                             >
                               <Printer size={14} />
-                            </ActionIcon>
+                            </button>
+                          </Tooltip>
+                          <Tooltip label={isAr ? 'حذف السند' : 'Delete voucher'}>
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteExpense(item)}
+                              disabled={deleteExpenseMutation.isPending}
+                              className="h-8 w-8 rounded-lg border border-slate-200 bg-white hover:bg-red-50 hover:border-red-200 text-slate-500 hover:text-red-600 flex items-center justify-center cursor-pointer disabled:opacity-40"
+                              aria-label={isAr ? `حذف السند ${item.voucherNumber || ''}` : `Delete ${item.voucherNumber || 'expense'}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </Tooltip>
                         </div>
                       </td>
@@ -931,328 +1034,377 @@ export const ExpensesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── MODAL: CREATE NEW EXPENSE ── */}
       <Modal
         opened={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         title={
-          <div className="flex items-center gap-2.5" dir={direction}>
-            <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100 shrink-0">
-              <Coins size={17} />
+          <div className="flex items-center gap-3 pe-8" dir={direction}>
+            <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#F45A0A] shrink-0">
+              <Coins size={20} />
             </div>
-            <div>
-              <h3 className="font-extrabold text-sm text-slate-900 leading-tight">
+            <div className="min-w-0">
+              <h3 className="font-extrabold text-[15px] text-slate-900 leading-tight truncate">
                 {activeExpenseId
-                  ? (isAr ? 'عرض وتعديل قيد المصروف' : 'View & Edit Expense')
-                  : (isAr ? 'تسجيل وقيد مصروف جديد' : 'New Operating Expense')}
+                  ? (isAr ? 'تعديل قيد المصروف' : 'Edit expense')
+                  : (isAr ? 'تسجيل مصروف جديد' : 'New expense')}
               </h3>
-              <p className="text-[11px] text-slate-500 font-medium">
+              <p className="text-[11.5px] text-slate-500 font-medium mt-0.5 truncate">
                 {activeExpenseId
-                  ? (isAr ? `القيد ${activeExpenseNumber}` : `${activeExpenseNumber}`)
-                  : (isAr ? 'قيد مالي مباشر لحسابات وصندوق الفرع' : 'Direct operational expense voucher')}
+                  ? (isAr ? `السند ${activeExpenseNumber} · ${selectedCashboxName}` : `${activeExpenseNumber} · ${selectedCashboxName}`)
+                  : (isAr ? 'قيد مباشر على حساب المصروف وصندوق الصرف' : 'Posted against the expense account and cashbox')}
               </p>
             </div>
           </div>
         }
-        size="780px"
+        size="1040px"
+        padding={0}
         radius="16px"
         dir={direction}
         centered
         closeOnClickOutside={!saveExpenseMutation.isPending}
         closeOnEscape={!saveExpenseMutation.isPending}
         styles={{
-          header: { padding: '14px 20px', borderBottom: '1px solid #F1F5F9' },
-          body: { padding: '18px 20px', overflow: 'visible' },
+          inner: { padding: '24px 16px', overflow: 'visible' },
+          content: {
+            width: 'min(1040px, 96vw)',
+            maxWidth: '96vw',
+            minHeight: 'min(640px, 90dvh)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'visible',
+            border: '1px solid #e2e8f0',
+          },
+          header: { minHeight: '64px', padding: '12px 18px', borderBottom: '1px solid #e2e8f0' },
+          body: { padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'visible' },
         }}
       >
-        <form onSubmit={handleSubmit} className="space-y-4 font-sans text-xs" dir={direction}>
-          {/* ── 1. MINIMALIST PRESET CHIPS ── */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] font-bold text-slate-400 ml-1">
-              {isAr ? 'اختيار سريع:' : 'Quick Select:'}
-            </span>
-            {EXPENSE_PRESETS.map((preset, pIdx) => {
-              const Icon = preset.icon;
-              return (
-                <button
-                  key={pIdx}
-                  type="button"
-                  onClick={() => handleApplyPreset(preset)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-orange-50 hover:text-[#F45A0A] text-slate-700 text-[11.5px] font-bold transition-colors cursor-pointer"
-                >
-                  <Icon size={12} className="text-slate-500" />
-                  <span>{preset.label}</span>
-                </button>
-              );
-            })}
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-visible" dir={direction}>
+          <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-[#FAFAFA] px-5 py-3">
+            <div className="flex items-center gap-2 shrink-0">
+              <Switch
+                size="md"
+                color="orange"
+                checked={showConversion}
+                onChange={(event) => setShowConversion(event.currentTarget.checked)}
+                aria-label={isAr ? 'إظهار الصرافة' : 'Show conversion'}
+              />
+              <span className={`text-[11.5px] font-extrabold ${showConversion ? 'text-[#F45A0A]' : 'text-slate-500'}`}>
+                {isAr ? 'الصرافة' : 'Conversion'}
+              </span>
+            </div>
+
+            <div className="hidden sm:block h-7 w-px bg-slate-200" />
+
+            <div className="flex items-center gap-2 min-w-[240px] flex-1">
+              <span className="text-[11.5px] font-extrabold text-slate-500 shrink-0">
+                {isAr ? 'صندوق الصرف' : 'Cashbox'}
+              </span>
+              <div className="min-w-0 flex-1">
+                <SearchableCombobox
+                  value={cashboxAccountId}
+                  onChange={(v) => {
+                    if (v) {
+                      setCashboxAccountId(v);
+                      setFormErrors((current) => ({ ...current, cashboxAccountId: '' }));
+                    }
+                  }}
+                  options={cashboxComboboxOptions}
+                  placeholder={isAr ? 'اختر صندوق الصرف...' : 'Select cashbox...'}
+                  error={formErrors.cashboxAccountId}
+                  clearable={false}
+                  maxRendered={6}
+                  maxListHeight={168}
+                  leftIcon={<Wallet size={15} />}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 min-w-[240px] flex-1">
+              <span className="text-[11.5px] font-extrabold text-slate-500 shrink-0">
+                {isAr ? 'حساب أب المصاريف' : 'Parent account'}
+              </span>
+              <div className="min-w-0 flex-1">
+                <SearchableCombobox
+                  value={expenseParentId}
+                  onChange={(v) => setExpenseParentId(v || 'ALL')}
+                  options={expenseParentOptions}
+                  placeholder={isAr ? 'كل بنود المصاريف' : 'All expense items'}
+                  clearable={false}
+                  maxRendered={12}
+                  maxListHeight={240}
+                  leftIcon={<Coins size={15} />}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* ── 2. EXPENSE ACCOUNT (MAIN SELECTOR) ── */}
-          <div>
-            <label className="font-bold text-slate-700 text-xs block mb-1">
-              {isAr ? 'بند / حساب المصروف *' : 'Expense Item *'}
-            </label>
-            <Select
+          <div className="flex flex-1 flex-col overflow-visible p-5 gap-4">
+            {frequentExpenseAccounts.length > 0 && (
+            <div>
+              <p className="text-[11px] font-extrabold text-slate-500 mb-2">{isAr ? 'الأكثر استعمالاً' : 'Most used'}</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                  {frequentExpenseAccounts.map((account: { id: string; nameAr?: string; nameEn?: string; name?: string }) => {
+                    const active = expenseAccountId === account.id;
+                    const label = isAr
+                      ? (account.nameAr || account.nameEn || account.name || '')
+                      : (account.nameEn || account.nameAr || account.name || '');
+                    return (
+                      <button
+                        key={account.id}
+                        type="button"
+                        onClick={() => handleApplyFrequentAccount(account)}
+                        className={`flex items-center gap-1.5 h-9 px-3 rounded-xl border text-[11.5px] font-bold cursor-pointer ${
+                          active
+                            ? 'bg-[#F45A0A] text-white border-[#F45A0A]'
+                            : 'border-slate-200 bg-white hover:bg-orange-50 hover:border-orange-200 hover:text-[#C2410C] text-slate-700'
+                        }`}
+                      >
+                        <Coins size={13} className={active ? 'text-white' : 'text-[#F45A0A]'} />
+                        <span>{label}</span>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+            )}
+
+            <SearchableCombobox
+              label={isAr ? 'بند المصروف' : 'Expense item'}
+              required
               value={expenseAccountId}
               onChange={(v) => {
-                setExpenseAccountId(v || '');
+                setExpenseAccountId(v);
                 setFormErrors((current) => ({ ...current, expenseAccountId: '' }));
               }}
-              data={expenseSelectOptions || []}
-              searchable
-              clearable
-              size="sm"
-              radius="md"
+              options={modalExpenseOptions}
+              placeholder={isAr ? 'ابحث باسم بند المصروف...' : 'Search expense item...'}
               error={formErrors.expenseAccountId}
-              autoFocus={!activeExpenseId}
-              placeholder={isAr ? 'اختر أو ابحث عن بند المصروف...' : 'Search and select expense item...'}
-              styles={{
-                input: {
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: '#0F172A',
-                  borderColor: formErrors.expenseAccountId ? '#EF4444' : '#CBD5E1',
-                  height: '38px',
-                },
-              }}
+              clearable={false}
+              maxRendered={6}
+              maxListHeight={168}
             />
-          </div>
 
-          {/* ── 3. THREE-COLUMN ROW: AMOUNT & CURRENCY | DATE | CASHBOX ── */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-start">
-            {/* Amount & Currency */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="font-bold text-slate-700 text-xs">
-                  {isAr ? 'مبلغ وعملة المصروف *' : 'Amount & Currency *'}
-                </label>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <NumberInput
-                  placeholder={currency === 'IQD' ? '25,000' : '50.00'}
-                  value={amount}
-                  onChange={(val) => {
-                    setAmount(val as number | '');
-                    setFormErrors((current) => ({ ...current, amount: '' }));
-                  }}
-                  min={0}
-                  thousandSeparator=","
-                  size="sm"
-                  radius="md"
-                  error={formErrors.amount}
-                  className="flex-1"
-                  styles={{
-                    input: {
-                      fontFamily: 'monospace',
-                      fontWeight: 800,
-                      fontSize: '14.5px',
-                      color: '#0F172A',
-                      borderColor: formErrors.amount ? '#EF4444' : '#CBD5E1',
-                      height: '36px',
-                    },
-                  }}
-                />
-                <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setCurrency('IQD')}
-                    className={`px-2 py-1 text-[11px] font-black rounded-md transition-all cursor-pointer ${
-                      currency === 'IQD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    IQD
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCurrency('USD')}
-                    className={`px-2 py-1 text-[11px] font-black rounded-md transition-all cursor-pointer ${
-                      currency === 'USD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    $ USD
-                  </button>
-                </div>
-              </div>
-
-              {currency === 'USD' && (
-                <span className="block mt-1 font-mono text-[10.5px] text-slate-500 font-medium">
-                  100$ = {(exchangeRate * 100).toLocaleString()} د.ع (≈ {((Number(amount) || 0) * exchangeRate).toLocaleString()} د.ع)
-                </span>
-              )}
-            </div>
-
-            {/* Expense Date */}
-            <div>
-              <SegmentedDatePicker
-                label={isAr ? 'تاريخ المصروف' : 'Expense Date'}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+              <div className="md:col-span-7">
+              <FormattedNumberInput
+                label={isAr ? 'المبلغ' : 'Amount'}
                 required
-                value={expenseDate}
-                onChange={(_date, isoString) => {
-                  setExpenseDate(isoString);
-                  setFormErrors((current) => ({ ...current, expenseDate: '' }));
+                value={amount}
+                onChange={(val) => {
+                  setAmount(val);
+                  setFormErrors((current) => ({ ...current, amount: '' }));
                 }}
-                clearable={false}
-                dropdownPosition="top"
-                error={formErrors.expenseDate}
-              />
-            </div>
-
-            {/* Paid From Cashbox / Bank */}
-            <div>
-              <label className="font-bold text-slate-700 text-xs block mb-1">
-                {isAr ? 'صندوق / بنك الصرف *' : 'Paid From Cashbox *'}
-              </label>
-              <Select
-                size="sm"
-                radius="md"
-                data={cashboxAccounts.map((a: any) => ({
-                  value: a.id,
-                  label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'الصندوق'}`,
-                }))}
-                value={cashboxAccountId}
-                onChange={(v) => {
-                  if (v) {
-                    setCashboxAccountId(v);
-                    setFormErrors((current) => ({ ...current, cashboxAccountId: '' }));
-                  }
-                }}
-                searchable
-                error={formErrors.cashboxAccountId}
-                placeholder={isAr ? 'اختر صندوق الصرف...' : 'Select cashbox...'}
+                placeholder={currency === 'IQD' ? '25,000' : '50.00'}
+                error={formErrors.amount}
                 styles={{
                   input: {
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: '#0F172A',
-                    borderColor: formErrors.cashboxAccountId ? '#EF4444' : '#CBD5E1',
-                    height: '36px',
+                    height: 48,
+                    minHeight: 48,
+                    textAlign: 'center',
+                    fontSize: 26,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    letterSpacing: '-0.02em',
                   },
+                }}
+                classNames={{
+                  ...fieldClassNames,
+                  input: 'rounded-[12px] border-[#E5E7EB] bg-[#FAFAFA] font-mono tabular-nums lining-nums text-slate-900',
+                }}
+              />
+              </div>
+              <div className="md:col-span-5 flex items-end gap-2 min-w-0">
+                <CurrencySegmentedControl
+                  value={currency}
+                  onChange={(val) => setCurrency(val === 'USD' ? 'USD' : 'IQD')}
+                  showAllOption={false}
+                  height="h-[48px]"
+                  className="shrink-0 [&_[role=radiogroup]]:!w-[148px]"
+                />
+                <div className="min-w-0 flex-1">
+                  <SegmentedDatePicker
+                    label={isAr ? 'تاريخ المصروف' : 'Expense date'}
+                    required
+                    value={expenseDate}
+                    onChange={(_date, isoString) => {
+                      setExpenseDate(isoString);
+                      setFormErrors((current) => ({ ...current, expenseDate: '' }));
+                    }}
+                    clearable={false}
+                    dropdownPosition="bottom"
+                    error={formErrors.expenseDate}
+                    className="[&>label]:!text-[12.5px] [&>label]:!font-bold [&>label]:!text-slate-800 [&>label]:!mb-[7px] [&_.custom-seg-picker]:!rounded-[12px] [&_.custom-seg-picker]:!bg-[#FAFAFA] [&_.custom-seg-picker]:!border-[#E5E7EB]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {showConversion && (
+              <p dir="ltr" className="text-[11.5px] font-mono font-extrabold tabular-nums lining-nums text-slate-600 text-start">
+                {currency === 'USD'
+                  ? `100 USD = ${(exchangeRate * 100).toLocaleString('en-US')} IQD · ${(Number(amount) || 0).toLocaleString('en-US')} USD ≈ ${Math.round((Number(amount) || 0) * exchangeRate).toLocaleString('en-US')} IQD`
+                  : `100 USD = ${(exchangeRate * 100).toLocaleString('en-US')} IQD · ${(Number(amount) || 0).toLocaleString('en-US')} IQD ≈ ${((Number(amount) || 0) / (exchangeRate || 1)).toLocaleString('en-US', { maximumFractionDigits: 2 })} USD`}
+              </p>
+            )}
+
+            <div className="flex flex-1 flex-col min-h-[140px]">
+              <Textarea
+                label={isAr ? 'البيان وتفاصيل المصروف' : 'Description'}
+                placeholder={isAr ? 'اكتب سبب الصرف وأي ملاحظات تدقيقية...' : 'Enter purpose and audit notes...'}
+                value={description}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  setDescriptionTouched(true);
+                  setFormErrors((current) => ({ ...current, description: '' }));
+                }}
+                required
+                error={formErrors.description}
+                styles={{
+                  root: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 },
+                  wrapper: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 },
+                  input: {
+                    flex: 1,
+                    height: '100%',
+                    minHeight: 0,
+                    resize: 'none',
+                    fontSize: 15,
+                    fontWeight: 700,
+                  },
+                }}
+                classNames={{
+                  label: fieldClassNames.label,
+                  input: 'rounded-[12px] border-[#E5E7EB] bg-[#FAFAFA] text-slate-900',
                 }}
               />
             </div>
           </div>
 
-          {/* ── 4. DESCRIPTION TEXTAREA ── */}
-          <div>
-            <label className="font-bold text-slate-700 text-xs block mb-1">
-              {isAr ? 'البيان وتفاصيل المصروف *' : 'Description / Notes *'}
-            </label>
-            <Textarea
-              placeholder={isAr ? 'اكتب تفاصيل وسبب صرف المبلغ والمستفيد وأي ملاحظات تدقيقية...' : 'Enter expense details and purpose...'}
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value);
-                setFormErrors((current) => ({ ...current, description: '' }));
-              }}
-              minRows={3}
-              maxRows={6}
-              size="sm"
-              radius="md"
-              error={formErrors.description}
-              styles={{
-                input: {
-                  fontSize: '12.5px',
-                  lineHeight: '1.5',
-                  borderColor: formErrors.description ? '#EF4444' : '#CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                },
-              }}
-            />
-          </div>
-
-          {/* ── 5. FOOTER: ACTIONS & REFERENCE & PAGINATION ── */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
-            {/* Actions: Save & Cancel */}
-            <div className="flex items-center gap-2">
-              <Button
-                type="submit"
-                size="sm"
-                color="orange"
-                variant="filled"
-                loading={saveExpenseMutation.isPending}
-                className="bg-[#F45A0A] hover:bg-[#dd4f05] rounded-xl font-bold h-9 px-5 text-white shadow-xs cursor-pointer"
-              >
-                {activeExpenseId ? (isAr ? 'حفظ التعديلات' : 'Save Changes') : (isAr ? 'حفظ وترحيل المصروف' : 'Save & Post Expense')}
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                disabled={saveExpenseMutation.isPending}
-                onClick={() => setCreateModalOpen(false)}
-                className="rounded-xl font-bold h-9 border-slate-200 text-slate-700"
-              >
-                {isAr ? 'إلغاء' : 'Cancel'}
-              </Button>
-            </div>
-
-            {/* Reference / Invoice # Input */}
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-slate-500 text-[11px] shrink-0">
-                {isAr ? 'رقم الوصل:' : 'Ref #:'}
-              </span>
-              <TextInput
-                placeholder="INV-00123"
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-                size="xs"
-                radius="md"
-                className="w-32"
-                styles={{ input: { fontFamily: 'monospace', fontSize: '11px', fontWeight: 600 } }}
-              />
-            </div>
-
-            {/* Pagination Controls */}
-            <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+          <div className="mt-auto sticky bottom-0 z-20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-slate-200 bg-white px-5 py-3 rounded-b-[16px]">
+            <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-50 p-1 shrink-0">
               <Tooltip label={isAr ? 'أول قيد' : 'First'}>
-                <button
-                  type="button"
-                  onClick={handleNavigateFirst}
-                  disabled={navigationExpenses.length === 0 || currentExpenseIndex === 0 || saveExpenseMutation.isPending}
-                  className="h-6 w-6 shrink-0 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-[#F45A0A] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {direction === 'rtl' ? <ChevronsRight size={13} /> : <ChevronsLeft size={13} />}
+                <button type="button" onClick={handleNavigateFirst} disabled={navigationExpenses.length === 0 || currentExpenseIndex === 0 || saveExpenseMutation.isPending} className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-[#F45A0A] disabled:opacity-30 cursor-pointer">
+                  {direction === 'rtl' ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
                 </button>
               </Tooltip>
               <Tooltip label={isAr ? 'السابق' : 'Prev'}>
-                <button
-                  type="button"
-                  onClick={handleNavigatePrevious}
-                  disabled={currentExpenseIndex <= 0 || saveExpenseMutation.isPending}
-                  className="h-6 w-6 shrink-0 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-[#F45A0A] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {direction === 'rtl' ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+                <button type="button" onClick={handleNavigatePrevious} disabled={currentExpenseIndex <= 0 || saveExpenseMutation.isPending} className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-[#F45A0A] disabled:opacity-30 cursor-pointer">
+                  {direction === 'rtl' ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
                 </button>
               </Tooltip>
-
-              <div className="h-6 px-2 rounded bg-white border border-slate-200 flex items-center justify-center">
-                <span className="font-mono text-[10px] font-bold text-slate-700" dir="ltr">
-                  {activeExpenseNumber || (isAr ? 'قيد جديد' : 'New')}
-                </span>
-              </div>
-
+              <span className="h-8 min-w-[80px] px-2 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-mono text-[11px] font-extrabold tabular-nums lining-nums text-slate-700" dir="ltr">
+                {activeExpenseNumber || (isAr ? 'جديد' : 'New')}
+              </span>
               <Tooltip label={isAr ? 'التالي' : 'Next'}>
-                <button
-                  type="button"
-                  onClick={handleNavigateNext}
-                  disabled={navigationExpenses.length === 0 || currentExpenseIndex >= navigationExpenses.length - 1 || saveExpenseMutation.isPending}
-                  className="h-6 w-6 shrink-0 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-[#F45A0A] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {direction === 'rtl' ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
+                <button type="button" onClick={handleNavigateNext} disabled={navigationExpenses.length === 0 || currentExpenseIndex >= navigationExpenses.length - 1 || saveExpenseMutation.isPending} className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-[#F45A0A] disabled:opacity-30 cursor-pointer">
+                  {direction === 'rtl' ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
                 </button>
               </Tooltip>
               <Tooltip label={isAr ? 'آخر قيد' : 'Last'}>
-                <button
-                  type="button"
-                  onClick={handleNavigateLast}
-                  disabled={navigationExpenses.length === 0 || currentExpenseIndex >= navigationExpenses.length - 1 || saveExpenseMutation.isPending}
-                  className="h-6 w-6 shrink-0 rounded flex items-center justify-center text-slate-600 hover:bg-white hover:text-[#F45A0A] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {direction === 'rtl' ? <ChevronsLeft size={13} /> : <ChevronsRight size={13} />}
+                <button type="button" onClick={handleNavigateLast} disabled={navigationExpenses.length === 0 || currentExpenseIndex >= navigationExpenses.length - 1 || saveExpenseMutation.isPending} className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-600 hover:bg-white hover:text-[#F45A0A] disabled:opacity-30 cursor-pointer">
+                  {direction === 'rtl' ? <ChevronsLeft size={14} /> : <ChevronsRight size={14} />}
                 </button>
               </Tooltip>
             </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={saveExpenseMutation.isPending}
+                onClick={() => setCreateModalOpen(false)}
+                className="h-11 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold text-xs cursor-pointer disabled:opacity-50"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="submit"
+                disabled={saveExpenseMutation.isPending}
+                className="h-11 px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {saveExpenseMutation.isPending
+                  ? (isAr ? 'جارٍ الحفظ...' : 'Saving...')
+                  : activeExpenseId
+                    ? (isAr ? 'حفظ التعديلات' : 'Save changes')
+                    : (isAr ? 'حفظ وترحيل المصروف' : 'Save & post')}
+              </button>
+            </div>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        opened={Boolean(pendingDeleteExpense)}
+        onClose={() => {
+          if (!deleteExpenseMutation.isPending) setPendingDeleteExpense(null);
+        }}
+        title={
+          <div className="flex items-center gap-3 pe-8" dir={direction}>
+            <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
+              <Trash2 size={18} />
+            </div>
+            <h3 className="font-extrabold text-[14.5px] text-slate-900">
+              {isAr ? 'حذف قيد المصروف' : 'Delete expense'}
+            </h3>
+          </div>
+        }
+        size="460px"
+        radius="16px"
+        centered
+        dir={direction}
+        closeOnClickOutside={!deleteExpenseMutation.isPending}
+        closeOnEscape={!deleteExpenseMutation.isPending}
+      >
+        <div className="space-y-4" dir={direction}>
+          <p className="text-[13px] font-semibold text-slate-700 leading-relaxed">
+            {isAr
+              ? 'سيتم حذف السند مع القيد المحاسبي المرتبط به وعكس أثره على أرصدة الحسابات. لا يمكن التراجع عن هذا الإجراء.'
+              : 'The voucher and its linked journal entry will be deleted and account balances reversed. This cannot be undone.'}
+          </p>
+
+          {pendingDeleteExpense && (
+            <div className="rounded-xl border border-slate-200 bg-[#FAFAFA] px-3 py-2.5 space-y-1">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11.5px] font-bold text-slate-500">{isAr ? 'رقم السند' : 'Voucher'}</span>
+                <span className="font-mono text-[12px] font-extrabold tabular-nums lining-nums text-slate-900" dir="ltr">
+                  {pendingDeleteExpense.voucherNumber || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11.5px] font-bold text-slate-500">{isAr ? 'المبلغ' : 'Amount'}</span>
+                <span className="font-mono text-[12px] font-extrabold tabular-nums lining-nums text-slate-900" dir="ltr">
+                  {(Number(pendingDeleteExpense.amount) || 0).toLocaleString('en-US')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11.5px] font-bold text-slate-500">{isAr ? 'بند المصروف' : 'Expense item'}</span>
+                <span className="text-[12px] font-bold text-slate-900 truncate max-w-[220px]">
+                  {accountDisplayName(pendingDeleteExpense.account) || '—'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              disabled={deleteExpenseMutation.isPending}
+              onClick={() => setPendingDeleteExpense(null)}
+              className="h-10 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold text-xs cursor-pointer disabled:opacity-50"
+            >
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button
+              type="button"
+              disabled={deleteExpenseMutation.isPending}
+              onClick={() => {
+                if (pendingDeleteExpense?.id) deleteExpenseMutation.mutate(pendingDeleteExpense.id);
+              }}
+              className="h-10 px-5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer disabled:opacity-50"
+            >
+              {deleteExpenseMutation.isPending
+                ? (isAr ? 'جارٍ الحذف...' : 'Deleting...')
+                : (isAr ? 'تأكيد الحذف' : 'Delete')}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

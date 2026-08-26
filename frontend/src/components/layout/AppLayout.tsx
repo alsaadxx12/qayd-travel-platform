@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -10,9 +10,12 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { IconSearch } from '@tabler/icons-react';
 import { SubscriptionExpiredLockoutModal } from '../pricing/SubscriptionExpiredLockoutModal';
 import { FeedbackFloatingDrawer } from '../feedback/FeedbackFloatingDrawer';
-import { AIAssistantFloatingButton } from '../ai/AIAssistantFloatingButton';
 import { ImpersonationBanner } from './ImpersonationBanner';
 import { PermissionDeniedModal } from '../common/PermissionDeniedModal';
+
+const CopilotRoot = lazy(() =>
+  import('../ai/CopilotRoot').then((m) => ({ default: m.CopilotRoot })),
+);
 
 export const AppLayout: React.FC = () => {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -133,8 +136,9 @@ export const AppLayout: React.FC = () => {
       {/* Unified Single Floating Support Drawer Button */}
       <FeedbackFloatingDrawer />
 
-      {/* Floating AI Assistant Panel */}
-      <AIAssistantFloatingButton />
+      <Suspense fallback={null}>
+        <CopilotRoot />
+      </Suspense>
 
       {/* Global Permission Denied Alert Modal */}
       <PermissionDeniedModal />

@@ -10,6 +10,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
+  @Get('debts')
+  @ApiOperation({ summary: 'تقرير الديون والذمم للعملاء والموردين مع أرصدة الدينار والدولار' })
+  async getDebtsReport(@Req() req: any) {
+    return this.reportsService.getDebtsReport(req.user.companyId);
+  }
+
   @Get('account-statement/:accountId')
   @ApiOperation({ summary: 'كشف حساب تفصيلي مع الرصيد الافتتاحي والرصيد التراكمي' })
   async getAccountStatement(

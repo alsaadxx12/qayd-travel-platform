@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentVouchersService, CreatePaymentVoucherDto } from './payment-vouchers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -12,8 +12,9 @@ export class PaymentVouchersController {
 
   @Get()
   @ApiOperation({ summary: 'قائمة سندات الدفع' })
-  async findAll(@Req() req: any) {
-    return this.paymentVouchersService.findAll(req.user.companyId);
+  async findAll(@Req() req: any, @Query('limit') limit?: string) {
+    const parsed = Number(limit);
+    return this.paymentVouchersService.findAll(req.user.companyId, Number.isFinite(parsed) ? parsed : undefined);
   }
 
   @Get(':id')

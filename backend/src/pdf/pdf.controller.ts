@@ -1,10 +1,8 @@
 import { Controller, Post, Body, Res, Req, HttpException, HttpStatus } from '@nestjs/common';
-import type { Response } from 'express';
 import { PdfService, PdfGenerateOptions } from './pdf.service';
-import { TemplateService } from './template.service';
 import type { StatementPdfData } from './template.service';
-import { IsString, IsOptional, IsBoolean, IsIn, IsArray, IsNumber, ValidateNested, IsObject } from 'class-validator';
-import { PrintTemplatesService } from '../print-templates/print-templates.service';
+import { StatementPdfService } from './statement-pdf.service';
+import { IsString, IsOptional, IsBoolean, IsIn } from 'class-validator';
 
 class GeneratePdfDto {
   @IsString()
@@ -55,8 +53,7 @@ class GeneratePdfDto {
 export class PdfController {
   constructor(
     private readonly pdfService: PdfService,
-    private readonly templateService: TemplateService,
-    private readonly printTemplatesService: PrintTemplatesService,
+    private readonly statementPdfService: StatementPdfService,
   ) {}
 
   @Post('generate')
@@ -116,44 +113,19 @@ export class PdfController {
     @Res() res: any,
   ) {
     try {
-      let savedConfig = {};
       const companyId = req.user?.companyId || (body as any).companyId || 'default';
-      try {
-        const dbTemplate = await this.printTemplatesService.getTemplate(companyId, 'statement');
-        if (dbTemplate && dbTemplate.config) {
-          savedConfig = dbTemplate.config;
-        }
-      } catch (e) {
-        console.warn('Failed to fetch print template from DB, using fallback:', e);
-      }
-
-      const mergedSettings = {
-        ...savedConfig,
-        ...(body.settings || {}),
-      };
-
-      const updatedBody = {
-        ...body,
-        settings: mergedSettings,
-      };
-
-      // 1. Render HTML from Handlebars template with merged settings
-      const html = this.templateService.renderStatementHtml(updatedBody);
-
-      // 2. Generate PDF from complete HTML
-      const pdfBuffer = await this.pdfService.generateFromHtml(html);
-
-      // 3. Build safe filename
-      const safeName = `statement_${Date.now()}.pdf`;
-      const arabicName = `كشف_حساب_${body.accountCode || body.accountName}_${body.startDate}.pdf`;
-      const encodedName = encodeURIComponent(arabicName);
+      const generated = await this.statementPdfService.generate(companyId, body);
+      const encodedName = encodeURIComponent(generated.downloadName);
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="${safeName}"; filename*=UTF-8''${encodedName}`);
-      res.setHeader('Content-Length', pdfBuffer.length.toString());
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${generated.filename}"; filename*=UTF-8''${encodedName}`,
+      );
+      res.setHeader('Content-Length', generated.buffer.length.toString());
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
-      return res.status(200).send(pdfBuffer);
+      return res.status(200).send(generated.buffer);
     } catch (error: any) {
       console.error('PdfController Statement Error:', error);
       if (!res.headersSent) {

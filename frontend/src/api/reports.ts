@@ -112,6 +112,70 @@ export interface DebtAmountTraceResponse {
   };
 }
 
+export interface DebtsReportRow {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn?: string | null;
+  category?: string;
+  type: string;
+  debitUSD: number;
+  creditUSD: number;
+  endingBalanceUSD: number;
+  debitIQD: number;
+  creditIQD: number;
+  endingBalanceIQD: number;
+  totalDebit: number;
+  totalCredit: number;
+  endingBalance: number;
+  debtType: 'receivable' | 'payable' | 'zero';
+  debtLabel: string;
+  accountCurrency: 'USD' | 'IQD';
+}
+
+export interface DebtsReportResponse {
+  rows: DebtsReportRow[];
+  generatedAt: string;
+}
+
+export interface AccountStatementLine {
+  id: string;
+  date: string;
+  entryNumber?: string | null;
+  reference?: string | null;
+  description?: string | null;
+  debit: number;
+  credit: number;
+  runningBalance: number;
+}
+
+export interface AccountStatementResponse {
+  account: { id: string; code: string; nameAr: string; type: string };
+  startDate: string;
+  endDate: string;
+  openingBalance: number;
+  closingBalance: number;
+  lines: AccountStatementLine[];
+}
+
+export function getDebtsReport() {
+  return apiRequest<DebtsReportResponse>('/api/reports/debts', {
+    ttl: 30_000,
+    timeoutMs: 15000,
+  });
+}
+
+export function getAccountStatement(accountId: string, startDate?: string, endDate?: string) {
+  const query = new URLSearchParams();
+  if (startDate) query.set('startDate', startDate);
+  if (endDate) query.set('endDate', endDate);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return apiRequest<AccountStatementResponse>(
+    `/api/reports/account-statement/${encodeURIComponent(accountId)}${suffix}`,
+    { noCache: true, timeoutMs: 20000 },
+  );
+}
+
 export function getDebtAmountTrace(accountId: string, signal?: AbortSignal) {
   return apiRequest<DebtAmountTraceResponse>(
     `/api/reports/debts/${encodeURIComponent(accountId)}/amount-trace`,

@@ -67,7 +67,7 @@ async function main() {
             companyId: comp.id,
             tenantId: comp.tenantId,
             balance: 0,
-            currency: 'IQD',
+            currency: 'MULTI',
             isSystem: true,
             branchScope: 'ALL_BRANCHES',
           },

@@ -27,6 +27,8 @@ interface SearchableComboboxProps {
   renderOption?: (option: ComboboxOption, isSelected: boolean) => React.ReactNode;
   className?: string;
   displayValue?: string;
+  maxRendered?: number;
+  maxListHeight?: number;
 }
 
 export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
@@ -44,6 +46,8 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   renderOption,
   className = '',
   displayValue,
+  maxRendered = 80,
+  maxListHeight = 280,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,7 +74,6 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   const isUUID = value && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(value);
   const displayLabel = selectedOption ? selectedOption.label : (isUUID ? (displayValue || '') : value);
 
-  // Filtered options
   const filteredOptions = options.filter((opt) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
@@ -78,8 +81,21 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
     const c = (opt.code || '').toLowerCase();
     const v = (opt.value || '').toLowerCase();
     const n = (opt.name || '').toLowerCase();
-    return l.includes(q) || c.includes(q) || v.includes(q) || n.includes(q);
+    const nAr = (opt.nameAr || '').toLowerCase();
+    const nEn = (opt.nameEn || '').toLowerCase();
+    return l.includes(q) || c.includes(q) || v.includes(q) || n.includes(q) || nAr.includes(q) || nEn.includes(q);
   });
+
+  const visibleOptions = filteredOptions.length <= maxRendered
+    ? filteredOptions
+    : (() => {
+        const sliced = filteredOptions.slice(0, maxRendered);
+        const selected = filteredOptions.find((opt) => opt.value === value);
+        if (selected && !sliced.some((opt) => opt.value === selected.value)) {
+          return [selected, ...sliced.slice(0, maxRendered - 1)];
+        }
+        return sliced;
+      })();
 
   // Handle clicking outside
   useEffect(() => {
@@ -145,19 +161,19 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
       case 'ArrowDown':
         e.preventDefault();
         setHighlightedIndex((prev) =>
-          prev < filteredOptions.length - 1 ? prev + 1 : 0
+          prev < visibleOptions.length - 1 ? prev + 1 : 0
         );
         break;
       case 'ArrowUp':
         e.preventDefault();
         setHighlightedIndex((prev) =>
-          prev > 0 ? prev - 1 : filteredOptions.length - 1
+          prev > 0 ? prev - 1 : visibleOptions.length - 1
         );
         break;
       case 'Enter':
         e.preventDefault();
-        if (highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
-          handleSelectOption(filteredOptions[highlightedIndex]);
+        if (highlightedIndex >= 0 && highlightedIndex < visibleOptions.length) {
+          handleSelectOption(visibleOptions[highlightedIndex]);
         } else if (allowCustomValue && searchQuery.trim()) {
           onChange(searchQuery.trim());
           setIsOpen(false);
@@ -230,14 +246,14 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
               }}
               onClick={(e) => e.stopPropagation()}
               placeholder={displayLabel || placeholder}
-              className="w-full bg-transparent text-sm font-medium text-slate-900 outline-none placeholder:text-[#9CA3AF]"
+              className="w-full bg-transparent text-[14px] font-semibold text-slate-900 outline-none placeholder:text-[#9CA3AF]"
               role="combobox"
               aria-expanded={isOpen}
               aria-controls={listId}
             />
           ) : (
             <span
-              className={`text-sm font-medium truncate block ${
+              className={`text-[14px] font-semibold truncate block ${
                 displayLabel ? 'text-slate-900' : 'text-[#9CA3AF]'
               }`}
             >
@@ -280,10 +296,11 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
             ref={listboxRef}
             role="listbox"
             onScroll={checkScroll}
-            className="max-h-[280px] overflow-y-auto overscroll-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden space-y-0.5"
+            style={{ maxHeight: maxListHeight }}
+            className="overflow-y-auto overscroll-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden space-y-0.5"
           >
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((opt, idx) => {
+            {visibleOptions.length > 0 ? (
+              visibleOptions.map((opt, idx) => {
                 const isSelected = opt.value === value || opt.label === value;
                 const isHighlighted = idx === highlightedIndex;
 
@@ -297,7 +314,7 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
                     aria-selected={isSelected}
                     onMouseEnter={() => setHighlightedIndex(idx)}
                     onClick={() => handleSelectOption(opt)}
-                    className={`flex items-center justify-between px-3 py-2.5 rounded-[9px] text-xs cursor-pointer transition-colors duration-100 select-none ${
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-[9px] text-[13.5px] cursor-pointer transition-colors duration-100 select-none ${
                       isSelected
                         ? 'bg-[#FFF3E8] text-[#F45A0A] font-bold'
                         : isHighlighted
@@ -319,11 +336,11 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
                             }}
                           />
                         )}
-                        <span className="truncate text-xs font-medium text-slate-900">
+                        <span className="truncate text-[13.5px] font-semibold text-slate-900">
                           {opt.label}
                         </span>
                         {opt.subLabel && (
-                          <span className="text-[10.5px] text-slate-400 truncate">
+                          <span className="text-[11.5px] text-slate-400 truncate">
                             ({opt.subLabel})
                           </span>
                         )}
@@ -339,6 +356,11 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
             ) : (
               <div className="py-6 text-center text-xs text-slate-500 font-medium select-none">
                 لا توجد نتائج مطابقة
+              </div>
+            )}
+            {filteredOptions.length > visibleOptions.length && (
+              <div className="px-3 py-2 text-[11px] text-slate-500 font-medium">
+                اكتب للبحث بين {filteredOptions.length.toLocaleString('en-US')} حساباً
               </div>
             )}
           </div>

@@ -162,10 +162,23 @@ export class AirlinesService {
 
   async findAll(companyId: string) {
     await this.ensureDefaultAirlines(companyId);
-    return this.prisma.airline.findMany({
+    const airlines = await this.prisma.airline.findMany({
       where: { companyId },
+      select: {
+        id: true,
+        code: true,
+        nameAr: true,
+        nameEn: true,
+        logo: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
+    return airlines.map((airline) => ({
+      ...airline,
+      logo: airline.logo && !airline.logo.startsWith('data:') ? airline.logo : null,
+    }));
   }
 
   async findOne(id: string, companyId: string) {

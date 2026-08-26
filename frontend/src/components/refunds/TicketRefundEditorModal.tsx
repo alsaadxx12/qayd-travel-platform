@@ -382,7 +382,7 @@ export const TicketRefundEditorModal: React.FC<TicketRefundEditorModalProps> = (
               />
               <TextInput
                 label={isAr ? 'رقم التذكرة (Ticket #) *' : 'Ticket Number *'}
-                placeholder="e.g. 076-2300332188"
+                placeholder={isAr ? 'رقم التذكرة' : 'Ticket number'}
                 value={ticketNumber}
                 onChange={(e) => setTicketNumber(e.target.value)}
                 className="font-mono font-bold text-xs"

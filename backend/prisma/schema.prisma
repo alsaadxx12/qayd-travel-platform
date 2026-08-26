@@ -405,7 +405,7 @@ model Account {
   balance        Decimal         @default(0)
   level          Int             @default(1)
   isSystem       Boolean         @default(false)
-  currency       String          @default("IQD")
+  currency       String          @default("MULTI")
   branchScope    String          @default("ALL_BRANCHES")
   branchIds      String[]        @default([])
   phone          String?
@@ -649,6 +649,8 @@ model PaymentVoucher {
   voucherNumber          String
   date                   DateTime    @default(now())
   amount                 Decimal
+  currency               String      @default("IQD")
+  exchangeRate           Decimal     @default(1) @map("exchange_rate")
   accountId              String // Account debited
   cashboxOrBankAccountId String // Account credited
   supplierId             String?
@@ -1098,4 +1100,87 @@ model AppNotification {
   @@index([tenantId, isDeleted, isRead])
   @@index([userId, isDeleted, isRead])
   @@map("app_notifications")
+}
+
+// ============================================
+// AI COPILOT (المستشار الذكي)
+// Scalar-only tenant/company/user ids so these tables stay additive
+// and require no changes to Tenant / Company / User models.
+// ============================================
+
+model AiConversation {
+  id            String   @id @default(uuid())
+  tenantId      String?  @map("tenant_id")
+  companyId     String   @map("company_id")
+  userId        String   @map("user_id")
+  title         String   @default("محادثة جديدة")
+  lastMessageAt DateTime @default(now()) @map("last_message_at")
+  isPinned      Boolean  @default(false) @map("is_pinned")
+  isDeleted     Boolean  @default(false) @map("is_deleted")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  messages AiMessage[]
+
+  @@index([companyId, userId, isDeleted, lastMessageAt])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  role           String // user | assistant | tool
+  content        String   @default("")
+  toolCalls      String?  @map("tool_calls") // JSON string: [{ name, args, ok, durationMs }]
+  uiBlocks       String?  @map("ui_blocks") // JSON string: rich cards/tables rendered by the client
+  imageBase64    String?  @map("image_base64")
+  model          String?
+  latencyMs      Int?     @map("latency_ms")
+  feedback       String? // up | down
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+model AiActionLog {
+  id             String   @id @default(uuid())
+  tenantId       String?  @map("tenant_id")
+  companyId      String   @map("company_id")
+  userId         String   @map("user_id")
+  conversationId String?  @map("conversation_id")
+  question       String   @default("")
+  toolName       String   @map("tool_name")
+  toolArgs       String   @default("{}") @map("tool_args")
+  resultSummary  String?  @map("result_summary")
+  mutatedData    Boolean  @default(false) @map("mutated_data")
+  status         String   @default("ok") // ok | denied | error
+  durationMs     Int?     @map("duration_ms")
+  ipAddress      String?  @map("ip_address")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([companyId, createdAt])
+  @@index([userId, createdAt])
+  @@map("ai_action_logs")
+}
+
+model AiLearnedFact {
+  id         String   @id @default(uuid())
+  tenantId   String?  @map("tenant_id")
+  companyId  String   @map("company_id")
+  userId     String?  @map("user_id")
+  kind       String // rule | alias | preference | correction
+  title      String
+  content    String
+  entityKind String?  @map("entity_kind")
+  entityId   String?  @map("entity_id")
+  source     String   @default("user")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([companyId, isActive, updatedAt])
+  @@map("ai_learned_facts")
 }

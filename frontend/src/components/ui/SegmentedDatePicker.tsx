@@ -358,6 +358,18 @@ export const SegmentedDatePicker: React.FC<SegmentedDatePickerProps> = ({
           -webkit-appearance: none !important;
           margin: 0 !important;
         }
+        /* Segments behave like a picker trigger: keep type-to-replace, hide caret and selection highlight */
+        .custom-seg-picker input {
+          caret-color: transparent !important;
+        }
+        .custom-seg-picker input::selection {
+          background: transparent !important;
+          color: inherit !important;
+        }
+        .custom-seg-picker input::-moz-selection {
+          background: transparent !important;
+          color: inherit !important;
+        }
       `}</style>
 
       {/* Top Label */}
@@ -378,10 +390,10 @@ export const SegmentedDatePicker: React.FC<SegmentedDatePickerProps> = ({
           disabled
             ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
             : isOpen
-            ? 'border-2 border-[#F45A0A] shadow-2xs'
+            ? 'border border-[#F45A0A]'
             : error
-            ? 'border-2 border-red-500 ring-1 ring-red-500/20'
-            : 'border border-slate-200 hover:border-slate-300 shadow-2xs'
+            ? 'border border-red-500'
+            : 'border border-slate-200 hover:border-slate-300'
         }`}
       >
         {/* LTR Segments Area: [ YEAR / YYYY ]  /  [ MONTH / MM ]  /  [ DAY / DD ] */}
@@ -392,8 +404,8 @@ export const SegmentedDatePicker: React.FC<SegmentedDatePickerProps> = ({
             onClick={handleOpenYear}
             className={`w-[48px] h-[36px] rounded-[8px] flex flex-col items-center justify-between py-1 px-0.5 transition-all box-border shrink-0 ${
               activeSegment === 'year' && isOpen
-                ? 'border border-[#F45A0A] bg-[#FFF3E8] text-[#F45A0A]'
-                : 'border border-transparent hover:bg-slate-100/70 text-[#8A9BA8]'
+                ? 'text-[#F45A0A]'
+                : 'hover:bg-slate-100/70 text-[#8A9BA8]'
             }`}
           >
             <span
@@ -425,8 +437,8 @@ export const SegmentedDatePicker: React.FC<SegmentedDatePickerProps> = ({
             onClick={handleOpenMonth}
             className={`w-[40px] h-[36px] rounded-[8px] flex flex-col items-center justify-between py-1 px-0.5 transition-all box-border shrink-0 ${
               activeSegment === 'month' && isOpen
-                ? 'border border-[#F45A0A] bg-[#FFF3E8] text-[#F45A0A]'
-                : 'border border-transparent hover:bg-slate-100/70 text-[#8A9BA8]'
+                ? 'text-[#F45A0A]'
+                : 'hover:bg-slate-100/70 text-[#8A9BA8]'
             }`}
           >
             <span
@@ -458,8 +470,8 @@ export const SegmentedDatePicker: React.FC<SegmentedDatePickerProps> = ({
             onClick={handleOpenDay}
             className={`w-[40px] h-[36px] rounded-[8px] flex flex-col items-center justify-between py-1 px-0.5 transition-all box-border shrink-0 ${
               activeSegment === 'day' && isOpen
-                ? 'border border-[#F45A0A] bg-[#FFF3E8] text-[#F45A0A]'
-                : 'border border-transparent hover:bg-slate-100/70 text-[#8A9BA8]'
+                ? 'text-[#F45A0A]'
+                : 'hover:bg-slate-100/70 text-[#8A9BA8]'
             }`}
           >
             <span

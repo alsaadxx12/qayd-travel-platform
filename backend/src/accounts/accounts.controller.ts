@@ -13,8 +13,8 @@ export class AccountsController {
 
   @Get('tree')
   @ApiOperation({ summary: 'جلب شجرة الحسابات الهرمية كاملة' })
-  async getTree(@Req() req: any) {
-    return this.accountsService.getTree(req.user.companyId);
+  async getTree(@Req() req: any, @Query('lite') lite?: string) {
+    return this.accountsService.getTree(req.user.companyId, lite === '1' || lite === 'true');
   }
 
   @Get()

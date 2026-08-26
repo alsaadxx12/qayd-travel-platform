@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Modal,
   Button,
   Paper,
   Badge,
   Textarea,
+  Loader,
 } from '@mantine/core';
 import {
   Sparkles,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { type VisaPassengerItem } from './VisaIssueModal';
 import { showSuccessNotification, showWarningNotification } from '../../utils/notifications';
+import { API_BASE_URL } from '../../api/client';
 
 interface SmartVisaImportModalProps {
   opened: boolean;
@@ -317,6 +319,32 @@ export function parseVisaPastedText(
   return results;
 }
 
+function mapVisaAiPassengers(passengers: any[], defaultVisa: string): VisaPassengerItem[] {
+  return (passengers || [])
+    .filter((p) => p?.name)
+    .map((p) => {
+      const buyPrice = Number(p.buyPrice) || 0;
+      const salePrice = Number(p.salePrice) || 0;
+      return {
+        id: `imp-${Math.random().toString(36).substring(2, 9)}`,
+        name: String(p.name || '').trim(),
+        passportNumber: String(p.passportNumber || '').trim(),
+        visaType: String(p.visaType || defaultVisa || '').trim(),
+        personType: p.personType === 'CHD' || p.personType === 'INF' ? p.personType : 'ADT',
+        status: 'Processing' as const,
+        voucherNumber: String(p.orderNumber || '').trim(),
+        buyPrice,
+        salePrice,
+        supplierName: String(p.supplierName || '').trim(),
+        customerName: String(p.customerName || '').trim(),
+        issueDate: String(p.issueDate || '').trim(),
+        employeeName: String(p.employeeName || '').trim(),
+        profit: salePrice - buyPrice,
+        notes: String(p.notes || '').trim(),
+      };
+    });
+}
+
 export const SmartVisaImportModal: React.FC<SmartVisaImportModalProps> = ({
   opened,
   onClose,
@@ -326,11 +354,62 @@ export const SmartVisaImportModal: React.FC<SmartVisaImportModalProps> = ({
 }) => {
   const [rawText, setRawText] = useState('');
   const [parsedRows, setParsedRows] = useState<VisaPassengerItem[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiEngineUsed, setAiEngineUsed] = useState('');
+  const analyzeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analyzeAbort = useRef<AbortController | null>(null);
+  const analyzeSeq = useRef(0);
+
+  const runOpenAiParse = async (text: string) => {
+    const seq = ++analyzeSeq.current;
+    analyzeAbort.current?.abort();
+    const ac = new AbortController();
+    analyzeAbort.current = ac;
+    setIsAnalyzing(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/smart-parser/parse-visa`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          textContent: text,
+          defaultVisaType,
+          availableVisaTypes,
+        }),
+        signal: ac.signal,
+      });
+      if (!res.ok || seq !== analyzeSeq.current) return;
+      const data = await res.json();
+      if (seq !== analyzeSeq.current) return;
+      const mapped = mapVisaAiPassengers(data.passengers || [], defaultVisaType);
+      if (mapped.length) {
+        setParsedRows(mapped);
+        setAiEngineUsed(data.aiEngineUsed || 'OpenAI');
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+    } finally {
+      if (seq === analyzeSeq.current) setIsAnalyzing(false);
+    }
+  };
 
   const handleTextChange = (text: string) => {
     setRawText(text);
+    setAiEngineUsed('');
     const rows = parseVisaPastedText(text, defaultVisaType, availableVisaTypes);
     setParsedRows(rows);
+    if (analyzeTimer.current) clearTimeout(analyzeTimer.current);
+    if (!text.trim()) {
+      setIsAnalyzing(false);
+      analyzeAbort.current?.abort();
+      return;
+    }
+    analyzeTimer.current = setTimeout(() => {
+      void runOpenAiParse(text);
+    }, 450);
   };
 
   const handlePasteFromClipboard = async () => {
@@ -380,6 +459,7 @@ export const SmartVisaImportModal: React.FC<SmartVisaImportModalProps> = ({
     );
     setRawText('');
     setParsedRows([]);
+    setAiEngineUsed('');
     onClose();
   };
 
@@ -407,7 +487,7 @@ export const SmartVisaImportModal: React.FC<SmartVisaImportModalProps> = ({
             <Sparkles size={18} />
           </div>
           <div>
-            <h3 className="text-sm font-black text-slate-900 leading-none">الاستيراد السريع للتأشيرات (Excel Import)</h3>
+            <h3 className="text-sm font-black text-slate-900 leading-none">الاستيراد الذكي للتأشيرات</h3>
           </div>
         </div>
       }
@@ -417,7 +497,7 @@ export const SmartVisaImportModal: React.FC<SmartVisaImportModalProps> = ({
         <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2">
           <div className="flex items-center gap-2 text-slate-700 font-bold text-[11.5px]">
             <FileSpreadsheet size={16} className="text-[#F45A0A]" />
-            <span>الصق البيانات المنسوخة من إكسل مباشرة:</span>
+            <span>الصق البيانات ثم يحلّلها OpenAI تلقائياً:</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -428,8 +508,12 @@ export const SmartVisaImportModal: React.FC<SmartVisaImportModalProps> = ({
                 color="gray"
                 leftSection={<Trash2 size={12} />}
                 onClick={() => {
+                  if (analyzeTimer.current) clearTimeout(analyzeTimer.current);
+                  analyzeAbort.current?.abort();
                   setRawText('');
                   setParsedRows([]);
+                  setAiEngineUsed('');
+                  setIsAnalyzing(false);
                 }}
                 className="text-slate-500 hover:text-red-600 font-bold"
               >
@@ -473,6 +557,13 @@ export const SmartVisaImportModal: React.FC<SmartVisaImportModalProps> = ({
         </div>
 
         {/* Live Detected Preview Table */}
+        {isAnalyzing && parsedRows.length === 0 && (
+          <Paper p="md" radius="md" withBorder className="bg-white border-slate-200 flex flex-col items-center gap-2 py-8">
+            <Loader color="orange" size="sm" type="bars" />
+            <span className="font-bold text-slate-700">جارٍ تحليل التأشيرات عبر OpenAI...</span>
+          </Paper>
+        )}
+
         {parsedRows.length > 0 && (
           <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs space-y-2">
             <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
@@ -481,6 +572,16 @@ export const SmartVisaImportModal: React.FC<SmartVisaImportModalProps> = ({
                 <span>البيانات المكتشفة ({parsedRows.length} سجل)</span>
               </span>
               <div className="flex items-center gap-1.5">
+                {isAnalyzing && (
+                  <Badge size="sm" color="blue" variant="light" className="font-bold" leftSection={<Loader size={10} color="blue" />}>
+                    OpenAI
+                  </Badge>
+                )}
+                {aiEngineUsed && !isAnalyzing && (
+                  <Badge size="sm" color="indigo" variant="light" className="font-bold">
+                    {aiEngineUsed}
+                  </Badge>
+                )}
                 <Badge size="sm" color="orange" variant="light" className="font-mono font-bold">
                   {summaryMeta?.detectedCurrency || 'IQD'}
                 </Badge>

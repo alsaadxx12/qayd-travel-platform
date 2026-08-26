@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { Suspense, lazy, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal, Menu, Tooltip } from '@mantine/core';
 import { useAuthStore } from '../store/useAuthStore';
@@ -111,6 +111,7 @@ export const DashboardPage: React.FC = () => {
   // ─── Real Database Data States ───
   const [loading, setLoading] = useState<boolean>(true);
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
+  const hasDashboardDataRef = useRef(false);
 
   // Main KPI Figures
   const [kpis, setKpis] = useState({
@@ -184,9 +185,9 @@ export const DashboardPage: React.FC = () => {
 
   // ─── Fetch All Dashboard Data ───
   const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
+    setLoading(!hasDashboardDataRef.current);
 
-    const vouchersPromise = apiRequest('/api/vouchers?limit=10').catch(() => []);
+    const vouchersPromise = apiRequest('/api/vouchers?limit=10', { ttl: 15_000 }).catch(() => []);
 
     try {
       // 1. Fetch lightweight dashboard summary instead of loading full tickets.
@@ -204,6 +205,7 @@ export const DashboardPage: React.FC = () => {
       setKpis(summary.kpis);
       setServicesData(summary.servicesData as any);
       setTrendChartData(summary.trendChartData || []);
+      hasDashboardDataRef.current = true;
       setLastSyncTime(new Date().toLocaleTimeString(isAr ? 'ar-IQ' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
     } catch (error) {
       console.warn('Dashboard summary failed', error);

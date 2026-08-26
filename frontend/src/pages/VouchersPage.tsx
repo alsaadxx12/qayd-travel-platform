@@ -3,6 +3,7 @@ import { apiRequest } from '../api/client';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { FinancialVoucherForm } from '../components/vouchers/FinancialVoucherForm';
 import { useLanguageStore } from '../store/useLanguageStore';
+import { useAiPageContext } from '../hooks/useAiPageContext';
 import { SegmentedDatePicker } from '../components/ui/SegmentedDatePicker';
 import { CurrencySegmentedControl } from '../components/ui/CurrencySegmentedControl';
 import { Modal, Drawer, Menu, Tooltip } from '@mantine/core';
@@ -62,6 +63,14 @@ export const VouchersPage: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [slipModalOpen, setSlipModalOpen] = useState(false);
   const [selectedSlipVoucher, setSelectedSlipVoucher] = useState<any>(null);
+
+  const openVoucher = selectedVoucher || selectedSlipVoucher;
+  useAiPageContext({
+    route: '/vouchers',
+    entity: openVoucher ? 'voucher' : undefined,
+    recordId: selectedEditVoucherId || openVoucher?.id,
+    label: openVoucher?.voucherNumber || openVoucher?.number,
+  });
 
   // Delete Voucher States
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);

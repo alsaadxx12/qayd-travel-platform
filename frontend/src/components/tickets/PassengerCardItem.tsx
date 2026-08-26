@@ -190,7 +190,7 @@ export const PassengerCardItem: React.FC<PassengerCardItemProps> = ({
               dir="ltr"
               value={passenger.ticketNumber}
               onChange={(e) => onChangeField('ticketNumber', e.target.value)}
-              placeholder="076-2300332188"
+              placeholder="رقم التذكرة"
               className="w-full h-[46px] px-3.5 rounded-[9px] border border-[#E2E6EA] text-xs font-mono font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 placeholder:text-[#A0A7B2]"
             />
           </div>

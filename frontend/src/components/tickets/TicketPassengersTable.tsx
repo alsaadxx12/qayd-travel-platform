@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { showSuccessNotification, showInfoNotification, showErrorNotification } from '../../utils/notifications';
 import { formatCurrency, getCurrencySymbol, getCurrencyLabel, parseCurrencyInput } from '../../utils/currencyUtils';
-import { extractTextFromPdf } from '../../utils/pdfTextExtractor';
+import { prepareTicketParseFormData } from '../../utils/pdfTextExtractor';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { API_BASE_URL } from '../../api/client';
 
@@ -186,10 +186,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
 
     setIsAnalyzingTicket(true);
     try {
-      const textContent = await extractTextFromPdf(file);
-      const formData = new FormData();
-      formData.append('ticketFile', file);
-      formData.append('textContent', textContent);
+      const formData = await prepareTicketParseFormData(file);
 
       const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE_URL}/smart-parser/parse-ticket`, {
@@ -207,6 +204,10 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
         if (onSmartImport) {
           onSmartImport(apiResult);
         } else if (apiResult.passengers && apiResult.passengers.length > 0) {
+          const moneyOrNull = (v: any) => {
+            const n = Number(v);
+            return Number.isFinite(n) && n > 0 ? n : null;
+          };
           const newRows: PassengerLine[] = apiResult.passengers.map((p: any, i: number) => ({
             id: `p-ai-${Date.now()}-${i}`,
             name: p.name || '',
@@ -214,11 +215,11 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
             ticketNumber: p.ticketNumber || '',
             documentNumber: p.documentNumber || '',
             pnr: apiResult.pnr || globalPnr || '',
-            fareBuy: null,
-            fareSell: null,
-            tax1: 0,
-            tax2: 0,
-            charge: 0,
+            fareBuy: moneyOrNull(p.fareBuy),
+            fareSell: moneyOrNull(p.fareSell),
+            tax1: Number(p.tax1) > 0 ? Number(p.tax1) : 0,
+            tax2: Number(p.tax2) > 0 ? Number(p.tax2) : 0,
+            charge: Number(p.charge) > 0 ? Number(p.charge) : 0,
           }));
 
           if (passengers.length === 1 && !passengers[0].name.trim() && !passengers[0].ticketNumber.trim()) {
@@ -782,7 +783,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
           <input
             ref={smartFileInputRef}
             type="file"
-            accept=".pdf,.txt,.html,.doc,.docx"
+            accept=".pdf,image/jpeg,image/png,image/webp,.txt"
             onChange={handleDirectSmartFileSelect}
             className="hidden"
           />
@@ -1358,7 +1359,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
                         dir="ltr"
                         value={p.ticketNumber}
                         onChange={(e) => handleFieldChange(idx, 'ticketNumber', e.target.value)}
-                        placeholder="076-2300332188"
+                        placeholder={isAr ? 'رقم التذكرة' : 'Ticket number'}
                         className="w-full h-9 px-2.5 rounded-[8px] border border-[#E2E6EA] bg-white text-xs font-mono font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-[#F45A0A]"
                       />
                     </div>
@@ -1590,7 +1591,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
                       dir="ltr"
                       value={p.ticketNumber}
                       onChange={(e) => handleFieldChange(idx, 'ticketNumber', e.target.value)}
-                      placeholder="076-2300332188"
+                      placeholder={isAr ? 'رقم التذكرة' : 'Ticket number'}
                       className="w-full h-9 px-3 rounded-[8px] border border-[#E2E6EA] bg-white text-xs font-mono font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-[#F45A0A] placeholder:text-[#A0A7B2]"
                     />
                   </td>

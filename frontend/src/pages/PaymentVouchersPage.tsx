@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../api/client';
+import { useAiPageContext } from '../hooks/useAiPageContext';
 import { Plus, ArrowUpRight, Printer } from 'lucide-react';
 
 export const PaymentVouchersPage: React.FC = () => {
@@ -12,6 +13,13 @@ export const PaymentVouchersPage: React.FC = () => {
   // Modals
   const [openModal, setOpenModal] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<any>(null);
+
+  useAiPageContext({
+    route: '/payment-vouchers',
+    entity: selectedVoucher ? 'voucher' : undefined,
+    recordId: selectedVoucher?.id,
+    label: selectedVoucher?.voucherNumber,
+  });
 
   // Form State
   const [amount, setAmount] = useState('');

@@ -2,12 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Modal,
   TextInput,
-  Select,
-  SegmentedControl,
-  MultiSelect,
   Switch,
 } from '@mantine/core';
-import { branchesApi, type Branch } from '../../api/branches';
+import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { arabicToEnglish } from '../../utils/arabicToEnglish';
 import {
   IconWand,
@@ -20,7 +17,6 @@ import {
   IconReceipt,
   IconArrowRight,
   IconArrowLeft,
-  IconEdit,
   IconPlus,
   IconCreditCard,
   IconUsers,
@@ -31,7 +27,6 @@ import {
   IconDeviceDesktopAnalytics,
   IconCashBanknote,
   IconCoins,
-  IconBuildingCommunity,
   IconAlertCircle,
   IconLoader2,
 } from '@tabler/icons-react';
@@ -98,7 +93,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
     setAccountsLoading(true);
     setAccountsError(false);
     accountsApi
-      .getTree()
+      .getTree(true)
       .then((data) => {
         if (isMounted && Array.isArray(data)) {
           setInternalAccounts(data);
@@ -154,43 +149,19 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
   const [email, setEmail] = useState<string>('');
   const [address, setAddress] = useState<string>('');
   const [contactPerson, setContactPerson] = useState<string>('');
-  // Accounting Suggestion Override State
-  const [showOverrideFields, setShowOverrideFields] = useState<boolean>(false);
-  const [manualParentCode, setManualParentCode] = useState<string>('');
-  const [manualCode, setManualCode] = useState<string>('');
+  const [parentId, setParentId] = useState<string>('');
+  const [parentManual, setParentManual] = useState(false);
+  const [accountCode, setAccountCode] = useState<string>('');
+  const [codeManual, setCodeManual] = useState(false);
 
   // Step 2: Financial & Scope Settings
-  const [branchScope, setBranchScope] = useState<string>('CURRENT_BRANCH');
-  const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [currentBranch, setCurrentBranch] = useState<Branch | null>(null);
-  const [branchesLoading, setBranchesLoading] = useState(false);
-  const [branchesError, setBranchesError] = useState(false);
+  const [currentBranchId, setCurrentBranchId] = useState<string>('');
 
-  // Fetch branches from database
   useEffect(() => {
     if (!opened) return;
-    let isMounted = true;
-    setBranchesLoading(true);
-    setBranchesError(false);
-    branchesApi.getAll().then((data) => {
-      if (!isMounted) return;
-      setBranches(data);
-      const activeBranchId = localStorage.getItem('active_branch_id') || localStorage.getItem('activeBranchId');
-      const active = data.find((b) => b.id === activeBranchId) || data.find((b) => b.isMain) || data[0];
-      if (active) {
-        setCurrentBranch(active);
-        if (mode === 'CREATE') setSelectedBranches([active.id]);
-      }
-    }).catch(() => {
-      if (isMounted) setBranchesError(true);
-    }).finally(() => {
-      if (isMounted) setBranchesLoading(false);
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [opened, mode]);
+    const activeId = localStorage.getItem('active_branch_id') || localStorage.getItem('activeBranchId') || '';
+    setCurrentBranchId(activeId);
+  }, [opened]);
 
   // Credit Policy
   const [paymentMode, setPaymentMode] = useState<'CASH_ONLY' | 'CREDIT_ALLOWED'>('CASH_ONLY');
@@ -222,8 +193,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
       setEmail(initialData.email || '');
       setAddress(initialData.address || '');
       setContactPerson(initialData.contactPerson || '');
-      setCurrency(initialData.currency || 'MULTI');
-      setBranchScope(initialData.scope || 'ALL_BRANCHES');
+      setCurrency('MULTI');
 
       const rawRole = (initialData as any).accountRole;
       const initialCat = (initialData as any).category;
@@ -246,6 +216,14 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
             if (freshAcc.isBlocked !== undefined) {
               setIsBlocked(Boolean(freshAcc.isBlocked));
             }
+            if (freshAcc.parentId) {
+              setParentId(freshAcc.parentId);
+              setParentManual(true);
+            }
+            if (freshAcc.code) {
+              setAccountCode(String(freshAcc.code));
+              setCodeManual(true);
+            }
           }
         }).catch(() => {});
       }
@@ -267,17 +245,15 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         setOpeningBalanceOpen(false);
       }
 
-      if (initialData.branchIds && initialData.branchIds.length > 0) {
-        setSelectedBranches(initialData.branchIds);
-      }
       setCreditLimit(String(initialData.creditLimit ?? 0));
       setCreditLimitUSD(String(initialData.creditLimitUSD ?? 0));
       setPaymentDays(String(initialData.paymentDays ?? 0));
       setPaymentMode((initialData.paymentMode as any) || 'CASH_ONLY');
       setOverduePolicy(initialData.overduePolicy || 'BLOCK');
-      setShowOverrideFields(false);
-      setManualParentCode('');
-      setManualCode('');
+      setParentId(initialData.parentId || '');
+      setParentManual(Boolean(initialData.parentId));
+      setAccountCode(initialData.code || '');
+      setCodeManual(true);
 
       const code = initialData.code || '';
 
@@ -360,10 +336,10 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
       setAddress('');
       setContactPerson('');
       setCurrency('MULTI');
-      setShowOverrideFields(false);
-      setManualParentCode('');
-      setManualCode('');
-      setBranchScope('CURRENT_BRANCH');
+      setParentId('');
+      setParentManual(false);
+      setAccountCode('');
+      setCodeManual(false);
       setCreditLimit('0');
       setCreditLimitUSD('0');
       setPaymentDays('30');
@@ -382,31 +358,11 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
     if (!parentCode) return '10101';
     if (!Array.isArray(accounts) || accounts.length === 0) return `${parentCode}01`;
 
-    const flat: AccountNode[] = [];
-    const visited = new Set<string>();
-
-    const walk = (nodes: AccountNode[]) => {
-      if (!Array.isArray(nodes)) return;
-      for (const n of nodes) {
-        if (!n) continue;
-        const key = n.id || n.code;
-        if (key) {
-          if (visited.has(key)) continue;
-          visited.add(key);
-        }
-        flat.push(n);
-        if (n.children && Array.isArray(n.children) && n.children.length > 0) {
-          walk(n.children);
-        }
-      }
-    };
-    walk(accounts);
-
-    const parent = flat.find((account) => String(account.code || '') === parentCode);
+    const parent = accounts.find((account) => String(account.code || '') === parentCode);
     const directChildren = parent?.children?.length
       ? parent.children
       : parent
-        ? flat.filter((account) => account.parentId === parent.id)
+        ? accounts.filter((account) => account.parentId === parent.id)
         : [];
     const childrenCodes = directChildren
       .map((account) => String(account.code || ''))
@@ -430,16 +386,10 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
 
     const maxNum = Math.max(...suffixes);
     const nextNum = maxNum + 1;
-    // Format based on parent code convention
-    let padLen = 3;
-    if (parentCode === '181' || parentCode === '182') padLen = 3;
-    else if (parentCode === '1614' || parentCode === '2614') padLen = 3;
-    else if (childrenCodes.length > 0) {
-      padLen = Math.max(2, childrenCodes[0].slice(parentCode.length).length);
-    }
-    const paddedNext = String(nextNum).padStart(padLen, '0');
-
-    return `${parentCode}${paddedNext}`;
+    let padLen = 2;
+    if (parentCode === '181' || parentCode === '182' || parentCode === '1614' || parentCode === '2614') padLen = 3;
+    else padLen = Math.max(2, childrenCodes[0].slice(parentCode.length).length);
+    return `${parentCode}${String(nextNum).padStart(padLen, '0')}`;
   }
 
   // Classification Engine
@@ -456,7 +406,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         return {
           parentCode: '1614',
           controlAccount: isAr ? '1614 - مدينون قطاع خاص (العملاء)' : '1614 - Private Sector Debtors (Customers)',
-          suggestedCode: initialData?.code || getNextAvailableCode('1614', allAccounts),
+          suggestedCode: initialData?.code || '',
           nature: 'DEBIT' as const,
           type: 'ASSET' as const,
           category: 'CUSTOMER' as const,
@@ -467,7 +417,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         return {
           parentCode: '1614200',
           controlAccount: isAr ? '1614200 - الموظفين وسلف الكادر' : '1614200 - Staff Advances & Employees',
-          suggestedCode: initialData?.code || getNextAvailableCode('1614200', allAccounts),
+          suggestedCode: initialData?.code || '',
           nature: 'DEBIT' as const,
           type: 'ASSET' as const,
           category: 'CUSTOMER' as const,
@@ -483,7 +433,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         return {
           parentCode: '2614',
           controlAccount: isAr ? '2614 - موردو التذاكر وشركات الطيران' : '2614 - Ticket Suppliers & Airlines',
-          suggestedCode: initialData?.code || getNextAvailableCode('2614', allAccounts),
+          suggestedCode: initialData?.code || '',
           nature: 'CREDIT' as const,
           type: 'LIABILITY' as const,
           category: 'SUPPLIER' as const,
@@ -494,7 +444,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         return {
           parentCode: '181',
           controlAccount: isAr ? '181 - نقدية بالصندوق (الصناديق والقاصات)' : '181 - Cash on Hand (Cashboxes)',
-          suggestedCode: initialData?.code || getNextAvailableCode('181', allAccounts),
+          suggestedCode: initialData?.code || '',
           nature: 'DEBIT' as const,
           type: 'ASSET' as const,
           category: 'CASH' as const,
@@ -506,7 +456,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         return {
           parentCode: '182',
           controlAccount: isAr ? '182 - نقدية لدى المصارف (البنوك والمحافظ)' : '182 - Cash at Banks & Wallets',
-          suggestedCode: initialData?.code || getNextAvailableCode('182', allAccounts),
+          suggestedCode: initialData?.code || '',
           nature: 'DEBIT' as const,
           type: 'ASSET' as const,
           category: 'BANK' as const,
@@ -518,7 +468,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         return {
           parentCode: expenseSubCategory || '3',
           controlAccount: isAr ? `3 - الاستخدامات (المصروفات) [${expenseSubCategory || '3'}]` : `3 - Operating Expenses [${expenseSubCategory || '3'}]`,
-          suggestedCode: initialData?.code || getNextAvailableCode(expenseSubCategory || '3', allAccounts),
+          suggestedCode: initialData?.code || '',
           nature: 'DEBIT' as const,
           type: 'EXPENSE' as const,
           category: 'GENERAL' as const,
@@ -529,7 +479,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         return {
           parentCode: revenueSubCategory || '4',
           controlAccount: isAr ? `4 - الموارد (الإيرادات) [${revenueSubCategory || '4'}]` : `4 - Revenues [${revenueSubCategory || '4'}]`,
-          suggestedCode: initialData?.code || getNextAvailableCode(revenueSubCategory || '4', allAccounts),
+          suggestedCode: initialData?.code || '',
           nature: 'CREDIT' as const,
           type: 'REVENUE' as const,
           category: 'GENERAL' as const,
@@ -539,15 +489,16 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         return {
           parentCode: '1614',
           controlAccount: isAr ? '1614 - مدينون قطاع خاص (العملاء)' : '1614 - Private Sector Debtors',
-          suggestedCode: initialData?.code || getNextAvailableCode('1614', allAccounts),
+          suggestedCode: initialData?.code || '',
           nature: 'DEBIT' as const,
           type: 'ASSET' as const,
           category: 'CUSTOMER' as const,
         };
     }
-  }, [accountType, expenseSubCategory, revenueSubCategory, allAccounts, initialData, isAr]);
+  }, [accountType, expenseSubCategory, revenueSubCategory, initialData, isAr]);
 
   const flatAccounts = useMemo(() => {
+    if (!opened) return [];
     const flat: AccountNode[] = [];
     const visited = new Set<string>();
     const walk = (nodes: AccountNode[]) => {
@@ -561,19 +512,61 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
     };
     walk(allAccounts);
     return flat;
-  }, [allAccounts]);
+  }, [opened, allAccounts]);
 
-  const finalCode = manualCode.trim() || classificationRules.suggestedCode;
-  const existingParent = mode === 'EDIT' && initialData?.parentId
-    ? flatAccounts.find((account) => account.id === initialData.parentId)
-    : undefined;
-  const finalParentCode = manualParentCode.trim() || existingParent?.code || classificationRules.parentCode;
-  const parentAccount = flatAccounts.find((account) => account.code === finalParentCode);
+  const blockedParentIds = useMemo(() => {
+    const blocked = new Set<string>();
+    if (mode !== 'EDIT' || !initialData?.id) return blocked;
+    const mark = (nodes: AccountNode[]) => {
+      for (const node of nodes || []) {
+        blocked.add(node.id);
+        if (node.children?.length) mark(node.children);
+      }
+    };
+    mark(initialData.children || []);
+    blocked.add(initialData.id);
+    return blocked;
+  }, [mode, initialData]);
+
+  const parentOptions = useMemo(() => {
+    if (!opened) return [];
+    const groups = flatAccounts.filter((account) => {
+      if (blockedParentIds.has(account.id)) return false;
+      return account.isGroup || Boolean(account.children?.length) || account.id === parentId;
+    });
+    const source = groups.length > 0 ? groups : flatAccounts.filter((account) => !blockedParentIds.has(account.id));
+    return source.map((account) => ({
+        value: account.id,
+        label: isAr ? account.nameAr : (account.nameEn || account.nameAr),
+        name: account.nameAr,
+        nameAr: account.nameAr,
+        nameEn: account.nameEn,
+      }));
+  }, [opened, flatAccounts, blockedParentIds, isAr, parentId]);
+
+  useEffect(() => {
+    if (!opened || parentManual) return;
+    const suggested = flatAccounts.find((account) => account.code === classificationRules.parentCode);
+    if (suggested) setParentId(suggested.id);
+  }, [opened, parentManual, classificationRules.parentCode, flatAccounts]);
+
+  useEffect(() => {
+    if (!opened || codeManual) return;
+    const parent = flatAccounts.find((account) => account.id === parentId);
+    if (!parent) return;
+    setAccountCode(getNextAvailableCode(parent.code, flatAccounts));
+  }, [opened, codeManual, parentId, allAccounts, flatAccounts]);
+
+  const parentAccount = flatAccounts.find((account) => account.id === parentId);
+  const finalParentCode = parentAccount?.code || '';
+  const finalCode = accountCode.trim() || classificationRules.suggestedCode;
   const isCashCustomer = activeGroup === 'CUSTOMERS' && accountType === 'CASH_CUSTOMER';
 
   const selectCustomerType = (type: 'CASH_CUSTOMER' | 'INDIVIDUAL_CLIENT' | 'CORPORATE_CLIENT') => {
     const wasCashCustomer = accountType === 'CASH_CUSTOMER';
     setAccountType(type);
+    setParentManual(false);
+    setCodeManual(false);
     if (type === 'CASH_CUSTOMER') {
       setNameAr(CASH_CUSTOMER_NAME_AR);
       setNameEn(CASH_CUSTOMER_NAME_EN);
@@ -593,6 +586,84 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
       setPaymentDays('30');
     }
   };
+
+  const selectGroup = (id: typeof activeGroup) => {
+    setActiveGroup(id);
+    setParentManual(false);
+    setCodeManual(false);
+    if (id === 'FINANCIAL') {
+      setAccountType('CASHBOX');
+      setAccountRole('GENERAL');
+    } else if (id === 'CUSTOMERS') {
+      selectCustomerType('CASH_CUSTOMER');
+      setAccountRole('CUSTOMER');
+    } else if (id === 'SUPPLIERS') {
+      setAccountType('IATA_AIRLINE');
+      setAccountRole('SUPPLIER');
+    } else if (id === 'EXPENSES') {
+      setAccountType('GDS_SUBSCRIPTION');
+      setAccountRole('GENERAL');
+    } else if (id === 'REVENUES') {
+      setAccountType('REVENUE');
+      setAccountRole('GENERAL');
+    }
+  };
+
+  const chipClass = (active: boolean) =>
+    `flex min-h-10 items-center gap-2 px-3 rounded-xl border text-start text-xs font-bold cursor-pointer transition-colors ${
+      active
+        ? 'bg-[#F45A0A] text-white border-[#F45A0A]'
+        : 'bg-white border-slate-200 text-slate-700 hover:border-orange-200 hover:bg-orange-50'
+    }`;
+
+  const fieldClassNames = {
+    label: '!font-bold !text-slate-800 text-[12.5px] mb-[7px]',
+    input: 'h-[46px] rounded-[11px] border-[#E5E7EB] bg-[#FAFAFA] font-semibold',
+  };
+
+  const groupTabs = [
+    { id: 'FINANCIAL' as const, label: isAr ? 'المالية' : 'Financial', icon: <IconWallet size={16} /> },
+    { id: 'CUSTOMERS' as const, label: isAr ? 'العملاء' : 'Customers', icon: <IconUsers size={16} /> },
+    { id: 'SUPPLIERS' as const, label: isAr ? 'الموردون' : 'Suppliers', icon: <IconPlane size={16} /> },
+    { id: 'EXPENSES' as const, label: isAr ? 'المصروفات' : 'Expenses', icon: <IconCashBanknote size={16} /> },
+    { id: 'REVENUES' as const, label: isAr ? 'الإيرادات' : 'Revenue', icon: <IconReceipt size={16} /> },
+  ];
+
+  const typeItems =
+    activeGroup === 'FINANCIAL'
+      ? [
+          { id: 'INTERNAL_MASTER', label: isAr ? 'ماستر داخلي' : 'Internal Master', icon: <IconCreditCard size={16} /> },
+          { id: 'EXTERNAL_MASTER', label: isAr ? 'ماستر خارجي' : 'External Master', icon: <IconCreditCard size={16} /> },
+          { id: 'CASHBOX', label: isAr ? 'صندوق' : 'Cashbox', icon: <IconWallet size={16} /> },
+          { id: 'BANK', label: isAr ? 'بنك' : 'Bank', icon: <IconBuildingBank size={16} /> },
+        ]
+      : activeGroup === 'CUSTOMERS'
+        ? [
+            { id: 'CASH_CUSTOMER', label: isAr ? 'زبون نقدي' : 'Cash Customer', icon: <IconCashBanknote size={16} /> },
+            { id: 'INDIVIDUAL_CLIENT', label: isAr ? 'أفراد' : 'Individuals', icon: <IconUser size={16} /> },
+            { id: 'CORPORATE_CLIENT', label: isAr ? 'شركة' : 'Company', icon: <IconBuilding size={16} /> },
+          ]
+        : activeGroup === 'SUPPLIERS'
+          ? [
+              { id: 'IATA_AIRLINE', label: isAr ? 'شركة طيران' : 'Airline', icon: <IconPlane size={16} /> },
+              { id: 'TICKET_SUPPLIER', label: isAr ? 'مورد تذاكر' : 'Ticket Supplier', icon: <IconTicket size={16} /> },
+              { id: 'HOTEL_SUPPLIER', label: isAr ? 'مورد فنادق' : 'Hotel Supplier', icon: <IconBed size={16} /> },
+              { id: 'VISA_SUPPLIER', label: isAr ? 'مورد فيزا' : 'Visa Supplier', icon: <IconId size={16} /> },
+              { id: 'TOURISM_SUPPLIER', label: isAr ? 'مورد سياحة' : 'Tour Supplier', icon: <IconWorld size={16} /> },
+            ]
+          : activeGroup === 'EXPENSES'
+            ? [
+                { id: 'GDS_SUBSCRIPTION', label: isAr ? 'اشتراكات GDS' : 'GDS Subscriptions', icon: <IconDeviceDesktopAnalytics size={16} /> },
+                { id: 'EXPENSE', label: isAr ? 'مصروف تشغيلي' : 'Operating Expense', icon: <IconReceipt size={16} /> },
+              ]
+            : [];
+
+  const selectedTypeLabel = typeItems.find((item) => item.id === accountType)?.label
+    || (activeGroup === 'REVENUES' ? (isAr ? 'إيراد' : 'Revenue') : '');
+
+  const parentDisplayName = parentAccount
+    ? (isAr ? parentAccount.nameAr : (parentAccount.nameEn || parentAccount.nameAr))
+    : '';
 
   const validateStepOne = () => {
     if (!nameAr.trim()) {
@@ -617,7 +688,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
       return false;
     }
     if (!parentAccount) {
-      showErrorNotification(isAr ? 'الحساب الأب غير موجود' : 'Parent account missing', isAr ? `لم يتم العثور على الحساب الأب (${finalParentCode}) في الدليل.` : `Parent account (${finalParentCode}) was not found in the chart.`);
+      showErrorNotification(isAr ? 'الحساب الأب مطلوب' : 'Parent account required', isAr ? 'حدد حساب الأب من الدليل قبل الحفظ.' : 'Select a parent account from the chart before saving.');
       return false;
     }
     if (!unchangedLegacyCode && (finalCode === finalParentCode || !finalCode.startsWith(finalParentCode))) {
@@ -639,46 +710,11 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
   const parseAmount = (value: string) => Number(String(value || '0').replace(/,/g, ''));
 
   const validateStepTwo = () => {
-    if (branchesLoading && branchScope !== 'ALL_BRANCHES') {
-      showErrorNotification(isAr ? 'الفروع قيد التحميل' : 'Branches are loading', isAr ? 'انتظر اكتمال تحميل الفروع.' : 'Wait for branches to finish loading.');
+    const amountIQD = parseAmount(openingAmount);
+    const amountUSD = parseAmount(openingAmountUSD);
+    if (!Number.isFinite(amountIQD) || !Number.isFinite(amountUSD) || amountIQD < 0 || amountUSD < 0) {
+      showErrorNotification(isAr ? 'الرصيد الافتتاحي غير صحيح' : 'Invalid opening balance', isAr ? 'يجب أن تكون مبالغ الرصيد أرقاماً غير سالبة.' : 'Opening balance amounts must be non-negative numbers.');
       return false;
-    }
-    if (branchesError && branchScope !== 'ALL_BRANCHES') {
-      showErrorNotification(isAr ? 'تعذر تحميل الفروع' : 'Branches unavailable', isAr ? 'لا يمكن حفظ نطاق فرع غير متحقق منه.' : 'A branch scope cannot be saved before branches are loaded.');
-      return false;
-    }
-    if (branchScope === 'CURRENT_BRANCH' && !currentBranch) {
-      showErrorNotification(isAr ? 'الفرع الحالي غير محدد' : 'Current branch missing', isAr ? 'حدد فرع العمل الحالي أولاً.' : 'Select the active workspace branch first.');
-      return false;
-    }
-    if (branchScope === 'SPECIFIC_BRANCHES' && selectedBranches.length === 0) {
-      showErrorNotification(isAr ? 'اختر فرعاً واحداً على الأقل' : 'Select at least one branch', isAr ? 'نطاق الفروع المحددة لا يمكن أن يكون فارغاً.' : 'Specific branch scope cannot be empty.');
-      return false;
-    }
-    if (paymentMode === 'CREDIT_ALLOWED' && !isCashCustomer) {
-      const limitIQD = parseAmount(creditLimit);
-      const limitUSD = parseAmount(creditLimitUSD);
-      if (overduePolicy !== 'UNLIMITED' && ((currency !== 'USD' && limitIQD <= 0) || (currency !== 'IQD' && limitUSD <= 0))) {
-        showErrorNotification(isAr ? 'سقف الائتمان غير مكتمل' : 'Credit limit required', isAr ? 'أدخل سقفاً موجباً لكل عملة مفعلة.' : 'Enter a positive limit for every enabled currency.');
-        return false;
-      }
-      const days = Number(paymentDays);
-      if (!Number.isInteger(days) || days < 0) {
-        showErrorNotification(isAr ? 'مدة السداد غير صحيحة' : 'Invalid payment term', isAr ? 'مدة السداد يجب أن تكون عدداً صحيحاً غير سالب.' : 'Payment days must be a non-negative integer.');
-        return false;
-      }
-    }
-    if (openingBalanceOpen) {
-      const amountIQD = parseAmount(openingAmount);
-      const amountUSD = parseAmount(openingAmountUSD);
-      if (!Number.isFinite(amountIQD) || !Number.isFinite(amountUSD) || amountIQD < 0 || amountUSD < 0) {
-        showErrorNotification(isAr ? 'الرصيد الافتتاحي غير صحيح' : 'Invalid opening balance', isAr ? 'يجب أن تكون مبالغ الرصيد أرقاماً غير سالبة.' : 'Opening balance amounts must be non-negative numbers.');
-        return false;
-      }
-      if (!openingDate || Number.isNaN(new Date(openingDate).getTime())) {
-        showErrorNotification(isAr ? 'تاريخ الرصيد مطلوب' : 'Opening date required', isAr ? 'حدد تاريخاً صحيحاً للرصيد الافتتاحي.' : 'Select a valid opening balance date.');
-        return false;
-      }
     }
     return true;
   };
@@ -698,24 +734,23 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         accountRole,
         isBlocked,
         parentId: parentAccount!.id,
-        branchScope,
-        currency,
-        branchIds: branchScope === 'ALL_BRANCHES' ? [] : branchScope === 'CURRENT_BRANCH' ? (currentBranch ? [currentBranch.id] : []) : selectedBranches,
+        branchScope: 'CURRENT_BRANCH',
+        currency: 'MULTI',
+        branchIds: currentBranchId ? [currentBranchId] : [],
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
         address: address.trim() || undefined,
         contactPerson: contactPerson.trim() || undefined,
-        creditLimit: effectivePaymentMode === 'CREDIT_ALLOWED' && overduePolicy !== 'UNLIMITED' && currency !== 'USD' ? parseAmount(creditLimit) : 0,
-        creditLimitUSD: effectivePaymentMode === 'CREDIT_ALLOWED' && overduePolicy !== 'UNLIMITED' && currency !== 'IQD' ? parseAmount(creditLimitUSD) : 0,
-        paymentDays: effectivePaymentMode === 'CREDIT_ALLOWED' ? Number(paymentDays) : 0,
+        creditLimit: 0,
+        creditLimitUSD: 0,
+        paymentDays: 0,
         paymentMode: effectivePaymentMode,
         overduePolicy: isBlocked ? 'BLOCK' : overduePolicy,
-        ...(openingBalanceOpen ? {
+        ...(parseAmount(openingAmount) > 0 || parseAmount(openingAmountUSD) > 0 ? {
           openingAmountIQD: currency !== 'USD' ? parseAmount(openingAmount) : 0,
           openingAmountUSD: currency !== 'IQD' ? parseAmount(openingAmountUSD) : 0,
           openingNature,
-          openingDate,
-          openingNotes: openingNotes.trim() || undefined,
+          openingDate: getTodayInputDate(),
         } : {}),
       };
 
@@ -739,9 +774,9 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         setEmail('');
         setAddress('');
         setContactPerson('');
-        setManualCode('');
-        setManualParentCode('');
-        setShowOverrideFields(false);
+        setAccountCode('');
+        setCodeManual(false);
+        setParentManual(false);
         setPaymentMode('CASH_ONLY');
         setCreditLimit('0');
         setCreditLimitUSD('0');
@@ -766,41 +801,66 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
       opened={opened}
       onClose={onClose}
       title={
-        <div className="flex items-center gap-3 py-0.5" dir={direction}>
-          <div className="w-10 h-10 rounded-lg bg-orange-50 border border-orange-200 flex items-center justify-center text-[#F45A0A] shrink-0">
-            <IconWand size={20} />
+        <div className="flex w-full items-center justify-between gap-4 pe-8" dir={direction}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#F45A0A] shrink-0">
+              <IconWand size={20} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-extrabold text-[15px] text-slate-900 leading-tight truncate">
+                {mode === 'EDIT'
+                  ? (isAr ? 'تعديل الحساب' : 'Edit account')
+                  : (isAr ? 'إضافة حساب جديد' : 'Add new account')}
+              </h3>
+              <p className="text-[11.5px] text-slate-500 font-medium mt-0.5 truncate">
+                {isAr ? 'دليل الحسابات' : 'Chart of accounts'}
+                {selectedTypeLabel ? ` · ${selectedTypeLabel}` : ''}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-extrabold text-base text-slate-900 leading-tight">
-              {mode === 'EDIT'
-                ? (isAr ? `تعديل الحساب المحاسبي (${initialData?.code})` : `Edit Accounting Account (${initialData?.code})`)
-                : (isAr ? 'إضافة حساب' : 'Add Account')}
-            </h3>
-            <span className="text-[11.5px] text-slate-500 font-normal">
-              {isAr
-                ? 'دليل الحسابات'
-                : 'Chart of accounts'}
-            </span>
+          <div className="flex items-center gap-1.5 shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className={`h-8 px-3 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                step === 1 ? 'bg-[#F45A0A] text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span className="font-mono tabular-nums lining-nums">1</span>
+              <span className="ms-1">{isAr ? 'البيانات' : 'Details'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={goToStepTwo}
+              className={`h-8 px-3 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                step === 2 ? 'bg-[#F45A0A] text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span className="font-mono tabular-nums lining-nums">2</span>
+              <span className="ms-1">{isAr ? 'الإعدادات' : 'Settings'}</span>
+            </button>
           </div>
         </div>
       }
-      size="1040px"
+      size="960px"
       padding={0}
-      radius="12px"
+      radius="16px"
       centered
       styles={{
         content: {
-          height: 'min(760px, 92dvh)',
+          height: 'min(720px, 92dvh)',
           maxHeight: '92dvh',
           display: 'flex',
           flexDirection: 'column',
-          borderRadius: '12px',
+          borderRadius: '16px',
           overflow: 'hidden',
+          border: '1px solid #e2e8f0',
         },
         header: {
-          minHeight: '72px',
-          padding: '14px 22px',
+          minHeight: '76px',
+          padding: '14px 18px',
           borderBottom: '1px solid #e2e8f0',
+          background: '#ffffff',
         },
         body: {
           flex: 1,
@@ -810,261 +870,133 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
           padding: 0,
         },
       }}
-      overlayProps={{ opacity: 0.48, blur: 3 }}
+      overlayProps={{ opacity: 0.35, blur: 0 }}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden text-xs select-none font-sans font-medium [&_.mantine-InputWrapper-label]:font-bold [&_.mantine-Input-input]:font-semibold" dir={direction}>
-        {/* ── 1. STEP PROGRESS INDICATOR ── */}
-        <div className="flex items-center border-b border-slate-200 bg-slate-50 px-5 py-3 gap-3">
-          <button
-            type="button"
-            onClick={() => setStep(1)}
-            className={`flex items-center justify-center gap-2 flex-1 h-9 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
-              step === 1
-                ? 'bg-white text-slate-950 border border-slate-200 shadow-xs'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-mono ${step === 1 ? 'bg-[#F45A0A] text-white font-black' : 'bg-slate-200 text-slate-600'}`}>
-              1
-            </span>
-            <span>{isAr ? 'البيانات' : 'Details'}</span>
-          </button>
-
-          <div className="h-px w-10 bg-slate-300" />
-
-          <button
-            type="button"
-            onClick={goToStepTwo}
-            className={`flex items-center justify-center gap-2 flex-1 h-9 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
-              step === 2
-                ? 'bg-white text-slate-950 border border-slate-200 shadow-xs'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-mono ${step === 2 ? 'bg-[#F45A0A] text-white font-black' : 'bg-slate-200 text-slate-600'}`}>
-              2
-            </span>
-            <span>{isAr ? 'الإعدادات' : 'Settings'}</span>
-          </button>
-        </div>
-
-        {/* ── 2. SCROLLABLE CONTENT AREA ── */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 px-5 py-4 space-y-4 bg-white">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-white">
           {(accountsLoading || accountsError) && (
-            <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-[11.5px] font-semibold ${accountsError ? 'border-red-200 bg-red-50 text-red-700' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
+            <div className={`mx-4 mt-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px] font-semibold ${accountsError ? 'border-red-200 bg-red-50 text-red-700' : 'border-orange-200 bg-orange-50 text-[#C2410C]'}`}>
               {accountsError ? <IconAlertCircle size={16} /> : <IconLoader2 size={16} className="animate-spin" />}
               <span>{accountsError ? (isAr ? 'تعذر تحميل شجرة الحسابات؛ الحفظ متوقف لحماية الترابط المحاسبي.' : 'Chart loading failed; saving is blocked to protect account hierarchy.') : (isAr ? 'جارٍ التحقق من شجرة الحسابات والرمز المقترح...' : 'Validating the account tree and suggested code...')}</span>
             </div>
           )}
           {step === 1 && (
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_270px] gap-5 items-start">
-              <div className="space-y-5 min-w-0">
-              {/* Category Tabs (5 Tabs) */}
-              <div>
-                <label className="block font-extrabold text-slate-900 mb-2 text-xs">
-                  {isAr ? 'تصنيف الحساب' : 'Account category'}
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-1 border-b border-slate-200">
-                  {[
-                    { id: 'FINANCIAL', label: isAr ? 'المالية' : 'Financial', icon: <IconWallet size={16} /> },
-                    { id: 'CUSTOMERS', label: isAr ? 'العملاء' : 'Customers', icon: <IconUsers size={16} /> },
-                    { id: 'SUPPLIERS', label: isAr ? 'الموردون' : 'Suppliers', icon: <IconPlane size={16} /> },
-                    { id: 'EXPENSES', label: isAr ? 'المصروفات' : 'Expenses', icon: <IconCashBanknote size={16} /> },
-                    { id: 'REVENUES', label: isAr ? 'الإيرادات' : 'Revenue', icon: <IconReceipt size={16} /> },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveGroup(tab.id as any);
-                        if (tab.id === 'FINANCIAL') setAccountType('CASHBOX');
-                        else if (tab.id === 'CUSTOMERS') selectCustomerType('CASH_CUSTOMER');
-                        else if (tab.id === 'SUPPLIERS') setAccountType('IATA_AIRLINE');
-                        else if (tab.id === 'EXPENSES') setAccountType('GDS_SUBSCRIPTION');
-                        else if (tab.id === 'REVENUES') setAccountType('REVENUE');
-                      }}
-                      className={`relative flex min-h-12 items-center justify-center gap-1.5 px-2 py-2 transition-colors cursor-pointer font-bold text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 ${
-                        activeGroup === tab.id
-                          ? 'text-[#C2410C] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-[#F45A0A]'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className={activeGroup === tab.id ? 'text-[#F45A0A]' : 'text-slate-500'}>{tab.icon}</div>
-                      <span className="leading-tight text-[11px]">{tab.label}</span>
-                    </button>
-                  ))}
+            <div className="flex min-h-full flex-col lg:flex-row">
+              <aside className="w-full lg:w-[248px] shrink-0 border-b lg:border-b-0 lg:border-e border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                <div>
+                  <p className="text-[11px] font-extrabold text-slate-500 mb-2">
+                    {isAr ? 'التصنيف' : 'Category'}
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-1 gap-1.5">
+                    {groupTabs.map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => selectGroup(tab.id)}
+                        className={`flex min-h-10 items-center gap-2 px-3 rounded-xl border text-start text-xs font-bold cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 ${
+                          activeGroup === tab.id
+                            ? 'bg-[#F45A0A] text-white border-[#F45A0A]'
+                            : 'bg-transparent border-transparent text-slate-600 hover:bg-white hover:border-slate-200'
+                        }`}
+                      >
+                        <span className={activeGroup === tab.id ? 'text-white' : 'text-slate-400'}>{tab.icon}</span>
+                        <span>{tab.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Sub-Type Cards */}
-              <div>
-                <label className="block font-extrabold text-slate-900 mb-2 text-xs">
-                  {isAr ? 'نوع الحساب' : 'Account type'}
-                </label>
-                {activeGroup === 'FINANCIAL' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {[
-                      { id: 'INTERNAL_MASTER', label: isAr ? 'ماستر داخلي' : 'Internal Master', icon: <IconCreditCard size={18} /> },
-                      { id: 'EXTERNAL_MASTER', label: isAr ? 'ماستر خارجي' : 'External Master', icon: <IconCreditCard size={18} /> },
-                      { id: 'CASHBOX', label: isAr ? 'صندوق' : 'Cashbox', icon: <IconWallet size={18} /> },
-                      { id: 'BANK', label: isAr ? 'بنك' : 'Bank', icon: <IconBuildingBank size={18} /> },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setAccountType(item.id)}
-                        className={`flex min-h-11 items-center text-start p-3 rounded-lg border transition-colors cursor-pointer ${
-                          accountType === item.id
-                            ? 'bg-orange-50 border-[#F45A0A] text-[#9A3412]'
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 font-bold text-xs">
-                          <span className={accountType === item.id ? 'text-[#F45A0A]' : 'text-slate-500'}>{item.icon}</span>
+                <div>
+                  <p className="text-[11px] font-extrabold text-slate-500 mb-2">
+                    {isAr ? 'النوع' : 'Type'}
+                  </p>
+                  {typeItems.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-1.5">
+                      {typeItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            if (activeGroup === 'CUSTOMERS') {
+                              selectCustomerType(item.id as 'CASH_CUSTOMER' | 'INDIVIDUAL_CLIENT' | 'CORPORATE_CLIENT');
+                            } else {
+                              setAccountType(item.id);
+                              setParentManual(false);
+                              setCodeManual(false);
+                            }
+                          }}
+                          className={chipClass(accountType === item.id)}
+                        >
+                          <span className={accountType === item.id ? 'text-white' : 'text-slate-400'}>{item.icon}</span>
                           <span>{item.label}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {activeGroup === 'CUSTOMERS' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {[
-                      { id: 'CASH_CUSTOMER', label: isAr ? 'زبون نقدي' : 'Cash Customer', icon: <IconCashBanknote size={17} /> },
-                      { id: 'INDIVIDUAL_CLIENT', label: isAr ? 'أفراد' : 'Individuals', icon: <IconUser size={17} /> },
-                      { id: 'CORPORATE_CLIENT', label: isAr ? 'شركة' : 'Company', icon: <IconBuilding size={17} /> },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => selectCustomerType(item.id as 'CASH_CUSTOMER' | 'INDIVIDUAL_CLIENT' | 'CORPORATE_CLIENT')}
-                        className={`flex min-h-12 items-center justify-center gap-2.5 p-3 rounded-lg border transition-colors cursor-pointer font-extrabold text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 ${
-                          accountType === item.id
-                            ? 'bg-orange-50 border-[#F45A0A] text-[#9A3412]'
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className={accountType === item.id ? 'text-[#F45A0A]' : 'text-slate-500'}>{item.icon}</span>
-                        <span>{item.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {activeGroup === 'SUPPLIERS' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {[
-                      { id: 'IATA_AIRLINE', label: isAr ? 'شركة طيران' : 'Airline', icon: <IconPlane size={16} /> },
-                      { id: 'TICKET_SUPPLIER', label: isAr ? 'مورد تذاكر' : 'Ticket Supplier', icon: <IconTicket size={16} /> },
-                      { id: 'HOTEL_SUPPLIER', label: isAr ? 'مورد فنادق' : 'Hotel Supplier', icon: <IconBed size={16} /> },
-                      { id: 'VISA_SUPPLIER', label: isAr ? 'مورد فيزا' : 'Visa Supplier', icon: <IconId size={16} /> },
-                      { id: 'TOURISM_SUPPLIER', label: isAr ? 'مورد سياحة' : 'Tour Supplier', icon: <IconWorld size={16} /> },
-                    ].map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setAccountType(item.id)}
-                        className={`flex min-h-11 items-center gap-2.5 p-3 rounded-lg border transition-colors cursor-pointer font-bold text-xs ${
-                          accountType === item.id
-                            ? 'bg-orange-50 border-[#F45A0A] text-[#9A3412]'
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className={accountType === item.id ? 'text-[#F45A0A]' : 'text-slate-500'}>{item.icon}</span>
-                        <span>{item.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {activeGroup === 'EXPENSES' && (
-                  <div className="space-y-2.5">
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setAccountType('GDS_SUBSCRIPTION')}
-                        className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all cursor-pointer font-bold text-xs ${
-                          accountType === 'GDS_SUBSCRIPTION'
-                            ? 'bg-[#FFF7ED] border-[#F45A0A] ring-2 ring-[#F45A0A]/20 text-[#9A3412]'
-                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <IconDeviceDesktopAnalytics size={16} className="text-[#F45A0A]" />
-                        <span>{isAr ? 'اشتراكات GDS' : 'GDS Subscriptions'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAccountType('EXPENSE')}
-                        className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all cursor-pointer font-bold text-xs ${
-                          accountType === 'EXPENSE'
-                            ? 'bg-[#FFF7ED] border-[#F45A0A] ring-2 ring-[#F45A0A]/20 text-[#9A3412]'
-                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <IconReceipt size={16} className="text-[#F45A0A]" />
-                        <span>{isAr ? 'مصروف تشغيلي' : 'Operating Expense'}</span>
-                      </button>
+                        </button>
+                      ))}
                     </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                      {isAr ? 'اختر الحساب الأب من الدليل لوضع الإيراد في مكانه الصحيح.' : 'Choose the parent account to place this revenue in the chart.'}
+                    </p>
+                  )}
+                  {(activeGroup === 'EXPENSES' || activeGroup === 'REVENUES') && typeItems.length > 0 && (
+                    <p className="mt-2 text-[11px] text-slate-500 font-medium leading-relaxed">
+                      {isAr ? 'حدد الحساب الأب من الدليل لوضعه في المسار الصحيح.' : 'Pick the parent account to place it in the correct path.'}
+                    </p>
+                  )}
+                </div>
+              </aside>
 
-                    {accountType === 'EXPENSE' && (
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                        <Select
-                          size="xs"
-                          label={isAr ? 'بند المصروف' : 'Expense category'}
-                          data={[
-                            { value: '3111', label: isAr ? '3111 - رواتب الموظفين الأساسية' : '3111 - Staff Basic Salaries' },
-                            { value: '3116', label: isAr ? '3116 - أجور أعمال إضافية (Overtime)' : '3116 - Overtime Wages' },
-                            { value: '3118', label: isAr ? '3118 - مكافآت وحوافز مبيعات التذاكر' : '3118 - Ticketing Sales Incentives' },
-                            { value: '3252', label: isAr ? '3252 - القرطاسية ومستلزمات المكاتب' : '3252 - Stationery & Office Supplies' },
-                            { value: '3272', label: isAr ? '3272 - الكهرباء والمولدات' : '3272 - Electricity & Generators' },
-                            { value: '3313', label: isAr ? '3313 - نفقات الاتصالات والإنترنت والهاتف' : '3313 - Telecom & Internet Expenses' },
-                            { value: '33161', label: isAr ? '33161 - دعاية وإعلان وحملات التسويق' : '33161 - Marketing & Advertising' },
-                            { value: '33163', label: isAr ? '33163 - ضيافة واستقبال العملاء' : '33163 - Hospitality & Client Reception' },
-                            { value: '33412', label: isAr ? '33412 - إيجار مقرات وفروع المكتب' : '33412 - Office & Branch Rent' },
-                            { value: '3355', label: isAr ? '3355 - خسائر فروقات أسعار الصرف الأجنبي' : '3355 - Foreign Exchange Losses' },
-                            { value: '3366', label: isAr ? '3366 - خدمات وعمولات مصرفية وبوابات الدفع' : '3366 - Bank & Payment Gateway Fees' },
-                            { value: '3399', label: isAr ? '3399 - مصروفات نثرية وتشغيلية متنوعة' : '3399 - Miscellaneous Petty Cash Expenses' },
-                          ]}
-                          value={expenseSubCategory}
-                          onChange={(v) => setExpenseSubCategory(v || '331')}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
+              <section className="min-w-0 flex-1 p-4 sm:p-5 space-y-4">
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-orange-200 bg-[#FFF3E8] px-3.5 py-2.5">
+                  <IconCoins size={16} className="text-[#F45A0A] shrink-0" />
+                  <span className="text-xs font-extrabold text-[#DD4F05] font-mono tabular-nums lining-nums">IQD + USD</span>
+                  <span className="text-[11px] text-slate-600 font-medium">
+                    {isAr ? 'كل الحسابات تدعم العملتين معاً' : 'Every account supports both currencies'}
+                  </span>
+                  <span className="ms-auto text-[11px] font-bold text-slate-600">
+                    {classificationRules.nature === 'DEBIT' ? (isAr ? 'طبيعة: مدين' : 'Nature: Debit') : (isAr ? 'طبيعة: دائن' : 'Nature: Credit')}
+                  </span>
+                </div>
 
-                {activeGroup === 'REVENUES' && (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                    <Select
-                      size="xs"
-                      label={isAr ? 'بند الإيراد' : 'Revenue category'}
-                      data={[
-                        { value: '4231', label: isAr ? '4231 - عمولة بيع التذاكر' : '4231 - Ticketing Sales Commission' },
-                        { value: '4232', label: isAr ? '4232 - عمولات شركات الطيران' : '4232 - Airline Commissions' },
-                        { value: '4233', label: isAr ? '4233 - عمولات موردي ومنصات التذاكر' : '4233 - Ticket Supplier Overrides' },
-                        { value: '4234', label: isAr ? '4234 - حوافز وتارجت شركات الطيران (Override & Incentives)' : '4234 - Airline Volume Incentives & Targets' },
-                        { value: '4241', label: isAr ? '4241 - إيراد / عمولة حجوزات الفنادق' : '4241 - Hotel Booking Commission' },
-                        { value: '4242', label: isAr ? '4242 - إيراد البرامج والرحلات السياحية' : '4242 - Tour Packages Revenue' },
-                        { value: '4243', label: isAr ? '4243 - إيراد رحلات المجموعات والكروبات (Groups)' : '4243 - Group Travel & Charter Revenue' },
-                        { value: '4355', label: isAr ? '4355 - أرباح فروقات أسعار الصرف الأجنبي' : '4355 - FX Gain on Currency Exchange' },
-                        { value: '4361', label: isAr ? '4361 - أجور إصدار التذاكر (Issuance Fees)' : '4361 - Ticket Issuance Fees' },
-                        { value: '4362', label: isAr ? '4362 - أجور خدمة الحجز وتعديل المواعيد' : '4362 - Date Change & Rebooking Fees' },
-                        { value: '4363', label: isAr ? '4363 - أجور إعادة إصدار التذاكر (Reissue Fees)' : '4363 - Ticket Reissuance Fees' },
-                        { value: '4364', label: isAr ? '4364 - أجور استرجاع التذاكر (Refund Fees)' : '4364 - Ticket Refund Admin Fees' },
-                        { value: '4365', label: isAr ? '4365 - أجور ورسوم خدمة الفيزا والتأشيرات' : '4365 - Visa Processing & Admin Fees' },
-                        { value: '4366', label: isAr ? '4366 - أجور خدمة حجز الفنادق' : '4366 - Hotel Reservation Service Fees' },
-                        { value: '4392', label: isAr ? '4392 - إيراد عمولة بيع' : '4392 - Other Sales Commissions' },
-                      ]}
-                      value={revenueSubCategory}
-                      onChange={(v) => setRevenueSubCategory(v || '4231')}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <SearchableCombobox
+                    label={isAr ? 'حساب الأب' : 'Parent account'}
+                    required
+                    value={parentId}
+                    onChange={(value) => {
+                      setParentId(value);
+                      setParentManual(true);
+                      setCodeManual(false);
+                    }}
+                    options={parentOptions}
+                    placeholder={isAr ? 'ابحث باسم الحساب الأب...' : 'Search parent account name...'}
+                    disabled={accountsLoading}
+                    clearable={false}
+                    maxRendered={80}
+                  />
+                  <div>
+                    <label className="block text-[12.5px] font-bold text-slate-800 mb-[7px]">
+                      {isAr ? 'رمز الحساب' : 'Account code'}
+                      <span className="text-red-500 ms-0.5">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      inputMode="numeric"
+                      value={finalCode}
+                      onChange={(e) => {
+                        setAccountCode(e.target.value.replace(/[^\d]/g, ''));
+                        setCodeManual(true);
+                      }}
+                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white focus:bg-white focus:border-[#F45A0A] outline-none font-mono font-extrabold tabular-nums lining-nums text-slate-900 text-sm"
                     />
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {parentAccount
+                        ? (isAr ? `مرتبط بـ ${parentDisplayName}` : `Linked to ${parentDisplayName}`)
+                        : (isAr ? 'حدد الحساب الأب أولاً' : 'Select a parent account first')}
+                    </p>
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Input Details & Currency Card */}
-              <div className="pt-4 border-t border-slate-200 space-y-3.5">
                 {!isCashCustomer && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <TextInput
@@ -1073,110 +1005,44 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
                       required
                       value={nameAr}
                       onChange={(e) => handleNameArChange(e.target.value)}
+                      classNames={fieldClassNames}
                     />
                     <TextInput
                       label={isAr ? 'الاسم الإنجليزي' : 'English name'}
                       placeholder="English name"
                       value={nameEn}
                       onChange={(e) => handleNameEnChange(e.target.value)}
+                      classNames={fieldClassNames}
                     />
                   </div>
                 )}
 
-                {/* Currency Selector with clear brand orange buttons */}
-                <div>
-                  <label className="font-bold text-slate-700 text-xs flex items-center gap-1.5 mb-1.5">
-                    <IconCoins size={15} className="text-[#F45A0A]" />
-                    <span>{isAr ? 'العملة' : 'Currency'}</span>
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg">
-                    {[
-                      { id: 'MULTI', label: 'IQD + USD' },
-                      { id: 'IQD', label: 'IQD' },
-                      { id: 'USD', label: 'USD' },
-                    ].map((cOpt) => {
-                      const isActive = currency === cOpt.id;
-                      return (
-                        <button
-                          key={cOpt.id}
-                          type="button"
-                          onClick={() => setCurrency(cOpt.id as any)}
-                          className={`min-h-9 px-2 py-2 rounded-md font-bold text-[11.5px] transition-colors cursor-pointer ${
-                            isActive
-                              ? 'bg-[#F45A0A] text-white shadow-xs'
-                              : 'bg-transparent text-slate-600 hover:bg-white hover:text-slate-900'
-                          }`}
-                        >
-                          {cOpt.label}
-                        </button>
-                      );
-                    })}
+                {isCashCustomer && (
+                  <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-3">
+                    <p className="text-xs font-extrabold text-slate-800">{isAr ? 'زبون نقدي' : 'Cash Customer'}</p>
+                    <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                      {isAr ? 'يُنشأ باسم ثابت ولا يحتاج بيانات اتصال.' : 'Created with a fixed name and no contact details.'}
+                    </p>
                   </div>
-                </div>
+                )}
 
                 {((activeGroup === 'CUSTOMERS' && !isCashCustomer) || activeGroup === 'SUPPLIERS') && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-100">
-                    <TextInput label={isAr ? 'الهاتف' : 'Phone'} placeholder="07701234567" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <TextInput label={isAr ? 'الهاتف' : 'Phone'} placeholder="07701234567" value={phone} onChange={(e) => setPhone(e.target.value)} classNames={fieldClassNames} />
                     {(accountType === 'CORPORATE_CLIENT' || activeGroup === 'SUPPLIERS') && (
-                      <TextInput label={isAr ? 'مسؤول الاتصال' : 'Contact'} placeholder={isAr ? 'الاسم' : 'Name'} value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} />
+                      <TextInput label={isAr ? 'مسؤول الاتصال' : 'Contact'} placeholder={isAr ? 'الاسم' : 'Name'} value={contactPerson} onChange={(e) => setContactPerson(e.target.value)} classNames={fieldClassNames} />
                     )}
-                    <TextInput label={isAr ? 'البريد' : 'Email'} placeholder="contact@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                    <TextInput label={isAr ? 'العنوان' : 'Address'} placeholder={isAr ? 'المحافظة والمنطقة' : 'City and district'} value={address} onChange={(e) => setAddress(e.target.value)} />
+                    <TextInput label={isAr ? 'البريد' : 'Email'} placeholder="contact@example.com" value={email} onChange={(e) => setEmail(e.target.value)} classNames={fieldClassNames} />
+                    <TextInput label={isAr ? 'العنوان' : 'Address'} placeholder={isAr ? 'المحافظة والمنطقة' : 'City and district'} value={address} onChange={(e) => setAddress(e.target.value)} classNames={fieldClassNames} />
                   </div>
                 )}
-              </div>
-              </div>
-
-              {/* Accounting Direction Preview Badge Box */}
-              <aside className="xl:sticky xl:top-0 border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
-                <div className="p-3.5 space-y-3">
-                <div className="flex items-center justify-between font-bold text-orange-950 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <IconCheck size={16} className="text-[#F45A0A]" />
-                    <span>{isAr ? 'الربط المحاسبي' : 'Accounting link'}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowOverrideFields(!showOverrideFields)}
-                    className="text-[11.5px] font-bold text-[#F45A0A] hover:underline cursor-pointer flex items-center gap-1"
-                  >
-                    <IconEdit size={12} />
-                    <span>{showOverrideFields ? (isAr ? 'إلغاء' : 'Cancel') : (isAr ? 'تعديل' : 'Edit')}</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 text-xs">
-                  <div className="p-2.5 bg-white rounded-md border border-slate-200">
-                    <span className="text-[10.5px] text-slate-500 block font-medium">{isAr ? 'الرمز' : 'Code'}</span>
-                    <span className="font-mono font-black text-[#9A3412] text-sm" dir="ltr">{manualCode || classificationRules.suggestedCode}</span>
-                  </div>
-                  <div className="p-2.5 bg-white rounded-md border border-slate-200">
-                    <span className="text-[10.5px] text-slate-500 block font-medium">{isAr ? 'الحساب الأب' : 'Parent'}</span>
-                    <span className="font-bold text-slate-900 line-clamp-1" title={classificationRules.controlAccount}>{classificationRules.controlAccount}</span>
-                  </div>
-                  <div className="p-2.5 bg-white rounded-md border border-slate-200">
-                    <span className="text-[10.5px] text-slate-500 block font-medium">{isAr ? 'الطبيعة' : 'Nature'}</span>
-                    <span className={`font-bold ${classificationRules.nature === 'DEBIT' ? 'text-emerald-700' : 'text-blue-700'}`}>
-                      {classificationRules.nature === 'DEBIT' ? (isAr ? 'مدين' : 'Debit') : (isAr ? 'دائن' : 'Credit')}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Manual Override Fields */}
-                {showOverrideFields && (
-                  <div className="grid grid-cols-1 gap-2.5 pt-2 border-t border-slate-200">
-                    <TextInput label={isAr ? 'كود الحساب الأب اليدوي' : 'Manual Parent Code'} placeholder={classificationRules.parentCode} value={manualParentCode} onChange={(e) => setManualParentCode(e.target.value)} />
-                    <TextInput label={isAr ? 'الكود التسلسلي اليدوي' : 'Manual Serial Code'} placeholder={classificationRules.suggestedCode} value={manualCode} onChange={(e) => setManualCode(e.target.value)} />
-                  </div>
-                )}
-                </div>
-              </aside>
+              </section>
             </div>
           )}
 
           {/* STEP 2: Financial Settings & Final Review */}
           {step === 2 && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-5 shadow-2xs">
+            <div className="p-4 sm:p-5 space-y-4">
               {/* 1. Account Business Role & Transaction Treatment */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
@@ -1204,108 +1070,96 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
                       key={role.id}
                       type="button"
                       onClick={() => setAccountRole(role.id as any)}
-                      className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-start transition-all cursor-pointer ${
+                      className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-start transition-colors cursor-pointer ${
                         accountRole === role.id
-                          ? 'bg-orange-50/80 border-[#F45A0A] text-[#9A3412] shadow-xs ring-1 ring-[#F45A0A]/20'
-                          : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                          ? 'bg-[#F45A0A] text-white border-[#F45A0A]'
+                          : 'bg-white border-slate-200 text-slate-700 hover:border-orange-200 hover:bg-orange-50'
                       }`}
                     >
                       <div className="flex items-center gap-1.5 font-bold text-xs">
-                        <span className={accountRole === role.id ? 'text-[#F45A0A]' : 'text-slate-400'}>{role.icon}</span>
+                        <span className={accountRole === role.id ? 'text-white' : 'text-slate-400'}>{role.icon}</span>
                         <span>{role.label}</span>
                       </div>
-                      <span className="text-[10px] text-slate-500 font-medium line-clamp-1">{role.desc}</span>
+                      <span className={`text-[10px] font-medium line-clamp-1 ${accountRole === role.id ? 'text-white/80' : 'text-slate-500'}`}>{role.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* 2. Account Block Status & Transaction Permission */}
-              <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold shrink-0 ${isBlocked ? 'bg-red-100 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                    {isBlocked ? <IconAlertCircle size={18} /> : <IconCheck size={18} />}
-                  </div>
-                  <div>
-                    <span className="font-extrabold text-xs text-slate-900 block">
-                      {isAr ? 'حالة التعامل وتجميد الحساب' : 'Transaction Access & Account Status'}
-                    </span>
-                    <span className={`text-[11px] font-medium ${isBlocked ? 'text-red-700' : 'text-slate-500'}`}>
-                      {isBlocked
-                        ? (isAr ? 'الحساب موقوف ومجمد نهائياً ولا يظهر في أي قائمة منسدلة أو فواتير' : 'Account is permanently blocked and hidden from all dropdowns')
-                        : (isAr ? 'الحساب نشط ومتاح لإصدار الفواتير والسندات في النظام' : 'Account is active and ready for operations')}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2.5 shrink-0 bg-slate-50 px-3.5 py-1.5 rounded-xl border border-slate-200">
-                  <span className={`text-xs font-bold ${!isBlocked ? 'text-emerald-700' : 'text-red-600'}`}>
-                    {!isBlocked ? (isAr ? 'نشط ومتاح' : 'Active') : (isAr ? 'مجمد وموقوف' : 'Blocked')}
+              <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-2 h-11 px-3 rounded-xl border border-slate-200 bg-white">
+                  <span className={`text-xs font-extrabold ${!isBlocked ? 'text-[#F45A0A]' : 'text-slate-400'}`}>
+                    {!isBlocked ? (isAr ? 'نشط' : 'Active') : (isAr ? 'موقوف' : 'Blocked')}
                   </span>
                   <Switch
                     size="md"
-                    color="teal"
+                    color="orange"
                     checked={!isBlocked}
                     onChange={(event) => setIsBlocked(!event.currentTarget.checked)}
                   />
                 </div>
-              </div>
-
-              {/* 3. Opening Balance Section (Always Open, Clean Layout) */}
-              <div className="pt-4 border-t border-slate-100 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center font-bold">
-                      <IconWallet size={18} />
-                    </div>
-                    <div>
-                      <span className="font-extrabold text-xs text-slate-900 block">
-                        {isAr ? 'الرصيد الافتتاحي' : 'Opening Balance'}
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {isAr ? 'حدد طبيعة وقيمة الرصيد الأولي للحساب إن وجد' : 'Specify initial opening balance if applicable'}
-                      </span>
-                    </div>
+                {!isCashCustomer && (accountRole === 'CUSTOMER' || accountRole === 'SUPPLIER' || accountRole === 'BOTH') && (
+                  <div className="flex items-center gap-2 h-11 px-3 rounded-xl border border-slate-200 bg-white">
+                    <span className={`text-xs font-extrabold ${paymentMode === 'CREDIT_ALLOWED' ? 'text-[#F45A0A]' : 'text-slate-400'}`}>
+                      {paymentMode === 'CREDIT_ALLOWED' ? (isAr ? 'آجل' : 'Credit') : (isAr ? 'نقد' : 'Cash')}
+                    </span>
+                    <Switch
+                      size="md"
+                      color="orange"
+                      checked={paymentMode === 'CREDIT_ALLOWED'}
+                      onChange={(event) => setPaymentMode(event.currentTarget.checked ? 'CREDIT_ALLOWED' : 'CASH_ONLY')}
+                    />
                   </div>
-
-                  <SegmentedControl
-                    size="xs"
-                    value={openingNature}
-                    onChange={(v) => setOpeningNature(v)}
-                    data={[
-                      { label: isAr ? 'مدين - لنا على الطرف' : 'Debit - due to us', value: 'DEBIT' },
-                      { label: isAr ? 'دائن - للطرف علينا' : 'Credit - due to partner', value: 'CREDIT' },
-                    ]}
-                    color={openingNature === 'CREDIT' ? 'orange' : 'red'}
-                    className="font-bold shrink-0"
+                )}
+                <div className="flex items-center gap-2 h-11 px-3 rounded-xl border border-slate-200 bg-white">
+                  <span className={`text-xs font-extrabold ${openingNature === 'DEBIT' ? 'text-[#F45A0A]' : 'text-slate-400'}`}>
+                    {openingNature === 'DEBIT' ? (isAr ? 'مدين' : 'Debit') : (isAr ? 'دائن' : 'Credit')}
+                  </span>
+                  <Switch
+                    size="md"
+                    color="orange"
+                    checked={openingNature === 'DEBIT'}
+                    onChange={(event) => setOpeningNature(event.currentTarget.checked ? 'DEBIT' : 'CREDIT')}
                   />
                 </div>
+              </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
-                  {(currency === 'MULTI' || currency === 'IQD') && (
-                    <FormattedNumberInput
-                      size="xs"
-                      label={isAr ? (currency === 'MULTI' ? 'رصيد الدينار (IQD)' : 'المبلغ (د.ع)') : 'IQD Amount'}
-                      value={openingAmount}
-                      onChange={setOpeningAmount}
-                    />
-                  )}
-                  {(currency === 'MULTI' || currency === 'USD') && (
-                    <FormattedNumberInput
-                      size="xs"
-                      label={isAr ? (currency === 'MULTI' ? 'رصيد الدولار (USD)' : 'المبلغ ($)') : 'USD Amount'}
-                      value={openingAmountUSD}
-                      onChange={setOpeningAmountUSD}
-                    />
-                  )}
-                  <div className={currency === 'MULTI' ? 'sm:col-span-2 lg:col-span-1' : ''}>
-                    <TextInput
-                      size="xs"
-                      label={isAr ? 'البيان' : 'Memo / Statement'}
-                      placeholder={isAr ? 'رصيد مرحل' : 'Opening balance rollover'}
-                      value={openingNotes}
-                      onChange={(e) => setOpeningNotes(e.target.value)}
-                    />
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center font-bold">
+                    <IconWallet size={18} />
                   </div>
+                  <div>
+                    <span className="font-extrabold text-xs text-slate-900 block">
+                      {isAr ? 'الرصيد الافتتاحي' : 'Opening Balance'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      {isAr ? 'أدخل قيمة الرصيد الأولي إن وجد' : 'Enter an opening balance if applicable'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <FormattedNumberInput
+                    label={isAr ? 'رصيد الدينار (IQD)' : 'IQD Amount'}
+                    value={openingAmount}
+                    onChange={setOpeningAmount}
+                    styles={{ input: { height: 56, minHeight: 56 } }}
+                    classNames={{
+                      label: '!font-bold !text-slate-800 text-[12.5px] mb-[7px]',
+                      input: 'h-[56px] min-h-[56px] rounded-[11px] border-[#E5E7EB] bg-[#FAFAFA] font-mono font-extrabold tabular-nums lining-nums text-[20px] text-slate-900',
+                    }}
+                  />
+                  <FormattedNumberInput
+                    label={isAr ? 'رصيد الدولار (USD)' : 'USD Amount'}
+                    value={openingAmountUSD}
+                    onChange={setOpeningAmountUSD}
+                    styles={{ input: { height: 56, minHeight: 56 } }}
+                    classNames={{
+                      label: '!font-bold !text-slate-800 text-[12.5px] mb-[7px]',
+                      input: 'h-[56px] min-h-[56px] rounded-[11px] border-[#E5E7EB] bg-[#FAFAFA] font-mono font-extrabold tabular-nums lining-nums text-[20px] text-slate-900',
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -1313,12 +1167,12 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
         </div>
 
         {/* ── 3. ACTION FOOTER BUTTONS ── */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2.5 border-t border-slate-200 bg-slate-50 px-5 py-3 mt-auto">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2.5 border-t border-slate-200 bg-white px-4 sm:px-5 py-3 mt-auto">
           {step === 2 ? (
             <button
               type="button"
               onClick={() => setStep(1)}
-              className="h-10 w-full sm:w-auto px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              className="h-11 w-full sm:w-auto px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               {direction === 'rtl' ? <IconArrowRight size={14} /> : <IconArrowLeft size={14} />}
               <span>{isAr ? 'رجوع' : 'Back'}</span>
@@ -1331,7 +1185,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
             <button
               type="button"
               onClick={onClose}
-              className="h-10 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 font-semibold text-xs transition-colors cursor-pointer"
+              className="h-11 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold text-xs transition-colors cursor-pointer"
             >
               {isAr ? 'إلغاء' : 'Cancel'}
             </button>
@@ -1340,7 +1194,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
                 type="button"
                 onClick={goToStepTwo}
                 disabled={accountsLoading}
-                className="h-10 px-4 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-11 px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span>{isAr ? 'التالي' : 'Next'}</span>
                 {direction === 'rtl' ? <IconArrowLeft size={14} /> : <IconArrowRight size={14} />}
@@ -1352,7 +1206,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
                     type="button"
                     onClick={() => handleSave(true)}
                     disabled={saving}
-                    className="h-10 px-3 rounded-lg border border-[#F45A0A] bg-orange-50 hover:bg-orange-100 text-[#C2410C] font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="h-11 px-3 rounded-xl border border-[#F45A0A] bg-orange-50 hover:bg-orange-100 text-[#C2410C] font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     <IconPlus size={14} />
                     <span>{isAr ? 'إنشاء وإضافة آخر' : 'Create & Add Another'}</span>
@@ -1362,7 +1216,7 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
                   type="button"
                   onClick={() => handleSave(false)}
                   disabled={saving}
-                  className="col-span-2 h-10 px-5 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 sm:col-auto"
+                  className="col-span-2 h-11 px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 sm:col-auto"
                 >
                   <IconCheck size={14} />
                   <span>{mode === 'EDIT' ? (isAr ? 'تحديث الحساب' : 'Update Account') : (isAr ? 'إنشاء الحساب' : 'Create Account')}</span>

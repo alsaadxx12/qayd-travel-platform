@@ -54,17 +54,20 @@ export interface UpdateAccountPayload {
 }
 
 export const accountsApi = {
-  getTree: async (): Promise<AccountNode[]> => {
-    const rawData = await apiRequest('/accounts/tree');
+  getTree: async (lite = false): Promise<AccountNode[]> => {
+    const rawData = await apiRequest(`/accounts/tree${lite ? '?lite=1' : ''}`, {
+      ttl: lite ? 120_000 : 60_000,
+    });
     return mapAccountsToNodes(rawData);
   },
 
-  getFlat: async (type?: string, category?: string): Promise<AccountNode[]> => {
+  getFlat: async (type?: string, category?: string, lite = false): Promise<AccountNode[]> => {
     const query = new URLSearchParams();
     if (type) query.append('type', type);
     if (category) query.append('category', category);
+    if (lite) query.append('lite', '1');
     const endpoint = `/accounts${query.toString() ? `?${query.toString()}` : ''}`;
-    const rawData = await apiRequest(endpoint);
+    const rawData = await apiRequest(endpoint, { ttl: lite ? 120_000 : 60_000 });
     return mapAccountsToNodes(rawData);
   },
 
@@ -134,9 +137,10 @@ function mapAccountsToNodes(rawList: any[]): AccountNode[] {
     nature: mapNature(item.type),
     parentId: item.parentId || undefined,
     level: item.level || 1,
+    isParent: Boolean(item.isParent),
     isGroup: item.isParent || (item.children && item.children.length > 0) || false,
     scope: item.branchScope || 'ALL_BRANCHES',
-    currency: item.currency || 'IQD',
+    currency: 'MULTI',
     branchIds: item.branchIds || [],
     openingAmountIQD: Number(item.openingAmountIQD || 0),
     openingAmountUSD: Number(item.openingAmountUSD || 0),

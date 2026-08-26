@@ -54,10 +54,11 @@ export const QuickPastePassengersModal: React.FC<QuickPastePassengersModalProps>
     return isNaN(num) ? null : num;
   };
 
-  // Detect if a string is a numeric ticket number
+  // Detect ticket numbers of any airline layout, never phones
   const isLikelyTicketNumber = (val: string): boolean => {
     const v = val.replace(/[\s-]/g, '');
-    return /^\d{6,16}$/.test(v);
+    if (/^(?:00)?9647\d{9}$/.test(v) || /^0?7\d{9}$/.test(v)) return false;
+    return /^\d{8,16}$/.test(v) || /^[A-Z0-9][-A-Z0-9]{5,20}$/i.test(val.trim());
   };
 
   // Detect if a string is a PNR

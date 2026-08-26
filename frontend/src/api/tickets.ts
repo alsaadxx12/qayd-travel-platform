@@ -128,7 +128,7 @@ export const ticketsApi = {
     apiRequest(`/tickets${ticketListQuery(params)}`),
 
   getFlights: (params?: { limit?: number; dateFrom?: string; dateTo?: string }): Promise<TicketData[]> =>
-    apiRequest(`/tickets/flights${ticketListQuery(params)}`),
+    apiRequest(`/tickets/flights${ticketListQuery(params)}`, { ttl: 60_000 }),
 
   getVisas: (params?: { limit?: number; dateFrom?: string; dateTo?: string }): Promise<TicketData[]> =>
     apiRequest(`/tickets/visas${ticketListQuery(params)}`),
@@ -144,7 +144,7 @@ export const ticketsApi = {
     Object.entries(params).forEach(([key, value]) => {
       if (value) query.set(key, value);
     });
-    return apiRequest(`/tickets/dashboard-summary?${query.toString()}`);
+    return apiRequest(`/tickets/dashboard-summary?${query.toString()}`, { ttl: 10_000 });
   },
 
   create: (data: Omit<TicketData, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>): Promise<TicketData> =>

@@ -16,6 +16,7 @@ import {
 } from '@tabler/icons-react';
 import { showSuccessNotification, showInfoNotification } from '../../utils/notifications';
 import { apiRequest } from '../../api/client';
+import { aiAssistantApi } from '../../api/aiAssistant';
 
 interface AddonsStoreModalProps {
   opened: boolean;
@@ -43,6 +44,22 @@ export const AddonsStoreModal: React.FC<AddonsStoreModalProps> = ({ opened, onCl
   // Saved state in localStorage
   const [addons, setAddons] = useState<AddonItem[]>(() => {
     const defaultAddons: AddonItem[] = [
+      {
+        id: 'ai_copilot',
+        name: 'وكيل الذكاء (المستشار الذكي)',
+        category: 'الذكاء الاصطناعي',
+        description: 'وكيل قراءة وتحليل لأرصدة الحسابات والتذاكر والسندات والقيود عبر OpenAI، مع متابعة الرصيد المتوفر والمتبقي.',
+        icon: IconSparkles,
+        iconColor: 'text-indigo-600',
+        iconBg: 'bg-indigo-50 border-indigo-200',
+        cost: 'حسب استهلاك OpenAI',
+        costUSD: 0,
+        availableQuota: 'جاري قراءة الرصيد...',
+        quotaPercentage: 0,
+        isEnabled: true,
+        badgeText: 'وكيل الذكاء ⭐',
+        features: ['أرصدة الصناديق والحسابات', 'التذاكر والسندات', 'متابعة الرصيد المتوفر والمتبقي'],
+      },
       {
         id: 'whatsapp',
         name: 'إضافة الواتساب التلقائي (WhatsApp Bot)',
@@ -165,6 +182,35 @@ export const AddonsStoreModal: React.FC<AddonsStoreModalProps> = ({ opened, onCl
       })
       .catch((err) => {
         console.error('Failed to fetch Brevo account info in modal:', err);
+      });
+
+    aiAssistantApi
+      .getBilling(true)
+      .then((data) => {
+        const fmt = (n: number) => (n > 0 && n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
+        const remaining = data.remainingKnown ? fmt(data.remainingUsd) : data.connected ? 'نشط' : 'غير معروف';
+        const available = data.remainingKnown ? fmt(data.allocatedUsd ?? data.grantUsd) : 'جاري القراءة';
+        const used = fmt((data.usedMonthUsd ?? data.usedUsd) || 0);
+        const pct = data.usagePercent ?? (data.remainingKnown && data.grantUsd > 0
+          ? Math.max(0, Math.min(100, Math.round(((data.usedMonthUsd ?? data.usedUsd) / (data.allocatedUsd ?? data.grantUsd)) * 100)))
+          : 0);
+        setAddons((prev) =>
+          prev.map((a) =>
+            a.id === 'ai_copilot'
+              ? {
+                  ...a,
+                  availableQuota: `متوفر ${available} • مستخدم ${used} • متبقي ${remaining}`,
+                  quotaPercentage: pct,
+                  cost: data.connected ? `${data.model} • متصل` : data.message || 'غير متصل',
+                  isEnabled: true,
+                  badgeText: data.connected ? 'OpenAI نشط ⭐' : 'تحقق من الرصيد',
+                }
+              : a,
+          ),
+        );
+      })
+      .catch((err) => {
+        console.error('Failed to fetch AI billing in modal:', err);
       });
   }, [opened]);
 

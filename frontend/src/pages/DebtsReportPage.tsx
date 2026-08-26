@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { getAccountStatement, getDebtsReport } from '../api/reports';
 import { apiRequest } from '../api/client';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
 import { AccountingGrid, AccountingColumnDef } from '../components/common/AccountingGrid';
@@ -21,12 +23,13 @@ import {
 } from '@tabler/icons-react';
 import * as XLSX from 'xlsx';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
+import { useAiPageContext } from '../hooks/useAiPageContext';
 
 interface AccountDebtRow {
   id: string;
   code: string;
   nameAr: string;
-  nameEn?: string;
+  nameEn?: string | null;
   category?: string;
   type: string;
   debitUSD: number;
@@ -43,19 +46,16 @@ interface AccountDebtRow {
   accountCurrency: 'USD' | 'IQD';
 }
 
-// Global in-memory cache for instant zero-latency loading (< 20ms)
-let globalAccountsCache: any[] | null = null;
-let globalEntriesCache: any[] | null = null;
-let globalTicketsCache: any[] | null = null;
-
 export const DebtsReportPage: React.FC = () => {
   const navigate = useNavigate();
   const { openTab } = useWorkspaceStore();
 
-  const [accountsData, setAccountsData] = useState<any[]>(() => globalAccountsCache || []);
-  const [entriesData, setEntriesData] = useState<any[]>(() => globalEntriesCache || []);
-  const [ticketsData, setTicketsData] = useState<any[]>(() => globalTicketsCache || []);
-  const [loading, setLoading] = useState<boolean>(() => !globalAccountsCache);
+  const { data: debtsReport, isLoading: loading, isError, refetch } = useQuery({
+    queryKey: ['debts-report'],
+    queryFn: getDebtsReport,
+    staleTime: 30_000,
+  });
+
   const [searchQuery, setSearchQuery] = useState('');
   
   // Filter buttons mode: 'receivables' (ديون لنا) | 'payables' (ديون علينا) | 'all' (الكل)
@@ -95,7 +95,6 @@ export const DebtsReportPage: React.FC = () => {
   const [emailBody, setEmailBody] = useState('مرحباً، تجدون برفقه كشف الحساب التفصيلي للذمم المالية للفترة المحددة.');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
-  const [customersData, setCustomersData] = useState<any[]>([]);
   const [debtContextMenu, setDebtContextMenu] = useState<{
     x: number;
     y: number;
@@ -104,36 +103,12 @@ export const DebtsReportPage: React.FC = () => {
   const [traceAccount, setTraceAccount] = useState<AccountDebtRow | null>(null);
   const [isTraceModalOpen, setIsTraceModalOpen] = useState(false);
 
-  // 1. Instant Real-Time Data Fetching (Zero Stale-Cache Delay)
-  const fetchDebtsData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [accs, entries, tickets, custs] = await Promise.all([
-        apiRequest('/api/accounts').catch(() => []),
-        apiRequest('/api/journal-entries').catch(() => []),
-        apiRequest('/api/tickets').catch(() => []),
-        apiRequest('/api/partners/customers').catch(() => []),
-      ]);
-
-      const validAccs = Array.isArray(accs) ? accs : [];
-      const validEntries = Array.isArray(entries) ? entries : [];
-      const validTickets = Array.isArray(tickets) ? tickets : [];
-      const validCusts = Array.isArray(custs) ? custs : [];
-
-      setAccountsData(validAccs);
-      setEntriesData(validEntries);
-      setTicketsData(validTickets);
-      setCustomersData(validCusts);
-    } catch (err) {
-      console.error('Error loading fresh debts data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchDebtsData();
-  }, [fetchDebtsData]);
+  useAiPageContext({
+    route: '/debts-report',
+    entity: traceAccount ? 'account' : undefined,
+    recordId: traceAccount?.id,
+    label: traceAccount ? `${traceAccount.code} ${traceAccount.nameAr}` : undefined,
+  });
 
   useEffect(() => {
     if (!debtContextMenu) return;
@@ -151,219 +126,7 @@ export const DebtsReportPage: React.FC = () => {
     };
   }, [debtContextMenu]);
 
-  // 2. Compute Debts & Balances per Account from Real Database Data
-  const debtRows = useMemo<AccountDebtRow[]>(() => {
-    if (!accountsData || accountsData.length === 0) return [];
-
-    const balanceMap: Record<
-      string,
-      { debitUSD: number; creditUSD: number; debitIQD: number; creditIQD: number }
-    > = {};
-    const accById: Record<string, any> = {};
-    const accByName: Record<string, any> = {};
-
-    accountsData.forEach((acc: any) => {
-      accById[acc.id] = acc;
-      if (acc.nameAr) accByName[acc.nameAr.trim().toLowerCase()] = acc;
-
-      const isOpeningCredit = (acc.openingNature || '').toString().toUpperCase() === 'CREDIT';
-      const openIQD = Number(acc.openingAmountIQD ?? acc.openingBalance ?? acc.initialBalance ?? 0);
-      const openUSD = Number(acc.openingAmountUSD ?? 0);
-
-      balanceMap[acc.id] = {
-        debitUSD: !isOpeningCredit && openUSD > 0 ? openUSD : 0,
-        creditUSD: isOpeningCredit && openUSD > 0 ? openUSD : 0,
-        debitIQD: !isOpeningCredit && openIQD > 0 ? openIQD : 0,
-        creditIQD: isOpeningCredit && openIQD > 0 ? openIQD : 0,
-      };
-    });
-
-    const processedVoucherNumbers = new Set<string>();
-
-    // 2.1 Process Journal Entries (O(1) instant lookup)
-    entriesData.forEach(entry => {
-      const entryStatus = String(entry.status || 'POSTED').toUpperCase();
-      if (entryStatus !== 'POSTED') return;
-      if (entry.reference && entry.reference.startsWith('OPENING-')) {
-        return; // Handled via Account opening balance to prevent duplication
-      }
-
-      const entryCurr = (entry.currency || '').toString().toUpperCase();
-      if (Array.isArray(entry.lines)) {
-        entry.lines.forEach((line: any) => {
-          const accId = line.accountId;
-          if (!accId) return;
-
-          const processedKeys = [
-            entry.reference,
-            entry.voucherNumber,
-            entry.entryNumber,
-          ].filter(Boolean);
-          processedKeys.forEach((key: string) => processedVoucherNumbers.add(key.toLowerCase()));
-
-          const lineCurr = (line.currency || entryCurr || 'IQD').toString().toUpperCase();
-          const isUSD = lineCurr.includes('USD') || lineCurr.includes('$');
-
-          if (!balanceMap[accId]) {
-            balanceMap[accId] = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
-          }
-
-          if (isUSD) {
-            balanceMap[accId].debitUSD += Number(line.debit || 0);
-            balanceMap[accId].creditUSD += Number(line.credit || 0);
-          } else {
-            balanceMap[accId].debitIQD += Number(line.debit || 0);
-            balanceMap[accId].creditIQD += Number(line.credit || 0);
-          }
-        });
-      }
-    });
-
-    // 2.2 Process tickets only when no posted journal entry already exists for the invoice
-    ticketsData.forEach((t: any) => {
-      const ticketStatus = (t.status || 'POSTED').toString().toUpperCase();
-      if (!['POSTED', 'REFUNDED'].includes(ticketStatus)) return;
-
-      const invNum = (t.invoiceNumber || t.id || '').toLowerCase();
-      if (invNum && processedVoucherNumbers.has(invNum)) return;
-
-      const rawCurr = (t.currency || t.currencyType || t.sellCurrency || 'IQD').toString().toUpperCase();
-      const isUSD = rawCurr.includes('USD') || rawCurr.includes('$');
-
-      const paymentType = (t.paymentType || '').toString().toUpperCase();
-      const isCash =
-        t.paymentMethod === 'CASH_HAND' ||
-        paymentType === 'DEBIT' ||
-        paymentType === 'CASH' ||
-        t.paymentType === 'نقدي';
-      const totalSell = Number(t.netSell || t.totalSell || 0);
-      const totalBuy = Number(t.netBuy || t.totalBuy || 0);
-
-      // A) Customer Account
-      if (t.customerName || t.customerAccountId || t.customerId) {
-        const custNameClean = (t.customerName || '').trim().toLowerCase();
-        let matchedAcc = accById[t.customerAccountId] || accById[t.customerId] || accByName[custNameClean];
-        if (!matchedAcc) {
-          const foundCust = (customersData || []).find((c: any) => c.id === t.customerName || c.code === t.customerName || c.nameAr === t.customerName);
-          if (foundCust) {
-            matchedAcc = accById[foundCust.accountId] || (foundCust.nameAr ? accByName[foundCust.nameAr.trim().toLowerCase()] : null);
-          }
-        }
-        if (matchedAcc) {
-          if (!balanceMap[matchedAcc.id]) {
-            balanceMap[matchedAcc.id] = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
-          }
-          const customerDebit = Math.max(totalSell, 0);
-          const customerCredit = Math.max(-totalSell, 0);
-          if (isUSD) {
-            balanceMap[matchedAcc.id].debitUSD += customerDebit;
-            balanceMap[matchedAcc.id].creditUSD += customerCredit;
-            if (isCash && totalSell > 0) balanceMap[matchedAcc.id].creditUSD += totalSell;
-          } else {
-            balanceMap[matchedAcc.id].debitIQD += customerDebit;
-            balanceMap[matchedAcc.id].creditIQD += customerCredit;
-            if (isCash && totalSell > 0) balanceMap[matchedAcc.id].creditIQD += totalSell;
-          }
-        }
-      }
-
-      // B) Cashbox / Master / Receiving Account (when ticket is cash)
-      if (isCash) {
-        const cbTarget = (t.paymentMethod && t.paymentMethod.trim() && t.paymentMethod.trim() !== 'CASH_HAND')
-          ? t.paymentMethod.trim()
-          : (t.receivingCashbox && t.receivingCashbox.trim())
-          ? t.receivingCashbox.trim()
-          : (t.cashbox && t.cashbox.trim())
-          ? t.cashbox.trim()
-          : null;
-        if (cbTarget) {
-          const cbClean = cbTarget.trim().toLowerCase();
-          const matchedAcc = accById[cbTarget] || accByName[cbClean] || accountsData.find((a: any) => a.id === cbTarget || a.code === cbTarget);
-          if (matchedAcc) {
-            if (!balanceMap[matchedAcc.id]) {
-              balanceMap[matchedAcc.id] = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
-            }
-            if (isUSD) balanceMap[matchedAcc.id].debitUSD += totalSell;
-            else balanceMap[matchedAcc.id].debitIQD += totalSell;
-          }
-        }
-      }
-
-      // C) Supplier Account
-      const suppName = t.supplierAccountName || t.supplierAccount;
-      if (suppName || t.supplierId) {
-        const suppNameClean = (suppName || '').trim().toLowerCase();
-        const matchedAcc = accById[t.supplierAccount] || accById[t.supplierId] || accByName[suppNameClean];
-        if (matchedAcc) {
-          if (!balanceMap[matchedAcc.id]) {
-            balanceMap[matchedAcc.id] = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
-          }
-          const supplierDebit = Math.max(-totalBuy, 0);
-          const supplierCredit = Math.max(totalBuy, 0);
-          if (isUSD) {
-            balanceMap[matchedAcc.id].debitUSD += supplierDebit;
-            balanceMap[matchedAcc.id].creditUSD += supplierCredit;
-          } else {
-            balanceMap[matchedAcc.id].debitIQD += supplierDebit;
-            balanceMap[matchedAcc.id].creditIQD += supplierCredit;
-          }
-        }
-      }
-    });
-
-    return accountsData
-      .filter((acc: any) => {
-        const category = (acc.category || '').toString().toUpperCase();
-        return !acc.isGroup && !acc.isParent && ['CUSTOMER', 'SUPPLIER'].includes(category);
-      })
-      .map((acc: any) => {
-        const dUSD = balanceMap[acc.id]?.debitUSD || 0;
-        const cUSD = balanceMap[acc.id]?.creditUSD || 0;
-        const balUSD = dUSD - cUSD;
-
-        const dIQD = balanceMap[acc.id]?.debitIQD || 0;
-        const cIQD = balanceMap[acc.id]?.creditIQD || 0;
-        const balIQD = dIQD - cIQD;
-
-        const accCurrStr = (acc.currency || '').toString().toUpperCase();
-        const isExplicitIQD = accCurrStr.includes('IQD') || accCurrStr.includes('د.ع');
-
-        const hasIQDBal = Math.abs(balIQD) > 0.01;
-        const accountCurrency: 'USD' | 'IQD' = (hasIQDBal || isExplicitIQD) ? 'IQD' : 'USD';
-
-        let debtType: 'receivable' | 'payable' | 'zero' = 'zero';
-        let debtLabel = 'متعادل';
-
-        if (balIQD > 0.01 || balUSD > 0.01) {
-          debtType = 'receivable';
-          debtLabel = 'ديون لنا (مدين)';
-        } else if (balIQD < -0.01 || balUSD < -0.01) {
-          debtType = 'payable';
-          debtLabel = 'ديون علينا (دائن)';
-        }
-
-        return {
-          id: acc.id,
-          code: acc.code || '—',
-          nameAr: acc.nameAr || 'حساب بدون اسم',
-          nameEn: acc.nameEn,
-          category: acc.category || acc.type,
-          type: acc.type || 'حساب فرعي',
-          debitUSD: dUSD,
-          creditUSD: cUSD,
-          endingBalanceUSD: balUSD,
-          debitIQD: dIQD,
-          creditIQD: cIQD,
-          endingBalanceIQD: balIQD,
-          totalDebit: dIQD || dUSD,
-          totalCredit: cIQD || cUSD,
-          endingBalance: balIQD !== 0 ? balIQD : balUSD,
-          debtType,
-          debtLabel,
-          accountCurrency,
-        };
-      });
-  }, [accountsData, entriesData, ticketsData, customersData]);
+  const debtRows = useMemo<AccountDebtRow[]>(() => debtsReport?.rows ?? [], [debtsReport]);
 
   // 3. Filtered Debt Rows based on user filter toggle mode, currency switches & search
   const filteredRows = useMemo(() => {
@@ -483,133 +246,33 @@ export const DebtsReportPage: React.FC = () => {
   };
 
   // ── Helper to calculate full statement data for a single account ──
-  const generateAccountStatementData = useCallback((targetAcc: AccountDebtRow) => {
-    const targetAccId = targetAcc.id;
-    const targetAccName = targetAcc.nameAr.trim().toLowerCase();
-
-    const start = batchStartDate ? new Date(batchStartDate) : new Date('2026-01-01');
-    const end = batchEndDate ? new Date(batchEndDate + 'T23:59:59') : new Date();
-
-    let previousBalance = 0;
-    const rawLines: any[] = [];
-    const processedVoucherNumbers = new Set<string>();
-
-    // 1. Process Journal Entries
-    entriesData.forEach((e: any) => {
-      const entryStatus = String(e.status || 'POSTED').toUpperCase();
-      if (entryStatus !== 'POSTED') return;
-      const entryDate = new Date(e.date || Date.now());
-      if (Array.isArray(e.lines)) {
-        e.lines.forEach((l: any) => {
-          if (l.accountId === targetAccId) {
-            const lineCurr = (l.currency || e.currency || 'USD').toString().toUpperCase();
-            const isIQD = lineCurr.includes('IQD') || lineCurr.includes('د.ع');
-            const isUSD = !isIQD;
-            if (isUSD && !includeUSD) return;
-            if (isIQD && !includeIQD) return;
-
-            const debit = Number(l.debit || 0);
-            const credit = Number(l.credit || 0);
-            const processedKeys = [
-              e.reference,
-              e.voucherNumber,
-              e.entryNumber,
-            ].filter(Boolean);
-            processedKeys.forEach((key: string) => processedVoucherNumbers.add(key.toLowerCase()));
-
-            if (entryDate < start) {
-              previousBalance += (debit - credit);
-            } else if (entryDate <= end) {
-              rawLines.push({
-                date: e.date,
-                entryNumber: e.entryNumber || '—',
-                voucherNumber: e.voucherNumber || '—',
-                docType: e.voucherNumber ? (e.voucherType === 'RECEIPT' ? 'سند قبض' : 'سند دفع') : 'قيد يومية',
-                description: l.description || e.description || 'حركة حساب',
-                debit,
-                credit,
-              });
-            }
-          }
-        });
-      }
-    });
-
-    // 2. Process Tickets
-    ticketsData.forEach((t: any) => {
-      const ticketStatus = (t.status || 'POSTED').toString().toUpperCase();
-      if (!['POSTED', 'REFUNDED'].includes(ticketStatus)) return;
-
-      const tDate = new Date(t.issueDate || t.createdAt || t.date || Date.now());
-      const invNum = (t.invoiceNumber || t.id || '').toLowerCase();
-      if (invNum && processedVoucherNumbers.has(invNum)) return;
-
-      const custName = (t.customerName || '').trim().toLowerCase();
-      const suppName = (t.supplierAccountName || t.supplierAccount || '').trim().toLowerCase();
-
-      const isCust = custName && (custName.includes(targetAccName) || targetAccName.includes(custName));
-      const isSupp = suppName && (suppName.includes(targetAccName) || targetAccName.includes(suppName));
-
-      if (isCust) {
-        const sellAmt = Number(t.netSell || t.totalSell || 0);
-        const debit = Math.max(sellAmt, 0);
-        const credit = Math.max(-sellAmt, 0);
-        if (tDate < start) {
-          previousBalance += debit - credit;
-        } else if (tDate <= end) {
-          rawLines.push({
-            date: t.issueDate || t.createdAt || new Date().toISOString().split('T')[0],
-            entryNumber: t.invoiceNumber || t.ticketNumber || 'تذكرة',
-            voucherNumber: t.pnr || '—',
-            docType: sellAmt < 0 ? 'استرداد تذاكر' : 'فاتورة تذاكر',
-            description: `${sellAmt < 0 ? 'استرداد تذكرة' : 'تذكرة طيران'} - PNR: ${t.pnr || '—'}`,
-            debit,
-            credit,
-          });
-        }
-      }
-
-      if (isSupp) {
-        const buyAmt = Number(t.netBuy || t.totalBuy || 0);
-        const debit = Math.max(-buyAmt, 0);
-        const credit = Math.max(buyAmt, 0);
-        if (tDate < start) {
-          previousBalance += debit - credit;
-        } else if (tDate <= end) {
-          rawLines.push({
-            date: t.issueDate || t.createdAt || new Date().toISOString().split('T')[0],
-            entryNumber: t.invoiceNumber || t.ticketNumber || 'تذكرة',
-            voucherNumber: t.pnr || '—',
-            docType: buyAmt < 0 ? 'استرداد من مورد' : 'فاتورة شراء تذاكر',
-            description: `${buyAmt < 0 ? 'استرداد من مورد' : 'شراء تذكرة طيران'} - PNR: ${t.pnr || '—'}`,
-            debit,
-            credit,
-          });
-        }
-      }
-    });
-
-    rawLines.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    let running = (includeOpening || includePrevious) ? previousBalance : 0;
-    const finalLines = rawLines.map(l => {
-      running += (l.debit - l.credit);
-      return { ...l, runningBalance: running };
-    });
-
-    const totalDebit = rawLines.reduce((s, l) => s + l.debit, 0);
-    const totalCredit = rawLines.reduce((s, l) => s + l.credit, 0);
+  const generateAccountStatementData = useCallback(async (targetAcc: AccountDebtRow) => {
+    const stmt = await getAccountStatement(targetAcc.id, batchStartDate, batchEndDate);
+    const rawLines = (stmt.lines || []).map((line) => ({
+      date: line.date,
+      entryNumber: line.entryNumber || '—',
+      voucherNumber: line.reference || '—',
+      docType: 'قيد يومية',
+      description: line.description || 'حركة حساب',
+      debit: Number(line.debit || 0),
+      credit: Number(line.credit || 0),
+      runningBalance: Number(line.runningBalance || 0),
+    }));
+    const previousBalance = Number(stmt.openingBalance || 0);
+    const closingBalance = includeOpening || includePrevious
+      ? Number(stmt.closingBalance || 0)
+      : rawLines.reduce((sum, line) => sum + line.debit - line.credit, 0);
 
     return {
       account: targetAcc,
       previousBalance,
       openingBalance: previousBalance,
-      lines: finalLines,
-      totalDebit,
-      totalCredit,
-      closingBalance: running,
+      lines: rawLines,
+      totalDebit: rawLines.reduce((sum, line) => sum + line.debit, 0),
+      totalCredit: rawLines.reduce((sum, line) => sum + line.credit, 0),
+      closingBalance,
     };
-  }, [entriesData, ticketsData, batchStartDate, batchEndDate, includeOpening, includePrevious, includeUSD, includeIQD]);
+  }, [batchStartDate, batchEndDate, includeOpening, includePrevious]);
 
   // Get selected accounts based on user choice
   const getSelectedAccountsForBatch = useCallback(() => {
@@ -641,8 +304,9 @@ export const DebtsReportPage: React.FC = () => {
       await new Promise(r => setTimeout(r, 200));
       const allRowsForExcel: any[] = [];
 
-      targetAccounts.forEach((acc, index) => {
-        const stmt = generateAccountStatementData(acc);
+      for (let index = 0; index < targetAccounts.length; index++) {
+        const acc = targetAccounts[index];
+        const stmt = await generateAccountStatementData(acc);
         if (skipZeroBalanceAccounts && Math.abs(stmt.closingBalance) < 0.01) {
           return;
         }
@@ -705,7 +369,7 @@ export const DebtsReportPage: React.FC = () => {
         const p = Math.min(85, 10 + Math.round(((index + 1) / targetAccounts.length) * 75));
         setExportProgress(p);
         setExportStatusText(`معالجة حساب ${index + 1} من ${targetAccounts.length} (${acc.nameAr})...`);
-      });
+      }
 
       setExportProgress(90);
       setExportStatusText('جاري إنشاء وتحميل ملف Excel واختيار مكان الحفظ...');
@@ -777,8 +441,9 @@ export const DebtsReportPage: React.FC = () => {
         <body>
       `;
 
-      targetAccounts.forEach((acc, index) => {
-        const stmt = generateAccountStatementData(acc);
+      for (let index = 0; index < targetAccounts.length; index++) {
+        const acc = targetAccounts[index];
+        const stmt = await generateAccountStatementData(acc);
         if (skipZeroBalanceAccounts && Math.abs(stmt.closingBalance) < 0.01) {
           return;
         }
@@ -879,7 +544,7 @@ export const DebtsReportPage: React.FC = () => {
         const p = Math.min(80, 15 + Math.round(((index + 1) / targetAccounts.length) * 65));
         setExportProgress(p);
         setExportStatusText(`توليد صفحات PDF لحساب ${index + 1} من ${targetAccounts.length}...`);
-      });
+      }
 
       htmlContent += `
         </body>
@@ -1245,6 +910,18 @@ export const DebtsReportPage: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6 space-y-4 max-w-[1600px] mx-auto select-none dir-rtl">
+      {isError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 flex items-center justify-between gap-3">
+          <span>تعذر تحميل تقرير الديون. تحقق من الاتصال ثم أعد المحاولة.</span>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="h-8 px-3 rounded-lg bg-white border border-red-200 text-red-700 font-bold cursor-pointer"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      )}
 
       {/* ── Top Summary Metric Cards (ديون لنا / ديون علينا / الصافي) ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1442,6 +1119,7 @@ export const DebtsReportPage: React.FC = () => {
           data={filteredRows}
           columnDefs={columnDefs}
           loading={loading}
+          onRefresh={() => { void refetch(); }}
           gridKey="debts_report_grid"
           hideSearch={true}
           hideFilters={true}

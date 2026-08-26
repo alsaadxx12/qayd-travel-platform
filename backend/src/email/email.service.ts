@@ -115,6 +115,30 @@ export class SendStatementEmailDto {
   }>;
 }
 
+/**
+ * Brevo network budgets. Node's global fetch has no default timeout, so a stalled
+ * TCP connection used to hang the request (and the AI stream) forever.
+ */
+const BREVO_SEND_TIMEOUT_MS = Number(process.env.BREVO_TIMEOUT_MS || 25_000);
+const BREVO_META_TIMEOUT_MS = 12_000;
+
+async function brevoFetch(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err: any) {
+    if (err?.name === 'AbortError' || controller.signal.aborted) {
+      throw new Error(
+        `تعذر الوصول إلى خدمة البريد (Brevo) خلال ${Math.round(timeoutMs / 1000)} ثانية. تحقق من الاتصال بالإنترنت أو حالة الخدمة ثم أعد المحاولة.`,
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -216,20 +240,16 @@ export class EmailService {
 
     try {
       const [accRes, sendersRes] = await Promise.all([
-        fetch('https://api.brevo.com/v3/account', {
-          method: 'GET',
-          headers: {
-            'api-key': apiKey,
-            accept: 'application/json',
-          },
-        }),
-        fetch('https://api.brevo.com/v3/senders', {
-          method: 'GET',
-          headers: {
-            'api-key': apiKey,
-            accept: 'application/json',
-          },
-        }),
+        brevoFetch(
+          'https://api.brevo.com/v3/account',
+          { method: 'GET', headers: { 'api-key': apiKey, accept: 'application/json' } },
+          BREVO_META_TIMEOUT_MS,
+        ),
+        brevoFetch(
+          'https://api.brevo.com/v3/senders',
+          { method: 'GET', headers: { 'api-key': apiKey, accept: 'application/json' } },
+          BREVO_META_TIMEOUT_MS,
+        ),
       ]);
 
       if (!accRes.ok) {
@@ -360,15 +380,19 @@ export class EmailService {
     }
 
     try {
-      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-          'api-key': apiKey,
-          'Content-Type': 'application/json',
-          accept: 'application/json',
+      const res = await brevoFetch(
+        'https://api.brevo.com/v3/smtp/email',
+        {
+          method: 'POST',
+          headers: {
+            'api-key': apiKey,
+            'Content-Type': 'application/json',
+            accept: 'application/json',
+          },
+          body: JSON.stringify(bodyPayload),
         },
-        body: JSON.stringify(bodyPayload),
-      });
+        BREVO_SEND_TIMEOUT_MS,
+      );
 
       if (!res.ok) {
         const errorText = await res.text();

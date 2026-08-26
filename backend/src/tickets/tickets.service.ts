@@ -225,12 +225,19 @@ export class UpdateTicketDto extends PartialType(CreateTicketDto) {
 @Injectable()
 export class TicketsService {
   private ticketsCache = new Map<string, { data: any[]; timestamp: number }>();
-  private readonly CACHE_TTL = 60000; // 60s TTL
+  private dashboardCache = new Map<string, { data: any; timestamp: number }>();
+  private readonly CACHE_TTL = 60000;
+  private readonly DASHBOARD_TTL = 15000;
 
   public invalidateCache(companyId: string) {
     for (const key of this.ticketsCache.keys()) {
       if (key.startsWith(companyId)) {
         this.ticketsCache.delete(key);
+      }
+    }
+    for (const key of this.dashboardCache.keys()) {
+      if (key.startsWith(companyId)) {
+        this.dashboardCache.delete(key);
       }
     }
   }
@@ -308,6 +315,47 @@ export class TicketsService {
       airlineRef: { select: { id: true, code: true, nameAr: true, nameEn: true } },
       cashboxAccount: { select: { id: true, nameAr: true } },
       branch: { select: { id: true, nameAr: true } },
+    } satisfies Prisma.TicketSelect;
+  }
+
+  private ticketGridSelect() {
+    return {
+      id: true,
+      invoiceNumber: true,
+      issueDate: true,
+      travelDate: true,
+      customerName: true,
+      employeeName: true,
+      currency: true,
+      paymentType: true,
+      paymentMethod: true,
+      supplierAccount: true,
+      supplierAccountName: true,
+      supplierId: true,
+      tripType: true,
+      airline: true,
+      airlineId: true,
+      pnr: true,
+      route: true,
+      totalSell: true,
+      totalBuy: true,
+      netSell: true,
+      netBuy: true,
+      profit: true,
+      discountAmount: true,
+      status: true,
+      isAudited: true,
+      createdAt: true,
+      updatedAt: true,
+      _count: { select: { passengers: true } },
+      passengers: {
+        take: 1,
+        orderBy: { id: 'asc' as const },
+        select: { name: true, status: true },
+      },
+      customer: { select: { id: true, nameAr: true } },
+      supplier: { select: { id: true, nameAr: true } },
+      airlineRef: { select: { id: true, code: true, nameAr: true, nameEn: true } },
     } satisfies Prisma.TicketSelect;
   }
 
@@ -529,46 +577,185 @@ export class TicketsService {
     branchId?: string,
     listQuery?: { limit?: string; dateFrom?: string; dateTo?: string },
   ) {
-    const { take, issueDate } = this.ticketListWindow(listQuery?.limit, listQuery?.dateFrom, listQuery?.dateTo);
-    const cacheKey = `${companyId}:${branchId || 'ALL'}:FLIGHTS:${take}:${listQuery?.dateFrom || ''}:${listQuery?.dateTo || ''}`;
+    const take = parseListLimit(listQuery?.limit, 25, 60);
+    const from = parseOptionalDate(listQuery?.dateFrom);
+    const to = parseOptionalDate(listQuery?.dateTo);
+    const cacheKey = `${companyId}:${branchId || 'ALL'}:FLIGHTS-FAST:${take}:${from?.toISOString() || ''}:${to?.toISOString() || ''}`;
     const cached = this.ticketsCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
       return cached.data;
     }
 
-    const branchScope = await this.buildBranchScopeWhere(companyId, branchId);
-    const whereClause: Prisma.TicketWhereInput = {
-      companyId,
-      ...(issueDate ? { issueDate } : {}),
-      AND: [
-        ...(branchScope ? [branchScope] : []),
-        {
-          OR: [
-            { tripType: null },
-            { tripType: { not: 'VISA' } },
-          ],
-        },
-        {
-          NOT: {
-            OR: [
-              { invoiceNumber: { contains: 'VISA', mode: 'insensitive' } },
-              { pnr: { contains: 'فيزا' } },
-              { pnr: { contains: 'VISA', mode: 'insensitive' } },
-              { airline: { contains: 'فيزا' } },
-              { airline: { contains: 'VISA', mode: 'insensitive' } },
-            ],
-          },
-        },
-      ],
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    let branchFilter = Prisma.empty;
+    if (branchId && branchId !== 'ALL') {
+      if (uuidRe.test(branchId)) {
+        branchFilter = Prisma.sql`AND (t."branchId" = ${branchId} OR t."branchId" IS NULL)`;
+      } else {
+        const branchScope = await this.buildBranchScopeWhere(companyId, branchId);
+        const scopedId = branchScope?.OR?.[0]?.branchId;
+        if (scopedId) {
+          const includeNull = Boolean(branchScope.OR?.some((row) => row.branchId === null));
+          branchFilter = includeNull
+            ? Prisma.sql`AND (t."branchId" = ${scopedId} OR t."branchId" IS NULL)`
+            : Prisma.sql`AND t."branchId" = ${scopedId}`;
+        }
+      }
+    }
+
+    let dateFilter = Prisma.empty;
+    if (from) {
+      dateFilter = Prisma.sql`AND t."createdAt" >= ${from}`;
+    }
+    if (to) {
+      dateFilter = Prisma.sql`${dateFilter} AND t."createdAt" <= ${to}`;
+    }
+
+    type FastRow = {
+      id: string;
+      invoiceNumber: string;
+      issueDate: Date;
+      travelDate: Date | null;
+      customerName: string | null;
+      employeeName: string | null;
+      currency: string | null;
+      paymentType: string | null;
+      paymentMethod: string | null;
+      supplierAccount: string | null;
+      supplierAccountName: string | null;
+      supplierId: string | null;
+      tripType: string | null;
+      airline: string | null;
+      airlineId: string | null;
+      pnr: string | null;
+      route: string | null;
+      totalSell: number;
+      totalBuy: number;
+      netSell: number;
+      netBuy: number;
+      profit: number;
+      discountAmount: number | null;
+      status: string;
+      isAudited: boolean;
+      createdAt: Date;
+      updatedAt: Date;
+      customer_name_ar: string | null;
+      supplier_name_ar: string | null;
+      airline_name_ar: string | null;
+      airline_name_en: string | null;
+      airline_code: string | null;
+      passenger_count: number;
+      first_passenger: string | null;
+      passengers_json: any;
     };
 
-    const data = await this.prisma.ticket.findMany({
-      where: whereClause,
-      relationLoadStrategy: 'join',
-      select: this.ticketListSelect(),
-      orderBy: { createdAt: 'desc' },
-      take,
-    });
+    const rows = await this.prisma.$queryRaw<FastRow[]>(Prisma.sql`
+      SELECT
+        t.id,
+        t."invoiceNumber",
+        t."issueDate",
+        t."travelDate",
+        t."customerName",
+        t."employeeName",
+        t.currency,
+        t."paymentType",
+        t.payment_method AS "paymentMethod",
+        t."supplierAccount",
+        t."supplierAccountName",
+        t.supplier_id AS "supplierId",
+        t."tripType",
+        t.airline,
+        t.airline_id AS "airlineId",
+        t.pnr,
+        t.route,
+        t."totalSell",
+        t."totalBuy",
+        t."netSell",
+        t."netBuy",
+        t.profit,
+        t."discountAmount",
+        t.status,
+        t."isAudited",
+        t."createdAt",
+        t."updatedAt",
+        c."nameAr" AS customer_name_ar,
+        s."nameAr" AS supplier_name_ar,
+        a."nameAr" AS airline_name_ar,
+        a."nameEn" AS airline_name_en,
+        a.code AS airline_code,
+        COALESCE((
+          SELECT COUNT(*)::int FROM ticket_passengers p WHERE p."ticketId" = t.id
+        ), 0) AS passenger_count,
+        (
+          SELECT p.name FROM ticket_passengers p WHERE p."ticketId" = t.id ORDER BY p.id ASC LIMIT 1
+        ) AS first_passenger,
+        (
+          SELECT COALESCE(json_agg(json_build_object(
+            'name', p.name,
+            'ticketNumber', p."ticketNumber",
+            'ticketType', p."ticketType",
+            'documentNumber', p."documentNumber",
+            'fareBuy', p."fareBuy",
+            'fareSell', p."fareSell"
+          ) ORDER BY p.id), '[]'::json)
+          FROM ticket_passengers p WHERE p."ticketId" = t.id
+        ) AS passengers_json
+      FROM tickets t
+      LEFT JOIN customers c ON c.id = t.customer_id
+      LEFT JOIN suppliers s ON s.id = t.supplier_id
+      LEFT JOIN airlines a ON a.id = t.airline_id
+      WHERE t."companyId" = ${companyId}
+        AND COALESCE(t."tripType", '') NOT IN ('VISA', 'REFUND')
+        AND t.status IS DISTINCT FROM 'REFUNDED'
+        AND t."invoiceNumber" NOT LIKE 'REF-%'
+        AND t."invoiceNumber" NOT ILIKE 'VISA%'
+        ${branchFilter}
+        ${dateFilter}
+      ORDER BY t."createdAt" DESC
+      LIMIT ${take}
+    `);
+
+    const data = rows.map((row) => ({
+      id: row.id,
+      invoiceNumber: row.invoiceNumber,
+      issueDate: row.issueDate,
+      travelDate: row.travelDate,
+      customerName: row.customer_name_ar || row.customerName,
+      employeeName: row.employeeName,
+      currency: row.currency,
+      paymentType: row.paymentType,
+      paymentMethod: row.paymentMethod,
+      supplierAccount: row.supplierAccount,
+      supplierAccountName: row.supplier_name_ar || row.supplierAccountName,
+      supplierId: row.supplierId,
+      tripType: row.tripType,
+      airline: row.airline,
+      airlineId: row.airlineId,
+      pnr: row.pnr,
+      route: row.route,
+      totalSell: Number(row.totalSell || 0),
+      totalBuy: Number(row.totalBuy || 0),
+      netSell: Number(row.netSell || 0),
+      netBuy: Number(row.netBuy || 0),
+      profit: Number(row.profit || 0),
+      discountAmount: Number(row.discountAmount || 0),
+      status: row.status,
+      isAudited: Boolean(row.isAudited),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      _count: { passengers: Number(row.passenger_count || 0) },
+      passengers: (() => {
+        const raw = row.passengers_json;
+        const arr = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw;
+        if (Array.isArray(arr) && arr.length) return arr;
+        return row.first_passenger ? [{ name: row.first_passenger }] : [];
+      })(),
+      customer: row.customer_name_ar ? { nameAr: row.customer_name_ar } : null,
+      supplier: row.supplier_name_ar ? { nameAr: row.supplier_name_ar } : null,
+      airlineRef: row.airline_name_ar
+        ? { nameAr: row.airline_name_ar, nameEn: row.airline_name_en, code: row.airline_code }
+        : null,
+    }));
 
     this.ticketsCache.set(cacheKey, { data, timestamp: Date.now() });
     return data;
@@ -744,7 +931,13 @@ export class TicketsService {
       filterStartDate = new Date(filters.dateFrom);
     }
 
-    const whereClause: any = { companyId };
+    const cacheKey = `${companyId}:${JSON.stringify(filters)}`;
+    const cachedSummary = this.dashboardCache.get(cacheKey);
+    if (cachedSummary && Date.now() - cachedSummary.timestamp < this.DASHBOARD_TTL) {
+      return cachedSummary.data;
+    }
+
+    const whereClause: { companyId: string; OR?: Array<{ branchId: string | null }> } = { companyId };
 
     if (filters.branchId && filters.branchId !== 'ALL') {
       const [requestedBranch, mainBranch] = await Promise.all([
@@ -772,43 +965,109 @@ export class TicketsService {
         : [{ branchId: resolvedBranchId }];
     }
 
+    let dateFilter = Prisma.empty;
+    let voucherDateWhere: { gte?: Date; lte?: Date } = {};
     if (filterStartDate) {
-      whereClause.issueDate = { gte: filterStartDate };
-      if (filters.datePreset === 'CUSTOM' && filters.dateTo) {
-        const end = new Date(filters.dateTo);
-        end.setDate(end.getDate() + 1);
-        whereClause.issueDate.lte = end;
-      }
-    }
-
-    const tickets = await this.prisma.ticket.findMany({
-      where: whereClause,
-      select: {
-        issueDate: true,
-        createdAt: true,
-        currency: true,
-        tripType: true,
-        status: true,
-        invoiceNumber: true,
-        totalSell: true,
-        totalBuy: true,
-        profit: true,
-        isAudited: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const voucherDateWhere: any = {};
-    if (filterStartDate) {
+      dateFilter = Prisma.sql`AND t."issueDate" >= ${filterStartDate}`;
       voucherDateWhere.gte = filterStartDate;
       if (filters.datePreset === 'CUSTOM' && filters.dateTo) {
         const end = new Date(filters.dateTo);
         end.setDate(end.getDate() + 1);
+        dateFilter = Prisma.sql`${dateFilter} AND t."issueDate" < ${end}`;
         voucherDateWhere.lte = end;
       }
     }
 
-    const [receiptTotals, paymentTotals] = await Promise.all([
+    let branchFilter = Prisma.empty;
+    if (whereClause.OR) {
+      const ids = (whereClause.OR as Array<{ branchId: string | null }>).map((row) => row.branchId);
+      const hasNull = ids.includes(null);
+      const concreteIds = ids.filter((id): id is string => Boolean(id));
+      if (hasNull && concreteIds[0]) {
+        branchFilter = Prisma.sql`AND (t."branchId" = ${concreteIds[0]} OR t."branchId" IS NULL)`;
+      } else if (concreteIds[0]) {
+        branchFilter = Prisma.sql`AND t."branchId" = ${concreteIds[0]}`;
+      }
+    }
+
+    const operationType = filters.operationType || 'ALL';
+    let opFilter = Prisma.empty;
+    if (operationType === 'REFUNDS') {
+      opFilter = Prisma.sql`AND (t."tripType" = 'REFUND' OR t.status = 'REFUNDED' OR t."invoiceNumber" LIKE 'REF-%')`;
+    } else if (operationType === 'TICKETS') {
+      opFilter = Prisma.sql`AND NOT (t."tripType" = 'REFUND' OR t.status = 'REFUNDED' OR t."invoiceNumber" LIKE 'REF-%') AND COALESCE(t."tripType", '') NOT IN ('VISA', 'HOTEL', 'GROUP')`;
+    } else if (operationType === 'VISAS') {
+      opFilter = Prisma.sql`AND (t."tripType" = 'VISA' OR t."invoiceNumber" ILIKE 'VISA%')`;
+    } else if (operationType === 'GROUPS') {
+      opFilter = Prisma.sql`AND t."tripType" = 'GROUP'`;
+    } else if (operationType === 'HOTELS') {
+      opFilter = Prisma.sql`AND t."tripType" = 'HOTEL'`;
+    }
+
+    const usdOnly = filters.currency === 'USD';
+    const trendStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sellExpr = usdOnly
+      ? Prisma.sql`CASE WHEN UPPER(COALESCE(t.currency, '')) LIKE '%USD%' OR COALESCE(t.currency, '') LIKE '%$%' THEN t."totalSell" ELSE 0 END`
+      : Prisma.sql`t."totalSell"`;
+    const buyExpr = usdOnly
+      ? Prisma.sql`CASE WHEN UPPER(COALESCE(t.currency, '')) LIKE '%USD%' OR COALESCE(t.currency, '') LIKE '%$%' THEN t."totalBuy" ELSE 0 END`
+      : Prisma.sql`t."totalBuy"`;
+
+    type AggRow = {
+      curr: string;
+      is_ref: boolean;
+      audit_bucket: string;
+      svc: string;
+      cnt: number;
+      sell: number;
+      buy: number;
+      profit: number;
+    };
+    type TrendRow = { day: Date; sales: number; purchases: number };
+
+    const [aggRows, trendRows, receiptTotals, paymentTotals] = await Promise.all([
+      this.prisma.$queryRaw<AggRow[]>(Prisma.sql`
+        SELECT
+          CASE
+            WHEN UPPER(COALESCE(t.currency, '')) LIKE '%USD%' OR COALESCE(t.currency, '') LIKE '%$%' THEN 'USD'
+            ELSE 'IQD'
+          END AS curr,
+          (t."tripType" = 'REFUND' OR t.status = 'REFUNDED' OR t."invoiceNumber" LIKE 'REF-%') AS is_ref,
+          CASE
+            WHEN t."isAudited" THEN 'AUDITED'
+            WHEN t.status = 'UNDER_REVIEW' THEN 'PENDING'
+            ELSE 'UNAUDITED'
+          END AS audit_bucket,
+          CASE
+            WHEN t."tripType" = 'REFUND' OR t.status = 'REFUNDED' OR t."invoiceNumber" LIKE 'REF-%' THEN 'refunds'
+            WHEN t."tripType" = 'VISA' OR t."invoiceNumber" ILIKE 'VISA%' THEN 'visas'
+            WHEN t."tripType" = 'GROUP' THEN 'groups'
+            WHEN t."tripType" = 'HOTEL' THEN 'hotels'
+            ELSE 'tickets'
+          END AS svc,
+          COUNT(*)::int AS cnt,
+          COALESCE(SUM(t."totalSell"), 0)::float AS sell,
+          COALESCE(SUM(t."totalBuy"), 0)::float AS buy,
+          COALESCE(SUM(t.profit), 0)::float AS profit
+        FROM tickets t
+        WHERE t."companyId" = ${companyId}
+          ${dateFilter}
+          ${branchFilter}
+          ${opFilter}
+        GROUP BY 1, 2, 3, 4
+      `),
+      this.prisma.$queryRaw<TrendRow[]>(Prisma.sql`
+        SELECT
+          DATE_TRUNC('day', t."createdAt") AS day,
+          COALESCE(SUM(${sellExpr}), 0)::float AS sales,
+          COALESCE(SUM(${buyExpr}), 0)::float AS purchases
+        FROM tickets t
+        WHERE t."companyId" = ${companyId}
+          AND t."createdAt" >= ${trendStart}
+          ${branchFilter}
+          ${opFilter}
+        GROUP BY 1
+      `),
       this.prisma.receiptVoucher.aggregate({
         where: {
           companyId,
@@ -827,86 +1086,50 @@ export class TicketsService {
       }),
     ]);
 
-    const operationType = filters.operationType || 'ALL';
-    const opFiltered = tickets.filter((t) => {
-      const isRef = t.tripType === 'REFUND' || t.status === 'REFUNDED' || String(t.invoiceNumber || '').startsWith('REF-');
-      if (operationType === 'ALL') return true;
-      if (operationType === 'REFUNDS') return isRef;
-      if (operationType === 'TICKETS') return !isRef && t.tripType !== 'VISA' && t.tripType !== 'HOTEL' && t.tripType !== 'GROUP';
-      if (operationType === 'VISAS') return t.tripType === 'VISA' || String(t.invoiceNumber || '').startsWith('VISA-');
-      if (operationType === 'GROUPS') return t.tripType === 'GROUP';
-      if (operationType === 'HOTELS') return t.tripType === 'HOTEL';
-      return true;
-    });
+    const emptySvc = () => ({ count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 });
+    const servicesData = {
+      tickets: emptySvc(),
+      refunds: emptySvc(),
+      groups: emptySvc(),
+      visas: emptySvc(),
+      hotels: emptySvc(),
+    };
 
     let audited = 0;
     let pending = 0;
     let unaudited = 0;
-    let regTicketsCount = 0;
-    let regSalesIQD = 0;
-    let regSalesUSD = 0;
-    let regCostIQD = 0;
-    let regCostUSD = 0;
-    let regProfitIQD = 0;
-    let regProfitUSD = 0;
-    let refTicketsCount = 0;
-    let refSalesIQD = 0;
-    let refSalesUSD = 0;
-    let refCostIQD = 0;
-    let refCostUSD = 0;
-    let refProfitIQD = 0;
-    let refProfitUSD = 0;
 
-    opFiltered.forEach((t) => {
-      const isUSD = (t.currency || '').toUpperCase().includes('USD') || (t.currency || '').includes('$');
-      const isRef = t.tripType === 'REFUND' || t.status === 'REFUNDED' || String(t.invoiceNumber || '').startsWith('REF-');
-      const sell = Number(t.totalSell || 0);
-      const buy = Number(t.totalBuy || 0);
-      const profit = Number(t.profit ?? (sell - buy));
-
-      if (isRef) {
-        refTicketsCount++;
-        if (isUSD) {
-          refSalesUSD += Math.abs(sell);
-          refCostUSD += Math.abs(buy);
-          refProfitUSD += profit;
-        } else {
-          refSalesIQD += Math.abs(sell);
-          refCostIQD += Math.abs(buy);
-          refProfitIQD += profit;
-        }
+    for (const row of aggRows) {
+      const count = Number(row.cnt || 0);
+      const sell = Number(row.sell || 0);
+      const buy = Number(row.buy || 0);
+      const profit = Number(row.profit || 0);
+      const svcKey = (row.svc || 'tickets') as keyof typeof servicesData;
+      const bucket = servicesData[svcKey] || servicesData.tickets;
+      bucket.count += count;
+      if (row.curr === 'USD') {
+        bucket.salesUSD += row.is_ref ? Math.abs(sell) : sell;
+        bucket.costUSD += row.is_ref ? Math.abs(buy) : buy;
+        bucket.profitUSD += profit;
       } else {
-        regTicketsCount++;
-        if (isUSD) {
-          regSalesUSD += sell;
-          regCostUSD += buy;
-          regProfitUSD += profit;
-        } else {
-          regSalesIQD += sell;
-          regCostIQD += buy;
-          regProfitIQD += profit;
-        }
+        bucket.salesIQD += row.is_ref ? Math.abs(sell) : sell;
+        bucket.costIQD += row.is_ref ? Math.abs(buy) : buy;
+        bucket.profitIQD += profit;
       }
-
-      if (t.isAudited) audited++;
-      else if (t.status === 'UNDER_REVIEW') pending++;
-      else unaudited++;
-    });
+      if (row.audit_bucket === 'AUDITED') audited += count;
+      else if (row.audit_bucket === 'PENDING') pending += count;
+      else unaudited += count;
+    }
 
     const daysCount = filters.datePreset === 'TODAY' ? 1 : filters.datePreset === 'WEEK' ? 7 : filters.datePreset === '3MONTHS' ? 90 : filters.datePreset === 'YEAR' ? 365 : 30;
-    const trendPoints: Array<{ date: string; sales: number; purchases: number; profit: number }> = [];
     const trendMap = new Map<string, { sales: number; purchases: number }>();
-
-    tickets.forEach((t) => {
-      const td = new Date(t.createdAt || t.issueDate);
+    for (const row of trendRows) {
+      const td = new Date(row.day);
       const key = `${td.getFullYear()}-${String(td.getMonth() + 1).padStart(2, '0')}-${String(td.getDate()).padStart(2, '0')}`;
-      const existing = trendMap.get(key) || { sales: 0, purchases: 0 };
-      const isTicketUSD = (t.currency || '').toUpperCase().includes('USD') || (t.currency || '').includes('$');
-      existing.sales += filters.currency === 'USD' ? (isTicketUSD ? Number(t.totalSell || 0) : 0) : Number(t.totalSell || 0);
-      existing.purchases += filters.currency === 'USD' ? (isTicketUSD ? Number(t.totalBuy || 0) : 0) : Number(t.totalBuy || 0);
-      trendMap.set(key, existing);
-    });
+      trendMap.set(key, { sales: Number(row.sales || 0), purchases: Number(row.purchases || 0) });
+    }
 
+    const trendPoints: Array<{ date: string; sales: number; purchases: number; profit: number }> = [];
     for (let i = Math.min(daysCount, 30); i >= 0; i--) {
       const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -919,16 +1142,16 @@ export class TicketsService {
       });
     }
 
-    return {
+    const summary = {
       kpis: {
-        salesIQD: regSalesIQD,
-        salesUSD: regSalesUSD,
-        buyCostIQD: regCostIQD,
-        buyCostUSD: regCostUSD,
-        netProfitIQD: regProfitIQD + refProfitIQD,
-        netProfitUSD: regProfitUSD + refProfitUSD,
-        refundsIQD: refSalesIQD,
-        refundsUSD: refSalesUSD,
+        salesIQD: servicesData.tickets.salesIQD,
+        salesUSD: servicesData.tickets.salesUSD,
+        buyCostIQD: servicesData.tickets.costIQD,
+        buyCostUSD: servicesData.tickets.costUSD,
+        netProfitIQD: servicesData.tickets.profitIQD + servicesData.refunds.profitIQD,
+        netProfitUSD: servicesData.tickets.profitUSD + servicesData.refunds.profitUSD,
+        refundsIQD: servicesData.refunds.salesIQD,
+        refundsUSD: servicesData.refunds.salesUSD,
         auditedCount: audited,
         pendingAuditCount: pending,
         unauditedCount: unaudited,
@@ -937,15 +1160,12 @@ export class TicketsService {
         paymentsIQD: Number(paymentTotals._sum.amount || 0),
         paymentsUSD: 0,
       },
-      servicesData: {
-        tickets: { count: regTicketsCount, salesIQD: regSalesIQD, salesUSD: regSalesUSD, costIQD: regCostIQD, costUSD: regCostUSD, profitIQD: regProfitIQD, profitUSD: regProfitUSD },
-        refunds: { count: refTicketsCount, salesIQD: refSalesIQD, salesUSD: refSalesUSD, costIQD: refCostIQD, costUSD: refCostUSD, profitIQD: refProfitIQD, profitUSD: refProfitUSD },
-        groups: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-        visas: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-        hotels: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-      },
+      servicesData,
       trendChartData: trendPoints,
     };
+
+    this.dashboardCache.set(cacheKey, { data: summary, timestamp: Date.now() });
+    return summary;
   }
 
   async create(companyId: string, dto: CreateTicketDto, userId?: string, activeBranchId?: string) {

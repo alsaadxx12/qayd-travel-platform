@@ -1,9 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { chatModelParams, DEFAULT_AI_MODEL } from '../common/openai-models';
 
 @Injectable()
 export class ExchangeRateService implements OnModuleInit {
   private readonly logger = new Logger(ExchangeRateService.name);
+  private liveRatesCache: { data: any; at: number } | null = null;
+  private readonly LIVE_TTL_MS = 60_000;
 
   constructor(private prisma: PrismaService) {}
 
@@ -16,9 +19,25 @@ export class ExchangeRateService implements OnModuleInit {
 
   /** Fetch live rates from iraqborsa.com */
   async fetchLiveRates() {
-    const response = await fetch('https://iraqborsa.com/borsa-api/summary.php');
-    if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
-    return response.json();
+    if (this.liveRatesCache && Date.now() - this.liveRatesCache.at < this.LIVE_TTL_MS) {
+      return this.liveRatesCache.data;
+    }
+
+    try {
+      const response = await fetch('https://iraqborsa.com/borsa-api/summary.php', {
+        signal: AbortSignal.timeout(1800),
+      });
+      if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
+      const data = await response.json();
+      this.liveRatesCache = { data, at: Date.now() };
+      return data;
+    } catch (error) {
+      if (this.liveRatesCache) {
+        this.logger.warn('Using cached exchange rates after upstream timeout/failure');
+        return this.liveRatesCache.data;
+      }
+      throw error;
+    }
   }
 
   /** Save a snapshot only if rates have changed from the last saved snapshot */
@@ -102,7 +121,7 @@ export class ExchangeRateService implements OnModuleInit {
     });
   }
 
-  /** Run Deep AI Exchange Rate & Iraqi Market Intelligence Analysis using Groq LLM */
+  /** Run Deep AI Exchange Rate & Iraqi Market Intelligence Analysis using OpenAI */
   async getAIAdvisorAnalysis(currentAdoptedRate?: number, period: 'TODAY' | 'WEEK' | 'MONTH' = 'WEEK') {
     try {
       // 1. Fetch real historical and live market snapshots strictly from Supabase Database
@@ -129,7 +148,8 @@ export class ExchangeRateService implements OnModuleInit {
       const adoptedRate = currentAdoptedRate || (baghdadSell + 5.0);
       const currentMargin = Number((adoptedRate - baghdadSell).toFixed(1));
 
-      const apiKey = process.env.GROQ_API_KEY || '';
+      const apiKey = process.env.OPENAI_API_KEY || '';
+      const openaiModel = process.env.AI_MODEL || DEFAULT_AI_MODEL;
       const nowStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
       const nowTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
       const rotationSeed = Math.floor(Math.random() * 10000);
@@ -342,14 +362,14 @@ export class ExchangeRateService implements OnModuleInit {
 }
 `;
 
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: openaiModel,
           messages: [
             {
               role: 'system',
@@ -360,13 +380,13 @@ export class ExchangeRateService implements OnModuleInit {
               content: prompt,
             },
           ],
-          temperature: 0.15,
           response_format: { type: 'json_object' },
+          ...chatModelParams(openaiModel, { maxTokens: 2200, temperature: 0.15, reasoning: 'high' }),
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Groq API returned HTTP ${response.status}`);
+        throw new Error(`OpenAI API returned HTTP ${response.status}`);
       }
 
       const resData = await response.json();
@@ -379,7 +399,7 @@ export class ExchangeRateService implements OnModuleInit {
         timestamp: new Date().toISOString(),
       };
     } catch (err: any) {
-      this.logger.error('Groq AI Exchange Advisor failed', err);
+      this.logger.error('OpenAI exchange advisor failed', err);
       // Resilient Smart Fallback using real database numbers
       const liveData = await this.fetchLiveRates().catch(() => ({ b: { sell: '1547.5', buy: '1545.0' } }));
       const baghdadSell = parseFloat(liveData.b?.sell || '1547.5');

@@ -26,7 +26,7 @@ export interface DebtTraceAccountRow {
   id: string;
   code: string;
   nameAr: string;
-  nameEn?: string;
+  nameEn?: string | null;
   debtType: 'receivable' | 'payable' | 'zero';
   endingBalanceIQD: number;
   endingBalanceUSD: number;

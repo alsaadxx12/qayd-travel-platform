@@ -44,6 +44,11 @@ export class CreatePaymentVoucherDto {
   @IsOptional()
   currency?: string;
 
+  @ApiPropertyOptional({ example: 1550, description: 'سعر صرف الدولار المستخدم عند الترحيل' })
+  @IsNumber()
+  @IsOptional()
+  exchangeRate?: number;
+
   @ApiPropertyOptional({ description: 'طريقة التسديد' })
   @IsString()
   @IsOptional()
@@ -69,36 +74,68 @@ export class CreatePaymentVoucherDto {
 export class PaymentVouchersService {
   constructor(private prisma: PrismaService) {}
 
+  // Vouchers store the entered currency; ledgers and balances stay in the base currency (IQD).
+  private normalizeCurrency(currency?: string | null): string {
+    const normalized = String(currency || 'IQD').trim().toUpperCase();
+    return normalized === 'USD' || normalized === '$' ? 'USD' : 'IQD';
+  }
+
+  private resolveRate(currency: string, rate?: number | null): number {
+    if (currency !== 'USD') return 1;
+    const parsed = Number(rate);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new BadRequestException('سعر الصرف مطلوب وصحيح عند تسجيل سند بالدولار');
+    }
+    return parsed;
+  }
+
   private async validateReferences(
     companyId: string,
     accountId: string,
     cashboxOrBankAccountId: string,
     supplierId?: string | null,
   ) {
-    const [account, cashboxAccount, supplier] = await Promise.all([
-      this.prisma.account.findFirst({ where: { id: accountId, companyId }, select: { id: true } }),
-      this.prisma.account.findFirst({ where: { id: cashboxOrBankAccountId, companyId }, select: { id: true } }),
+    // One round trip for both accounts keeps voucher saving fast on a remote database.
+    const [accounts, supplier] = await Promise.all([
+      this.prisma.account.findMany({
+        where: { companyId, id: { in: [accountId, cashboxOrBankAccountId] } },
+        select: { id: true },
+      }),
       supplierId
         ? this.prisma.supplier.findFirst({ where: { id: supplierId, companyId }, select: { id: true } })
         : Promise.resolve(null),
     ]);
 
-    if (!account) throw new BadRequestException('حساب الطرف المحدد لا ينتمي إلى الشركة الحالية');
-    if (!cashboxAccount) throw new BadRequestException('حساب الصندوق أو البنك لا ينتمي إلى الشركة الحالية');
+    const foundIds = new Set(accounts.map((item) => item.id));
+    if (!foundIds.has(accountId)) throw new BadRequestException('حساب الطرف المحدد لا ينتمي إلى الشركة الحالية');
+    if (!foundIds.has(cashboxOrBankAccountId)) throw new BadRequestException('حساب الصندوق أو البنك لا ينتمي إلى الشركة الحالية');
     if (supplierId && !supplier) throw new BadRequestException('المورد المحدد لا ينتمي إلى الشركة الحالية');
   }
 
-  async findAll(companyId: string) {
+  async findAll(companyId: string, requestedLimit?: number) {
+    const take = Math.min(Math.max(Number(requestedLimit) || 150, 1), 300);
     return this.prisma.paymentVoucher.findMany({
       where: { companyId },
-      include: {
-        account: { select: { id: true, code: true, nameAr: true } },
+      select: {
+        id: true,
+        voucherNumber: true,
+        date: true,
+        amount: true,
+        currency: true,
+        exchangeRate: true,
+        accountId: true,
+        cashboxOrBankAccountId: true,
+        supplierId: true,
+        reference: true,
+        description: true,
+        status: true,
+        createdAt: true,
+        account: { select: { id: true, code: true, nameAr: true, nameEn: true, type: true, isParent: true } },
         cashboxOrBankAccount: { select: { id: true, code: true, nameAr: true } },
-        supplier: { select: { id: true, code: true, nameAr: true, isAirline: true } },
         createdBy: { select: { id: true, name: true } },
-        journalEntry: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      take,
     });
   }
 
@@ -106,7 +143,7 @@ export class PaymentVouchersService {
     const voucher = await this.prisma.paymentVoucher.findFirst({
       where: { id, companyId },
       include: {
-        account: { select: { id: true, code: true, nameAr: true } },
+        account: { select: { id: true, code: true, nameAr: true, nameEn: true, type: true } },
         cashboxOrBankAccount: { select: { id: true, code: true, nameAr: true } },
         supplier: { select: { id: true, code: true, nameAr: true, isAirline: true } },
         createdBy: { select: { id: true, name: true } },
@@ -128,6 +165,9 @@ export class PaymentVouchersService {
     if (!amount || amount <= 0) {
       throw new BadRequestException('مبلغ سند الدفع يجب أن يكون أكبر من الصفر');
     }
+    const currency = this.normalizeCurrency(dto.currency);
+    const exchangeRate = this.resolveRate(currency, dto.exchangeRate);
+    const baseAmount = amount * exchangeRate;
     await this.validateReferences(companyId, dto.accountId, dto.cashboxOrBankAccountId, dto.supplierId);
 
     const year = new Date().getFullYear();
@@ -148,8 +188,8 @@ export class PaymentVouchersService {
           reference: dto.reference || voucherNumber,
           description: `سند دفع رقم ${voucherNumber}: ${dto.description}`,
           status: 'POSTED',
-          totalDebit: new Prisma.Decimal(amount),
-          totalCredit: new Prisma.Decimal(amount),
+          totalDebit: new Prisma.Decimal(baseAmount),
+          totalCredit: new Prisma.Decimal(baseAmount),
           companyId,
           createdById: userId,
           postedById: userId,
@@ -157,14 +197,14 @@ export class PaymentVouchersService {
             create: [
               {
                 accountId: dto.accountId,
-                debit: new Prisma.Decimal(amount),
+                debit: new Prisma.Decimal(baseAmount),
                 credit: new Prisma.Decimal(0),
                 description: `سداد إلى حساب - سند ${voucherNumber}`,
               },
               {
                 accountId: dto.cashboxOrBankAccountId,
                 debit: new Prisma.Decimal(0),
-                credit: new Prisma.Decimal(amount),
+                credit: new Prisma.Decimal(baseAmount),
                 description: `صرف مبلغ من الصندوق/البنك - سند ${voucherNumber}`,
               },
             ],
@@ -177,6 +217,8 @@ export class PaymentVouchersService {
           voucherNumber,
           date: dto.date ? new Date(dto.date) : new Date(),
           amount: new Prisma.Decimal(amount),
+          currency,
+          exchangeRate: new Prisma.Decimal(exchangeRate),
           accountId: dto.accountId,
           cashboxOrBankAccountId: dto.cashboxOrBankAccountId,
           supplierId: dto.supplierId || null,
@@ -191,12 +233,12 @@ export class PaymentVouchersService {
 
       await tx.account.update({
         where: { id: dto.accountId },
-        data: { balance: { increment: new Prisma.Decimal(amount) } },
+        data: { balance: { increment: new Prisma.Decimal(baseAmount) } },
       });
 
       await tx.account.update({
         where: { id: dto.cashboxOrBankAccountId },
-        data: { balance: { decrement: new Prisma.Decimal(amount) } },
+        data: { balance: { decrement: new Prisma.Decimal(baseAmount) } },
       });
 
       await tx.auditLog.create({
@@ -222,7 +264,8 @@ export class PaymentVouchersService {
     if (!voucher) throw new NotFoundException('سند الدفع غير موجود');
 
     return this.prisma.$transaction(async (tx) => {
-      const amount = Number(voucher.amount) || 0;
+      // Balances were posted in the base currency, so revert with the same rate.
+      const amount = (Number(voucher.amount) || 0) * (Number(voucher.exchangeRate) || 1);
 
       // Revert account balances
       if (voucher.accountId) {
@@ -265,6 +308,7 @@ export class PaymentVouchersService {
       }
 
       const voucher = await this.prisma.paymentVoucher.findFirst({
+
         where: { id, companyId },
         include: { journalEntry: { include: { lines: true } } },
       });
@@ -274,10 +318,16 @@ export class PaymentVouchersService {
       const newAccountId = dto.accountId || voucher.accountId;
       const newCashboxId = dto.cashboxOrBankAccountId || voucher.cashboxOrBankAccountId;
       const newSupplierId = dto.supplierId !== undefined ? (dto.supplierId || null) : voucher.supplierId;
+      const currency = this.normalizeCurrency(dto.currency ?? voucher.currency);
+      const exchangeRate = this.resolveRate(
+        currency,
+        dto.exchangeRate ?? Number(voucher.exchangeRate) ?? 1,
+      );
+      const baseAmount = amount * exchangeRate;
       await this.validateReferences(companyId, newAccountId, newCashboxId, newSupplierId);
 
     return this.prisma.$transaction(async (tx) => {
-      const oldAmount = Number(voucher.amount) || 0;
+      const oldAmount = (Number(voucher.amount) || 0) * (Number(voucher.exchangeRate) || 1);
       const oldAccountId = voucher.accountId;
       const oldCashboxId = voucher.cashboxOrBankAccountId;
 
@@ -306,7 +356,7 @@ export class PaymentVouchersService {
       if (newAccountExists) {
         await tx.account.update({
           where: { id: newAccountId },
-          data: { balance: { increment: new Prisma.Decimal(amount) } },
+          data: { balance: { increment: new Prisma.Decimal(baseAmount) } },
         });
       }
 
@@ -314,7 +364,7 @@ export class PaymentVouchersService {
       if (newCashboxExists) {
         await tx.account.update({
           where: { id: newCashboxId },
-          data: { balance: { decrement: new Prisma.Decimal(amount) } },
+          data: { balance: { decrement: new Prisma.Decimal(baseAmount) } },
         });
       }
 
@@ -326,20 +376,20 @@ export class PaymentVouchersService {
           data: {
             date: dto.date ? new Date(dto.date) : voucher.date,
             description: `سند دفع رقم ${voucher.voucherNumber}: ${dto.description || voucher.description}`,
-            totalDebit: new Prisma.Decimal(amount),
-            totalCredit: new Prisma.Decimal(amount),
+            totalDebit: new Prisma.Decimal(baseAmount),
+            totalCredit: new Prisma.Decimal(baseAmount),
             lines: {
               create: [
                 {
                   accountId: newAccountId,
-                  debit: new Prisma.Decimal(amount),
+                  debit: new Prisma.Decimal(baseAmount),
                   credit: new Prisma.Decimal(0),
                   description: `سداد/صرف إلى حساب - سند ${voucher.voucherNumber}`,
                 },
                 {
                   accountId: newCashboxId,
                   debit: new Prisma.Decimal(0),
-                  credit: new Prisma.Decimal(amount),
+                  credit: new Prisma.Decimal(baseAmount),
                   description: `صرف مبلغ من الصندوق/البنك - سند ${voucher.voucherNumber}`,
                 },
               ],
@@ -353,6 +403,8 @@ export class PaymentVouchersService {
         where: { id },
         data: {
           amount: new Prisma.Decimal(amount),
+          currency,
+          exchangeRate: new Prisma.Decimal(exchangeRate),
           date: dto.date ? new Date(dto.date) : voucher.date,
           accountId: newAccountId,
           cashboxOrBankAccountId: newCashboxId,

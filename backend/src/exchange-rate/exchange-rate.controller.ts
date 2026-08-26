@@ -10,8 +10,7 @@ export class ExchangeRateController {
   async getExchangeRate() {
     try {
       const data = await this.service.fetchLiveRates();
-      // Save snapshot on each manual refresh too
-      await this.service.saveSnapshot(data);
+      void this.service.saveSnapshot(data);
       return data;
     } catch (error: any) {
       return { error: error.message || 'Failed to fetch exchange rate', statusCode: 502 };
@@ -26,7 +25,7 @@ export class ExchangeRateController {
     return this.service.getHistory(p);
   }
 
-  /** Run AI Market Intelligence Advisor powered by Groq */
+  /** Run AI Market Intelligence Advisor powered by OpenAI */
   @Get('ai-advisor')
   async getAIAdvisor(
     @Query('period') period?: string,
