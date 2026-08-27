@@ -41,8 +41,30 @@ export class AiBillingService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  private async getOpenAiKey(): Promise<string> {
+    if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim()) {
+      return process.env.OPENAI_API_KEY.trim();
+    }
+    try {
+      const record = await this.prisma.printTemplate.findFirst({
+        where: { docType: 'ai_keys_config' },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (record && record.config) {
+        const parsed = typeof record.config === 'string' ? JSON.parse(record.config) : record.config;
+        if (parsed.openaiApiKey || parsed.openAiKey || parsed.apiKey) {
+          return String(parsed.openaiApiKey || parsed.openAiKey || parsed.apiKey).trim();
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Could not load db openai key: ${err}`);
+    }
+    return '';
+  }
+
   async getSnapshot(live = false): Promise<AiBillingSnapshot> {
-    const configured = Boolean(process.env.OPENAI_API_KEY?.trim());
+    const key = await this.getOpenAiKey();
+    const configured = Boolean(key);
     const adminConfigured = Boolean(process.env.OPENAI_ADMIN_KEY?.trim());
     const model = process.env.AI_MODEL || DEFAULT_AI_MODEL;
 
@@ -284,7 +306,7 @@ export class AiBillingService {
       };
     }
 
-    const key = process.env.OPENAI_API_KEY?.trim();
+    const key = await this.getOpenAiKey();
     if (!key) {
       return { connected: false, status: 'unconfigured', message: 'لم يُضبط مفتاح OpenAI' };
     }

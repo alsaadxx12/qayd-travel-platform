@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import OpenAI from 'openai';
 import { AiTool } from '../types/ai-tool.types';
 import { parseLeakedToolCall, stripModelScratch } from './intent-router';
 import { AiBillingService } from './ai-billing.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import {
   DEFAULT_AI_MODEL,
   DEFAULT_FAST_MODEL,
@@ -35,27 +36,59 @@ type ProviderKind = 'openai';
  * Copilot, ticket parsing, and visa analysis all use OpenAI only.
  */
 @Injectable()
-export class LlmProviderService {
+export class LlmProviderService implements OnModuleInit {
   private readonly logger = new Logger(LlmProviderService.name);
 
-  private readonly openAiKey = process.env.OPENAI_API_KEY || '';
+  private cachedOpenAiKey = '';
   private readonly primaryModel = process.env.AI_MODEL || DEFAULT_AI_MODEL;
   private readonly fastModel = process.env.AI_FAST_MODEL || DEFAULT_FAST_MODEL;
   private readonly openaiTimeoutMs = Number(process.env.AI_OPENAI_TIMEOUT_MS || 50000);
 
   private openAiClient: OpenAI | null = null;
+  private openAiKeyUsed = '';
 
   /** Skip a model until this timestamp (ms) after auth/quota/rate-limit failures. */
   private readonly disabledUntil = new Map<string, number>();
 
-  constructor(private readonly billing: AiBillingService) {}
+  constructor(
+    private readonly billing: AiBillingService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  async onModuleInit() {
+    await this.getOpenAiKey();
+  }
+
+  async getOpenAiKey(): Promise<string> {
+    if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim()) {
+      this.cachedOpenAiKey = process.env.OPENAI_API_KEY.trim();
+      return this.cachedOpenAiKey;
+    }
+    if (this.cachedOpenAiKey) return this.cachedOpenAiKey;
+    try {
+      const record = await this.prisma.printTemplate.findFirst({
+        where: { docType: 'ai_keys_config' },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (record && record.config) {
+        const parsed = typeof record.config === 'string' ? JSON.parse(record.config) : record.config;
+        if (parsed.openaiApiKey || parsed.openAiKey || parsed.apiKey) {
+          this.cachedOpenAiKey = String(parsed.openaiApiKey || parsed.openAiKey || parsed.apiKey).trim();
+          return this.cachedOpenAiKey;
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Could not load db openai key: ${err}`);
+    }
+    return '';
+  }
 
   get hasToolCapableProvider(): boolean {
-    return Boolean(this.openAiKey);
+    return Boolean(this.cachedOpenAiKey || process.env.OPENAI_API_KEY);
   }
 
   get hasOpenAi(): boolean {
-    return Boolean(this.openAiKey);
+    return Boolean(this.cachedOpenAiKey || process.env.OPENAI_API_KEY);
   }
 
   get primaryModelName(): string {
@@ -63,10 +96,12 @@ export class LlmProviderService {
   }
 
   private getOpenAi(): OpenAI | null {
-    if (!this.openAiKey) return null;
-    if (!this.openAiClient) {
+    const key = this.cachedOpenAiKey || process.env.OPENAI_API_KEY || '';
+    if (!key) return null;
+    if (!this.openAiClient || this.openAiKeyUsed !== key) {
+      this.openAiKeyUsed = key;
       this.openAiClient = new OpenAI({
-        apiKey: this.openAiKey,
+        apiKey: key,
         maxRetries: 0,
         timeout: this.openaiTimeoutMs,
       });

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { SystemKnowledgeService } from '../core/system-knowledge.service';
 import { AiPermissionService } from '../core/ai-permission.service';
 import { LearningService, LearnedKind } from '../core/learning.service';
+import { LlmProviderService } from '../core/llm-provider.service';
 import { AiRequestContext, AiTool, AiToolResult, AiToolProvider } from '../types/ai-tool.types';
 import { baghdadLongAr, baghdadYmd, nowContextLine } from '../core/baghdad-clock';
 import { DEFAULT_AI_MODEL, DEFAULT_FAST_MODEL } from '../../common/openai-models';
@@ -12,6 +13,7 @@ export class MetaTools implements AiToolProvider {
     private readonly knowledge: SystemKnowledgeService,
     private readonly permissions: AiPermissionService,
     private readonly learning: LearningService,
+    private readonly llm: LlmProviderService,
   ) {}
 
   getTools(): AiTool[] {
@@ -119,7 +121,7 @@ export class MetaTools implements AiToolProvider {
   private async generateImage(args: any): Promise<AiToolResult> {
     const prompt = String(args.prompt || args.description || '').trim();
     if (!prompt) return { ok: false, data: { message: 'اكتب وصف الصورة المطلوب تصميمها' } };
-    const key = process.env.OPENAI_API_KEY?.trim();
+    const key = (await this.llm.getOpenAiKey())?.trim();
     if (!key) return { ok: false, data: { message: 'مفتاح OpenAI غير مضبوط لتوليد الصور' } };
 
     const size = ['1024x1024', '1536x1024', '1024x1536', '1792x1024', '1024x1792'].includes(String(args.size || ''))
@@ -174,7 +176,7 @@ export class MetaTools implements AiToolProvider {
 
     const today = baghdadYmd();
     const todayAr = baghdadLongAr();
-    const key = process.env.OPENAI_API_KEY?.trim();
+    const key = (await this.llm.getOpenAiKey())?.trim();
     if (!key) {
       return {
         ok: true,
