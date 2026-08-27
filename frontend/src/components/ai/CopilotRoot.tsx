@@ -61,9 +61,6 @@ export const CopilotRoot: React.FC = () => {
                 <IconBrain size={20} className="text-white drop-shadow-xs" stroke={2.2} />
               </div>
             </div>
-
-            {/* Delicate, smaller live status dot */}
-            <span className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-[1.5px] ring-white shadow-2xs z-20 pointer-events-none" />
           </button>
         </div>
       )}
