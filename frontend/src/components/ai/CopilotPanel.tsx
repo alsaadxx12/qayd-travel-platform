@@ -297,10 +297,8 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
     mode === 'fullscreen'
       ? 'fixed inset-3 z-[80] w-auto h-auto'
       : `fixed z-[80] bottom-6 ${isArabic ? 'left-6' : 'right-6'} ${
-          mode === 'expanded' ? 'w-[min(760px,96vw)] h-[min(820px,88vh)]' : 'w-[min(440px,94vw)] h-[min(640px,80vh)]'
+          mode === 'expanded' ? 'w-[min(780px,96vw)] h-[min(840px,90vh)]' : 'w-[min(460px,94vw)] h-[min(720px,90vh)]'
         }`;
-
-  if (!opened) return null;
 
   return (
     <div
