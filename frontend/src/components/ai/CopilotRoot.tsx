@@ -44,11 +44,14 @@ export const CopilotRoot: React.FC = () => {
         </div>
       )}
       {opened && (
-        <>
-          <div className="fixed inset-0 z-[75] bg-slate-900/15 backdrop-blur-[1px]" onClick={() => setOpened(false)} />
-          <CopilotPanel opened={opened} onClose={() => setOpened(false)} />
-        </>
+        <div
+          className="fixed inset-0 z-[75] bg-slate-900/15 backdrop-blur-[1px]"
+          onClick={() => setOpened(false)}
+        />
       )}
+      <div className={opened ? 'contents' : 'hidden'}>
+        <CopilotPanel opened={opened} onClose={() => setOpened(false)} />
+      </div>
     </>
   );
 };

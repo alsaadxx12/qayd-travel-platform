@@ -21,7 +21,6 @@ export type CopilotMode = 'compact' | 'expanded' | 'fullscreen';
 const MODE_KEY = 'qayd_ai_copilot_mode';
 const LEGACY_KEY = 'qayd_ai_chat_sessions_v2';
 const MIGRATED_KEY = 'qayd_ai_sessions_migrated_v1';
-const WELCOME_DISMISSED_KEY = 'qayd_ai_welcome_dismissed';
 
 interface Props {
   opened: boolean;
@@ -47,20 +46,13 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
   const [mode, setMode] = useState<CopilotMode>(() => (localStorage.getItem(MODE_KEY) as CopilotMode) || 'compact');
   const [showHistory, setShowHistory] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>();
-  const [messages, setMessages] = useState<CopilotChatMessage[]>([
-    {
-      role: 'assistant',
-      content: isArabic
-        ? 'أهلاً بك. اسأل عن الأرصدة والتذاكر، أو أي سؤال عام، أو اطلب تصميم صورة، أو الصق صورة مباشرة في المحادثة.'
-        : 'Ask about balances and tickets, any general question, image design, or paste an image into the chat.',
-    },
-  ]);
+  const [messages, setMessages] = useState<CopilotChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [attached, setAttached] = useState<{ name: string; data: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(WELCOME_DISMISSED_KEY));
+  const [showWelcome, setShowWelcome] = useState(true);
   const [showCapabilities, setShowCapabilities] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -121,14 +113,8 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
     stop();
     setConversationId(undefined);
     setShowHistory(false);
-    setMessages([
-      {
-        role: 'assistant',
-        content: isArabic
-          ? 'محادثة جديدة. كيف يمكنني مساعدتك؟'
-          : 'New conversation. How can I help?',
-      },
-    ]);
+    setShowCapabilities(false);
+    setMessages([]);
   };
 
   const sendText = useCallback(
@@ -363,7 +349,6 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
           setShowCapabilities(false);
           if (showWelcome) {
             setShowWelcome(false);
-            localStorage.setItem(WELCOME_DISMISSED_KEY, '1');
           }
           sendText(p);
         }}
@@ -373,7 +358,6 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
           isArabic={isArabic}
           onDismiss={() => {
             setShowWelcome(false);
-            localStorage.setItem(WELCOME_DISMISSED_KEY, '1');
           }}
         />
       ) : showHistory ? (
