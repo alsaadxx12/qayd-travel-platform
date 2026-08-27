@@ -49,11 +49,6 @@ export const CopilotHeader: React.FC<Props> = ({
           className="w-full h-full object-cover select-none"
         />
       </div>
-      <span
-        className={`absolute -bottom-0.5 ${isArabic ? '-left-0.5' : '-right-0.5'} w-3 h-3 rounded-full ring-2 ring-white ${
-          connected ? 'bg-emerald-500' : 'bg-slate-300'
-        }`}
-      />
     </div>
 
     <div className="flex-1 min-w-0">
