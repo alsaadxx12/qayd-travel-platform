@@ -3,11 +3,11 @@ import { ActionIcon, Tooltip } from '@mantine/core';
 import {
   IconArrowsMaximize,
   IconArrowsMinimize,
+  IconBulb,
   IconChevronDown,
   IconHistory,
   IconPlus,
 } from '@tabler/icons-react';
-import { CapabilitiesTooltip } from './CapabilitiesTooltip';
 import type { CopilotMode } from './CopilotPanel';
 import { AI_AVATAR, AI_GREETING_AR, AI_GREETING_EN, AI_NAME_AR } from './persona';
 
@@ -18,6 +18,8 @@ interface Props {
   onMode: (mode: CopilotMode) => void;
   onNew: () => void;
   onHistory: () => void;
+  onToggleCapabilities?: () => void;
+  showCapabilities?: boolean;
   onClose: () => void;
   connected: boolean;
 }
@@ -29,6 +31,8 @@ export const CopilotHeader: React.FC<Props> = ({
   onMode,
   onNew,
   onHistory,
+  onToggleCapabilities,
+  showCapabilities,
   onClose,
   connected,
 }) => (
@@ -83,7 +87,17 @@ export const CopilotHeader: React.FC<Props> = ({
           <IconHistory size={16} />
         </ActionIcon>
       </Tooltip>
-      <CapabilitiesTooltip isArabic={isArabic} />
+      <Tooltip label={isArabic ? 'ماذا يمكنني أن أفعل؟' : 'What can I do?'} withArrow>
+        <ActionIcon
+          variant={showCapabilities ? 'filled' : 'subtle'}
+          color="orange"
+          radius="md"
+          onClick={onToggleCapabilities}
+          aria-label={isArabic ? 'ماذا يمكنني أن أفعل؟' : 'What can I do?'}
+        >
+          <IconBulb size={16} stroke={2} />
+        </ActionIcon>
+      </Tooltip>
       <Tooltip
         label={mode === 'fullscreen' ? (isArabic ? 'تصغير' : 'Exit full') : isArabic ? 'تكبير' : 'Expand'}
         withArrow

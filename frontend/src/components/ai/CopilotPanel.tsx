@@ -7,6 +7,7 @@ import { Composer, compressImage } from './Composer';
 import { ConversationHistory } from './ConversationHistory';
 import { CopilotChatMessage } from './MessageBubble';
 import { WelcomeScreen } from './WelcomeScreen';
+import { CapabilitiesBanner } from './CapabilitiesBanner';
 import { aiAssistantApi, ChatMessage } from '../../api/aiAssistant';
 import { streamCopilotChat } from '../../api/aiStream';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -60,6 +61,7 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
   const [status, setStatus] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(WELCOME_DISMISSED_KEY));
+  const [showCapabilities, setShowCapabilities] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const { data: brief } = useQuery({
@@ -342,10 +344,29 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
         onNew={startNew}
         onHistory={() => {
           setShowHistory((v) => !v);
+          setShowCapabilities(false);
           refetchConversations();
         }}
+        onToggleCapabilities={() => {
+          setShowCapabilities((v) => !v);
+          if (showHistory) setShowHistory(false);
+        }}
+        showCapabilities={showCapabilities}
         onClose={onClose}
         connected
+      />
+      <CapabilitiesBanner
+        isArabic={isArabic}
+        open={showCapabilities}
+        onClose={() => setShowCapabilities(false)}
+        onSelectPrompt={(p) => {
+          setShowCapabilities(false);
+          if (showWelcome) {
+            setShowWelcome(false);
+            localStorage.setItem(WELCOME_DISMISSED_KEY, '1');
+          }
+          sendText(p);
+        }}
       />
       {showWelcome && !showHistory ? (
         <WelcomeScreen
