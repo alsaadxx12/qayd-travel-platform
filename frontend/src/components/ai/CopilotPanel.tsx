@@ -253,7 +253,7 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
             ? 'تم إيقاف الطلب.'
             : 'Request stopped.'
           : err?.message || 'تعذر الحصول على إجابة.';
-        if (!aborted) showErrorNotification('المستشار الذكي', msg);
+        if (!aborted) showErrorNotification('أينشتاين العراق', msg);
         setMessages((prev) => {
           const next = [...prev];
           // Always settle the bubble: an interrupted request must never leave a

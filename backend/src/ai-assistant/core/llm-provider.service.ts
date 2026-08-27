@@ -308,4 +308,42 @@ export class LlmProviderService {
       return {};
     }
   }
+
+  /* -- Whisper Speech-to-Text (single fast call) -- */
+  async transcribeAudio(audioBuffer: Buffer, mimeType: string, knownNames?: string[]): Promise<string> {
+    const client = this.getOpenAi();
+    if (!client) throw new Error('OpenAI API key is not configured');
+
+    const ext = mimeType.includes('webm') ? 'webm'
+      : mimeType.includes('mp4') ? 'mp4'
+      : mimeType.includes('wav') ? 'wav'
+      : mimeType.includes('ogg') ? 'ogg'
+      : mimeType.includes('mpeg') ? 'mp3'
+      : 'webm';
+
+    const { toFile } = await import('openai/uploads');
+    const uploadable = await toFile(audioBuffer, `voice.${ext}`, { type: mimeType });
+
+    const realNames = knownNames?.length ? knownNames.slice(0, 50).join(', ') + ',' : '';
+    const domainPrompt = [
+      realNames,
+      'سلف علي السعدي, كشف حساب علي السعدي, رصيد علي السعدي,',
+      'كشف حساب, رصيد الصندوق, مبيعات اليوم, أرباح اليوم,',
+      'ذمم العملاء, حوالة, فاتورة, قيد يومية, سند قبض, سند صرف,',
+      'تذكرة طيران, حجز, تأشيرة, فيزا,',
+      'دائن, مدين, الرصيد, المصروفات, الإيرادات,',
+      'السعدي, المالكي, الحسيني, الموسوي, العبيدي,',
+      'علي, أحمد, محمد, حسين, عباس, كرار, مصطفى, حيدر,',
+    ].filter(Boolean).join(' ');
+
+    const whisperRes = await client.audio.transcriptions.create({
+      file: uploadable,
+      model: 'whisper-1',
+      language: 'ar',
+      prompt: domainPrompt,
+      temperature: 0,
+    });
+
+    return whisperRes.text?.trim() || '';
+  }
 }

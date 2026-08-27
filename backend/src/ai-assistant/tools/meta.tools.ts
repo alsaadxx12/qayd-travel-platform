@@ -196,15 +196,10 @@ export class MetaTools implements AiToolProvider {
         ui: searched.sources.length
           ? [
               {
-                type: 'table',
-                payload: {
-                  title: 'مصادر حديثة',
-                  columns: [
-                    { key: 'title', label: 'المصدر' },
-                    { key: 'url', label: 'الرابط' },
-                  ],
-                  rows: searched.sources.slice(0, 5),
-                },
+                // Citations get their own compact block. As a generic table the raw
+                // URL wrapped across five unreadable lines.
+                type: 'sources',
+                payload: { title: 'مصادر حديثة', items: searched.sources.slice(0, 5) },
               },
             ]
           : undefined,

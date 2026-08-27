@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CopilotCardShell, formatDate, formatMoney } from './blockUtils.tsx';
+import { CopilotCardShell, CopilotCardHeader, formatDate, formatMoney } from './blockUtils.tsx';
 import { looksNumeric } from '../extractMarkdownTables';
 
 export const DataTableBlock: React.FC<{ payload: any; onPrompt?: (text: string) => void }> = ({ payload }) => {
@@ -14,13 +14,13 @@ export const DataTableBlock: React.FC<{ payload: any; onPrompt?: (text: string) 
       const currency = col.currency || (col.currencyKey ? row[col.currencyKey] : undefined);
       if (col.type === 'money' || currency === 'USD' || currency === 'IQD') {
         return (
-          <span dir="ltr" className="font-mono tabular-nums font-semibold text-slate-900 whitespace-nowrap">
+          <span dir="ltr" className="font-mono tabular-nums lining-nums font-bold text-slate-900 whitespace-nowrap">
             {formatMoney(value, currency === 'USD' ? 'USD' : undefined)}
           </span>
         );
       }
       return (
-        <span dir="ltr" className="font-mono tabular-nums font-semibold text-slate-900 whitespace-nowrap">
+        <span dir="ltr" className="font-mono tabular-nums lining-nums font-bold text-slate-900 whitespace-nowrap">
           {String(value)}
         </span>
       );
@@ -38,17 +38,13 @@ export const DataTableBlock: React.FC<{ payload: any; onPrompt?: (text: string) 
 
   return (
     <CopilotCardShell>
-      {payload.title && (
-        <div className="px-3 py-2 text-[12px] font-bold text-slate-800 border-b border-slate-100 bg-slate-50/80">
-          {payload.title}
-        </div>
-      )}
-      <div className="overflow-x-auto max-h-72">
+      {payload.title && <CopilotCardHeader>{payload.title}</CopilotCardHeader>}
+      <div className="copilot-scroll overflow-x-auto max-h-72">
         <table className="w-full text-[12px] text-right border-collapse">
           <thead className="bg-slate-50 sticky top-0 z-[1]">
             <tr>
               {columns.map((c) => (
-                <th key={c.key} className="px-3 py-2 font-bold text-slate-500 whitespace-nowrap border-b border-slate-200">
+                <th key={c.key} className="px-3 py-2 font-bold text-[10.5px] uppercase tracking-wide text-slate-400 whitespace-nowrap border-b border-slate-200 bg-white">
                   {c.label}
                 </th>
               ))}
@@ -56,7 +52,7 @@ export const DataTableBlock: React.FC<{ payload: any; onPrompt?: (text: string) 
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={i} className="border-t border-slate-100 even:bg-slate-50/60">
+              <tr key={i} className="border-t border-slate-100 even:bg-slate-50/50 hover:bg-[#FFF7F0] transition-colors">
                 {columns.map((c) => (
                   <td key={c.key} className="px-3 py-2 align-top">
                     {renderCell(c, row)}
@@ -71,7 +67,7 @@ export const DataTableBlock: React.FC<{ payload: any; onPrompt?: (text: string) 
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="w-full text-center text-[11px] py-1.5 text-[#F45A0A] font-semibold border-t border-slate-100 hover:bg-orange-50"
+          className="w-full text-center text-[11px] py-2 text-[#C2410C] font-bold border-t border-slate-100 hover:bg-[#FFF3E8] transition-colors"
         >
           {expanded ? 'عرض أقل' : `عرض الكل (${payload.totalCount || allRows.length})`}
         </button>

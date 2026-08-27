@@ -26,6 +26,7 @@ export type AiUiBlockType =
   | 'entity_card'
   | 'generated_image'
   | 'pdf_file'
+  | 'sources'
   | 'email_confirm';
 
 export interface AiUiBlock {

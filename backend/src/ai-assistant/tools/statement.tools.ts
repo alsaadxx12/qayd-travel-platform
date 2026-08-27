@@ -199,7 +199,12 @@ export class StatementTools implements AiToolProvider {
       };
     }
 
-    if (!confirm) {
+    // Auto-send: when the email comes from the saved entity record (not manually
+    // typed by the user), skip the confirmation step and send immediately.
+    // If the user explicitly typed a recipientEmail, still confirm to guard
+    // against typos.
+    const emailFromRecord = !isValidEmail(typedEmail) && isValidEmail(built.contact.email);
+    if (!confirm && !emailFromRecord) {
       return {
         ok: true,
         data: {
@@ -365,21 +370,28 @@ export class StatementTools implements AiToolProvider {
     }
 
     const query = String(args.query || '').trim();
-    if (!query || /^(pdf|email|الإيميل|الايميل|بالإيميل|بالايميل)$/i.test(query)) {
+
+    // Also try the label from the last selected memory entity as a search query
+    const memoryLabel = [...(ctx.memory || [])].reverse()
+      .find((m) => m.kind === 'account' || m.kind === 'customer' || m.kind === 'supplier')?.label || '';
+
+    const effectiveQuery = query && !/^(pdf|email|\u0627\u0644\u0625\u064a\u0645\u064a\u0644|\u0627\u0644\u0627\u064a\u0645\u064a\u0644|\u0628\u0627\u0644\u0625\u064a\u0645\u064a\u0644|\u0628\u0627\u0644\u0627\u064a\u0645\u064a\u0644|\u0643\u0634\u0641|\u0627\u0631\u0633\u0644)$/i.test(query) ? query : memoryLabel;
+
+    if (!effectiveQuery) {
       return {
         ok: false,
         result: {
           ok: false,
           data: {
             found: false,
-            message: 'حدد العميل أو الشركة أولاً من القائمة، ثم اطلب كشف PDF أو إرسال الكشف بالإيميل.',
+            message: '\u062d\u062f\u062f \u0627\u0644\u0639\u0645\u064a\u0644 \u0623\u0648 \u0627\u0644\u0634\u0631\u0643\u0629 \u0623\u0648\u0644\u0627\u064b \u0645\u0646 \u0627\u0644\u0642\u0627\u0626\u0645\u0629\u060c \u062b\u0645 \u0627\u0637\u0644\u0628 \u0643\u0634\u0641 PDF \u0623\u0648 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0643\u0634\u0641 \u0628\u0627\u0644\u0625\u064a\u0645\u064a\u0644.',
           },
-          note: 'لم يُحدد حساب للكشف. اختر العميل من نتائج البحث ثم أعد المحاولة.',
+          note: '\u0644\u0645 \u064a\u064f\u062d\u062f\u062f \u062d\u0633\u0627\u0628 \u0644\u0644\u0643\u0634\u0641. \u0627\u062e\u062a\u0631 \u0627\u0644\u0639\u0645\u064a\u0644 \u0645\u0646 \u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0628\u062d\u062b \u062b\u0645 \u0623\u0639\u062f \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629.',
         },
       };
     }
 
-    const searched = await this.entityTools.lookup(query, ctx, ['customer', 'supplier', 'account']);
+    const searched = await this.entityTools.lookup(effectiveQuery, ctx, ['customer', 'supplier', 'account']);
     if (!searched.ok || !searched.data?.found) {
       return {
         ok: false,

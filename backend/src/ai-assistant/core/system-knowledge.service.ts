@@ -165,4 +165,32 @@ export class SystemKnowledgeService {
     ];
     return all.filter((p) => hasPermission(p.permission)).slice(0, 7);
   }
+
+  /** Fetch real customer/supplier names for voice recognition accuracy */
+  async getEntityNames(companyId: string): Promise<string[]> {
+    const cacheKey = `entity_names:${companyId}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && Date.now() - cached.at < this.ttlMs * 5) return cached.value;
+
+    const [customers, suppliers] = await Promise.all([
+      this.prisma.customer.findMany({
+        where: { companyId },
+        select: { nameAr: true },
+        take: 200,
+      }),
+      this.prisma.supplier.findMany({
+        where: { companyId },
+        select: { nameAr: true },
+        take: 200,
+      }),
+    ]);
+
+    const names = [
+      ...customers.map((c) => c.nameAr),
+      ...suppliers.map((s) => s.nameAr),
+    ].filter(Boolean);
+
+    this.cache.set(cacheKey, { at: Date.now(), value: names });
+    return names;
+  }
 }

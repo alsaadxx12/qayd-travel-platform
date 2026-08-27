@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ReportsService } from '../../reports/reports.service';
 import { CashboxesBanksService } from '../../cashboxes-banks/cashboxes-banks.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AIAssistantService } from '../ai-assistant.service';
 import { AiPermissionService } from '../core/ai-permission.service';
 import { AiRequestContext, AiTool, AiToolResult, AiToolProvider } from '../types/ai-tool.types';
 import { PERIOD_ENUM, resolvePeriod, round2, toNumber } from './tool-utils';
@@ -13,6 +14,7 @@ export class AnalyticsTools implements AiToolProvider {
     private readonly cashboxes: CashboxesBanksService,
     private readonly prisma: PrismaService,
     private readonly permissions: AiPermissionService,
+    private readonly aiService: AIAssistantService,
   ) {}
 
   getTools(): AiTool[] {
@@ -130,7 +132,7 @@ export class AnalyticsTools implements AiToolProvider {
       {
         name: 'getExchangeRate',
         description:
-          'أسعار الصرف الحية والمعتمدة في النظام وهامش الأمان. Current adopted and market FX rates.',
+          'أسعار الصرف الثلاثة (بغداد، أربيل/الشمال، البصرة/الجنوب) والسعر المعتمد في النظام وكيف يُحتسب: السوق المرتبط + هامش الأمان. استخدمها لأسئلة «سعر الصرف»، «السعر المعتمد»، «الهامش»، «ليش السعر هيك»، «فرق السعر». Adopted rate, its market source, the margin, and all three market rates.',
         parameters: { type: 'object', properties: {}, additionalProperties: false },
         requiredPermissions: [],
         sensitivity: 'read',
@@ -462,32 +464,100 @@ export class AnalyticsTools implements AiToolProvider {
     };
   }
 
-  private async getExchangeRate(_ctx: AiRequestContext): Promise<AiToolResult> {
+  /** Arabic label for each configurable market source. */
+  private static readonly RATE_SOURCE_LABEL: Record<string, string> = {
+    BAGHDAD_SELL: 'بيع بغداد',
+    BAGHDAD_BUY: 'شراء بغداد',
+    NORTHERN_SELL: 'بيع الشمال (أربيل)',
+    SOUTHERN_SELL: 'بيع الجنوب (البصرة)',
+    AVERAGE: 'متوسط الأسواق الثلاثة',
+    FIXED: 'سعر ثابت مُدخل يدوياً',
+  };
+
+  /**
+   * The full exchange-rate picture, not just the market prices.
+   *
+   * The adopted rate is the number the whole system prices with, and it is DERIVED:
+   * one chosen market rate plus a safety margin. Users ask "why is the rate this
+   * number" far more often than they ask what Baghdad is trading at, so the tool
+   * returns the derivation, not only the result.
+   */
+  private async getExchangeRate(ctx: AiRequestContext): Promise<AiToolResult> {
     const snap = await this.prisma.exchangeRateSnapshot.findFirst({ orderBy: { capturedAt: 'desc' } });
-    const baghdadSell = snap?.baghdadSell || 0;
-    const baghdadBuy = snap?.baghdadBuy || 0;
+    const brief = await this.aiService.getLiveFinancialContext(ctx.tenantId || ctx.companyId);
+    const doctrine: any = (brief as any).rateDoctrine || {};
+
+    const markets = {
+      baghdad: { sell: round2(snap?.baghdadSell), buy: round2(snap?.baghdadBuy), label: 'بغداد' },
+      erbil: { sell: round2(snap?.northernSell), buy: round2(snap?.northernBuy), label: 'أربيل (الشمال)' },
+      basra: { sell: round2(snap?.southernSell), buy: round2(snap?.southernBuy), label: 'البصرة (الجنوب)' },
+    };
+
+    const sourceLabel =
+      AnalyticsTools.RATE_SOURCE_LABEL[String(doctrine.baseMarketSource)] ||
+      String(doctrine.baseMarketSource || 'بيع بغداد');
+    const adopted = round2(brief.adoptedRate);
+    const marginPerUsd = round2(doctrine.marginPerUsd);
+    const isFixed = doctrine.mode === 'FIXED';
+
+    const formula = isFixed
+      ? `السعر المعتمد ثابت ومُدخل يدوياً = ${adopted} د.ع/$`
+      : `السعر المعتمد = ${sourceLabel} (${round2(doctrine.baseMarketValue)}) + هامش الأمان (${marginPerUsd}) = ${adopted} د.ع/$`;
 
     return {
       ok: true,
       data: {
-        baghdadSell,
-        baghdadBuy,
-        northernSell: snap?.northernSell || 0,
-        southernSell: snap?.southernSell || 0,
+        adoptedRate: adopted,
+        formula,
+        source: { code: doctrine.baseMarketSource || null, label: sourceLabel, value: round2(doctrine.baseMarketValue) },
+        margin: {
+          perUsd: marginPerUsd,
+          amount: round2(doctrine.marginAmount),
+          unit: doctrine.marginUnit || 'PER_USD',
+          per100Usd: round2(marginPerUsd * 100),
+        },
+        mode: doctrine.mode || 'MARKET_LINKED',
+        configured: doctrine.configured === true,
+        markets,
+        marginVsBaghdadSell: round2(brief.currentMargin),
+        isMarginSafe: brief.isMarginSafe === true,
         capturedAt: snap?.capturedAt || null,
       },
       ui: [
         {
           type: 'kpi',
           payload: {
-            title: 'أسعار الصرف',
+            title: 'السعر المعتمد وكيف تكوّن',
             items: [
-              { label: 'بيع بغداد', value: baghdadSell, type: 'text' },
-              { label: 'شراء بغداد', value: baghdadBuy, type: 'text' },
+              { label: 'المعتمد', value: adopted, emphasis: true },
+              { label: sourceLabel, value: round2(doctrine.baseMarketValue) },
+              { label: 'هامش الأمان', value: marginPerUsd },
+            ],
+          },
+        },
+        {
+          type: 'table',
+          payload: {
+            title: 'أسعار الأسواق الثلاثة (دينار/دولار)',
+            // DataTableBlock reads row[col.key] — columns are objects, rows are keyed
+            // objects. Passing plain arrays renders an empty grid of dashes.
+            columns: [
+              { key: 'market', label: 'السوق' },
+              { key: 'sell', label: 'بيع' },
+              { key: 'buy', label: 'شراء' },
+            ],
+            rows: [
+              { market: markets.baghdad.label, sell: markets.baghdad.sell, buy: markets.baghdad.buy },
+              { market: markets.erbil.label, sell: markets.erbil.sell, buy: markets.erbil.buy },
+              { market: markets.basra.label, sell: markets.basra.sell, buy: markets.basra.buy },
             ],
           },
         },
       ],
+      suggestions: ['ليش السعر المعتمد هيك؟', 'قارن الأسواق الثلاثة', 'أرباح فرق السعر'],
+      note: doctrine.configured
+        ? formula
+        : `${formula} — تنبيه: لم أجد إعدادات سعر صرف محفوظة لهذه الشركة، فالقيم افتراضية.`,
     };
   }
 }

@@ -58,6 +58,14 @@ export class AIAssistantService {
     }
 
     let adoptedRate = clientAdoptedRate || 1552.5;
+    // How that adopted rate was reached — the Copilot needs to be able to EXPLAIN it,
+    // not just quote the number.
+    let rateMode: 'FIXED' | 'MARKET_LINKED' = 'MARKET_LINKED';
+    let baseMarketSource = 'BAGHDAD_SELL';
+    let baseMarketValue = baghdadSell;
+    let marginAmount = 0;
+    let marginUnit: 'PER_USD' | 'PER_100_USD' = 'PER_USD';
+    let rateConfigured = false;
 
     if (!clientAdoptedRate) {
       const rateTemplate = await this.prisma.printTemplate.findFirst({
@@ -75,8 +83,12 @@ export class AIAssistantService {
       if (rateTemplate?.config) {
         try {
           const cfg = JSON.parse(rateTemplate.config);
+          rateConfigured = true;
           if (cfg.mode === 'FIXED') {
+            rateMode = 'FIXED';
             adoptedRate = Number(cfg.fixedRate || 1530);
+            baseMarketSource = 'FIXED';
+            baseMarketValue = adoptedRate;
           } else {
             let baseMarket = baghdadSell;
             if (cfg.baseMarketSource === 'BAGHDAD_BUY') baseMarket = baghdadBuy;
@@ -86,11 +98,12 @@ export class AIAssistantService {
               baseMarket = Number(((baghdadSell + northernSell + southernSell) / 3).toFixed(1));
             }
 
-            const marginVal =
-              cfg.marginUnit === 'PER_100_USD'
-                ? Number(cfg.marginAmount || 0) / 100
-                : Number(cfg.marginAmount || 0);
+            marginUnit = cfg.marginUnit === 'PER_100_USD' ? 'PER_100_USD' : 'PER_USD';
+            marginAmount = Number(cfg.marginAmount || 0);
+            const marginVal = marginUnit === 'PER_100_USD' ? marginAmount / 100 : marginAmount;
 
+            baseMarketSource = String(cfg.baseMarketSource || 'BAGHDAD_SELL');
+            baseMarketValue = baseMarket;
             adoptedRate = Number((baseMarket + marginVal).toFixed(1));
           }
         } catch (e: any) {
@@ -127,6 +140,16 @@ export class AIAssistantService {
       southernSell,
       currentMargin,
       isMarginSafe,
+      /** How the adopted rate is produced, so the Copilot can explain it in words. */
+      rateDoctrine: {
+        mode: rateMode,
+        configured: rateConfigured,
+        baseMarketSource,
+        baseMarketValue,
+        marginAmount,
+        marginUnit,
+        marginPerUsd: marginUnit === 'PER_100_USD' ? marginAmount / 100 : marginAmount,
+      },
       tenantName: tenantInfo?.name || 'علاء الدين',
       planName,
       planCode,

@@ -1,14 +1,14 @@
 import React from 'react';
-import { ActionIcon, Badge, Tooltip } from '@mantine/core';
+import { ActionIcon, Tooltip } from '@mantine/core';
 import {
   IconArrowsMaximize,
   IconArrowsMinimize,
   IconChevronDown,
   IconHistory,
   IconPlus,
-  IconRobot,
 } from '@tabler/icons-react';
 import type { CopilotMode } from './CopilotPanel';
+import { AI_AVATAR, AI_GREETING_AR, AI_GREETING_EN, AI_NAME_AR } from './persona';
 
 interface Props {
   isArabic: boolean;
@@ -31,48 +31,75 @@ export const CopilotHeader: React.FC<Props> = ({
   onClose,
   connected,
 }) => (
-  <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 bg-white">
-    <div className="w-8 h-8 rounded-full bg-[#F45A0A] text-white flex items-center justify-center">
-      <IconRobot size={16} />
+  // No coloured strip across the top: on a rounded panel its ends get clipped and
+  // it reads as a stray line. The warmth comes from a soft wash instead, and the
+  // brand colour is carried by the avatar where it belongs.
+  <div className="relative flex items-center gap-2.5 px-3.5 py-3 bg-gradient-to-b from-[#FFFAF6] to-white border-b border-slate-200/70">
+    <div className="relative shrink-0">
+      <div className="w-10 h-10 rounded-full overflow-hidden bg-white ring-1 ring-slate-200 shadow-sm">
+        <img
+          src={AI_AVATAR}
+          alt={AI_NAME_AR}
+          draggable={false}
+          className="w-full h-full object-cover select-none"
+        />
+      </div>
+      <span
+        className={`absolute -bottom-0.5 ${isArabic ? '-left-0.5' : '-right-0.5'} w-3 h-3 rounded-full ring-2 ring-white ${
+          connected ? 'bg-emerald-500' : 'bg-slate-300'
+        }`}
+      />
     </div>
+
     <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-1.5">
-        <span className="text-[13px] font-bold text-slate-800">{isArabic ? 'المستشار الذكي' : 'Copilot'}</span>
-        <Badge size="xs" color="orange" variant="light">AI</Badge>
+      <div className="text-[12px] font-bold text-slate-900 leading-tight">
+        {isArabic ? AI_GREETING_AR : AI_GREETING_EN}
       </div>
-      <div className="flex items-center gap-1 text-[10px] text-slate-500">
-        <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-        {connected ? (isArabic ? 'متصل' : 'Online') : isArabic ? 'غير متصل' : 'Offline'}
+      <div className="text-[10.5px] text-slate-400 leading-tight">
+        {connected ? (isArabic ? 'جاهز للإجابة' : 'Ready') : isArabic ? 'غير متصل' : 'Offline'}
       </div>
     </div>
+
     {rate ? (
-      <Badge size="sm" color="orange" variant="light" className="font-mono">
-        1$ = {Number(rate).toLocaleString('en-US')}
-      </Badge>
+      <Tooltip label={isArabic ? 'السعر المعتمد في النظام' : 'Adopted rate'} withArrow>
+        <div className="hidden sm:flex items-baseline gap-1 shrink-0 px-2.5 h-[26px] rounded-lg bg-[#FFF3E8] border border-orange-100">
+          <span className="text-[9.5px] font-bold text-[#C2410C]">USD</span>
+          <span dir="ltr" className="font-mono tabular-nums lining-nums text-[12px] font-extrabold text-[#DD4F05]">
+            {Number(rate).toLocaleString('en-US')}
+          </span>
+        </div>
+      </Tooltip>
     ) : null}
-    <Tooltip label={isArabic ? 'السجل' : 'History'}>
-      <ActionIcon variant="subtle" color="gray" onClick={onHistory}>
-        <IconHistory size={16} />
-      </ActionIcon>
-    </Tooltip>
-    <Tooltip label={isArabic ? 'محادثة جديدة' : 'New'}>
-      <ActionIcon variant="light" color="orange" onClick={onNew}>
-        <IconPlus size={16} />
-      </ActionIcon>
-    </Tooltip>
-    <Tooltip label={mode === 'fullscreen' ? (isArabic ? 'تصغير' : 'Exit full') : isArabic ? 'ملء الشاشة' : 'Full screen'}>
-      <ActionIcon
-        variant="subtle"
-        color="gray"
-        onClick={() =>
-          onMode(mode === 'compact' ? 'expanded' : mode === 'expanded' ? 'fullscreen' : 'compact')
-        }
+
+    <div className="flex items-center gap-0.5 shrink-0 ps-1 border-s border-slate-200">
+      <Tooltip label={isArabic ? 'محادثة جديدة' : 'New chat'} withArrow>
+        <ActionIcon variant="subtle" color="orange" radius="md" onClick={onNew}>
+          <IconPlus size={16} stroke={2.2} />
+        </ActionIcon>
+      </Tooltip>
+      <Tooltip label={isArabic ? 'السجل' : 'History'} withArrow>
+        <ActionIcon variant="subtle" color="gray" radius="md" onClick={onHistory}>
+          <IconHistory size={16} />
+        </ActionIcon>
+      </Tooltip>
+      <Tooltip
+        label={mode === 'fullscreen' ? (isArabic ? 'تصغير' : 'Exit full') : isArabic ? 'تكبير' : 'Expand'}
+        withArrow
       >
-        {mode === 'compact' ? <IconArrowsMaximize size={15} /> : <IconArrowsMinimize size={15} />}
-      </ActionIcon>
-    </Tooltip>
-    <ActionIcon variant="subtle" color="gray" onClick={onClose}>
-      <IconChevronDown size={16} />
-    </ActionIcon>
+        <ActionIcon
+          variant="subtle"
+          color="gray"
+          radius="md"
+          onClick={() => onMode(mode === 'compact' ? 'expanded' : mode === 'expanded' ? 'fullscreen' : 'compact')}
+        >
+          {mode === 'compact' ? <IconArrowsMaximize size={15} /> : <IconArrowsMinimize size={15} />}
+        </ActionIcon>
+      </Tooltip>
+      <Tooltip label={isArabic ? 'إغلاق' : 'Close'} withArrow>
+        <ActionIcon variant="subtle" color="gray" radius="md" onClick={onClose}>
+          <IconChevronDown size={17} />
+        </ActionIcon>
+      </Tooltip>
+    </div>
   </div>
 );

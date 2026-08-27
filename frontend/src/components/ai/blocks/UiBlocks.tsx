@@ -8,6 +8,7 @@ import { DisambiguationBlock } from './DisambiguationBlock';
 import { JournalCard } from './JournalCard';
 import { GeneratedImageBlock } from './GeneratedImageBlock';
 import { PdfFileBlock } from './PdfFileBlock';
+import { SourcesBlock } from './SourcesBlock';
 import { EmailConfirmBlock } from './EmailConfirmBlock';
 import { EntityCardBlock } from './EntityCardBlock';
 
@@ -38,6 +39,8 @@ export const UiBlocks: React.FC<{ blocks?: any[]; onPrompt?: (text: string) => v
             return <GeneratedImageBlock key={i} payload={block.payload} />;
           case 'pdf_file':
             return <PdfFileBlock key={i} payload={block.payload} />;
+          case 'sources':
+            return <SourcesBlock key={i} payload={block.payload} />;
           case 'email_confirm':
             return <EmailConfirmBlock key={i} payload={block.payload} onPrompt={onPrompt} />;
           case 'journal_card':

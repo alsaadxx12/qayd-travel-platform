@@ -25,6 +25,13 @@ import { OperationsTools } from './tools/operations.tools';
 import { AnalyticsTools } from './tools/analytics.tools';
 import { MetaTools } from './tools/meta.tools';
 import { StatementTools } from './tools/statement.tools';
+import { ReferenceTools } from './tools/reference.tools';
+import { DataTools } from './tools/data.tools';
+import { MemoryTools } from './tools/memory.tools';
+import { BriefTools } from './tools/brief.tools';
+import { DailyBriefService } from './core/daily-brief.service';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { SchemaMapService } from './core/schema-map.service';
 import { AiBillingService } from './core/ai-billing.service';
 
 @Module({
@@ -36,6 +43,7 @@ import { AiBillingService } from './core/ai-billing.service';
     CashboxesBanksModule,
     PdfModule,
     EmailModule,
+    NotificationsModule,
   ],
   controllers: [AIAssistantController],
   providers: [
@@ -58,6 +66,12 @@ import { AiBillingService } from './core/ai-billing.service';
     AnalyticsTools,
     MetaTools,
     StatementTools,
+    ReferenceTools,
+    DataTools,
+    MemoryTools,
+    BriefTools,
+    DailyBriefService,
+    SchemaMapService,
   ],
   exports: [AIAssistantService],
 })

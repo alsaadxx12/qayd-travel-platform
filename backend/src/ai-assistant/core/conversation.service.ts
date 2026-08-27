@@ -95,6 +95,34 @@ export class ConversationService {
     return message;
   }
 
+  /**
+   * A one-line memory of what this user has been working on lately, injected into
+   * the prompt so a brand-new chat does not start as a blank slate.
+   */
+  async recentTopics(companyId: string, userId: string, take = 5): Promise<string> {
+    const rows = await this.prisma.aiConversation.findMany({
+      where: { companyId, userId, isDeleted: false, title: { not: 'محادثة جديدة' } },
+      orderBy: { lastMessageAt: 'desc' },
+      take,
+      select: { title: true, lastMessageAt: true },
+    });
+    if (!rows.length) return '';
+    const list = rows
+      .map((r) => {
+        const when = r.lastMessageAt ? new Date(r.lastMessageAt).toLocaleDateString('en-GB') : '';
+        return `- ${r.title}${when ? ` (${when})` : ''}`;
+      })
+      .join('\n');
+    return `مواضيع حچينا بيها مؤخراً مع نفس المستخدم (للسياق فقط — لا تفترض أرقاماً منها، واستخدم recallConversations إذا احتجت التفاصيل):\n${list}`;
+  }
+
+  /** How many questions the user has asked in this conversation so far. */
+  async countUserMessages(conversationId: string): Promise<number> {
+    return this.prisma.aiMessage.count({
+      where: { conversationId, role: 'user' },
+    });
+  }
+
   async setTitleIfDefault(conversationId: string, firstUserText: string) {
     const conv = await this.prisma.aiConversation.findUnique({ where: { id: conversationId } });
     if (!conv || (conv.title && conv.title !== 'محادثة جديدة')) return;

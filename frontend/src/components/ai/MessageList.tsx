@@ -36,7 +36,7 @@ export const MessageList: React.FC<Props> = ({
   return (
     <div
       ref={boxRef}
-      className="flex-1 overflow-y-auto px-3 py-3 space-y-3"
+      className="copilot-scroll copilot-canvas flex-1 overflow-y-auto flex flex-col px-3 py-3.5 space-y-3.5"
       onScroll={() => {
         const el = boxRef.current;
         if (!el) return;
@@ -45,6 +45,9 @@ export const MessageList: React.FC<Props> = ({
       }}
     >
       {messages.length <= 1 && prompts?.length ? <QuickPrompts prompts={prompts} onPick={onPrompt} /> : null}
+      {/* Suggestions stay pinned at the top; the spacer below pushes the conversation
+          itself down against the composer so a short chat has no empty gap. */}
+      <div className="flex-1 min-h-0" aria-hidden="true" />
       {messages.map((m, i) => (
         <MessageBubble
           key={m.id || i}
@@ -57,7 +60,12 @@ export const MessageList: React.FC<Props> = ({
           onFeedback={m.id ? (v) => onFeedback(i, v) : undefined}
         />
       ))}
-      {status && <div className="text-[11px] text-slate-400 px-1">{status}</div>}
+      {status && messages[messages.length - 1]?.content && (
+        <div className="flex items-center gap-1.5 px-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#F45A0A] animate-pulse" />
+          <span className="text-[11px] text-slate-400">{status}</span>
+        </div>
+      )}
       <div ref={endRef} />
     </div>
   );

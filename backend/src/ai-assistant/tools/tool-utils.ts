@@ -23,6 +23,12 @@ export function looseMatch(haystack: string | null | undefined, needle: string):
   const h = normalizeArabic(haystack);
   const n = normalizeArabic(needle);
   if (!n) return false;
+  // A short needle must match a WHOLE WORD, never a bare substring. Otherwise a
+  // 3-letter query like "انت" matches «الريحانتان سماوة» and «مصاريف انترنيت»,
+  // which is how the search used to return nonsense for "من انت".
+  if (n.length < 4) {
+    return h.split(' ').some((w) => w === n);
+  }
   if (h.includes(n) || n.includes(h)) return true;
   // Every word in the query must appear somewhere, so "علي السعدي" matches "علي حسن السعدي".
   const words = n.split(' ').filter((w) => w.length > 1);

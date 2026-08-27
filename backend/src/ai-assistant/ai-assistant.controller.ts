@@ -9,7 +9,11 @@ import {
   Res,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AIAssistantService } from './ai-assistant.service';
@@ -250,5 +254,27 @@ export class AIAssistantController {
   @ApiOperation({ summary: 'تقييم إجابة المستشار' })
   async feedback(@Param('id') id: string, @Body() dto: MessageFeedbackDto, @Request() req: any) {
     return this.conversations.setFeedback(id, req.user.companyId, req.user.userId, dto.feedback);
+  }
+
+  @Post('transcribe')
+  @ApiOperation({ summary: 'تحويل الصوت إلى نص (Whisper + GPT)' })
+  @UseInterceptors(FileInterceptor('audio', { limits: { fileSize: 25 * 1024 * 1024 } }))
+  async transcribe(@UploadedFile() file: any, @Request() req: any) {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('لم يتم إرسال ملف صوتي');
+    }
+    try {
+      // Fetch real entity names for better recognition accuracy
+      let knownNames: string[] = [];
+      try {
+        const entities = await this.knowledge.getEntityNames(req.user.companyId);
+        knownNames = entities;
+      } catch (_) { /* non-critical */ }
+
+      const text = await this.llm.transcribeAudio(file.buffer, file.mimetype, knownNames);
+      return { text };
+    } catch (err: any) {
+      throw new BadRequestException(err.message || 'فشل تحويل الصوت');
+    }
   }
 }

@@ -77,9 +77,21 @@ export class EntityTools implements AiToolProvider {
   }
 
   private async searchEntity(args: any, ctx: AiRequestContext): Promise<AiToolResult> {
-    const query = (args.query || args.name || args.q || '').trim();
+    let query = (args.query || args.name || args.q || '').trim();
     if (!query) {
-      return { ok: false, data: { found: false, message: 'لم يتم تحديد نص للبحث' } };
+      return { ok: false, data: { found: false, message: '\u0644\u0645 \u064a\u062a\u0645 \u062a\u062d\u062f\u064a\u062f \u0646\u0635 \u0644\u0644\u0628\u062d\u062b' } };
+    }
+
+    // Strip common financial action prefixes that are NOT part of entity names
+    // Multi-pass: handles stacked prefixes like "صدّر كشف سلف علي السعدي"
+    const originalQuery = query;
+    const PREFIX_RE = /^(\u0635\u062f\u0651?\u0631|\u062d\u0645\u0651?\u0644|\u0646\u0632\u0651?\u0644|\u0623\u0631\u0633\u0644|\u0627\u0631\u0633\u0644|\u062a\u0635\u062f\u064a\u0631|\u062a\u062d\u0645\u064a\u0644|\u062a\u0646\u0632\u064a\u0644|\u0633\u0644\u0641|\u0631\u0635\u064a\u062f|\u0643\u0634\u0641|\u062d\u0633\u0627\u0628|\u0630\u0645\u0629|\u0630\u0645\u0645|\u0643\u0634\u0641 \u062d\u0633\u0627\u0628)\s+/i;
+    const PREP_RE = /^(\u0644\u062d\u0633\u0627\u0628|\u0639\u0646|\u0625\u0644\u0649|\u0627\u0644\u0649|\u0644|\u0639\u0644\u0649|\u0625\u0644\u0649|\u0625\u0644)\s+/i;
+    for (let i = 0; i < 5 && (PREFIX_RE.test(query) || PREP_RE.test(query)); i++) {
+      query = query.replace(PREFIX_RE, '').replace(PREP_RE, '').trim();
+    }
+    if (!query) {
+      return { ok: false, data: { found: false, message: '\u0644\u0645 \u064a\u062a\u0645 \u062a\u062d\u062f\u064a\u062f \u0646\u0635 \u0644\u0644\u0628\u062d\u062b' } };
     }
 
     const kinds: EntityKind[] = Array.isArray(args.kinds) && args.kinds.length
@@ -99,11 +111,36 @@ export class EntityTools implements AiToolProvider {
       kinds.includes('passenger') ? this.findPassengers(ctx, contains, hits) : null,
     ]);
 
+    // If prefixes were stripped, also search with the original query so that
+    // accounts whose names contain stripped prefixes (e.g. "سلف علي السعدي")
+    // are still found.
+    if (originalQuery !== query) {
+      const origContains = { contains: originalQuery, mode: 'insensitive' as const };
+      const existingIds = new Set(hits.map((h) => `${h.kind}:${h.id}`));
+      const origHits: EntityHit[] = [];
+      await Promise.all([
+        kinds.includes('customer') ? this.findCustomers(ctx, origContains, origHits) : null,
+        kinds.includes('supplier') ? this.findSuppliers(ctx, origContains, origHits) : null,
+        kinds.includes('account') ? this.findAccounts(ctx, origContains, origHits) : null,
+        kinds.includes('airline') ? this.findAirlines(ctx, origContains, origHits) : null,
+        kinds.includes('employee') ? this.findEmployees(ctx, origContains, origHits) : null,
+        kinds.includes('branch') ? this.findBranches(ctx, origContains, origHits) : null,
+        kinds.includes('passenger') ? this.findPassengers(ctx, origContains, origHits) : null,
+      ]);
+      for (const h of origHits) {
+        if (!existingIds.has(`${h.kind}:${h.id}`)) {
+          hits.push(h);
+        }
+      }
+    }
+
     // Prisma `contains` misses Arabic spelling variants, so widen with a normalised pass.
+    // Score against both the stripped and original query, using the higher score,
+    // so hits like "سلف علي السعدي" are not dropped when scored against stripped "علي السعدي".
     const scored = hits
       .map((h) => ({
         hit: h,
-        score: this.score(h, query),
+        score: Math.max(this.score(h, query), originalQuery !== query ? this.score(h, originalQuery) : 0),
       }))
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score);
@@ -122,15 +159,23 @@ export class EntityTools implements AiToolProvider {
     if (!deduped.length) {
       return {
         ok: false,
-        data: { found: false, query, message: `لم أجد أي كيان مطابق لـ "${query}"` },
-        note: 'لا نتائج',
+        data: { found: false, query, message: `\u0644\u0645 \u0623\u062c\u062f \u0623\u064a \u0643\u064a\u0627\u0646 \u0645\u0637\u0627\u0628\u0642 \u0644\u0640 "${query}"` },
+        note: '\u0644\u0627 \u0646\u062a\u0627\u0626\u062c',
       };
     }
 
-    const capped = capForModel(deduped, 12);
+    // Re-score deduped hits for auto-selection logic
+    const dedupedScored = deduped.map((h) => ({ hit: h, score: Math.max(this.score(h, query), originalQuery !== query ? this.score(h, originalQuery) : 0) }));
+    dedupedScored.sort((a, b) => b.score - a.score);
 
-    if (deduped.length === 1) {
-      const match = deduped[0];
+    const bestScore = dedupedScored[0]?.score || 0;
+    const secondScore = dedupedScored[1]?.score || 0;
+
+    // Auto-select if: only 1 result, OR best match is exact (100), OR best is clearly ahead (20+ gap)
+    const autoSelect = deduped.length === 1 || bestScore === 100 || (bestScore - secondScore >= 20);
+
+    if (autoSelect) {
+      const match = dedupedScored[0].hit;
       return {
         ok: true,
         data: { found: true, exact: true, match },
@@ -147,10 +192,12 @@ export class EntityTools implements AiToolProvider {
             },
           },
         ],
-        suggestions: ['كشف PDF', 'أرسل الكشف بالإيميل', 'رصيده', 'كشف الحساب'],
-        note: `تم العثور على «${match.label}»`,
+        suggestions: ['\u0643\u0634\u0641 PDF', '\u0623\u0631\u0633\u0644 \u0627\u0644\u0643\u0634\u0641 \u0628\u0627\u0644\u0625\u064a\u0645\u064a\u0644', '\u0631\u0635\u064a\u062f\u0647', '\u0643\u0634\u0641 \u0627\u0644\u062d\u0633\u0627\u0628'],
+        note: `\u062a\u0645 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u00ab${match.label}\u00bb`,
       };
     }
+
+    const capped = capForModel(deduped, 12);
 
     return {
       ok: true,
@@ -165,7 +212,7 @@ export class EntityTools implements AiToolProvider {
           accountId: h.accountId,
         })),
         instruction:
-          'لا تبحث من جديد. اطلب من المستخدم اختيار صف واحد فقط، ثم اسأله ماذا يريد بخصوص هذا الاختيار.',
+          '\u0644\u0627 \u062a\u0628\u062d\u062b \u0645\u0646 \u062c\u062f\u064a\u062f. \u0627\u0637\u0644\u0628 \u0645\u0646 \u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645 \u0627\u062e\u062a\u064a\u0627\u0631 \u0635\u0641 \u0648\u0627\u062d\u062f \u0641\u0642\u0637\u060c \u062b\u0645 \u0646\u0641\u0651\u0630 \u0637\u0644\u0628\u0647 \u0627\u0644\u0623\u0635\u0644\u064a \u0645\u0628\u0627\u0634\u0631\u0629 \u0628\u062f\u0648\u0646 \u0633\u0624\u0627\u0644.',
       },
       ui: [
         {
@@ -183,8 +230,8 @@ export class EntityTools implements AiToolProvider {
           },
         },
       ],
-      suggestions: ['كشف PDF', 'أرسل الكشف بالإيميل'],
-      note: `${deduped.length} نتيجة مطابقة`,
+      suggestions: ['\u0643\u0634\u0641 PDF', '\u0623\u0631\u0633\u0644 \u0627\u0644\u0643\u0634\u0641 \u0628\u0627\u0644\u0625\u064a\u0645\u064a\u0644'],
+      note: `${deduped.length} \u0646\u062a\u064a\u062c\u0629 \u0645\u0637\u0627\u0628\u0642\u0629`,
     };
   }
 

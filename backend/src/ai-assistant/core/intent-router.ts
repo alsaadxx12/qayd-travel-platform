@@ -88,20 +88,27 @@ export function extractEntityQuery(question: string): string | null {
   if (parseEntityPick(question || '')) return null;
   if (parseEntityFollowUp(question || '')) return null;
   if (looksLikeLiveWorldQuestion(q)) return null;
-  const patterns = [
-    /من\s+هو+ه?\s+(.+)$/,
-    /تحقق\s+من\s+(?:هوه?\s+)?(?:سلف\s+)?(.+)$/,
-    /سلف\s+(.+)$/,
-    /(?:رصيد|كشف)\s+(?:حساب\s+)?(.+)$/,
-    /(?:شركة|العميل|عميل|المورد|مورد)\s+(.+)$/,
+  const patterns: { re: RegExp; keepPrefix?: string }[] = [
+    { re: /من\s+هو+ه?\s+(.+)$/ },
+    { re: /تحقق\s+من\s+(?:هوه?\s+)?(?:سلف\s+)?(.+)$/ },
+    { re: /سلف\s+(.+)$/, keepPrefix: 'سلف' },
+    { re: /(?:رصيد|كشف)\s+(?:حساب\s+)?(.+)$/ },
+    { re: /(?:شركة|العميل|عميل|المورد|مورد)\s+(.+)$/ },
   ];
   const generic = /^(الحساب|هذا|هذه|اختيارك|المقصود|العميل|المورد|pdf|email|الإيميل|الايميل|بالإيميل|بالايميل)$/i;
   for (const p of patterns) {
-    const m = q.match(p);
+    const m = q.match(p.re);
     if (!m) continue;
     let name = m[1].replace(/[؟?!.،,]+$/g, '').trim();
-    name = name.replace(/^(سلف|حساب|هوه?)\s+/, '');
+    // Only strip prefixes that are purely action verbs, NOT "سلف" which can be
+    // part of an account name like "سلف علي السعدي".
+    name = name.replace(/^(حساب|هوه?)\s+/, '');
     if (generic.test(name)) continue;
+    // If the pattern matched "سلف X", preserve "سلف X" as the query so
+    // searchEntity can find accounts named "سلف علي السعدي".
+    if (p.keepPrefix && name.length >= 2) {
+      return `${p.keepPrefix} ${name}`;
+    }
     if (name.length >= 3 && name.split(/\s+/).length <= 6) return name;
   }
   return null;
@@ -138,6 +145,19 @@ export function looksLikeImageGeneration(question: string): boolean {
   }
   return /(صمم|تصميم|ولّد|ولد\s+صور|ارسم|شعار|بوستر|لوجو|generate\s+(an?\s+)?image|create\s+(an?\s+)?image|dall-?e|gpt-image)/i.test(
     q,
+  );
+}
+
+/**
+ * Detects when the model hedges by claiming it cannot access live / real-time
+ * data instead of using the available search tool.  The orchestrator uses this
+ * to trigger a `searchCurrentInfo` fallback automatically.
+ */
+export function looksLikeNoLiveAccess(text: string): boolean {
+  const t = (text || '').trim();
+  if (!t) return false;
+  return /(لا (أملك|أستطيع|يمكنني) (الوصول|الاتصال|تصفح).*(إنترنت|انترنت|الويب|مباشر|حي|فوري|لحظي|مواقع)|ليس لدي.*(اتصال|وصول).*(إنترنت|انترنت|الشبكة|الويب)|لا أتمكن من.*(تصفح|البحث المباشر|الوصول المباشر)|don'?t have (live|real[- ]?time|internet|web) access|cannot (browse|access) (the )?(internet|web)|can'?t (browse|access) (the )?(internet|web)|no (live|real[- ]?time) (access|connection)|I (lack|don'?t have) (access to|a connection)|unable to (browse|access (the )?(internet|web|live)))/i.test(
+    t,
   );
 }
 
@@ -264,6 +284,11 @@ export function parseLeakedToolCall(text: string): { name: string; arguments: Re
   }
 }
 
+/** Rotates canned lines so staff do not read the same greeting twenty times a day. */
+function pick(lines: string[]): string {
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
 export function instantChatReply(question: string, locale: 'ar' | 'en' = 'ar'): string | null {
   const q = (question || '').replace(/[\s!؟?.،,~]+$/g, '').trim();
   if (!q) return null;
@@ -282,16 +307,42 @@ export function instantChatReply(question: string, locale: 'ar' | 'en' = 'ar'): 
   if (q.length > 48) return null;
 
   if (/^(مرحبا|مرحباً|مرحباا+|اهلا|أهلا|أهلاً|اهلاً|السلام عليكم|سلام عليكم|السلام|سلام|hi+|hello|hey|yo|صباح الخير|مساء الخير)$/i.test(q)) {
-    return ar ? 'مرحباً، تفضل. كيف أساعدك؟' : 'Hello — how can I help?';
+    return ar
+      ? pick([
+          'هلا بيك! شنو نسوي اليوم؟',
+          'هلا والله، تفضّل آمر.',
+          'أهلين، آني حاضر — شنو الشغلة؟',
+          'هلا بالغالي، اطلب وآني وياك.',
+        ])
+      : 'Hello — how can I help?';
   }
   if (/^(كيفك|شلونك|شلونكم|كيف حالك|how are you)$/i.test(q)) {
-    return ar ? 'بخير، شكراً. ماذا تريد أن نراجع في النظام؟' : 'Doing well. What should we look up?';
+    return ar
+      ? pick([
+          'بخير والله، وإنت شلونك؟ شنو نراجع؟',
+          'زين الحمدلله، ما عندي شغل غيرك — آمر.',
+          'تمام، جالس أنتظرك من الصبح. شنو تريد؟',
+        ])
+      : 'Doing well. What should we look up?';
   }
   if (/^(شكرا|شكرًا|شكراً|تسلم|مشكور|thanks|thank you|thx)$/i.test(q)) {
-    return ar ? 'العفو. إذا احتجت شيئاً آخر أنا هنا.' : 'You are welcome.';
+    return ar
+      ? pick([
+          'العفو، هذا واجبي.',
+          'تدلّل، أي وقت تريدني.',
+          'ولا يهمّك، آني موجود.',
+          'صحّة، إذا احتجت شي آني هنا.',
+        ])
+      : 'You are welcome.';
   }
   if (/^(تمام|زين|حسنا|حسناً|حسنًا|ok+|okay|done)$/i.test(q)) {
-    return ar ? 'حاضر. أرسل سؤالك متى شئت.' : 'Ready when you are.';
+    return ar
+      ? pick([
+          'حاضر، آني موجود.',
+          'تمام، متى ما تريد.',
+          'على راحتك، آني ما رايح مكان.',
+        ])
+      : 'Ready when you are.';
   }
   return null;
 }
@@ -391,23 +442,37 @@ export function stripModelScratch(text: string): string {
 }
 
 export function narrationForTool(toolName: string): string {
+  // Same friendly register as the rest of the assistant — but every line still says
+  // plainly that the figures come from the records, never from a guess.
   if (toolName === 'getCashboxBalances') {
-    return 'هذه أرصدة الصناديق والبنوك الحالية من سجلات النظام.';
+    return pick([
+      'هاي أرصدة الصناديق والبنوك، مأخوذة من سجلات النظام مباشرة.',
+      'تفضّل، الصناديق والبنوك كلها قدامك من السجلات.',
+    ]);
   }
   if (toolName === 'searchEntity') {
-    return 'هذه نتيجة البحث في سجلات النظام.';
+    return pick(['هاي اللي طلع بالبحث.', 'لكيت هاي النتائج بسجلات النظام.']);
   }
   if (toolName === 'findUnbalancedJournalEntries') {
-    return 'هذه القيود غير المتوازنة حسب سجلات النظام.';
+    return pick([
+      'هاي القيود غير المتوازنة حسب السجلات — تستاهل نظرة.',
+      'طلعت هاي القيود مو متوازنة. راجعها زين.',
+    ]);
   }
   if (toolName === 'searchVouchers') {
-    return 'هذه السندات المطابقة من سجلات النظام.';
+    return pick(['هاي السندات المطابقة من السجلات.', 'تفضّل، هاي السندات اللي تنطبق عليها.']);
   }
   if (toolName === 'exportAccountStatementPdf') {
-    return 'تم تجهيز كشف PDF بنفس قالب الطباعة المعتمد.';
+    return pick([
+      'جهّزت الكشف PDF بنفس قالب الطباعة المعتمد — تنزّله من البطاقة فوك.',
+      'الكشف جاهز بنفس القالب المعتمد، تفضّل نزّله.',
+    ]);
   }
   if (toolName === 'emailAccountStatement') {
-    return 'تم تجهيز إرسال كشف الحساب عبر خدمة الإيميل.';
+    return 'جهّزت إرسال كشف الحساب عبر خدمة الإيميل.';
   }
-  return 'تم جلب البيانات. راجع البطاقات والجداول أعلاه.';
+  return pick([
+    'جبت البيانات — شوف البطاقات والجداول فوك.',
+    'تفضّل، البيانات كلها بالجداول أعلاه.',
+  ]);
 }

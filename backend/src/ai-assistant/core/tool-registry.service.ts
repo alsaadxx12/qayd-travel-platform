@@ -6,6 +6,10 @@ import { OperationsTools } from '../tools/operations.tools';
 import { AnalyticsTools } from '../tools/analytics.tools';
 import { MetaTools } from '../tools/meta.tools';
 import { StatementTools } from '../tools/statement.tools';
+import { ReferenceTools } from '../tools/reference.tools';
+import { DataTools } from '../tools/data.tools';
+import { MemoryTools } from '../tools/memory.tools';
+import { BriefTools } from '../tools/brief.tools';
 
 @Injectable()
 export class ToolRegistryService implements OnModuleInit {
@@ -19,6 +23,10 @@ export class ToolRegistryService implements OnModuleInit {
     private readonly analyticsTools: AnalyticsTools,
     private readonly metaTools: MetaTools,
     private readonly statementTools: StatementTools,
+    private readonly referenceTools: ReferenceTools,
+    private readonly dataTools: DataTools,
+    private readonly memoryTools: MemoryTools,
+    private readonly briefTools: BriefTools,
   ) {}
 
   onModuleInit() {
@@ -29,6 +37,10 @@ export class ToolRegistryService implements OnModuleInit {
       this.analyticsTools,
       this.metaTools,
       this.statementTools,
+      this.referenceTools,
+      this.dataTools,
+      this.memoryTools,
+      this.briefTools,
     ];
 
     for (const provider of providers) {

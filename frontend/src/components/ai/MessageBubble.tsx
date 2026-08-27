@@ -10,7 +10,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { UiBlocks } from './blocks/UiBlocks';
 import { DataTableBlock } from './blocks/DataTableBlock';
-import { ToolTrace, SkeletonBlock } from './blocks/ToolTrace';
+import { SkeletonBlock } from './blocks/ToolTrace';
+import { AI_NAME_AR, AI_NAME_EN } from './persona';
 import { extractMarkdownTables, looksNumeric } from './extractMarkdownTables';
 
 export interface CopilotChatMessage {
@@ -71,6 +72,22 @@ const markdownComponents = {
   h1: ({ children }: any) => <h3 className="text-[14px] font-bold text-slate-900 mt-2 mb-1">{children}</h3>,
   h2: ({ children }: any) => <h3 className="text-[14px] font-bold text-slate-900 mt-2 mb-1">{children}</h3>,
   h3: ({ children }: any) => <h3 className="text-[13px] font-bold text-slate-800 mt-2 mb-1">{children}</h3>,
+  a: ({ href, children }: any) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[#C2410C] font-semibold underline decoration-orange-200 underline-offset-2 hover:decoration-[#F45A0A] break-all"
+    >
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }: any) => (
+    <blockquote className="my-2 ps-3 border-s-[3px] border-orange-200 bg-[#FFF7F0] rounded-e-lg py-1.5 pe-2 text-slate-700">
+      {children}
+    </blockquote>
+  ),
+  hr: () => <hr className="my-3 border-slate-200" />,
   code: ({ children }: any) => (
     <code className="font-mono text-[12px] bg-white/80 px-1 py-0.5 rounded border border-slate-200">{children}</code>
   ),
@@ -107,32 +124,26 @@ export const MessageBubble: React.FC<Props> = ({
   const text = isUser ? displayContent : parsed?.text || '';
 
   return (
-    <div className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
+    <div className={`copilot-msg-in flex ${isUser ? 'justify-start' : 'justify-end'}`}>
       <div className={isUser ? 'max-w-[85%]' : 'w-full max-w-full'}>
         {message.imageBase64?.startsWith('data:image/') && (
           <img src={message.imageBase64} alt="" className="rounded-lg mb-1.5 max-h-36 object-cover" />
         )}
 
         {message.loading && !message.content && !hasBlocks && (
-          <div className="bg-slate-100 rounded-2xl rounded-bl-md px-3 py-2">
-            <SkeletonBlock />
+          <div className="inline-flex bg-white border border-slate-200 rounded-2xl rounded-bl-md px-3 py-2 shadow-sm">
+            <SkeletonBlock isArabic={isArabic} />
           </div>
         )}
 
-        {message.tools?.length ? (
-          <div className="mb-1.5">
-            <ToolTrace tools={message.tools} />
-          </div>
-        ) : null}
-
         {isUser ? (
-          <div className="rounded-2xl rounded-br-md px-3 py-2 text-[13px] leading-relaxed bg-[#F45A0A] text-white whitespace-pre-wrap">
+          <div className="rounded-2xl rounded-br-md px-3.5 py-2.5 text-[13px] leading-relaxed bg-gradient-to-br from-[#F45A0A] to-[#DD4F05] text-white whitespace-pre-wrap shadow-sm shadow-orange-500/20">
             {displayContent}
           </div>
         ) : (
           <div className="space-y-2">
             {text ? (
-              <div className="rounded-2xl rounded-bl-md px-3.5 py-2.5 bg-slate-100 text-slate-800">
+              <div className="rounded-2xl rounded-bl-md px-3.5 py-2.5 bg-white border border-slate-200/90 text-slate-800 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                   {text}
                 </ReactMarkdown>
@@ -157,12 +168,12 @@ export const MessageBubble: React.FC<Props> = ({
         )}
 
         {!isUser && !message.loading && (message.content || hasBlocks) && (
-          <div className="flex items-center gap-1 mt-1 text-slate-400">
-            <button type="button" onClick={onCopy} className="p-1 hover:text-[#F45A0A]" title="نسخ">
+          <div className="flex items-center gap-0.5 mt-1.5 text-slate-300">
+            <button type="button" onClick={onCopy} className="p-1 rounded-md hover:text-[#F45A0A] hover:bg-orange-50 transition-colors" title="نسخ">
               {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
             </button>
             {onRegenerate && (
-              <button type="button" onClick={onRegenerate} className="p-1 hover:text-[#F45A0A]" title="إعادة التوليد">
+              <button type="button" onClick={onRegenerate} className="p-1 rounded-md hover:text-[#F45A0A] hover:bg-orange-50 transition-colors" title="إعادة التوليد">
                 <IconRefresh size={13} />
               </button>
             )}
@@ -184,17 +195,17 @@ export const MessageBubble: React.FC<Props> = ({
                 </button>
               </>
             )}
-            <span className="text-[10px] ms-1">{isArabic ? 'المستشار الذكي' : 'Copilot'}</span>
+            <span className="text-[10px] ms-1.5 text-slate-400">{isArabic ? AI_NAME_AR : AI_NAME_EN}</span>
           </div>
         )}
         {!isUser && message.suggestions?.length ? (
-          <div className="flex flex-wrap gap-1 mt-1.5">
+          <div className="flex flex-wrap gap-1.5 mt-2">
             {message.suggestions.slice(0, 4).map((s) => (
               <button
                 key={s}
                 type="button"
                 onClick={() => onPrompt?.(s)}
-                className="text-[10px] px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-[#F45A0A] hover:text-[#F45A0A]"
+                className="h-[28px] px-3 rounded-xl bg-white border border-slate-200 text-[11px] font-semibold text-slate-600 hover:border-[#F45A0A] hover:text-[#C2410C] hover:bg-[#FFF7F0] transition-colors"
               >
                 {s}
               </button>
