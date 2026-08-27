@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
+import * as fs from 'fs';
 
 export interface PdfGenerateOptions {
   html: string;
@@ -55,6 +56,26 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   private launching: Promise<puppeteer.Browser> | null = null;
   private readonly logger = new Logger(PdfService.name);
 
+  private getExecutablePath(): string | undefined {
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+    if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+    const commonPaths = [
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/chromium',
+      '/snap/bin/chromium',
+    ];
+    for (const p of commonPaths) {
+      try {
+        if (fs.existsSync(p)) return p;
+      } catch {
+        /* ignore */
+      }
+    }
+    return undefined;
+  }
+
   private getPuppeteerArgs(): string[] {
     const args = [
       '--no-sandbox',
@@ -80,11 +101,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
-    // Warm up in the BACKGROUND. Chromium can take tens of seconds to launch — or
-    // stall outright when it was never downloaded — and Nest does not start
-    // listening until onModuleInit resolves. Awaiting it here would leave the whole
-    // API unreachable (every route answering 502 through a dev proxy) until the
-    // browser settles. PDF requests launch it on demand anyway.
     void this.getBrowser()
       .then(() => this.logger.log('Puppeteer browser launched successfully'))
       .catch((error: any) =>
@@ -119,8 +135,13 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     if (this.browser && this.browser.connected) return this.browser;
     // Concurrent requests share one launch instead of spawning several Chromiums.
     if (!this.launching) {
+      const execPath = this.getExecutablePath();
       this.launching = withDeadline(
-        puppeteer.launch({ headless: true, args: this.getPuppeteerArgs() }),
+        puppeteer.launch({
+          headless: true,
+          args: this.getPuppeteerArgs(),
+          ...(execPath ? { executablePath: execPath } : {}),
+        }),
         LAUNCH_TIMEOUT_MS,
         'browser.launch',
       )
@@ -130,6 +151,17 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
             if (this.browser === browser) this.browser = null;
           });
           return browser;
+        })
+        .catch((err: any) => {
+          const errMsg = err?.message || String(err);
+          if (errMsg.includes('Could not find Chrome') || errMsg.includes('browser')) {
+            this.logger.error(`Chromium binary not found on host: ${errMsg}`);
+            throw new HttpException(
+              'تعذر تشغيل محرك PDF: متصفح Chromium غير متوفر على الخادم. يرجى تثبيت المتصفح أو استخدام الطباعة المباشرة من المتصفح.',
+              HttpStatus.SERVICE_UNAVAILABLE,
+            );
+          }
+          throw err;
         })
         .finally(() => {
           this.launching = null;
