@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ReportsService } from '../../reports/reports.service';
 import { EmailService } from '../../email/email.service';
@@ -36,6 +36,8 @@ function isValidEmail(value?: string | null): value is string {
  */
 @Injectable()
 export class StatementTools implements AiToolProvider {
+  private readonly logger = new Logger(StatementTools.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly reports: ReportsService,
@@ -139,7 +141,10 @@ export class StatementTools implements AiToolProvider {
         note: `تم تجهيز كشف PDF لـ «${built.account.nameAr}» بنفس قالب الطباعة المعتمد.`,
       };
     } catch (err: any) {
-      const message = err?.message || 'تعذر توليد كشف PDF';
+      const errMsg = err?.message || '';
+      const message = errMsg.includes('Chrome') || errMsg.includes('Chromium') || errMsg.includes('browser')
+        ? 'محرك PDF السحابي غير متوفر حالياً على هذا الخادم. يرجى استخدام زر الطباعة المباشر من واجهة كشف الحساب.'
+        : err?.message || 'تعذر توليد كشف PDF';
       return {
         ok: false,
         data: { message },
@@ -237,10 +242,9 @@ export class StatementTools implements AiToolProvider {
       };
     }
 
-    // Generate first, and keep the artifact even if the send fails, so a Brevo
-    // outage still leaves the user with a downloadable statement instead of nothing.
-    let generated: Awaited<ReturnType<StatementPdfService['generate']>>;
-    let artifactId: string;
+    // Attempt PDF generation, but don't block the entire email send if Puppeteer is unavailable on the host.
+    let generated: Awaited<ReturnType<StatementPdfService['generate']>> | null = null;
+    let artifactId: string | null = null;
     try {
       generated = await this.statementPdf.generate(ctx.companyId, built.pdf);
       artifactId = this.artifacts.put({
@@ -250,12 +254,7 @@ export class StatementTools implements AiToolProvider {
         filename: generated.downloadName,
       });
     } catch (err: any) {
-      const message = err?.message || 'تعذر توليد ملف كشف الحساب PDF قبل الإرسال';
-      return {
-        ok: false,
-        data: { sent: false, message },
-        note: message,
-      };
+      this.logger.warn(`PDF generation bypassed during email send: ${err?.message || err}`);
     }
 
     try {
@@ -267,9 +266,27 @@ export class StatementTools implements AiToolProvider {
         currentBalance: round2(built.closingBalance),
         fromDate: built.period.startDate,
         toDate: built.period.endDate,
-        pdfBase64: generated.buffer.toString('base64'),
+        pdfBase64: generated ? generated.buffer.toString('base64') : undefined,
         customMessage: typeof args.customMessage === 'string' ? args.customMessage : undefined,
       });
+
+      const uiBlocks: AiUiBlock[] = [];
+      if (generated && artifactId) {
+        uiBlocks.push({
+          type: 'pdf_file',
+          payload: {
+            artifactId,
+            filename: generated.downloadName,
+            accountName: built.account.nameAr,
+            period: built.period.label,
+            sizeBytes: generated.buffer.length,
+            closingBalance: round2(built.closingBalance),
+            emailedTo: recipientEmail,
+          },
+        });
+      } else {
+        uiBlocks.push(this.kpiBlock(built));
+      }
 
       return {
         ok: true,
@@ -279,43 +296,35 @@ export class StatementTools implements AiToolProvider {
           recipientEmail,
           account: { id: built.account.id, name: built.account.nameAr },
         },
-        ui: [
-          {
-            type: 'pdf_file',
-            payload: {
-              artifactId,
-              filename: generated.downloadName,
-              accountName: built.account.nameAr,
-              period: built.period.label,
-              sizeBytes: generated.buffer.length,
-              closingBalance: round2(built.closingBalance),
-              emailedTo: recipientEmail,
-            },
-          },
-        ],
+        ui: uiBlocks,
         suggestions: ['كشف PDF', 'رصيده'],
         note: `تم إرسال كشف «${built.account.nameAr}» إلى ${recipientEmail} عبر خدمة إرسال الكشوفات.`,
       };
     } catch (err: any) {
       const message = err?.message || 'تعذر إرسال كشف الحساب';
+      const uiBlocks: AiUiBlock[] = [];
+      if (generated && artifactId) {
+        uiBlocks.push({
+          type: 'pdf_file',
+          payload: {
+            artifactId,
+            filename: generated.downloadName,
+            accountName: built.account.nameAr,
+            period: built.period.label,
+            sizeBytes: generated.buffer.length,
+            closingBalance: round2(built.closingBalance),
+          },
+        });
+      } else {
+        uiBlocks.push(this.kpiBlock(built));
+      }
+
       return {
         ok: false,
         data: { sent: false, message, artifactId, recipientEmail },
-        ui: [
-          {
-            type: 'pdf_file',
-            payload: {
-              artifactId,
-              filename: generated.downloadName,
-              accountName: built.account.nameAr,
-              period: built.period.label,
-              sizeBytes: generated.buffer.length,
-              closingBalance: round2(built.closingBalance),
-            },
-          },
-        ],
+        ui: uiBlocks,
         suggestions: ['أرسل الكشف بالإيميل', 'كشف PDF'],
-        note: `${message} — الكشف جاهز للتنزيل من البطاقة أعلاه، ويمكنك إعادة محاولة الإرسال.`,
+        note: `${message} — يمكنك إعادة محاولة الإرسال أو فتح الكشف من الواجهة.`,
       };
     }
   }
