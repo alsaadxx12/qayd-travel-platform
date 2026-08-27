@@ -1,12 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { IconBrain } from '@tabler/icons-react';
 import { CopilotPanel } from './CopilotPanel';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { AI_AVATAR, AI_NAME_AR } from './persona';
 
 export const CopilotRoot: React.FC = () => {
   const [opened, setOpened] = useState(false);
+  const [showBrain, setShowBrain] = useState(false);
   const { language } = useLanguageStore();
   const isArabic = language === 'ar';
+
+  useEffect(() => {
+    if (opened) return;
+    const interval = setInterval(() => {
+      setShowBrain((prev) => !prev);
+    }, 3800);
+    return () => clearInterval(interval);
+  }, [opened]);
 
   return (
     <>
@@ -16,32 +26,42 @@ export const CopilotRoot: React.FC = () => {
             isArabic ? 'left-6' : 'right-6'
           } group select-none`}
         >
-          {/* Soft subtle glow behind button */}
-          <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-[#F45A0A]/35 to-[#FB923C]/20 blur-md pointer-events-none group-hover:scale-110 transition-transform duration-300" />
+          {/* Subtle ambient warm glow behind button */}
+          <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-[#F45A0A]/30 to-[#FB923C]/20 blur-md pointer-events-none group-hover:scale-115 transition-transform duration-300" />
 
-          {/* Slim Precision Button with integrated rotating border */}
+          {/* Borderless button with smooth 3D flip card effect */}
           <button
             type="button"
             onClick={() => setOpened(true)}
-            className="relative w-14 h-14 rounded-full p-[2px] overflow-hidden shadow-md shadow-orange-500/20 hover:shadow-xl hover:shadow-orange-500/35 hover:scale-105 active:scale-95 transition-all duration-300 focus:outline-none focus-visible:ring-3 focus-visible:ring-orange-300 cursor-pointer flex items-center justify-center bg-white"
+            className="relative w-14 h-14 rounded-full shadow-lg shadow-orange-500/25 hover:shadow-2xl hover:shadow-orange-500/40 hover:scale-108 active:scale-95 transition-all duration-300 focus:outline-none cursor-pointer flex items-center justify-center [perspective:600px]"
             title={AI_NAME_AR}
             aria-label={AI_NAME_AR}
           >
-            {/* Seamless rotating gradient border with zero gap */}
-            <div className="absolute -inset-[100%] copilot-spin-gradient pointer-events-none" />
+            <div
+              className={`relative w-full h-full rounded-full transition-transform duration-700 [transform-style:preserve-3d] ${
+                showBrain ? '[transform:rotateY(180deg)]' : ''
+              }`}
+            >
+              {/* Front side: Einstein Avatar */}
+              <div className="absolute inset-0 w-full h-full rounded-full overflow-hidden bg-white [backface-visibility:hidden]">
+                <img
+                  src={AI_AVATAR}
+                  alt={AI_NAME_AR}
+                  draggable={false}
+                  className="w-full h-full object-cover select-none"
+                />
+              </div>
 
-            {/* Inner avatar container */}
-            <div className="relative w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
-              <img
-                src={AI_AVATAR}
-                alt={AI_NAME_AR}
-                draggable={false}
-                className="w-full h-full object-cover rounded-full select-none group-hover:scale-110 transition-transform duration-300"
-              />
+              {/* Back side: Glowing Brain Icon in Brand Orange Theme */}
+              <div className="absolute inset-0 w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-[#F45A0A] via-[#EA580C] to-[#DD4F05] flex items-center justify-center shadow-inner [backface-visibility:hidden] [transform:rotateY(180deg)]">
+                <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-xs flex items-center justify-center">
+                  <IconBrain size={20} className="text-white drop-shadow-xs animate-pulse" stroke={2.2} />
+                </div>
+              </div>
             </div>
 
             {/* Subtle live status dot */}
-            <span className="absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white shadow-xs z-10" />
+            <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-white shadow-xs z-20 pointer-events-none" />
           </button>
         </div>
       )}
