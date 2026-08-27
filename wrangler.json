@@ -1,5 +1,6 @@
 {
   "name": "qayd-travel-platform",
+  "account_id": "f37f1bdb6a3576fedb8a6b352a4b8bf0",
   "compatibility_date": "2026-08-25",
   "assets": {
     "directory": "./frontend/dist",
