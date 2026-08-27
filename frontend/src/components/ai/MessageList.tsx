@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { CopilotChatMessage, MessageBubble } from './MessageBubble';
-import { QuickPrompts } from './QuickPrompts';
 
 interface Props {
   messages: CopilotChatMessage[];
@@ -44,9 +43,7 @@ export const MessageList: React.FC<Props> = ({
         stickRef.current = dist < 80;
       }}
     >
-      {messages.length <= 1 && prompts?.length ? <QuickPrompts prompts={prompts} onPick={onPrompt} /> : null}
-      {/* Suggestions stay pinned at the top; the spacer below pushes the conversation
-          itself down against the composer so a short chat has no empty gap. */}
+      {/* The spacer below pushes the conversation itself down against the composer so a short chat has no empty gap. */}
       <div className="flex-1 min-h-0" aria-hidden="true" />
       {messages.map((m, i) => (
         <MessageBubble
