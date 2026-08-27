@@ -16,30 +16,32 @@ export const CopilotRoot: React.FC = () => {
             isArabic ? 'left-6' : 'right-6'
           } group select-none`}
         >
-          {/* Pulsing warm glow aura behind the trigger */}
-          <div className="absolute -inset-2.5 rounded-full copilot-trigger-glow pointer-events-none" />
+          {/* Soft subtle glow behind button */}
+          <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-[#F45A0A]/35 to-[#FB923C]/20 blur-md pointer-events-none group-hover:scale-110 transition-transform duration-300" />
 
-          {/* Rotating loading-style gradient ring around Einstein */}
-          <div className="absolute -inset-1.5 rounded-full copilot-trigger-ring pointer-events-none" />
-
+          {/* Slim Precision Button with integrated rotating border */}
           <button
             type="button"
             onClick={() => setOpened(true)}
-            className="relative w-16 h-16 rounded-full overflow-hidden bg-white p-[2px] shadow-[0_8px_25px_-4px_rgba(244,90,10,0.4)] hover:shadow-[0_12px_32px_-2px_rgba(244,90,10,0.6)] group-hover:scale-105 active:scale-95 transition-all duration-300 focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-200 cursor-pointer"
+            className="relative w-14 h-14 rounded-full p-[2px] overflow-hidden shadow-md shadow-orange-500/20 hover:shadow-xl hover:shadow-orange-500/35 hover:scale-105 active:scale-95 transition-all duration-300 focus:outline-none focus-visible:ring-3 focus-visible:ring-orange-300 cursor-pointer flex items-center justify-center bg-white"
             title={AI_NAME_AR}
             aria-label={AI_NAME_AR}
           >
-            {/* White ring container for crisp avatar display */}
-            <div className="w-full h-full rounded-full overflow-hidden bg-white ring-2 ring-white">
+            {/* Seamless rotating gradient border with zero gap */}
+            <div className="absolute -inset-[100%] copilot-spin-gradient pointer-events-none" />
+
+            {/* Inner avatar container */}
+            <div className="relative w-full h-full rounded-full overflow-hidden bg-white p-[1px]">
               <img
                 src={AI_AVATAR}
                 alt={AI_NAME_AR}
                 draggable={false}
-                className="w-full h-full object-cover select-none group-hover:scale-110 transition-transform duration-300"
+                className="w-full h-full object-cover rounded-full select-none group-hover:scale-110 transition-transform duration-300"
               />
             </div>
-            {/* Live active dot indicator */}
-            <span className="absolute bottom-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-white shadow-xs" />
+
+            {/* Subtle live status dot */}
+            <span className="absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white shadow-xs z-10" />
           </button>
         </div>
       )}
