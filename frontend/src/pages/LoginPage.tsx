@@ -902,12 +902,12 @@ export const LoginPage: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* Enlarged Image Display */}
-                        <div className="relative mx-auto mt-3 flex h-[280px] w-full items-center justify-center">
+                        {/* Significantly Enlarged Image Display */}
+                        <div className="relative mx-auto mt-2 flex h-[340px] sm:h-[370px] w-full items-center justify-center">
                           {slide.imageType === 'avatar' ? (
                             <div className="relative group">
-                              <div className="absolute -inset-4 rounded-full bg-gradient-to-tr from-[#FF5F0A]/25 via-[#FB923C]/20 to-transparent blur-xl animate-pulse pointer-events-none" />
-                              <div className="relative h-[230px] w-[230px] rounded-full overflow-hidden ring-[5px] ring-white shadow-2xl shadow-orange-500/25 bg-gradient-to-b from-[#FFF5ED] to-white p-1">
+                              <div className="absolute -inset-6 rounded-full bg-gradient-to-tr from-[#FF5F0A]/30 via-[#FB923C]/25 to-transparent blur-2xl animate-pulse pointer-events-none" />
+                              <div className="relative h-[270px] w-[270px] sm:h-[290px] sm:w-[290px] rounded-full overflow-hidden ring-[6px] ring-white shadow-2xl shadow-orange-500/30 bg-gradient-to-b from-[#FFF5ED] to-white p-1">
                                 <img
                                   src={slide.image}
                                   alt={slide.title}
@@ -915,7 +915,7 @@ export const LoginPage: React.FC = () => {
                                   draggable={false}
                                 />
                               </div>
-                              <div className="absolute -bottom-2 inset-x-0 mx-auto w-fit px-3 py-0.5 rounded-full bg-slate-900/80 text-white text-[10.5px] font-bold shadow-md">
+                              <div className="absolute -bottom-2.5 inset-x-0 mx-auto w-fit px-4 py-1 rounded-full bg-slate-900/85 text-white text-[11px] font-extrabold shadow-lg backdrop-blur-xs">
                                 {slide.author}
                               </div>
                             </div>
@@ -924,7 +924,7 @@ export const LoginPage: React.FC = () => {
                               src={slide.image}
                               alt={slide.title}
                               aria-hidden="true"
-                              className="mx-auto h-[260px] w-full max-w-[420px] select-none object-contain drop-shadow-md"
+                              className="mx-auto h-[330px] sm:h-[360px] w-full max-w-[480px] select-none object-contain drop-shadow-xl scale-115 transition-transform duration-500 hover:scale-120"
                               draggable={false}
                             />
                           )}
