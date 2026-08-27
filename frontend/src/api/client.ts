@@ -88,7 +88,7 @@ export async function apiRequest<T = any>(
     const {
       noCache: _noCache,
       ttl: _ttl,
-      timeoutMs = 8000,
+      timeoutMs = 30000,
       skipBranchContext: _skipBranchContext,
       ...requestOptions
     } = options;
