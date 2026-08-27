@@ -116,6 +116,79 @@ const COPY = {
   },
 } as const;
 
+const LOGIN_SLIDES = {
+  ar: [
+    {
+      id: 'einstein-1',
+      eyebrow: 'الذكاء المحاسبي الخارق',
+      title: '«المنطق ينقلك من أ إلى ب، والخيال يأخذك إلى كل مكان»',
+      subtitle: 'نظام محاسبي ذكي يختصر الزمن ويعيد صياغة معادلات السفر بدقة استثنائية.',
+      formula: 'E = mc²',
+      formulaDesc: 'طاقة = كتلة × مربع سرعة الضوء',
+      author: '— ألبرت أينشتاين',
+      image: '/images/einstein-iraq.png',
+      imageType: 'avatar',
+    },
+    {
+      id: 'business',
+      eyebrow: 'بوابة العمليات المالية',
+      title: 'من الحجز إلى القيد، في مساحة واحدة متكاملة',
+      subtitle: 'إدارة حسابات السفر والتذاكر والفروع والصلاحيات بوضوح وسرعة قياسية.',
+      formula: '∑ Revenue - ∑ Cost = Profit',
+      formulaDesc: 'معادلة التوازن المالي الذكي',
+      author: 'منظومة QAYD المتكاملة',
+      image: '/assets/business-report.svg',
+      imageType: 'illustration',
+    },
+    {
+      id: 'einstein-2',
+      eyebrow: 'النسبية والسرعة في الإنجاز',
+      title: '«التعليم ليس حفظ الحقائق، بل تدريب العقل على التفكير والابتكار»',
+      subtitle: 'مساعد الذكاء الاصطناعي يحلل قيودك ويستخرج التقارير في أجزاء من الثانية.',
+      formula: "ΔS ≥ 0  |  t' = t / √(1 - v²/c²)",
+      formulaDesc: 'معادلة تمدد الزمن والإنتاجية',
+      author: '— أينشتاين العراق',
+      image: '/images/einstein-iraq.png',
+      imageType: 'avatar',
+    },
+  ],
+  en: [
+    {
+      id: 'einstein-1',
+      eyebrow: 'Supercharged Accounting AI',
+      title: '“Logic gets you from A to B. Imagination takes you everywhere.”',
+      subtitle: 'An intelligent accounting system redefining travel financial management with precision.',
+      formula: 'E = mc²',
+      formulaDesc: 'Energy = Mass × Speed of Light²',
+      author: '— Albert Einstein',
+      image: '/images/einstein-iraq.png',
+      imageType: 'avatar',
+    },
+    {
+      id: 'business',
+      eyebrow: 'Financial Operations Hub',
+      title: 'From Booking to Ledger, All in One Unified Workspace',
+      subtitle: 'Manage travel accounts, tickets, branches, and permissions with total clarity.',
+      formula: '∑ Revenue - ∑ Cost = Profit',
+      formulaDesc: 'Smart Financial Equilibrium',
+      author: 'QAYD Enterprise System',
+      image: '/assets/business-report.svg',
+      imageType: 'illustration',
+    },
+    {
+      id: 'einstein-2',
+      eyebrow: 'Relativity & Speed',
+      title: '“Education is not the learning of facts, but the training of the mind to think.”',
+      subtitle: 'AI assistant analyzes journal entries and compiles deep analytics in sub-seconds.',
+      formula: "ΔS ≥ 0  |  t' = t / √(1 - v²/c²)",
+      formulaDesc: 'Time Dilation & High Productivity',
+      author: '— Einstein of Iraq',
+      image: '/images/einstein-iraq.png',
+      imageType: 'avatar',
+    },
+  ],
+};
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const clearActiveBranchContext = () => {
@@ -176,6 +249,15 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const isAr = lang === 'ar';
   const t = COPY[lang];
+  const slides = isAr ? LOGIN_SLIDES.ar : LOGIN_SLIDES.en;
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  useEffect(() => {
+    const slideTimer = setInterval(() => {
+      setActiveSlide((prev) => (prev + 1) % slides.length);
+    }, 5200);
+    return () => clearInterval(slideTimer);
+  }, [slides.length]);
 
   // If already authenticated with active session, redirect directly to dashboard
   useEffect(() => {
@@ -791,20 +873,80 @@ export const LoginPage: React.FC = () => {
 
               <div className="relative z-10 flex w-full flex-1 items-center justify-center py-2">
                 <div className="grid w-full grid-cols-[minmax(0,1fr)] items-center">
-                  <div className="mx-auto max-w-[490px] text-center">
-                    <p className="mb-1 text-[11px] font-black uppercase tracking-[0.12em] text-[#E95408]">{t.visualEyebrow}</p>
-                    <h2 className="mx-auto max-w-[430px] text-[22px] font-black leading-[1.35] tracking-[-0.03em] text-[#17243D]">
-                      {t.visualTitle}
-                    </h2>
-                    <p className="mx-auto mt-1.5 max-w-[410px] text-xs font-medium leading-5 text-[#64748B]">{t.visualSubtitle}</p>
-                    <img
-                      src="/assets/business-report.svg"
-                      alt={t.visualAlt}
-                      aria-hidden="true"
-                      className="mx-auto mt-1 h-[330px] w-[430px] max-w-full select-none object-contain"
-                      draggable={false}
-                    />
-                  </div>
+                  {slides.map((slide, index) => {
+                    const isActive = index === activeSlide;
+                    return (
+                      <div
+                        key={slide.id}
+                        className={`col-start-1 row-start-1 mx-auto flex w-full max-w-[500px] flex-col items-center text-center transition-all duration-700 ${
+                          isActive ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-95 translate-y-2 pointer-events-none'
+                        }`}
+                      >
+                        <p className="mb-1 text-[11px] font-black uppercase tracking-[0.12em] text-[#E95408]">
+                          {slide.eyebrow}
+                        </p>
+                        <h2 className="mx-auto max-w-[440px] text-[20px] font-black leading-[1.38] tracking-[-0.02em] text-[#17243D]">
+                          {slide.title}
+                        </h2>
+                        <p className="mx-auto mt-1 max-w-[420px] text-[12px] font-medium leading-5 text-[#64748B]">
+                          {slide.subtitle}
+                        </p>
+
+                        {/* Mathematical / Physics Formula Badge */}
+                        <div className="mt-2.5 inline-flex items-center gap-2 rounded-xl border border-[#FF5F0A]/20 bg-white/85 px-3 py-1.5 shadow-xs backdrop-blur-xs">
+                          <span className="font-mono text-[12.5px] font-extrabold tracking-wider text-[#E95408]" dir="ltr">
+                            {slide.formula}
+                          </span>
+                          <span className="text-[10.5px] font-bold text-slate-400">
+                            • {slide.formulaDesc}
+                          </span>
+                        </div>
+
+                        {/* Enlarged Image Display */}
+                        <div className="relative mx-auto mt-3 flex h-[280px] w-full items-center justify-center">
+                          {slide.imageType === 'avatar' ? (
+                            <div className="relative group">
+                              <div className="absolute -inset-4 rounded-full bg-gradient-to-tr from-[#FF5F0A]/25 via-[#FB923C]/20 to-transparent blur-xl animate-pulse pointer-events-none" />
+                              <div className="relative h-[230px] w-[230px] rounded-full overflow-hidden ring-[5px] ring-white shadow-2xl shadow-orange-500/25 bg-gradient-to-b from-[#FFF5ED] to-white p-1">
+                                <img
+                                  src={slide.image}
+                                  alt={slide.title}
+                                  className="h-full w-full rounded-full object-cover select-none transition-transform duration-500 group-hover:scale-105"
+                                  draggable={false}
+                                />
+                              </div>
+                              <div className="absolute -bottom-2 inset-x-0 mx-auto w-fit px-3 py-0.5 rounded-full bg-slate-900/80 text-white text-[10.5px] font-bold shadow-md">
+                                {slide.author}
+                              </div>
+                            </div>
+                          ) : (
+                            <img
+                              src={slide.image}
+                              alt={slide.title}
+                              aria-hidden="true"
+                              className="mx-auto h-[260px] w-full max-w-[420px] select-none object-contain drop-shadow-md"
+                              draggable={false}
+                            />
+                          )}
+                        </div>
+
+                        {/* Interactive Slide Dots */}
+                        <div className="mt-2 flex items-center justify-center gap-1.5">
+                          {slides.map((_, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setActiveSlide(i)}
+                              className={`h-1.5 rounded-full transition-all duration-300 ${
+                                i === activeSlide ? 'w-6 bg-[#E95408]' : 'w-1.5 bg-slate-300 hover:bg-slate-400'
+                              }`}
+                              aria-label={`Go to slide ${i + 1}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
