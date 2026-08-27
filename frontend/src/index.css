@@ -632,3 +632,28 @@ aside ::-webkit-scrollbar-button {
 }
 
 .welcome-cta { animation: fadeIn 0.5s ease-out 0.85s both; }
+
+/* ── AI Floating Button – Rotating Ring & Glow Aura ── */
+@keyframes triggerRingRotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes triggerPulse {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50%      { transform: scale(1.15); opacity: 0.75; }
+}
+
+.copilot-trigger-glow {
+  background: radial-gradient(circle, rgba(244, 90, 10, 0.45) 0%, rgba(244, 90, 10, 0) 70%);
+  animation: triggerPulse 2.8s ease-in-out infinite;
+}
+
+.copilot-trigger-ring {
+  background: conic-gradient(from 0deg, #F45A0A 0%, #FB923C 35%, #FDBA74 55%, transparent 75%, #F45A0A 100%);
+  animation: triggerRingRotate 2.4s linear infinite;
+  border-radius: 9999px;
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+}
+
