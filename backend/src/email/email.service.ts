@@ -145,8 +145,25 @@ export class EmailService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  private getApiKey(): string {
-    return process.env.BREVO_API_KEY || '';
+  private async getApiKey(): Promise<string> {
+    if (process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim()) {
+      return process.env.BREVO_API_KEY.trim();
+    }
+    try {
+      const record = await this.prisma.printTemplate.findFirst({
+        where: { docType: 'brevo_sender_config' },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (record && record.config) {
+        const parsed = typeof record.config === 'string' ? JSON.parse(record.config) : record.config;
+        if (parsed.apiKey || parsed.brevoApiKey) {
+          return String(parsed.apiKey || parsed.brevoApiKey).trim();
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Could not load db brevo api key: ${err}`);
+    }
+    return '';
   }
 
   async getSenderConfig(): Promise<{ senderEmail: string; senderName: string }> {
@@ -219,7 +236,7 @@ export class EmailService {
   }
 
   async getAccountInfo(): Promise<BrevoAccountInfo> {
-    const apiKey = this.getApiKey();
+    const apiKey = await this.getApiKey();
     const currentSender = await this.getSenderConfig();
     if (!apiKey) {
       return {
@@ -292,7 +309,7 @@ export class EmailService {
   }
 
   async sendEmail(dto: SendEmailDto): Promise<{ success: boolean; messageId?: string }> {
-    const apiKey = this.getApiKey();
+    const apiKey = await this.getApiKey();
     if (!apiKey) {
       throw new Error('مفتاح خدمة Brevo غير مهيأ في النظام.');
     }
