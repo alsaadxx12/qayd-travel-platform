@@ -7,6 +7,7 @@ import {
   IconHistory,
   IconPlus,
 } from '@tabler/icons-react';
+import { CapabilitiesTooltip } from './CapabilitiesTooltip';
 import type { CopilotMode } from './CopilotPanel';
 import { AI_AVATAR, AI_GREETING_AR, AI_GREETING_EN, AI_NAME_AR } from './persona';
 
@@ -82,6 +83,7 @@ export const CopilotHeader: React.FC<Props> = ({
           <IconHistory size={16} />
         </ActionIcon>
       </Tooltip>
+      <CapabilitiesTooltip isArabic={isArabic} />
       <Tooltip
         label={mode === 'fullscreen' ? (isArabic ? 'تصغير' : 'Exit full') : isArabic ? 'تكبير' : 'Expand'}
         withArrow

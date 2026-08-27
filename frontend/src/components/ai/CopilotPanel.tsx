@@ -6,6 +6,7 @@ import { MessageList } from './MessageList';
 import { Composer, compressImage } from './Composer';
 import { ConversationHistory } from './ConversationHistory';
 import { CopilotChatMessage } from './MessageBubble';
+import { WelcomeScreen } from './WelcomeScreen';
 import { aiAssistantApi, ChatMessage } from '../../api/aiAssistant';
 import { streamCopilotChat } from '../../api/aiStream';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -19,6 +20,7 @@ export type CopilotMode = 'compact' | 'expanded' | 'fullscreen';
 const MODE_KEY = 'qayd_ai_copilot_mode';
 const LEGACY_KEY = 'qayd_ai_chat_sessions_v2';
 const MIGRATED_KEY = 'qayd_ai_sessions_migrated_v1';
+const WELCOME_DISMISSED_KEY = 'qayd_ai_welcome_dismissed';
 
 interface Props {
   opened: boolean;
@@ -57,6 +59,7 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem(WELCOME_DISMISSED_KEY));
   const abortRef = useRef<AbortController | null>(null);
 
   const { data: brief } = useQuery({
@@ -344,7 +347,15 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
         onClose={onClose}
         connected
       />
-      {showHistory ? (
+      {showWelcome && !showHistory ? (
+        <WelcomeScreen
+          isArabic={isArabic}
+          onDismiss={() => {
+            setShowWelcome(false);
+            localStorage.setItem(WELCOME_DISMISSED_KEY, '1');
+          }}
+        />
+      ) : showHistory ? (
         <ConversationHistory
           items={conversations || []}
           onOpen={openConversation}
@@ -379,7 +390,7 @@ export const CopilotPanel: React.FC<Props> = ({ opened, onClose }) => {
           status={status}
         />
       )}
-      {!showHistory && (
+      {!showHistory && !showWelcome && (
         <Composer
           value={input}
           onChange={setInput}
