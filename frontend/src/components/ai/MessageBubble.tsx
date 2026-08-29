@@ -127,7 +127,13 @@ export const MessageBubble: React.FC<Props> = ({
     <div className={`copilot-msg-in flex ${isUser ? 'justify-start' : 'justify-end'}`}>
       <div className={isUser ? 'max-w-[85%]' : 'w-full max-w-full'}>
         {message.imageBase64?.startsWith('data:image/') && (
-          <img src={message.imageBase64} alt="" className="rounded-lg mb-1.5 max-h-36 object-cover" />
+          <img
+            src={message.imageBase64}
+            alt={isArabic ? 'صورة مرسلة في المحادثة' : 'Image sent in the conversation'}
+            loading="lazy"
+            decoding="async"
+            className="rounded-lg mb-1.5 max-h-36 object-cover"
+          />
         )}
 
         {message.loading && !message.content && !hasBlocks && (
@@ -182,6 +188,8 @@ export const MessageBubble: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => onFeedback('up')}
+                  aria-label={isArabic ? 'إجابة مفيدة' : 'Helpful answer'}
+                  aria-pressed={message.feedback === 'up'}
                   className={`p-1 ${message.feedback === 'up' ? 'text-emerald-600' : 'hover:text-emerald-600'}`}
                 >
                   <IconThumbUp size={13} />
@@ -189,6 +197,8 @@ export const MessageBubble: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => onFeedback('down')}
+                  aria-label={isArabic ? 'إجابة غير مفيدة' : 'Unhelpful answer'}
+                  aria-pressed={message.feedback === 'down'}
                   className={`p-1 ${message.feedback === 'down' ? 'text-red-500' : 'hover:text-red-500'}`}
                 >
                   <IconThumbDown size={13} />

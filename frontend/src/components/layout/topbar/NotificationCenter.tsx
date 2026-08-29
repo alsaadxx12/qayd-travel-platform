@@ -254,6 +254,7 @@ export const NotificationCenter: React.FC = () => {
                         e.stopPropagation();
                         deleteMutation.mutate(item.id);
                       }}
+                      aria-label={isAr ? 'حذف الإشعار' : 'Delete notification'}
                       className="w-6 h-6 rounded-lg bg-white/80 border border-slate-200 text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
                     >
                       <IconTrash size={13} />

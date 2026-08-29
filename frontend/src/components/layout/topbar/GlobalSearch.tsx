@@ -684,7 +684,8 @@ export const GlobalSearch: React.FC = () => {
               <Search size={18} className="text-[#F45A0A] shrink-0 me-3" />
               <input
                 ref={inputRef}
-                type="text"
+                type="search"
+                aria-label={isAr ? 'البحث الشامل في النظام' : 'Search across the system'}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -699,6 +700,7 @@ export const GlobalSearch: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setQuery('')}
+                  aria-label={isAr ? 'مسح نص البحث' : 'Clear search'}
                   className="w-6 h-6 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer shrink-0"
                 >
                   <X size={14} />

@@ -383,7 +383,8 @@ export const Sidebar: React.FC = () => {
               className={`absolute ${direction === 'rtl' ? 'right-2.5' : 'left-2.5'} text-slate-400 pointer-events-none`}
             />
             <input
-              type="text"
+              type="search"
+              aria-label={isAr ? 'بحث في قائمة التنقل' : 'Search the navigation menu'}
               value={sidebarSearch}
               onChange={(e) => setSidebarSearch(e.target.value)}
               placeholder={isAr ? 'بحث في القائمة...' : 'Search in menu...'}
@@ -395,6 +396,7 @@ export const Sidebar: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSidebarSearch('')}
+                aria-label={isAr ? 'مسح بحث القائمة' : 'Clear menu search'}
                 className={`absolute ${direction === 'rtl' ? 'left-2' : 'right-2'} text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer`}
               >
                 <X size={13} />
@@ -500,6 +502,7 @@ export const Sidebar: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => toggleSection(section.key)}
+                    aria-label={sectionTitle}
                     className="w-11 h-11 rounded-xl flex items-center justify-center mx-auto cursor-pointer transition-colors text-slate-600 hover:bg-slate-100"
                   >
                     <SectionIcon size={20} />
@@ -680,6 +683,7 @@ export const Sidebar: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleNavClick({ id: 'addons-store', title: isAr ? 'متجر الإضافات' : 'Addons Store', path: '/addons' })}
+                aria-label={isAr ? 'متجر الإضافات' : 'Addons Store'}
                 className={`w-10 h-10 rounded-xl flex items-center justify-center mx-auto transition-all cursor-pointer shadow-xs ${
                   location.pathname === '/addons'
                     ? 'bg-[#F45A0A] text-white'
@@ -700,6 +704,7 @@ export const Sidebar: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleNavClick({ id: 'subscription-settings', title: planName, path: '/subscription-settings' })}
+                aria-label={isAr ? `الاشتراك: ${planName}` : `Subscription: ${planName}`}
                 className={`w-10 h-10 rounded-xl text-white flex items-center justify-center mx-auto transition-all cursor-pointer shadow-xs ${
                   location.pathname === '/subscription-settings'
                     ? 'bg-[#F45A0A] ring-2 ring-orange-200'

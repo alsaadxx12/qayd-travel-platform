@@ -187,7 +187,14 @@ export const WorkspaceContext: React.FC = () => {
               {/* Logo / Store Icon */}
               <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0">
                 {activeBranchLogo ? (
-                  <img src={activeBranchLogo} alt={activeBranchName} className="w-10 h-10 object-contain rounded-lg" />
+                  <img
+                    src={activeBranchLogo}
+                    alt={activeBranchName}
+                    width={40}
+                    height={40}
+                    decoding="async"
+                    className="w-10 h-10 object-contain rounded-lg"
+                  />
                 ) : (
                   <div className="w-10 h-10 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center">
                     <IconBuildingStore size={22} className="text-[#F45A0A]" />
@@ -381,7 +388,8 @@ export const WorkspaceContext: React.FC = () => {
                 <div className="relative">
                   <IconSearch size={16} className="absolute end-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
-                    type="text"
+                    type="search"
+                    aria-label={isAr ? 'بحث عن فرع' : 'Search branches'}
                     value={branchSearch}
                     onChange={(e) => setBranchSearch(e.target.value)}
                     placeholder={isAr ? 'بحث باسم الفرع أو الرمز أو المدينة...' : 'Search by branch name, code, or city...'}
