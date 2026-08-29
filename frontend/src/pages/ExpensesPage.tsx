@@ -27,6 +27,7 @@ import {
   FileSpreadsheet,
   FileText,
   X,
+  Pencil,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../api/client';
@@ -622,7 +623,7 @@ export const ExpensesPage: React.FC = () => {
       });
     },
     onSuccess: (_data, variables) => {
-      // Only the voucher list changes here; account lists are name/id lookups and stay valid.
+      // Invalidate and refresh query list immediately
       queryClient.invalidateQueries({ queryKey: ['expenses-vouchers-list'] });
       showSuccessNotification(
         variables.expenseId
@@ -632,15 +633,9 @@ export const ExpensesPage: React.FC = () => {
           ? (isAr ? 'تم حفظ التعديلات وتحديث القيد المحاسبي المرتبط' : 'Changes and linked journal entry were updated')
           : (isAr ? 'تم قيد المصروف في الحسابات وخصمه من صندوق الموظف' : 'Expense booked and deducted from employee cashbox')
       );
-      // Keep the editor open so the user can post several expenses in a row.
-      setActiveExpenseId(null);
-      setActiveExpenseNumber('');
-      setCurrentExpenseIndex(-1);
-      setAmount('');
-      setDescription('');
-      setDescriptionTouched(false);
-      setReference('');
-      setFormErrors({});
+      // Close modal immediately and reset state for snappy instant response
+      setCreateModalOpen(false);
+      resetExpenseForm();
     },
     onError: (err: any) => {
       showErrorNotification(
@@ -1241,19 +1236,20 @@ export const ExpensesPage: React.FC = () => {
                 <th className="p-3 text-center">{isAr ? 'صندوق الصرف' : 'Paid from'}</th>
                 <th className="p-3 text-center">{isAr ? 'المبلغ' : 'Amount'}</th>
                 <th className="p-3 text-center">{isAr ? 'الحالة' : 'Status'}</th>
+                <th className="p-3 text-center w-28">{isAr ? 'الإجراءات' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {vouchersLoading && filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-10 text-center text-slate-500 font-medium">
+                  <td colSpan={10} className="p-10 text-center text-slate-500 font-medium">
                     <RefreshCw size={18} className="inline-block animate-spin text-[#F45A0A] me-2" />
                     {isAr ? 'جارٍ تحميل السجل...' : 'Loading ledger...'}
                   </td>
                 </tr>
               ) : filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center">
+                  <td colSpan={10} className="p-12 text-center">
                     <div className="max-w-xs mx-auto space-y-3">
                       <div className="w-12 h-12 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center mx-auto text-[#F45A0A]">
                         <Coins size={22} />
@@ -1296,7 +1292,7 @@ export const ExpensesPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => openExpenseRecord(item)}
-                          title={isAr ? 'فتح القيد' : 'Open record'}
+                          title={isAr ? 'فتح وتعديل القيد' : 'Open & edit record'}
                           className="font-mono font-extrabold tabular-nums lining-nums text-slate-900 hover:text-[#F45A0A] hover:underline underline-offset-2 cursor-pointer"
                         >
                           {item.voucherNumber || `PV-${String(item.id).slice(0, 6)}`}
@@ -1342,6 +1338,29 @@ export const ExpensesPage: React.FC = () => {
                         }`}>
                           {item.status === 'POSTED' ? (isAr ? 'مرحّل' : 'Posted') : (item.status || '—')}
                         </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Tooltip label={isAr ? 'تعديل السند' : 'Edit voucher'} withArrow>
+                            <button
+                              type="button"
+                              onClick={() => openExpenseRecord(item)}
+                              className="h-8 px-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#F45A0A] font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors border border-orange-200 shadow-2xs"
+                            >
+                              <Pencil size={13} />
+                              <span>{isAr ? 'تعديل' : 'Edit'}</span>
+                            </button>
+                          </Tooltip>
+                          <Tooltip label={isAr ? 'حذف السند' : 'Delete voucher'} withArrow>
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteExpense(item)}
+                              className="h-8 w-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors border border-rose-200 shadow-2xs shrink-0"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </Tooltip>
+                        </div>
                       </td>
                     </tr>
                   );
