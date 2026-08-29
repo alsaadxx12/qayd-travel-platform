@@ -30,7 +30,8 @@ export const NotificationCenter: React.FC = () => {
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['my-notifications'],
     queryFn: notificationsApi.getMyNotifications,
-    refetchInterval: 30000,
+    refetchInterval: 2 * 60 * 1000, // 2 minutes — notifications are not urgent enough for 30s polling on a slow API
+    staleTime: 60 * 1000,
   });
 
   const unreadCount = useMemo(() => {

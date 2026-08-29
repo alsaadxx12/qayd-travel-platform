@@ -35,6 +35,7 @@ const STABLE_PREFIXES = [
   '/branches',
   '/permission-groups',
   '/subscriptions/plans',
+  '/accounts',
 ];
 
 /** Near-static data is worth holding for minutes, not seconds. */
@@ -51,6 +52,10 @@ const STABLE_TTL = 5 * 60 * 1000;
 const TTL_OVERRIDES: Array<[string, number]> = [
   ['/exchange-rate/history', STABLE_TTL], // historical series; does not move
   ['/exchange-rate', 60 * 1000], // mirrors the server's own upstream cache
+  ['/notifications', 30 * 1000], // notifications don't need sub-30s freshness
+  ['/receipt-vouchers', 30 * 1000], // voucher lists are stable within a session
+  ['/payment-vouchers', 30 * 1000],
+  ['/journal-entries', 30 * 1000],
 ];
 
 function ttlFor(path: string): number {
