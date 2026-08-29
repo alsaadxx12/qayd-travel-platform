@@ -31,7 +31,8 @@ import {
   TrendingUp,
   TrendingDown,
   Layers,
-  X
+  X,
+  CheckSquare
 } from 'lucide-react';
 
 type TabType = 'RECEIPT' | 'PAYMENT' | 'JOURNAL' | 'EXCHANGE';
@@ -78,6 +79,27 @@ export const VouchersPage: React.FC = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [voucherToDelete, setVoucherToDelete] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Clear selection when tab changes
+  useEffect(() => { setSelectedIds(new Set()); }, [activeTab]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === currentGridData.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(currentGridData.map((r: any) => r.id)));
+    }
+  };
 
   // Ref to accountsMap for name resolution
   const accountsMapRef = React.useRef<Record<string, string>>({});
@@ -916,11 +938,102 @@ export const VouchersPage: React.FC = () => {
 
       {/* ── 3. Main Vouchers Table ── */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+
+        {/* Bulk Actions Toolbar */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-[#FFF3E8] border-b border-orange-200">
+            <CheckSquare size={16} className="text-[#F45A0A]" />
+            <span className="text-xs font-bold text-[#F45A0A]">
+              {isAr ? `تم تحديد ${selectedIds.size} سند` : `${selectedIds.size} selected`}
+            </span>
+            <div className="flex items-center gap-1 ms-auto">
+              <Tooltip label={isAr ? 'معاينة' : 'View'} withArrow>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const first = currentGridData.find((r: any) => selectedIds.has(r.id));
+                    if (first) { setSelectedVoucher(first); setDrawerOpen(true); }
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Eye size={13} />
+                  <span>{isAr ? 'معاينة' : 'View'}</span>
+                </button>
+              </Tooltip>
+              <Tooltip label={isAr ? 'طباعة' : 'Print'} withArrow>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const first = currentGridData.find((r: any) => selectedIds.has(r.id));
+                    if (first) {
+                      setVoucherToPrint({
+                        voucherNumber: first.voucherNumber, type: first.type, date: first.date,
+                        amount: first.amount, currency: first.currency, accountName: first.accountName,
+                        accountCode: first.accountCode, cashboxName: first.cashboxName,
+                        reference: first.reference, description: first.description, user: first.userName,
+                        splitAccounts: first.splitAccounts, splitDescription: first.splitDescription,
+                        customCategory: first.customCategory,
+                      });
+                      setPrintModalOpen(true);
+                    }
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-emerald-300 hover:text-emerald-600 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Printer size={13} />
+                  <span>{isAr ? 'طباعة' : 'Print'}</span>
+                </button>
+              </Tooltip>
+              <Tooltip label={isAr ? 'تعديل' : 'Edit'} withArrow>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const first = currentGridData.find((r: any) => selectedIds.has(r.id));
+                    if (first) handleOpenEditModal(first);
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Edit size={13} />
+                  <span>{isAr ? 'تعديل' : 'Edit'}</span>
+                </button>
+              </Tooltip>
+              <Tooltip label={isAr ? 'حذف' : 'Delete'} withArrow>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const first = currentGridData.find((r: any) => selectedIds.has(r.id));
+                    if (first) { setVoucherToDelete(first); setDeleteConfirmOpen(true); }
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-rose-300 hover:text-rose-600 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Trash2 size={13} />
+                  <span>{isAr ? 'حذف' : 'Delete'}</span>
+                </button>
+              </Tooltip>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ms-1"
+              >
+                <X size={13} />
+                <span>{isAr ? 'إلغاء' : 'Cancel'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="w-full overflow-auto h-[58vh] min-h-[360px] overscroll-contain">
           <table className="w-full text-xs text-start border-collapse font-sans whitespace-nowrap min-w-full">
             <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-slate-50 [&_th]:shadow-[inset_0_-1px_0_#e2e8f0]">
               <tr className="border-b border-slate-200 text-slate-700 font-bold h-[44px]">
-                <th className="py-2.5 px-3 text-center whitespace-nowrap w-12 font-mono font-bold text-slate-500">{isAr ? '#' : '#'}</th>
+                <th className="py-2.5 px-3 text-center w-10">
+                  <input
+                    type="checkbox"
+                    checked={currentGridData.length > 0 && selectedIds.size === currentGridData.length}
+                    onChange={toggleSelectAll}
+                    className="w-3.5 h-3.5 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer accent-[#F45A0A]"
+                  />
+                </th>
+                <th className="py-2.5 px-3 text-center whitespace-nowrap w-10 font-mono font-bold text-slate-500">#</th>
                 <th className="py-2.5 px-3 text-start whitespace-nowrap w-36">{isAr ? 'رقم السند' : 'Voucher No'}</th>
                 <th className="py-2.5 px-3 text-start whitespace-nowrap min-w-[180px]">
                   {activeTab === 'RECEIPT'
@@ -940,14 +1053,13 @@ export const VouchersPage: React.FC = () => {
                 <th className="py-2.5 px-3 text-end whitespace-nowrap w-36 font-mono">{isAr ? 'المبلغ والعملة' : 'Amount & Currency'}</th>
                 <th className="py-2.5 px-3 text-center whitespace-nowrap w-28 font-mono">{isAr ? 'تاريخ السند' : 'Date'}</th>
                 <th className="py-2.5 px-3 text-start whitespace-nowrap w-32">{isAr ? 'المستخدم المنشئ' : 'Created By'}</th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap w-28">{isAr ? 'الإجراءات' : 'Actions'}</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center text-slate-500 font-bold">
+                  <td colSpan={10} className="py-16 text-center text-slate-500 font-bold">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={24} className="animate-spin text-[#F45A0A]" />
                       <span>{isAr ? 'جارٍ تحميل قيود وسجلات السندات المالية...' : 'Loading Financial Vouchers...'}</span>
@@ -956,7 +1068,7 @@ export const VouchersPage: React.FC = () => {
                 </tr>
               ) : currentGridData.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center text-slate-500 font-bold">
+                  <td colSpan={10} className="py-16 text-center text-slate-500 font-bold">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#F45A0A] flex items-center justify-center">
                         <Receipt size={24} />
@@ -978,10 +1090,21 @@ export const VouchersPage: React.FC = () => {
                       setSelectedVoucher(row);
                       setDrawerOpen(true);
                     }}
-                    className="h-[44px] hover:bg-orange-50/20 transition-colors cursor-pointer group"
+                    className={`h-[44px] transition-colors cursor-pointer group ${
+                      selectedIds.has(row.id) ? 'bg-orange-50/40' : 'hover:bg-orange-50/20'
+                    }`}
                   >
+                    {/* Checkbox Column */}
+                    <td className="py-2 px-3 text-center w-10" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => toggleSelect(row.id)}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer accent-[#F45A0A]"
+                      />
+                    </td>
                     {/* Sequence Column */}
-                    <td className="py-2 px-3 text-center font-mono font-bold text-slate-400 text-xs w-12 tabular-nums">
+                    <td className="py-2 px-3 text-center font-mono font-bold text-slate-400 text-xs w-10 tabular-nums">
                       {idx + 1}
                     </td>
 
@@ -1054,103 +1177,6 @@ export const VouchersPage: React.FC = () => {
                       </div>
                     </td>
 
-                    {/* Row Actions */}
-                    <td className="py-2 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-center gap-1">
-                        <Tooltip label={isAr ? 'معاينة السند' : 'View Details'} withArrow position="top">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedVoucher(row);
-                              setDrawerOpen(true);
-                            }}
-                            aria-label={isAr ? `معاينة السند ${row.voucherNumber || ''}` : `View voucher ${row.voucherNumber || ''}`}
-                            className="p-1.5 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Eye size={14} />
-                          </button>
-                        </Tooltip>
-
-                        <Tooltip label={isAr ? 'طباعة وتصدير السند' : 'Print & Export'} withArrow position="top">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setVoucherToPrint({
-                                voucherNumber: row.voucherNumber,
-                                type: row.type,
-                                date: row.date,
-                                amount: row.amount,
-                                currency: row.currency,
-                                accountName: row.accountName,
-                                accountCode: row.accountCode,
-                                cashboxName: row.cashboxName,
-                                reference: row.reference,
-                                description: row.description,
-                                user: row.userName,
-                                splitAccounts: row.splitAccounts,
-                                splitDescription: row.splitDescription,
-                                customCategory: row.customCategory,
-                              });
-                              setPrintModalOpen(true);
-                            }}
-                            aria-label={isAr ? `طباعة السند ${row.voucherNumber || ''}` : `Print voucher ${row.voucherNumber || ''}`}
-                            className="p-1.5 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Printer size={14} />
-                          </button>
-                        </Tooltip>
-
-                        {row.type !== 'JOURNAL' && (
-                          <Tooltip label={isAr ? `إشعارات ووصولات (${row.slipsCount || 0})` : `Receipt Slips (${row.slipsCount || 0})`} withArrow position="top">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedSlipVoucher(row);
-                                setSlipModalOpen(true);
-                              }}
-                              aria-label={isAr ? `وصولات السند ${row.voucherNumber || ''} (${row.slipsCount || 0})` : `Receipt slips for ${row.voucherNumber || ''} (${row.slipsCount || 0})`}
-                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                row.slipsCount > 0 ? 'bg-teal-50 text-teal-600 hover:bg-teal-100' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'
-                              }`}
-                            >
-                              <Paperclip size={14} />
-                            </button>
-                          </Tooltip>
-                        )}
-
-                        <Tooltip label={isAr ? 'تعديل السند' : 'Edit'} withArrow position="top">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenEditModal(row);
-                            }}
-                            aria-label={isAr ? `تعديل السند ${row.voucherNumber || ''}` : `Edit voucher ${row.voucherNumber || ''}`}
-                            className="p-1.5 hover:bg-orange-50 text-slate-500 hover:text-orange-600 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Edit size={14} />
-                          </button>
-                        </Tooltip>
-
-                        <Tooltip label={isAr ? 'حذف السند' : 'Delete'} withArrow position="top">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setVoucherToDelete(row);
-                              setDeleteConfirmOpen(true);
-                            }}
-                            aria-label={isAr ? `حذف السند ${row.voucherNumber || ''}` : `Delete voucher ${row.voucherNumber || ''}`}
-                            className="p-1.5 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </Tooltip>
-                      </div>
-                    </td>
                   </tr>
                 ))
               )}
