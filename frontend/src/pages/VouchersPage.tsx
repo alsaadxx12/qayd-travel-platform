@@ -1023,17 +1023,21 @@ export const VouchersPage: React.FC = () => {
           <table className="w-full text-xs text-start border-collapse font-sans whitespace-nowrap min-w-full">
             <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-slate-50/95 [&_th]:backdrop-blur-sm [&_th]:shadow-[inset_0_-1px_0_#e2e8f0]">
               <tr className="text-slate-600 font-bold h-[40px] text-[11px]">
-                <th className="py-2 px-2.5 text-center w-10">
+                <th className="py-2 px-2.5 text-center w-12">
                   <button
                     type="button"
                     onClick={toggleSelectAll}
-                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer border ${
+                    className={`relative inline-flex h-[18px] w-[32px] items-center rounded-full transition-colors cursor-pointer ${
                       currentGridData.length > 0 && selectedIds.size === currentGridData.length
-                        ? 'bg-[#F45A0A] border-[#F45A0A] text-white'
-                        : 'bg-white border-slate-300 text-transparent hover:border-[#F45A0A]'
+                        ? 'bg-[#F45A0A]'
+                        : 'bg-slate-300 hover:bg-slate-400'
                     }`}
                   >
-                    <CheckSquare size={11} />
+                    <span className={`inline-block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform ${
+                      currentGridData.length > 0 && selectedIds.size === currentGridData.length
+                        ? (isAr ? 'ltr:-translate-x-[2px] rtl:translate-x-[2px]' : 'translate-x-[16px]')
+                        : (isAr ? 'ltr:-translate-x-[16px] rtl:translate-x-[16px]' : 'translate-x-[2px]')
+                    }`} />
                   </button>
                 </th>
                 <th className="py-2 px-2 text-center w-8 font-mono text-slate-400">#</th>
@@ -1062,7 +1066,7 @@ export const VouchersPage: React.FC = () => {
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100/80">
+            <tbody className="divide-y divide-slate-100/60">
               {loading ? (
                 <tr>
                   <td colSpan={12} className="py-16 text-center text-slate-500 font-bold">
@@ -1091,6 +1095,7 @@ export const VouchersPage: React.FC = () => {
               ) : (
                 currentGridData.map((row, idx) => {
                   const isRowSelected = selectedIds.has(row.id);
+                  const rowTypeColor = row.type === 'RECEIPT' ? 'border-s-emerald-400' : row.type === 'PAYMENT' ? 'border-s-rose-400' : 'border-s-orange-400';
                   return (
                   <tr
                     key={row.id}
@@ -1098,8 +1103,10 @@ export const VouchersPage: React.FC = () => {
                       setSelectedVoucher(row);
                       setDrawerOpen(true);
                     }}
-                    className={`h-[42px] transition-colors cursor-pointer group ${
-                      isRowSelected ? 'bg-orange-50/50' : 'hover:bg-slate-50/80'
+                    className={`h-[44px] transition-all cursor-pointer group border-s-[3px] ${
+                      isRowSelected
+                        ? `bg-orange-50/60 ${rowTypeColor}`
+                        : `${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} border-s-transparent hover:border-s-[#F45A0A]/40 hover:bg-slate-50`
                     }`}
                   >
                     {/* Toggle Selection */}
@@ -1107,13 +1114,17 @@ export const VouchersPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => toggleSelect(row.id)}
-                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer border ${
+                        className={`relative inline-flex h-[18px] w-[32px] items-center rounded-full transition-colors cursor-pointer ${
                           isRowSelected
-                            ? 'bg-[#F45A0A] border-[#F45A0A] text-white'
-                            : 'bg-white border-slate-300 text-transparent hover:border-[#F45A0A] group-hover:border-slate-400'
+                            ? 'bg-[#F45A0A]'
+                            : 'bg-slate-300 group-hover:bg-slate-400'
                         }`}
                       >
-                        <CheckSquare size={11} />
+                        <span className={`inline-block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform ${
+                          isRowSelected
+                            ? (isAr ? 'ltr:-translate-x-[2px] rtl:translate-x-[2px]' : 'translate-x-[16px]')
+                            : (isAr ? 'ltr:-translate-x-[16px] rtl:translate-x-[16px]' : 'translate-x-[2px]')
+                        }`} />
                       </button>
                     </td>
 
