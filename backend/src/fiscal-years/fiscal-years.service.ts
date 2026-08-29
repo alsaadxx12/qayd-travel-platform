@@ -17,37 +17,88 @@ export class FiscalYearsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Every public method here starts by resolving the company, which meant a
+   * `company.findUnique` round trip before the real query could even begin — and
+   * against a hosted database that is a large share of a 1.6s response. Companies
+   * do not change identity, so the resolution is memoised.
+   */
+  private static readonly COMPANY_CACHE_TTL = 10 * 60 * 1000;
+  private companyIdCache = new Map<string, { id: string; expiresAt: number }>();
+  private activeYearCache = new Map<string, { data: any; expiresAt: number }>();
+  private yearsListCache = new Map<string, { data: any; expiresAt: number }>();
+
+  public clearCache(companyId?: string) {
+    if (companyId) {
+      this.companyIdCache.delete(companyId);
+      for (const key of this.activeYearCache.keys()) {
+        if (key.includes(companyId)) this.activeYearCache.delete(key);
+      }
+      this.yearsListCache.delete(companyId);
+    } else {
+      this.companyIdCache.clear();
+      this.activeYearCache.clear();
+      this.yearsListCache.clear();
+    }
+  }
+
   private async resolveCompanyId(companyId?: string): Promise<string> {
-    if (companyId && companyId !== 'default-company-id') {
-      const existing = await this.prisma.company.findUnique({ where: { id: companyId } });
-      if (existing) return existing.id;
+    const cacheKey = companyId || 'default';
+    const cached = this.companyIdCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.id;
     }
 
-    const defaultCompany = await this.prisma.company.findFirst({
-      where: { isDefault: true },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (defaultCompany) return defaultCompany.id;
+    let resolvedId: string | null = null;
+    if (companyId && companyId !== 'default-company-id') {
+      const existing = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { id: true },
+      });
+      if (existing) resolvedId = existing.id;
+    }
 
-    const anyCompany = await this.prisma.company.findFirst({
-      orderBy: { createdAt: 'asc' },
-    });
-    if (anyCompany) return anyCompany.id;
+    if (!resolvedId) {
+      const defaultCompany = await this.prisma.company.findFirst({
+        where: { isDefault: true },
+        select: { id: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (defaultCompany) resolvedId = defaultCompany.id;
+    }
 
-    const created = await this.prisma.company.create({
-      data: {
-        name: 'شركة الفرسان للسياحة والسفر',
-        code: 'TRAVEL01',
-        currency: 'IQD',
-        isDefault: true,
-      },
-    });
-    return created.id;
+    if (!resolvedId) {
+      const anyCompany = await this.prisma.company.findFirst({
+        select: { id: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (anyCompany) resolvedId = anyCompany.id;
+    }
+
+    if (!resolvedId) {
+      const created = await this.prisma.company.create({
+        data: {
+          name: 'شركة الفرسان للسياحة والسفر',
+          code: 'TRAVEL01',
+          currency: 'IQD',
+          isDefault: true,
+        },
+      });
+      resolvedId = created.id;
+    }
+
+    // Cache company ID for 10 minutes
+    this.companyIdCache.set(cacheKey, { id: resolvedId, expiresAt: Date.now() + 10 * 60 * 1000 });
+    return resolvedId;
   }
 
   // 1. Get all fiscal years for a company with metrics
   async getYears(companyId: string) {
     const validCompanyId = await this.resolveCompanyId(companyId);
+    const cached = this.yearsListCache.get(validCompanyId);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
+    }
 
     // Auto-seed default fiscal years if company has none
     const count = await this.prisma.fiscalYear.count({ where: { companyId: validCompanyId } });
@@ -71,7 +122,7 @@ export class FiscalYearsService {
       orderBy: { startDate: 'desc' },
     });
 
-    return years.map((y) => {
+    const result = years.map((y) => {
       const openPeriods = y.periods.filter((p) => p.status === 'OPEN').length;
       const closedPeriods = y.periods.filter((p) => p.status === 'CLOSED').length;
       return {
@@ -81,6 +132,9 @@ export class FiscalYearsService {
         closedPeriods,
       };
     });
+
+    this.yearsListCache.set(validCompanyId, { data: result, expiresAt: Date.now() + 60 * 1000 });
+    return result;
   }
 
   // 2. Get a single fiscal year
@@ -137,7 +191,7 @@ export class FiscalYearsService {
 
     const isCurrent = dto.isCurrent ?? false;
 
-    return this.prisma.$transaction(async (tx) => {
+    const createdYear = await this.prisma.$transaction(async (tx) => {
       if (isCurrent) {
         await tx.fiscalYear.updateMany({
           where: { companyId: validCompanyId },
@@ -164,7 +218,7 @@ export class FiscalYearsService {
       if (dto.createMonthlyPeriods !== false) {
         const periodsData: Prisma.FiscalPeriodCreateManyInput[] = [];
         const monthNames = [
-          'يناير (شهر 1)', 'فبراير (شهر 2)', 'مارس (شهر 3)', 'أبريل (شهر 4)',
+          'يناير (شهر 1)', 'فبراير (شهر 2)', 'مارس (شهر 3)', 'آبريل (شهر 4)',
           'مايو (شهر 5)', 'يونيو (شهر 6)', 'يوليو (شهر 7)', 'أغسطس (شهر 8)',
           'سبتمبر (شهر 9)', 'أكتوبر (شهر 10)', 'نوفمبر (شهر 11)', 'ديسمبر (شهر 12)'
         ];
@@ -199,6 +253,9 @@ export class FiscalYearsService {
 
       return year;
     });
+
+    this.clearCache(validCompanyId);
+    return createdYear;
   }
 
   // 4. Set Active Fiscal Year for the current user
@@ -214,15 +271,24 @@ export class FiscalYearsService {
       data: { activeFiscalYearId: year.id },
     });
 
+    this.clearCache(validCompanyId);
+
     return {
       success: true,
       activeFiscalYear: year,
     };
   }
 
-  // 5. Get Active Fiscal Year for a user
+  // 5. Get Active Fiscal Year for a user (ultra-fast cached lookup)
   async getActiveYear(userId: string, companyId: string) {
     const validCompanyId = await this.resolveCompanyId(companyId);
+    const cacheKey = `${userId || 'anon'}:${validCompanyId}`;
+
+    const cached = this.activeYearCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.data;
+    }
+
     let activeYear: any = null;
 
     if (userId) {
@@ -260,6 +326,10 @@ export class FiscalYearsService {
         where: { companyId: validCompanyId, isCurrent: true },
         include: { periods: true },
       });
+    }
+
+    if (activeYear) {
+      this.activeYearCache.set(cacheKey, { data: activeYear, expiresAt: Date.now() + 60 * 1000 });
     }
 
     return activeYear;

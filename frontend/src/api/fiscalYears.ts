@@ -142,9 +142,9 @@ export interface ClosingPreviewResult {
 }
 
 export const fiscalYearsApi = {
-  getAll: () => apiRequest<FiscalYear[]>('/api/fiscal-years'),
-  getById: (id: string) => apiRequest<FiscalYear>(`/api/fiscal-years/${id}`),
-  getActive: () => apiRequest<FiscalYear>('/api/fiscal-years/active'),
+  getAll: () => apiRequest<FiscalYear[]>('/api/fiscal-years', { ttl: 60000 }),
+  getById: (id: string) => apiRequest<FiscalYear>(`/api/fiscal-years/${id}`, { ttl: 60000 }),
+  getActive: () => apiRequest<FiscalYear>('/api/fiscal-years/active', { ttl: 60000 }),
   setActive: (fiscalYearId: string) =>
     apiRequest<{ success: boolean; activeFiscalYear: FiscalYear }>('/api/fiscal-years/active', {
       method: 'POST',

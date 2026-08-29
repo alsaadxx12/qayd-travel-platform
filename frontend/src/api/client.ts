@@ -14,6 +14,35 @@ const inFlightRequests = new Map<string, Promise<any>>();
 // Cache TTL in ms (30 seconds default for GET, keeps UI blazing fast while staying fresh)
 const DEFAULT_TTL = 30000;
 
+/**
+ * Endpoints that ordinary day-to-day writes cannot affect. Saving a voucher has no
+ * bearing on the tenant's subscription or on the fiscal-year list, yet every write
+ * used to clear the whole cache and force those to be fetched again — and on the
+ * hosted API they cost 1.6-1.9s each. They are only evicted when a write actually
+ * targets the same area, or when clearApiCache() is called on login/logout.
+ */
+const STABLE_PREFIXES = [
+  '/tenants/current',
+  '/fiscal-years',
+  '/print-templates',
+  '/employees',
+  '/roles',
+  '/branches',
+  '/permission-groups',
+];
+
+/** Near-static data is worth holding for minutes, not seconds. */
+const STABLE_TTL = 5 * 60 * 1000;
+
+function pathOfKey(key: string): string {
+  // key is `${method}:${endpoint}:${branchId}` and endpoints never contain ':'
+  return key.split(':')[1] || '';
+}
+
+function isStablePath(path: string): boolean {
+  return STABLE_PREFIXES.some((p) => path.startsWith(p));
+}
+
 export function invalidateApiCache(prefix?: string) {
   if (!prefix) {
     apiCache.clear();
@@ -21,6 +50,23 @@ export function invalidateApiCache(prefix?: string) {
   }
   for (const key of apiCache.keys()) {
     if (key.includes(prefix)) {
+      apiCache.delete(key);
+    }
+  }
+}
+
+/** Full wipe — use on sign-in, sign-out and branch switching. */
+export function clearApiCache() {
+  apiCache.clear();
+  inFlightRequests.clear();
+}
+
+/** Drops volatile entries but keeps near-static ones the write cannot have changed. */
+function invalidateAfterMutation(mutatedPath: string) {
+  const hitsStable = STABLE_PREFIXES.filter((p) => mutatedPath.startsWith(p));
+  for (const key of apiCache.keys()) {
+    const path = pathOfKey(key);
+    if (!isStablePath(path) || hitsStable.some((p) => path.startsWith(p))) {
       apiCache.delete(key);
     }
   }
@@ -38,11 +84,6 @@ export async function apiRequest<T = any>(
   const method = (options.method || 'GET').toUpperCase();
   const token = localStorage.getItem('token');
 
-  // If mutation, invalidate ALL cache to ensure cross-entity consistency (e.g. Accounts, Vouchers, Entries)
-  if (method !== 'GET') {
-    invalidateApiCache();
-  }
-
   // Strip leading /api if present to prevent double /api/api
   const cleanEndpoint = endpoint.startsWith('/api/')
     ? endpoint.slice(4)
@@ -57,10 +98,15 @@ export async function apiRequest<T = any>(
 
   const cacheKey = `${method}:${cleanEndpoint}:${activeBranchId}`;
 
+  // Scoped invalidation, now that we know which path is being written to.
+  if (method !== 'GET') {
+    invalidateAfterMutation(cleanEndpoint);
+  }
+
   // Check memory cache for GET requests
   if (method === 'GET' && !options.noCache) {
     const cached = apiCache.get(cacheKey);
-    const ttl = options.ttl ?? DEFAULT_TTL;
+    const ttl = options.ttl ?? (isStablePath(cleanEndpoint) ? STABLE_TTL : DEFAULT_TTL);
     if (cached && Date.now() - cached.timestamp < ttl) {
       return cached.data;
     }

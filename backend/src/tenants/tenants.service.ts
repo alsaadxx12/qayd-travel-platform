@@ -214,6 +214,24 @@ export class TenantsService {
     private jwtService: JwtService,
   ) {}
 
+  /**
+   * `/tenants/current` is requested on nearly every screen, and the query behind it
+   * is deep: the tenant, its five newest subscriptions, each with its plan version,
+   * features, limits and five payments, plus every membership with its user, plus
+   * every branch — then a usage roll-up on top. Against the hosted database that is
+   * the 1.9s call seen in the network panel.
+   *
+   * None of that changes minute to minute, so the assembled result is held briefly.
+   * The TTL is deliberately short: any plan or branch change shows up within it, and
+   * writes that go through this service clear it outright.
+   */
+  private static readonly TENANT_CACHE_TTL = 30 * 1000;
+  private tenantCache = new Map<string, { at: number; data: any }>();
+
+  public invalidateTenantCache() {
+    this.tenantCache.clear();
+  }
+
   private async fetchSupabaseManagementUsage(): Promise<SupabaseManagementUsageSnapshot> {
     const token = process.env.SUPABASE_MANAGEMENT_API_TOKEN?.trim();
     const projectRef = process.env.SUPABASE_PROJECT_REF?.trim();
@@ -1335,6 +1353,7 @@ export class TenantsService {
       settings.databaseUsageHistory = history;
       settings.databaseUsageMeasurementLog = measurementLog;
       settings.supabaseManagementUsage = result.providerIntegration;
+      this.invalidateTenantCache();
       await this.prisma.tenant.update({
         where: { id: rootTenant.id },
         data: { customSettings: JSON.stringify(settings) },
@@ -1418,6 +1437,7 @@ export class TenantsService {
       updatedAt: new Date().toISOString(),
     };
 
+    this.invalidateTenantCache();
     await this.prisma.tenant.update({
       where: { id: rootTenant.id },
       data: { customSettings: JSON.stringify(currentSettings) },
@@ -1467,6 +1487,7 @@ export class TenantsService {
       settings.databaseQuotaBytes = dto.databaseQuotaBytes;
     }
 
+    this.invalidateTenantCache();
     await this.prisma.tenant.update({
       where: { id: tenant.id },
       data: { customSettings: JSON.stringify(settings) },
@@ -1524,6 +1545,7 @@ export class TenantsService {
       },
     ].slice(-200);
     settings.databaseUsageMeasurementLog = measurementLog;
+    this.invalidateTenantCache();
     await this.prisma.tenant.update({
       where: { id: rootTenant.id },
       data: { customSettings: JSON.stringify(settings) },
@@ -1587,6 +1609,17 @@ export class TenantsService {
   }
 
   async getTenantById(id?: string, companyId?: string, userId?: string) {
+    const cacheKey = `${id || ''}|${companyId || ''}|${userId || ''}`;
+    const hit = this.tenantCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < TenantsService.TENANT_CACHE_TTL) {
+      return hit.data;
+    }
+    const result = await this.buildTenantById(id, companyId, userId);
+    this.tenantCache.set(cacheKey, { at: Date.now(), data: result });
+    return result;
+  }
+
+  private async buildTenantById(id?: string, companyId?: string, userId?: string) {
     let tenant: any = null;
     if (id) {
       tenant = await this.prisma.tenant.findUnique({
@@ -1911,6 +1944,7 @@ export class TenantsService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id } });
     if (!tenant) throw new NotFoundException('المؤسسة غير موجودة');
 
+    this.invalidateTenantCache();
     return await this.prisma.tenant.update({
       where: { id },
       data: {
