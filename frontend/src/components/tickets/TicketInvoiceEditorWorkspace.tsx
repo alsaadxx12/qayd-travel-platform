@@ -21,8 +21,6 @@ import {
   ArrowRight,
   ArrowLeft,
   History,
-  Copy,
-  Ban,
   MoreVertical,
   Settings,
   AlertCircle,
@@ -294,7 +292,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
   }, [customersList, accountsList]);
 
   useEffect(() => {
-    setPageSettings(loadTicketPageSettings(user?.companyId));
+    setPageSettings(loadTicketPageSettings(user?.companyId, 'tickets'));
   }, [user?.companyId]);
 
   const applyDefaultCustomer = useCallback(() => {
@@ -718,7 +716,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     } else {
       // Create Mode: generate new invoice sequence
       const nextNum = getNextSequenceNumber('tickets');
-      const settings = loadTicketPageSettings(user?.companyId);
+      const settings = loadTicketPageSettings(user?.companyId, 'tickets');
       setPageSettings(settings);
       setInvoiceNumber(nextNum || `TK-${Date.now().toString().slice(-6)}`);
       const today = new Date();
@@ -1581,21 +1579,6 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                 </Menu.Item>
               )}
               <Menu.Item
-                leftSection={<Copy size={14} />}
-                onClick={() => {
-                  const nextNum = getNextSequenceNumber('tickets');
-                  setInvoiceNumber(nextNum || `TK-${Date.now().toString().slice(-6)}`);
-                  setStatus('DRAFT');
-                  markDirty();
-                  showSuccessNotification(
-                    isAr ? 'تم نسخ الفاتورة' : 'Invoice Duplicated',
-                    isAr ? 'تم إنشاء رقم فاتورة جديد' : 'New invoice number generated'
-                  );
-                }}
-              >
-                {isAr ? 'نسخ الفاتورة' : 'Duplicate Invoice'}
-              </Menu.Item>
-              <Menu.Item
                 leftSection={<History size={14} />}
                 onClick={() => setAuditLogOpen(true)}
               >
@@ -1604,21 +1587,13 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
               <Menu.Item
                 leftSection={<Settings size={14} />}
                 onClick={() => {
-                  setDraftPageSettings(loadTicketPageSettings(user?.companyId));
+                  setDraftPageSettings(loadTicketPageSettings(user?.companyId, 'tickets'));
                   setPageSettingsOpen(true);
                 }}
               >
                 {isAr ? 'إعدادات الصفحة' : 'Page settings'}
               </Menu.Item>
               <Menu.Divider />
-              <Menu.Item
-                color="red"
-                leftSection={<Ban size={14} />}
-                onClick={() => setCancelModalOpen(true)}
-                disabled={status === 'CANCELLED'}
-              >
-                {isAr ? 'إلغاء الفاتورة' : 'Cancel Invoice'}
-              </Menu.Item>
               <Menu.Item
                 color="red"
                 leftSection={<Trash2 size={14} />}
@@ -2281,7 +2256,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
               color="orange"
               radius="md"
               onClick={() => {
-                saveTicketPageSettings(draftPageSettings, user?.companyId);
+                saveTicketPageSettings(draftPageSettings, user?.companyId, 'tickets');
                 setPageSettings(draftPageSettings);
                 applyPageSettingsToForm(draftPageSettings);
                 setPageSettingsOpen(false);

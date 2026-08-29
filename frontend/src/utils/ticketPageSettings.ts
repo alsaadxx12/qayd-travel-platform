@@ -1,15 +1,10 @@
 export const TICKET_PAGE_SETTINGS_KEY = 'ticket_page_defaults';
 
-/**
- * Editor screens that share the same "window settings" panel.
- * Each keeps its own saved defaults — a hotel booking and a ticket rarely want the
- * same currency or the same default customer.
- */
+/** Each editor keeps its own defaults: tickets usually sell in USD, visas in IQD. */
 export type EditorModule = 'tickets' | 'hotels' | 'visas' | 'refunds';
 
 const MODULE_KEY: Record<EditorModule, string> = {
-  // 'tickets' intentionally keeps the original key so settings saved before this
-  // panel was generalised are not silently lost.
+  // Kept as-is so settings saved before the split are not orphaned.
   tickets: TICKET_PAGE_SETTINGS_KEY,
   hotels: 'hotel_page_defaults',
   visas: 'visa_page_defaults',
@@ -43,10 +38,6 @@ function storageKey(companyId?: string, module: EditorModule = 'tickets') {
   return companyId ? `${base}_${companyId}` : base;
 }
 
-/**
- * Settings live in this browser, so each employee keeps their own defaults without
- * changing anything for a colleague.
- */
 export function loadTicketPageSettings(
   companyId?: string,
   module: EditorModule = 'tickets',

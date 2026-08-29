@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Button,
   Select,
@@ -9,6 +9,7 @@ import {
   Modal,
   Textarea,
   Badge,
+  Switch,
 } from '@mantine/core';
 import {
   FileCheck2,
@@ -18,8 +19,8 @@ import {
   ArrowRight,
   ArrowLeft,
   History,
-  Copy,
   MoreVertical,
+  Settings,
   AlertCircle,
   FileText,
   Sparkles,
@@ -54,6 +55,15 @@ import { UnsavedChangesModal } from '../tickets/UnsavedChangesModal';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { CurrencySegmentedControl } from '../ui/CurrencySegmentedControl';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
+import { DateTimeField } from '../ui/DateTimeField';
+import {
+  TicketPageSettings,
+  DEFAULT_TICKET_PAGE_SETTINGS,
+  loadTicketPageSettings,
+  saveTicketPageSettings,
+  findDefaultCashCustomer,
+  customerDisplayName,
+} from '../../utils/ticketPageSettings';
 import { partnersApi, Customer, Supplier } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
 import { employeesApi } from '../../api/employees';
@@ -249,6 +259,16 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
   const [auditLogOpen, setAuditLogOpen] = useState<boolean>(false);
   const [smartImportOpen, setSmartImportOpen] = useState<boolean>(false);
   const [confirmExitOpen, setConfirmExitOpen] = useState<boolean>(false);
+
+  // Per-employee page defaults, stored under their own key so visa defaults
+  // (often IQD) never overwrite the ticket editor's (often USD).
+  const [pageSettings, setPageSettings] = useState<TicketPageSettings>(() =>
+    loadTicketPageSettings(undefined, 'visas'),
+  );
+  const [pageSettingsOpen, setPageSettingsOpen] = useState<boolean>(false);
+  const [draftPageSettings, setDraftPageSettings] = useState<TicketPageSettings>(
+    DEFAULT_TICKET_PAGE_SETTINGS,
+  );
 
   // Reconciliation Modal for Unmatched Customer / Supplier
   const [reconciliationModalOpen, setReconciliationModalOpen] = useState<boolean>(false);
@@ -728,6 +748,48 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
     }
   }, [employeesList]);
 
+  // Read through a ref: the hydrate effect must not re-run (and wipe a half-typed
+  // transaction) merely because the customer list finished loading.
+  const customerCandidatesRef = useRef(allCustomerCandidates);
+  useEffect(() => {
+    customerCandidatesRef.current = allCustomerCandidates;
+  }, [allCustomerCandidates]);
+
+  /**
+   * Pushes the saved defaults onto the live form. Used both when a new visa
+   * transaction opens and right after the settings dialog saves, so the change is
+   * visible immediately instead of only on the next transaction.
+   */
+  const applyPageSettingsToForm = useCallback(
+    (settings: TicketPageSettings) => {
+      setCurrency(settings.defaultCurrency);
+      setPaymentType(settings.defaultPaymentType);
+      setPaymentMethod(settings.defaultPaymentMethod);
+
+      const match = findDefaultCashCustomer(allCustomerCandidates as any, settings);
+      if (match) setCustomerName(customerDisplayName(match, isAr));
+      else if (settings.defaultCustomerName) setCustomerName(settings.defaultCustomerName);
+
+      if (settings.datesDefaultToday) {
+        setIssueDate(new Date());
+        setEntryDate(new Date());
+      }
+
+      if (settings.linkCashboxToEmployee) {
+        const emp = user?.name || '';
+        if (emp) applyEmployeeCashbox(emp, availableCashboxes);
+      }
+    },
+    [allCustomerCandidates, isAr, user, applyEmployeeCashbox, availableCashboxes],
+  );
+
+  // Refresh the saved defaults each time the editor is opened, so a change made
+  // in another tab is picked up.
+  useEffect(() => {
+    if (!opened) return;
+    setPageSettings(loadTicketPageSettings(user?.companyId, 'visas'));
+  }, [opened, user?.companyId]);
+
   // Hydrate Data
   useEffect(() => {
     if (!opened) return;
@@ -850,27 +912,34 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
 
       setIsDirty(false);
     } else {
-      // Create Mode
+      // Create Mode — seeded from this employee's saved page defaults.
+      const defaults = loadTicketPageSettings(user?.companyId, 'visas');
       const nextNum = getNextSequenceNumber('visas') || `VISA-${Date.now().toString().slice(-6)}`;
       setInvoiceNumber(nextNum);
       setIssueDate(new Date());
-      setCustomerName('');
       setSupplierAccount('');
       setSupplierAccountName('');
       setVisaDestination('');
       const defaultEmp = user?.name || '';
       setEmployeeName(defaultEmp);
       setEntryEmployee(defaultEmp);
-      setCurrency('USD');
       setExchangeRate(0);
-      setPaymentType('');
-      setPaymentMethod('');
       setReference('');
       setNotes('');
       setStatus('DRAFT');
       setDiscountAmount(0);
 
-      if (defaultEmp) applyEmployeeCashbox(defaultEmp, availableCashboxes);
+      setCurrency(defaults.defaultCurrency);
+      setPaymentType(defaults.defaultPaymentType);
+      setPaymentMethod(defaults.defaultPaymentMethod);
+      setEntryDate(new Date());
+
+      const defaultCustomer = findDefaultCashCustomer(customerCandidatesRef.current as any, defaults);
+      setCustomerName(
+        defaultCustomer ? customerDisplayName(defaultCustomer, isAr) : defaults.defaultCustomerName || '',
+      );
+
+      if (defaultEmp && defaults.linkCashboxToEmployee) applyEmployeeCashbox(defaultEmp, availableCashboxes);
 
       setPassengers([
         {
@@ -1579,7 +1648,7 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
   // Keyboard shortcut: ESC & Ctrl+S / Ctrl+Enter
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && opened && !currencySwitchModalOpen && !auditLogOpen && !confirmExitOpen && !smartImportOpen) {
+      if (e.key === 'Escape' && opened && !currencySwitchModalOpen && !auditLogOpen && !confirmExitOpen && !smartImportOpen && !pageSettingsOpen) {
         e.preventDefault();
         handleRequestClose();
       }
@@ -1596,7 +1665,7 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [opened, currencySwitchModalOpen, auditLogOpen, confirmExitOpen, smartImportOpen, submittingAction, handleRequestClose, saveMutation]);
+  }, [opened, currencySwitchModalOpen, auditLogOpen, confirmExitOpen, smartImportOpen, pageSettingsOpen, submittingAction, handleRequestClose, saveMutation]);
 
   const handleSaveAndExit = async () => {
     try {
@@ -1693,25 +1762,19 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
             </Menu.Target>
             <Menu.Dropdown className="p-1 text-xs font-medium" dir={direction}>
               <Menu.Item
-                leftSection={<Copy size={14} />}
-                onClick={() => {
-                  const nextNum = getNextSequenceNumber('visas') || `VISA-${Date.now().toString().slice(-6)}`;
-                  setInvoiceNumber(nextNum);
-                  setStatus('DRAFT');
-                  markDirty();
-                  showSuccessNotification(
-                    isAr ? 'تم نسخ المعاملة' : 'Transaction Duplicated',
-                    isAr ? 'تم إنشاء رقم معاملة جديد' : 'New invoice number generated'
-                  );
-                }}
-              >
-                {isAr ? 'نسخ المعاملة' : 'Duplicate Invoice'}
-              </Menu.Item>
-              <Menu.Item
                 leftSection={<History size={14} />}
                 onClick={() => setAuditLogOpen(true)}
               >
                 {isAr ? 'سجل التعديلات' : 'Audit Trail Log'}
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<Settings size={14} />}
+                onClick={() => {
+                  setDraftPageSettings(loadTicketPageSettings(user?.companyId, 'visas'));
+                  setPageSettingsOpen(true);
+                }}
+              >
+                {isAr ? 'إعدادات الصفحة' : 'Page settings'}
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
@@ -1924,19 +1987,33 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
                     />
                   </div>
 
-                  {/* Entry Date */}
+                  {/* Entry Date — one combined field when the page settings ask for a time */}
                   <div id="field-entry-date">
-                    <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
-                      {isAr ? 'تاريخ الإدخال' : 'Entry Date'}
-                    </label>
-                    <SegmentedDatePicker
-                      value={entryDate}
-                      onChange={(date) => {
-                        if (date) setEntryDate(date);
-                        markDirty();
-                      }}
-                      clearable={false}
-                    />
+                    {pageSettings.entryDateIncludesTime ? (
+                      <DateTimeField
+                        label={isAr ? 'تاريخ ووقت الإدخال' : 'Entry date & time'}
+                        isArabic={isAr}
+                        value={entryDate}
+                        onChange={(date) => {
+                          setEntryDate(date);
+                          markDirty();
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
+                          {isAr ? 'تاريخ الإدخال' : 'Entry Date'}
+                        </label>
+                        <SegmentedDatePicker
+                          value={entryDate}
+                          onChange={(date) => {
+                            if (date) setEntryDate(date);
+                            markDirty();
+                          }}
+                          clearable={false}
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2632,6 +2709,142 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
         unmatchedSupplier={unmatchedSupplierData}
         onApplyMatches={handleApplyReconciliationMatches}
       />
+
+      <Modal
+        opened={pageSettingsOpen}
+        onClose={() => setPageSettingsOpen(false)}
+        size="520px"
+        padding="md"
+        radius="lg"
+        centered
+        dir={direction}
+        title={
+          <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+            <Settings size={18} className="text-orange-600" />
+            <span>{isAr ? 'إعدادات صفحة التأشيرات' : 'Visa page settings'}</span>
+          </div>
+        }
+      >
+        <div className="space-y-4 font-sans text-xs">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-600 leading-relaxed">
+            {isAr
+              ? 'تُحفظ هذه الخيارات على هذا الجهاز وتُطبَّق تلقائياً عند إنشاء معاملة تأشيرات جديدة، وهي مستقلة عن إعدادات صفحة التذاكر.'
+              : 'These options are saved on this device and applied automatically when creating a new visa transaction. They are independent of the ticket page settings.'}
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-800 mb-1.5">
+              {isAr ? 'العملة الافتراضية' : 'Default currency'}
+            </label>
+            <div className="h-9 flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-300 gap-1">
+              <button
+                type="button"
+                onClick={() => setDraftPageSettings((s) => ({ ...s, defaultCurrency: 'USD' }))}
+                className={`flex-1 h-full rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  draftPageSettings.defaultCurrency === 'USD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                $ USD
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraftPageSettings((s) => ({ ...s, defaultCurrency: 'IQD' }))}
+                className={`flex-1 h-full rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  draftPageSettings.defaultCurrency === 'IQD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                IQD
+              </button>
+            </div>
+          </div>
+
+          <SearchableCombobox
+            label={isAr ? 'العميل الافتراضي' : 'Default customer'}
+            value={draftPageSettings.defaultCustomerId || draftPageSettings.defaultCustomerName}
+            onChange={(val) => {
+              const found = allCustomerCandidates.find(
+                (c: any) => c.id === val || c.accountId === val || c.code === val || c.nameAr === val || c.nameEn === val || c.name === val,
+              );
+              setDraftPageSettings((s) => ({
+                ...s,
+                defaultCustomerId: (found as any)?.id || (found as any)?.accountId || '',
+                defaultCustomerName: found ? customerDisplayName(found, isAr) : (val || 'مسافر كاش'),
+              }));
+            }}
+            options={formattedCustomersData}
+            allowCustomValue
+          />
+
+          <SearchableCombobox
+            label={isAr ? 'نوع البيع الافتراضي' : 'Default sale type'}
+            value={draftPageSettings.defaultPaymentType}
+            onChange={(val) => setDraftPageSettings((s) => ({ ...s, defaultPaymentType: (val === 'آجل' ? 'آجل' : 'نقدي') }))}
+            options={[
+              { value: 'نقدي', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
+              { value: 'آجل', label: isAr ? 'آجل (ذمة العميل)' : 'Credit (On Account)' },
+            ]}
+            clearable={false}
+          />
+
+          <SearchableCombobox
+            label={isAr ? 'طريقة الاستلام الافتراضية' : 'Default receiving method'}
+            value={draftPageSettings.defaultPaymentMethod}
+            onChange={(val) => setDraftPageSettings((s) => ({ ...s, defaultPaymentMethod: val || 'CASH_HAND' }))}
+            options={paymentMethodsList}
+            clearable={false}
+          />
+
+          <Switch
+            checked={draftPageSettings.linkCashboxToEmployee}
+            onChange={(e) => setDraftPageSettings((s) => ({ ...s, linkCashboxToEmployee: e.currentTarget.checked }))}
+            label={isAr ? 'ربط صندوق الاستلام بحساب الموظف' : 'Link receiving cashbox to the issuing employee'}
+            description={isAr ? 'عند اختيار موظف الإصدار يُعبَّأ صندوقه تلقائياً' : 'Selecting the issuing employee fills their assigned cashbox'}
+            color="orange"
+            size="sm"
+          />
+
+          <Switch
+            checked={draftPageSettings.datesDefaultToday}
+            onChange={(e) => setDraftPageSettings((s) => ({ ...s, datesDefaultToday: e.currentTarget.checked }))}
+            label={isAr ? 'تاريخ الإصدار وتاريخ الإدخال = اليوم' : 'Issue date and entry date default to today'}
+            color="orange"
+            size="sm"
+          />
+
+          <Switch
+            checked={draftPageSettings.entryDateIncludesTime}
+            onChange={(e) => setDraftPageSettings((s) => ({ ...s, entryDateIncludesTime: e.currentTarget.checked }))}
+            label={isAr ? 'تاريخ الإدخال يشمل الوقت' : 'Entry date includes time'}
+            description={isAr ? 'يعرض حقل الوقت بجانب تاريخ الإدخال' : 'Shows a time field next to the entry date'}
+            color="orange"
+            size="sm"
+          />
+
+          <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+            <Button size="xs" variant="default" radius="md" onClick={() => setPageSettingsOpen(false)}>
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </Button>
+            <Button
+              size="xs"
+              color="orange"
+              radius="md"
+              onClick={() => {
+                saveTicketPageSettings(draftPageSettings, user?.companyId, 'visas');
+                setPageSettings(draftPageSettings);
+                applyPageSettingsToForm(draftPageSettings);
+                setPageSettingsOpen(false);
+                showSuccessNotification(
+                  isAr ? 'تم حفظ إعدادات الصفحة' : 'Page settings saved',
+                  isAr ? 'ستُطبَّق هذه الإعدادات على معاملات التأشيرات الجديدة وعلى المسودة الحالية.' : 'These defaults apply to new visa transactions and the current draft.',
+                );
+              }}
+              className="bg-[#F45A0A] hover:bg-orange-600 font-bold"
+            >
+              {isAr ? 'حفظ وتطبيق' : 'Save and apply'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <CurrencySwitchModal
         opened={currencySwitchModalOpen}
