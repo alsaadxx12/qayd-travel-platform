@@ -424,33 +424,38 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
             </div>
 
-            {/* Field 2: المبلغ رقماً (CENTERED AMOUNT) */}
-            <div className="flex items-center gap-3">
-              <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
-                <IconCoins size={16} style={{ color: primaryColor }} />
-                <span>{isEn ? 'Amount (Digits) :' : 'المبلغ رقماً :'}</span>
-              </span>
+            {/* Field 2: المبلغ رقماً + العملة بجانبه */}
+            <div className="grid grid-cols-12 gap-3">
+              {/* المبلغ رقماً (8 cols) */}
+              <div className="col-span-8 flex items-center gap-3">
+                <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
+                  <IconCoins size={16} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Amount (Digits) :' : 'المبلغ رقماً :'}</span>
+                </span>
 
-              <div
-                className="flex-1 flex items-center rounded-xl overflow-hidden border"
-                style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
-              >
                 <div
-                  className="px-3.5 py-2 text-xs font-black font-mono border-l flex items-center justify-center shrink-0"
+                  className="flex-1 rounded-xl p-2.5 px-4 text-center font-mono font-black text-lg tracking-wider border"
                   style={{
-                    backgroundColor: '#E2E8F0',
-                    borderColor: '#CBD5E1',
-                    color: '#334155',
+                    backgroundColor: fieldBgColor,
+                    borderColor: fieldBorderColor,
+                    color: amountTextColor,
                   }}
                 >
-                  {currencyCode}
-                </div>
-                {/* CENTERED NUMERICAL AMOUNT */}
-                <div
-                  className="flex-1 px-4 py-2 text-center font-mono font-black text-lg tracking-wider"
-                  style={{ color: amountTextColor }}
-                >
                   {amountFormatted}
+                </div>
+              </div>
+
+              {/* العملة (4 cols) بجانب المبلغ */}
+              <div className="col-span-4 flex items-center gap-2">
+                <span className="font-black text-xs text-slate-700 flex items-center gap-1 shrink-0">
+                  <IconWorld size={15} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Currency :' : 'العملة :'}</span>
+                </span>
+                <div
+                  className="flex-1 rounded-xl p-2.5 px-3 text-center font-bold text-xs text-slate-800 border truncate font-mono"
+                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
+                >
+                  {currencyName}
                 </div>
               </div>
             </div>
