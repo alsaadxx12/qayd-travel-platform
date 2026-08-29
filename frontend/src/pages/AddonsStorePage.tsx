@@ -265,8 +265,8 @@ export const AddonsStorePage: React.FC = () => {
         ? 'وكيل قراءة وتحليل لحسابات الشركة: أرصدة، تذاكر، سندات، وقيود — عبر نموذج OpenAI.'
         : 'Read-only accounting copilot for balances, tickets, vouchers, and journals via OpenAI.',
       icon: IconSparkles,
-      iconColor: 'text-indigo-600',
-      iconBg: 'bg-indigo-50 border-indigo-200',
+      iconColor: 'text-[#F45A0A]',
+      iconBg: 'bg-orange-50 border-orange-200',
       tagType: 'usage' as const,
       tagLabel: isAr ? 'وكيل الذكاء' : 'AI Agent',
       statLabel1: isAr ? 'الرصيد المخصص' : 'Allocated',
@@ -286,8 +286,8 @@ export const AddonsStorePage: React.FC = () => {
         ? `إرسال كشوف الحساب والتقارير المالية عبر البريد المعتمد (${brevoInfo?.activeSenderEmail || 'acc2.rooda10@gmail.com'}).`
         : `Automated sending of account statements and invoices via verified email (${brevoInfo?.activeSenderEmail || 'acc2.rooda10@gmail.com'}).`,
       icon: IconMail,
-      iconColor: 'text-rose-600',
-      iconBg: 'bg-rose-50 border-rose-200',
+      iconColor: 'text-[#F45A0A]',
+      iconBg: 'bg-orange-50 border-orange-200',
       tagType: 'usage' as const,
       tagLabel: isAr ? 'Brevo نشط' : 'Brevo Active',
       statLabel1: isAr ? 'الحد اليومي' : 'Daily Limit',
@@ -307,8 +307,8 @@ export const AddonsStorePage: React.FC = () => {
         ? 'ربط وتوسعة فروع المؤسسة بصناديق وكشوفات حسابات ومستخدمين مستقلين.'
         : 'Connect and expand branch offices with independent cashboxes, statements, and users.',
       icon: IconBuildingStore,
-      iconColor: 'text-purple-600',
-      iconBg: 'bg-purple-50 border-purple-200',
+      iconColor: 'text-[#F45A0A]',
+      iconBg: 'bg-orange-50 border-orange-200',
       tagType: 'subscription' as const,
       tagLabel: isAr ? 'نظام الفروع' : 'Branch System',
       statLabel1: isAr ? 'الفروع النشطة' : 'Active Branches',
@@ -328,8 +328,8 @@ export const AddonsStorePage: React.FC = () => {
         ? 'سيرفر وقاعدة بيانات Supabase PostgreSQL مؤمّنة مع نسخ احتياطي وتشفير عالي.'
         : 'Enterprise Supabase PostgreSQL database engine with automatic backups and encryption.',
       icon: IconDatabase,
-      iconColor: 'text-amber-600',
-      iconBg: 'bg-amber-50 border-amber-200',
+      iconColor: 'text-[#F45A0A]',
+      iconBg: 'bg-orange-50 border-orange-200',
       tagType: 'usage' as const,
       tagLabel: isAr ? 'قاعدة البيانات' : 'Cloud DB',
       statLabel1: isAr ? 'المحرك' : 'Engine',
@@ -349,8 +349,8 @@ export const AddonsStorePage: React.FC = () => {
         ? 'إرسال التذاكر والفواتير وإشعارات القبض والصرف للعملاء والوكلاء عبر WhatsApp.'
         : 'Send flight tickets, hotel vouchers, and payment receipts to customers via WhatsApp.',
       icon: IconBrandWhatsapp,
-      iconColor: 'text-emerald-600',
-      iconBg: 'bg-emerald-50 border-emerald-200',
+      iconColor: 'text-[#F45A0A]',
+      iconBg: 'bg-orange-50 border-orange-200',
       tagType: 'subscription' as const,
       tagLabel: isAr ? 'واتساب للأعمال' : 'WhatsApp API',
       statLabel1: isAr ? 'حالة البوابة' : 'Gateway Status',
@@ -428,11 +428,7 @@ export const AddonsStorePage: React.FC = () => {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   {/* Left: Tag Badge */}
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                    addon.tagType === 'usage'
-                      ? 'bg-rose-50 text-rose-700 border border-rose-200/80'
-                      : 'bg-amber-50 text-amber-800 border border-amber-200/80'
-                  }`}>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-50 text-[#C2410C] border border-orange-200/80`}>
                     {addon.tagLabel}
                   </span>
 
@@ -470,18 +466,18 @@ export const AddonsStorePage: React.FC = () => {
               </div>
 
               {/* 2. Middle Section: Real Technical Metrics */}
-              <div className="bg-slate-50/90 border border-slate-200/80 rounded-lg p-2 grid grid-cols-3 text-center divide-x divide-slate-200/80">
+              <div className="bg-[#FFF7ED] border border-orange-200/60 rounded-lg p-2.5 grid grid-cols-3 text-center divide-x divide-orange-200/60">
                 <div className="px-1">
-                  <span className="text-[9px] text-slate-500 font-bold block">{addon.statLabel1}</span>
-                  <span className="font-mono font-black text-slate-900 text-[11px] block tabular-nums">{addon.statVal1}</span>
+                  <span className="text-[9px] text-[#C2410C] font-bold block">{addon.statLabel1}</span>
+                  <span className="font-mono font-black text-slate-900 text-xs block mt-0.5 tabular-nums lining-nums">{addon.statVal1}</span>
                 </div>
                 <div className="px-1">
-                  <span className="text-[9px] text-slate-500 font-bold block">{addon.statLabel2}</span>
-                  <span className="font-mono font-black text-slate-900 text-[11px] block tabular-nums">{addon.statVal2}</span>
+                  <span className="text-[9px] text-[#C2410C] font-bold block">{addon.statLabel2}</span>
+                  <span className="font-mono font-black text-slate-900 text-xs block mt-0.5 tabular-nums lining-nums">{addon.statVal2}</span>
                 </div>
                 <div className="px-1">
-                  <span className="text-[9px] text-slate-500 font-bold block">{addon.statLabel3}</span>
-                  <span className="font-mono font-black text-emerald-700 text-[11px] block tabular-nums">{addon.statVal3}</span>
+                  <span className="text-[9px] text-[#C2410C] font-bold block">{addon.statLabel3}</span>
+                  <span className="font-mono font-black text-slate-900 text-xs block mt-0.5 tabular-nums lining-nums">{addon.statVal3}</span>
                 </div>
               </div>
 
