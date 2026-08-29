@@ -1926,8 +1926,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                   </div>
                 </div>
 
-                {/* ── Custom Allocation & Split Section (تقسيم وتوزيع السند مع حساب النظام التلقائي) ── */}
-                <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-2xs">
+                {/* ── Custom Allocation & Split Section (Side-by-Side Unified Container) ── */}
+                <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3 space-y-2.5 shadow-2xs">
                   <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-200/70 pb-2">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-lg bg-orange-600 text-white flex items-center justify-center text-xs font-black shadow-2xs">
@@ -1937,8 +1937,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                         <span className="font-extrabold text-xs text-slate-900 block leading-tight">
                           تقسيم وتوزيع السند المالي على الحسابات (Split Allocation)
                         </span>
-                        <span className="text-[10.5px] text-slate-500 font-medium">
-                          حساب النظام يحتسب الرصيد المتبقي تلقائياً ويقل بمجرد كتابة المبلغ في الحسابات المخصصة
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          حساب النظام يحتسب الرصيد تلقائياً ويقل بمجرد كتابة المبلغ في الحساب المخصص بجانبه
                         </span>
                       </div>
                     </div>
@@ -1956,54 +1956,54 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     </div>
                   </div>
 
-                  {/* List of Split Rows: 1. Main System Account (Auto-calculated) + 2. Custom Accounts */}
-                  <div className="space-y-2">
-                    {/* Row 1: System Account (حساب النظام - الرصيد الأساسي التلقائي) */}
-                    <div className="bg-gradient-to-r from-blue-50/80 to-indigo-50/60 p-2.5 rounded-xl border border-blue-200/90 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shadow-2xs">
-                      <div className="flex items-center gap-2 min-w-[200px] flex-1">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
-                        <div>
-                          <span className="font-black text-xs text-blue-950 block">
-                            🏢 حساب النظام (الرصيد الأساسي)
+                  {/* Side-by-Side Grid (واحد بجانب الآخر في نفس الحاوية) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 items-stretch">
+                    {/* 1. حساب النظام (الرصيد الأساسي التلقائي) - في الجانب الأيمن */}
+                    <div className="bg-gradient-to-r from-blue-50/90 to-indigo-50/70 p-2 rounded-xl border border-blue-200 flex items-center justify-between gap-2 shadow-2xs">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="font-black text-xs text-blue-950 block truncate">
+                            🏢 حساب النظام (الأساسي)
                           </span>
-                          <span className="text-[10.5px] text-blue-700 font-bold">
-                            🔗 {oppositeAcc?.nameAr ? `${oppositeAcc.nameAr} (الحساب المقابل)` : 'حساب النظام الرئيسي'}
+                          <span className="text-[10px] text-blue-700 font-bold block truncate">
+                            {oppositeAcc?.nameAr ? `🔗 ${oppositeAcc.nameAr}` : 'الرصيد المتبقي'}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="w-40 h-[34px] rounded-lg bg-white border border-blue-300 px-3 flex items-center justify-center shadow-2xs">
-                          <span className="font-mono font-black text-sm text-blue-800 tabular-nums">
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="w-32 h-[34px] rounded-lg bg-white border border-blue-300 px-2 flex items-center justify-center shadow-2xs">
+                          <span className="font-mono font-black text-xs sm:text-sm text-blue-800 tabular-nums">
                             {systemAccountAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
-                        <span className="text-[10.5px] text-blue-700 font-bold bg-blue-100/70 px-2 py-1 rounded-md border border-blue-200">
+                        <span className="text-[9.5px] text-blue-700 font-bold bg-blue-100/70 px-1.5 py-1 rounded border border-blue-200 shrink-0">
                           محسوب آلياً
                         </span>
                       </div>
                     </div>
 
-                    {/* Custom Accounts List */}
+                    {/* 2. الحسابات المخصصة - بجانبها في نفس الحاوية والشبكة */}
                     {splitAllocations.map((item, sIdx) => (
                       <div
                         key={item.id || sIdx}
-                        className="bg-white p-2.5 rounded-xl border border-slate-200 hover:border-orange-300 transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shadow-2xs"
+                        className="bg-white p-2 rounded-xl border border-slate-200 hover:border-orange-300 transition-all flex items-center justify-between gap-2 shadow-2xs"
                       >
-                        <div className="flex items-center gap-2 min-w-[180px] flex-1">
-                          <span className="w-2.5 h-2.5 rounded-full bg-orange-600 shrink-0" />
-                          <div>
-                            <span className="font-bold text-xs text-slate-900 block">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="w-2 h-2 rounded-full bg-orange-600 shrink-0" />
+                          <div className="min-w-0">
+                            <span className="font-bold text-xs text-slate-900 block truncate">
                               🏷️ {item.accountName}
                             </span>
-                            <span className="text-[10px] text-slate-400 font-medium">
-                              حساب تقسيم مخصص
+                            <span className="text-[9.5px] text-slate-400 font-medium block">
+                              حساب مخصص
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="w-40">
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="w-32">
                             <FormattedNumberInput
                               size="xs"
                               placeholder="0.00"
@@ -2012,7 +2012,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                               styles={{
                                 input: {
                                   height: '34px',
-                                  fontSize: '14px',
+                                  fontSize: '13px',
                                   fontWeight: 800,
                                   fontFamily: 'monospace',
                                   textAlign: 'center',
@@ -2029,7 +2029,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                             type="button"
                             onClick={() => handleFillRemaining(item.id)}
                             title="تعبئة كامل المبلغ المتبقي لهذا الحساب"
-                            className="h-[34px] px-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[11px] font-bold text-orange-900 border border-orange-200 cursor-pointer shadow-2xs transition-colors"
+                            className="h-[34px] px-2 rounded-lg bg-orange-50 hover:bg-orange-100 text-[10.5px] font-bold text-orange-900 border border-orange-200 cursor-pointer shadow-2xs transition-colors shrink-0"
                           >
                             المتبقي
                           </button>
@@ -2037,16 +2037,16 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                           <button
                             type="button"
                             onClick={() => handleRemoveSplitRow(item.id)}
-                            className="h-[34px] w-[34px] rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
+                            className="h-[34px] w-[30px] rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors shrink-0"
                           >
-                            <IconTrash size={14} />
+                            <IconTrash size={13} />
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Add Another Custom Split Row & Reset Action */}
+                  {/* Bottom Line: Add Account & Reset */}
                   <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70">
                     <div className="flex-1 min-w-[240px]">
                       <Select
@@ -2062,7 +2062,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                         }}
                         value={null}
                         styles={{
-                          input: { height: '32px', fontSize: '11.5px', borderRadius: '8px', backgroundColor: '#ffffff' },
+                          input: { height: '30px', fontSize: '11px', borderRadius: '8px', backgroundColor: '#ffffff' },
                         }}
                       />
                     </div>
@@ -2071,7 +2071,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                       <button
                         type="button"
                         onClick={handleResetCustomSplits}
-                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 cursor-pointer transition-colors"
+                        className="px-2 py-0.5 rounded-lg text-[10.5px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 cursor-pointer transition-colors"
                       >
                         تصفير المبالغ المخصصة ↺
                       </button>
