@@ -14,6 +14,7 @@ import {
   IconFileText,
   IconFileTypePdf,
   IconPhoto,
+  IconUpload,
   IconSparkles,
 } from '@tabler/icons-react';
 import jsPDF from 'jspdf';
@@ -232,6 +233,7 @@ export const PrintSettingsPage: React.FC = () => {
 
   const [isSaving, setIsSaving] = useState(false);
   const [isExportingTestPdf, setIsExportingTestPdf] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
 
   const currentDocKey = activeDocTab || 'statement';
@@ -241,6 +243,42 @@ export const PrintSettingsPage: React.FC = () => {
   const activeLogoUrl = useMemo(() => {
     return currentConfig?.logoUrl || branches[0]?.logo || (branches[0] as any)?.logoUrl || '';
   }, [currentConfig, branches]);
+
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showErrorNotification(isAr ? 'ملف غير صالح' : 'Invalid File', isAr ? 'يرجى اختيار صورة صالحة' : 'Please select an image file');
+      return;
+    }
+
+    setIsUploadingBanner(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        try {
+          const res = await branchesApi.uploadLogo(`header_banner_${Date.now()}_${file.name}`, base64);
+          if (res && res.url) {
+            updateCurrentConfig('headerImageUrl', res.url);
+            updateCurrentConfig('useFullHeaderImage', true);
+            showSuccessNotification(
+              isAr ? 'تم رفع الترويسة بنجاح' : 'Header Uploaded',
+              isAr ? 'تم رفع صورة الترويسة وتعيينها فورياً' : 'Header banner uploaded successfully'
+            );
+          }
+        } catch (err: any) {
+          showErrorNotification(isAr ? 'خطأ في الرفع' : 'Upload Failed', err?.message || 'Failed to upload header');
+        } finally {
+          setIsUploadingBanner(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setIsUploadingBanner(false);
+    }
+  };
 
   // Load all 4 doc templates on mount
   useEffect(() => {
@@ -852,6 +890,105 @@ export const PrintSettingsPage: React.FC = () => {
                       <IconBuilding size={14} className="text-[#F45A0A]" />
                       <span>{isAr ? 'بيانات الشركة والترويسة والشعار' : 'Company & Logo Settings'}</span>
                     </h4>
+
+                    {/* Full Header Banner Section (صورة الترويسة الكاملة) */}
+                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-slate-900 flex items-center gap-1.5 text-xs">
+                          <IconPhoto size={16} className="text-blue-600" />
+                          <span>{isAr ? 'صورة الترويسة الكاملة (Header Banner)' : 'Full Header Banner'}</span>
+                        </span>
+                        <Switch
+                          size="xs"
+                          color="blue"
+                          label={isAr ? 'تفعيل' : 'Enable'}
+                          checked={currentConfig.useFullHeaderImage === true}
+                          onChange={(e) => updateCurrentConfig('useFullHeaderImage', e.currentTarget.checked)}
+                        />
+                      </div>
+
+                      {/* Visual Header Banner Preview */}
+                      <div className="h-16 bg-white rounded-lg border border-dashed border-blue-300 flex items-center justify-center p-1 overflow-hidden">
+                        {currentConfig.headerImageUrl ? (
+                          <img
+                            src={currentConfig.headerImageUrl}
+                            alt="Header Banner Preview"
+                            style={{
+                              maxHeight: `${currentConfig.headerImageHeight || 55}px`,
+                              width: '100%',
+                              objectFit: 'contain',
+                            }}
+                          />
+                        ) : (
+                          <span className="text-[10px] text-blue-500 font-bold">
+                            {isAr ? 'لم يتم تعيين صورة ترويسة كاملة بعد' : 'No full header banner set'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Upload & Preset Actions */}
+                      <div className="flex items-center gap-2">
+                        <label className="flex-1">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleBannerUpload}
+                          />
+                          <Button
+                            component="span"
+                            size="xs"
+                            variant="light"
+                            color="blue"
+                            fullWidth
+                            loading={isUploadingBanner}
+                            leftSection={<IconUpload size={14} />}
+                            className="font-bold cursor-pointer"
+                          >
+                            {isAr ? 'رفع صورة ترويسة جديدة ☁️' : 'Upload Banner Image'}
+                          </Button>
+                        </label>
+
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          color="blue"
+                          onClick={() => {
+                            updateCurrentConfig(
+                              'headerImageUrl',
+                              'https://mgsgslrjbbjwkhhmdype.supabase.co/storage/v1/object/public/branch-images/voucher_header_banner_1788007955181.png'
+                            );
+                            updateCurrentConfig('useFullHeaderImage', true);
+                            showSuccessNotification(
+                              isAr ? 'تم تعيين الترويسة المعتمدة' : 'Official Banner Set',
+                              isAr ? 'تم تعيين ترويسة شركة الروضتين المعتمدة' : 'Official RODA 10 banner applied'
+                            );
+                          }}
+                          className="font-bold text-[10px]"
+                        >
+                          {isAr ? 'ترويسة الروضتين ⚡' : 'RODA 10 Preset'}
+                        </Button>
+                      </div>
+
+                      {/* Header Banner Height Slider */}
+                      {currentConfig.useFullHeaderImage && (
+                        <div>
+                          <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                            <span>{isAr ? 'ارتفاع الترويسة:' : 'Banner Height:'}</span>
+                            <span className="font-mono text-blue-600">{currentConfig.headerImageHeight || 85}px</span>
+                          </div>
+                          <Slider
+                            size="xs"
+                            color="blue"
+                            min={40}
+                            max={160}
+                            step={5}
+                            value={currentConfig.headerImageHeight || 85}
+                            onChange={(v) => updateCurrentConfig('headerImageHeight', v)}
+                          />
+                        </div>
+                      )}
+                    </div>
 
                     {/* Logo Preview & Size Sliders */}
                     <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
