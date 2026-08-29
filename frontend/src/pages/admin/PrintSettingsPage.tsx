@@ -970,22 +970,40 @@ export const PrintSettingsPage: React.FC = () => {
                         </Button>
                       </div>
 
-                      {/* Header Banner Height Slider */}
+                      {/* Header Banner Height & Top Spacing Sliders */}
                       {currentConfig.useFullHeaderImage && (
-                        <div>
-                          <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
-                            <span>{isAr ? 'ارتفاع الترويسة الكاملة:' : 'Full Banner Height:'}</span>
-                            <span className="font-mono text-blue-600">{currentConfig.headerImageHeight || 115}px</span>
+                        <div className="space-y-2">
+                          <div>
+                            <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                              <span>{isAr ? 'ارتفاع الترويسة الكاملة:' : 'Full Banner Height:'}</span>
+                              <span className="font-mono text-blue-600">{currentConfig.headerImageHeight || 115}px</span>
+                            </div>
+                            <Slider
+                              size="xs"
+                              color="blue"
+                              min={40}
+                              max={240}
+                              step={5}
+                              value={currentConfig.headerImageHeight || 115}
+                              onChange={(v) => updateCurrentConfig('headerImageHeight', v)}
+                            />
                           </div>
-                          <Slider
-                            size="xs"
-                            color="blue"
-                            min={40}
-                            max={240}
-                            step={5}
-                            value={currentConfig.headerImageHeight || 115}
-                            onChange={(v) => updateCurrentConfig('headerImageHeight', v)}
-                          />
+
+                          <div>
+                            <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                              <span>{isAr ? 'المسافة من أعلى الصفحة:' : 'Top Page Margin:'}</span>
+                              <span className="font-mono text-blue-600">{currentConfig.headerMarginTop ?? 4}mm</span>
+                            </div>
+                            <Slider
+                              size="xs"
+                              color="blue"
+                              min={0}
+                              max={25}
+                              step={1}
+                              value={currentConfig.headerMarginTop ?? 4}
+                              onChange={(v) => updateCurrentConfig('headerMarginTop', v)}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>

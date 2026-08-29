@@ -167,6 +167,10 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
 
   const logoUrl = cfg.logoUrl || '';
 
+  const topPadding = cfg.headerMarginTop !== undefined
+    ? `${cfg.headerMarginTop}mm`
+    : (cfg.useFullHeaderImage ? '4mm' : '10mm');
+
   return (
     <div
       id="printable-voucher-sheet"
@@ -176,7 +180,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
         width: '100%',
         maxWidth: '210mm',
         minHeight: '297mm', // Standard A4
-        padding: '14mm 16mm',
+        padding: `${topPadding} 14mm 10mm 14mm`,
         fontFamily: cfg.fontFamily || "'IBM Plex Sans Arabic', sans-serif",
         boxSizing: 'border-box',
         backgroundColor: '#ffffff',
@@ -207,7 +211,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
         </div>
       )}
 
-      <div className="relative flex flex-col justify-between" style={{ zIndex: 1, minHeight: '269mm' }}>
+      <div className="relative flex flex-col justify-between" style={{ zIndex: 1, minHeight: '275mm' }}>
         <div>
           {/* ═══════════════════════════════════════════════════════
               1. TOP HEADER SECTION
@@ -215,16 +219,16 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                  - Option B: 3-Section Clean Header (Meta Right, Title Center, Logo Left)
              ═══════════════════════════════════════════════════════ */}
           {cfg.useFullHeaderImage && cfg.headerImageUrl ? (
-            <div className="space-y-3 pb-2 mb-4 border-b border-slate-100">
+            <div className="space-y-2 pb-1.5 mb-3.5 border-b border-slate-100">
               {/* Full Width Header Banner Image (Flush Top & Full Width) */}
-              <div className="w-full flex items-center justify-center overflow-hidden rounded-xl bg-white shadow-2xs">
+              <div className="w-full flex items-center justify-center overflow-hidden rounded-lg bg-white">
                 <img
                   src={cfg.headerImageUrl}
                   alt="Header Banner"
                   className="w-full object-contain"
                   style={{
-                    maxHeight: `${cfg.headerImageHeight || 110}px`,
-                    borderRadius: `${cfg.headerImageBorderRadius || 8}px`,
+                    maxHeight: `${cfg.headerImageHeight || 115}px`,
+                    borderRadius: `${cfg.headerImageBorderRadius || 6}px`,
                   }}
                 />
               </div>
