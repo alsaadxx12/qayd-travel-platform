@@ -1222,17 +1222,15 @@ export const ExpensesPage: React.FC = () => {
           <table className="w-full text-start border-collapse text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold text-[11.5px]">
               <tr>
-                <th className="p-3 text-center w-11">
-                  <input
-                    type="checkbox"
+                <th className="p-3 text-center w-14">
+                  <Switch
+                    size="xs"
+                    color="orange"
                     checked={allVisibleSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someVisibleSelected;
-                    }}
                     onChange={toggleSelectAllVisible}
                     disabled={visibleIds.length === 0}
                     aria-label={isAr ? 'تحديد كل الأسطر' : 'Select all rows'}
-                    className="h-3.5 w-3.5 align-middle accent-[#F45A0A] cursor-pointer disabled:cursor-not-allowed"
+                    styles={{ track: { cursor: visibleIds.length === 0 ? 'not-allowed' : 'pointer' } }}
                   />
                 </th>
                 <th className="p-3 text-center w-12 font-mono tabular-nums lining-nums">#</th>
@@ -1284,12 +1282,13 @@ export const ExpensesPage: React.FC = () => {
                       }`}
                     >
                       <td className="p-3 text-center">
-                        <input
-                          type="checkbox"
+                        <Switch
+                          size="xs"
+                          color="orange"
                           checked={selectedSet.has(String(item.id))}
                           onChange={() => toggleRowSelection(String(item.id))}
                           aria-label={isAr ? `تحديد السند ${item.voucherNumber || ''}` : `Select ${item.voucherNumber || 'voucher'}`}
-                          className="h-3.5 w-3.5 align-middle accent-[#F45A0A] cursor-pointer"
+                          styles={{ track: { cursor: 'pointer' } }}
                         />
                       </td>
                       <td className="p-3 text-center text-slate-400 font-mono font-extrabold tabular-nums lining-nums">{(idx + 1).toLocaleString('en-US')}</td>
