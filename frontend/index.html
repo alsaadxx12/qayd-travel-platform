@@ -42,24 +42,29 @@
     }
     </script>
 
-    <!-- Fast Non-Blocking Fonts Preconnect & Async Load -->
+    <!--
+      Fonts: 4 weights total.
+        IBM Plex Sans Arabic 500/600/700 — the UI text face. Google serves no 800/900
+        for this family, so font-extrabold / font-black were always synthesised and
+        asking for them would add files without changing a pixel.
+        Plus Jakarta Sans 800 — numerals only, and index.css forces weight 800 on
+        every rule that selects it, so 600 and 700 were dead weight.
+    -->
+    <!-- Zero-Blocking Async Fonts Loading -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="preload"
-      as="style"
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
-    />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
-      media="print"
-      onload="this.media='all'"
-    />
+    <script>
+      (function() {
+        var l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@500;600;700&family=Plus+Jakarta+Sans:wght@800&display=swap';
+        document.head.appendChild(l);
+      })();
+    </script>
     <noscript>
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@500;600;700&family=Plus+Jakarta+Sans:wght@800&display=swap"
       />
     </noscript>
   </head>

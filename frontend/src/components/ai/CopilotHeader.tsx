@@ -9,7 +9,7 @@ import {
   IconPlus,
 } from '@tabler/icons-react';
 import type { CopilotMode } from './CopilotPanel';
-import { AI_AVATAR, AI_GREETING_AR, AI_GREETING_EN, AI_NAME_AR } from './persona';
+import { AI_AVATAR, AI_AVATAR_SIZE, AI_GREETING_AR, AI_GREETING_EN, AI_NAME_AR } from './persona';
 
 interface Props {
   isArabic: boolean;
@@ -45,6 +45,11 @@ export const CopilotHeader: React.FC<Props> = ({
         <img
           src={AI_AVATAR}
           alt={AI_NAME_AR}
+          width={AI_AVATAR_SIZE}
+          height={AI_AVATAR_SIZE}
+          /* Below the fold until the panel is opened. */
+          loading="lazy"
+          decoding="async"
           draggable={false}
           className="w-full h-full object-cover select-none"
         />

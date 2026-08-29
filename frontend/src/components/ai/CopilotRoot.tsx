@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { IconBrain } from '@tabler/icons-react';
 import { CopilotPanel } from './CopilotPanel';
 import { useLanguageStore } from '../../store/useLanguageStore';
-import { AI_AVATAR, AI_NAME_AR } from './persona';
+import { AI_AVATAR, AI_AVATAR_SIZE, AI_NAME_AR } from './persona';
 
 export const CopilotRoot: React.FC = () => {
   const [opened, setOpened] = useState(false);
@@ -46,6 +46,11 @@ export const CopilotRoot: React.FC = () => {
               <img
                 src={AI_AVATAR}
                 alt={AI_NAME_AR}
+                width={AI_AVATAR_SIZE}
+                height={AI_AVATAR_SIZE}
+                /* The launcher is on screen from first paint, so it must not be lazy. */
+                loading="eager"
+                decoding="async"
                 draggable={false}
                 className="w-full h-full object-cover select-none"
               />

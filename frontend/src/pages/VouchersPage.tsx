@@ -8,7 +8,6 @@ import { useAiPageContext } from '../hooks/useAiPageContext';
 import { SegmentedDatePicker } from '../components/ui/SegmentedDatePicker';
 import { CurrencySegmentedControl } from '../components/ui/CurrencySegmentedControl';
 import { Modal, Drawer, Menu, Tooltip } from '@mantine/core';
-import * as XLSX from 'xlsx';
 import {
   Receipt,
   ArrowDownLeft,
@@ -401,9 +400,14 @@ export const VouchersPage: React.FC = () => {
     fetchAllData(true);
   };
 
-  // Export to Excel Function
-  const exportVouchersToExcel = () => {
+  // Export to Excel Function — the library is fetched on demand, not at page load.
+  const [exporting, setExporting] = useState(false);
+
+  const exportVouchersToExcel = async () => {
+    if (exporting) return;
+    setExporting(true);
     try {
+      const XLSX = await import('xlsx');
       const rows = currentGridData.map((v, i) => ({
         '#': i + 1,
         [isAr ? 'رقم السند' : 'Voucher No']: v.voucherNumber,
@@ -439,13 +443,28 @@ export const VouchersPage: React.FC = () => {
         isAr ? 'تم تصدير الإكسل' : 'Export Complete',
         isAr ? 'تم حفظ سجل السندات بصيغة Excel بنجاح.' : 'Exported successfully.'
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error('Excel Export Error:', err);
+      showErrorNotification(
+        isAr ? 'تعذّر التصدير' : 'Export failed',
+        err?.message || (isAr ? 'حدث خطأ أثناء إنشاء ملف الإكسل.' : 'Could not build the Excel file.')
+      );
+    } finally {
+      setExporting(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-[#F6F8FB] p-3 sm:p-5 space-y-4 text-slate-900 select-none" dir={direction}>
+      {/*
+        The design deliberately has no visible page title, but a document still needs
+        exactly one H1. `sr-only` keeps it out of the layout entirely while screen
+        readers and crawlers still see it.
+      */}
+      <h1 className="sr-only">
+        {isAr ? 'السندات المالية — سندات القبض والدفع والقيد والصرافة' : 'Financial Vouchers — Receipts, Payments, Journal & FX'}
+      </h1>
+
       {/* ── 1. KPI Metrics Summary Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Total Receipts */}
@@ -723,6 +742,7 @@ export const VouchersPage: React.FC = () => {
               onClick={() => fetchAllData(true)}
               disabled={loading}
               className="h-[38px] w-[38px] rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold flex items-center justify-center cursor-pointer transition-all disabled:opacity-50"
+              aria-label={isAr ? 'تحديث بيانات السندات' : 'Refresh vouchers'}
               title={isAr ? 'تحديث البيانات' : 'Refresh'}
             >
               <RefreshCw size={14} className={loading ? 'animate-spin text-[#F45A0A]' : 'text-slate-500'} />
@@ -732,10 +752,12 @@ export const VouchersPage: React.FC = () => {
             <button
               type="button"
               onClick={exportVouchersToExcel}
-              className="h-[38px] px-3.5 rounded-xl bg-orange-50/80 border border-orange-200 hover:bg-orange-100 text-[#F45A0A] font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all"
+              disabled={exporting}
+              aria-label={isAr ? 'تصدير السندات إلى ملف إكسل' : 'Export vouchers to Excel'}
+              className="h-[38px] px-3.5 rounded-xl bg-orange-50/80 border border-orange-200 hover:bg-orange-100 text-[#F45A0A] font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all disabled:opacity-60"
             >
               <FileSpreadsheet size={15} />
-              <span>Excel</span>
+              <span>{exporting ? (isAr ? 'جارٍ التصدير…' : 'Exporting…') : 'Excel'}</span>
             </button>
           </div>
         </div>
@@ -746,7 +768,9 @@ export const VouchersPage: React.FC = () => {
           <div className="relative min-w-[240px] max-w-[340px] flex-1">
             <Search size={15} className={`absolute ${direction === 'rtl' ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
             <input
-              type="text"
+              type="search"
+              id="vouchers-search"
+              aria-label={isAr ? 'بحث في السندات المالية' : 'Search financial vouchers'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={isAr ? 'بحث برقم السند، الطرف، الصندوق، أو البيان...' : 'Search by voucher #, party, cashbox...'}
@@ -756,6 +780,7 @@ export const VouchersPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
+                aria-label={isAr ? 'مسح نص البحث' : 'Clear search'}
                 className={`absolute ${direction === 'rtl' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer`}
               >
                 <X size={13} />
@@ -835,6 +860,7 @@ export const VouchersPage: React.FC = () => {
                 <Menu.Target>
                   <button
                     type="button"
+                    aria-label={isAr ? 'تصفية حسب الصندوق أو البنك' : 'Filter by cashbox or bank'}
                     className="h-[38px] px-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
                   >
                     <Wallet size={14} className="text-[#F45A0A]" />
@@ -1039,6 +1065,7 @@ export const VouchersPage: React.FC = () => {
                               setSelectedVoucher(row);
                               setDrawerOpen(true);
                             }}
+                            aria-label={isAr ? `معاينة السند ${row.voucherNumber || ''}` : `View voucher ${row.voucherNumber || ''}`}
                             className="p-1.5 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
                           >
                             <Eye size={14} />
@@ -1068,6 +1095,7 @@ export const VouchersPage: React.FC = () => {
                               });
                               setPrintModalOpen(true);
                             }}
+                            aria-label={isAr ? `طباعة السند ${row.voucherNumber || ''}` : `Print voucher ${row.voucherNumber || ''}`}
                             className="p-1.5 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 rounded-lg transition-colors cursor-pointer"
                           >
                             <Printer size={14} />
@@ -1083,6 +1111,7 @@ export const VouchersPage: React.FC = () => {
                                 setSelectedSlipVoucher(row);
                                 setSlipModalOpen(true);
                               }}
+                              aria-label={isAr ? `وصولات السند ${row.voucherNumber || ''} (${row.slipsCount || 0})` : `Receipt slips for ${row.voucherNumber || ''} (${row.slipsCount || 0})`}
                               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                                 row.slipsCount > 0 ? 'bg-teal-50 text-teal-600 hover:bg-teal-100' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'
                               }`}
@@ -1099,6 +1128,7 @@ export const VouchersPage: React.FC = () => {
                               e.stopPropagation();
                               handleOpenEditModal(row);
                             }}
+                            aria-label={isAr ? `تعديل السند ${row.voucherNumber || ''}` : `Edit voucher ${row.voucherNumber || ''}`}
                             className="p-1.5 hover:bg-orange-50 text-slate-500 hover:text-orange-600 rounded-lg transition-colors cursor-pointer"
                           >
                             <Edit size={14} />
@@ -1113,6 +1143,7 @@ export const VouchersPage: React.FC = () => {
                               setVoucherToDelete(row);
                               setDeleteConfirmOpen(true);
                             }}
+                            aria-label={isAr ? `حذف السند ${row.voucherNumber || ''}` : `Delete voucher ${row.voucherNumber || ''}`}
                             className="p-1.5 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
                           >
                             <Trash2 size={14} />

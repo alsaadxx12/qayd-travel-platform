@@ -209,7 +209,16 @@ export const BranchWorkspaceSelector: React.FC<BranchWorkspaceSelectorProps> = (
               >
                 <div className="flex items-center gap-3.5">
                   {branch.logo ? (
-                    <img src={branch.logo} alt={branch.name} className="w-12 h-12 object-contain rounded-xl border border-slate-200 bg-white p-1 shadow-2xs shrink-0" />
+                    <img
+                      src={branch.logo}
+                      alt={branch.name}
+                      width={48}
+                      height={48}
+                      loading="lazy"
+                      decoding="async"
+                      style={{ width: '48px', height: '48px', aspectRatio: '1 / 1' }}
+                      className="w-12 h-12 object-contain rounded-xl border border-slate-200 bg-white p-1 shadow-2xs shrink-0"
+                    />
                   ) : (
                     <div className="w-12 h-12 rounded-xl bg-orange-100/70 border border-orange-200 text-[#F45A0A] flex items-center justify-center font-black text-xs shrink-0 font-mono">
                       {branch.code}

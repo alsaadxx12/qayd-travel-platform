@@ -10,7 +10,7 @@ import {
   IconArrowLeft,
   IconArrowRight,
 } from '@tabler/icons-react';
-import { AI_AVATAR, AI_NAME_AR, AI_NAME_EN } from './persona';
+import { AI_AVATAR, AI_AVATAR_SIZE, AI_NAME_AR, AI_NAME_EN } from './persona';
 
 interface Props {
   isArabic: boolean;
@@ -59,6 +59,10 @@ export const WelcomeScreen: React.FC<Props> = ({ isArabic, onDismiss }) => {
             <img
               src={AI_AVATAR}
               alt={isArabic ? AI_NAME_AR : AI_NAME_EN}
+              width={AI_AVATAR_SIZE}
+              height={AI_AVATAR_SIZE}
+              loading="lazy"
+              decoding="async"
               draggable={false}
               className="w-full h-full object-cover select-none"
             />

@@ -913,6 +913,7 @@ export const LoginPage: React.FC = () => {
                                   height={290}
                                   loading="lazy"
                                   decoding="async"
+                                  style={{ width: '290px', height: '290px', aspectRatio: '1 / 1' }}
                                   className="h-full w-full rounded-full object-cover select-none transition-transform duration-500 group-hover:scale-105"
                                   draggable={false}
                                 />
@@ -930,6 +931,7 @@ export const LoginPage: React.FC = () => {
                               loading="lazy"
                               decoding="async"
                               aria-hidden="true"
+                              style={{ width: '100%', maxWidth: '480px', height: 'auto', aspectRatio: '4 / 3' }}
                               className="mx-auto h-[330px] sm:h-[360px] w-full max-w-[480px] select-none object-contain drop-shadow-xl scale-115 transition-transform duration-500 hover:scale-120"
                               draggable={false}
                             />
