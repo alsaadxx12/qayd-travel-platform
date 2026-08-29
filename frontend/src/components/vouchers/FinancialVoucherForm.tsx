@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   Modal,
   Textarea,
@@ -1081,6 +1081,53 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     });
   }, [accounts]);
 
+  /**
+   * Account pickers used to rebuild their `data` array on every render and, worse,
+   * run `accounts.find(...)` for EVERY option on EVERY keystroke — O(n²) over the
+   * whole chart of accounts, which is what made the account field freeze while
+   * typing. The list is built once and searched through a prebuilt index.
+   */
+  const ACCOUNT_OPTION_LIMIT = 80;
+
+  const accountSearchIndex = useMemo(() => {
+    const index = new Map<string, string>();
+    accounts.forEach((a) => {
+      index.set(a.id, `${a.nameAr || ''} ${a.code || ''}`.toLowerCase());
+    });
+    return index;
+  }, [accounts]);
+
+  const accountSelectData = useMemo(
+    () => postingAccounts.map((acc) => ({ value: acc.id, label: acc.nameAr })),
+    [postingAccounts],
+  );
+
+  const filterAccountOptions = useCallback(
+    ({ options, search }: any) => {
+      const q = String(search || '').toLowerCase().trim();
+      const source = options as any[];
+      const out: any[] = [];
+      for (const opt of source) {
+        if (q) {
+          const hay = accountSearchIndex.get(opt.value) || String(opt.label || '').toLowerCase();
+          if (!hay.includes(q)) continue;
+        }
+        out.push(opt);
+        // Stop early: rendering thousands of rows is what stalls the dropdown.
+        if (out.length >= ACCOUNT_OPTION_LIMIT) break;
+      }
+      return out;
+    },
+    [accountSearchIndex],
+  );
+
+  const renderAccountOption = useCallback(
+    ({ option }: any) => (
+      <div className="py-1 px-1 text-xs font-bold text-slate-900">{option.label}</div>
+    ),
+    [],
+  );
+
   const cashboxAccounts = accounts.filter(
     (a) =>
       !a.isGroup &&
@@ -1417,24 +1464,10 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                         placeholder="ابحث بالاسم (عميل، مورد، مكتب بورصة، شركة)..."
                         value={oppositeAccountId}
                         onChange={(val) => setOppositeAccountId(val || '')}
-                        data={postingAccounts.map((acc) => ({
-                          value: acc.id,
-                          label: acc.nameAr,
-                        }))}
-                        renderOption={({ option }: any) => (
-                          <div className="py-1 px-1 text-xs font-bold text-slate-900">
-                            {option.label}
-                          </div>
-                        )}
-                        filter={({ options, search }) => {
-                          const q = search.toLowerCase().trim();
-                          if (!q) return options;
-                          return options.filter((opt: any) => {
-                            const acc = accounts.find((a) => a.id === opt.value);
-                            if (!acc) return (opt.label || '').toLowerCase().includes(q);
-                            return acc.nameAr.toLowerCase().includes(q) || (acc.code && acc.code.toLowerCase().includes(q));
-                          });
-                        }}
+                        data={accountSelectData}
+                        renderOption={renderAccountOption}
+                        filter={filterAccountOptions}
+                        limit={ACCOUNT_OPTION_LIMIT}
                         nothingFoundMessage="لا توجد نتائج مطابقة"
                         maxDropdownHeight={280}
                         styles={{
@@ -1619,24 +1652,10 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                                   placeholder="اختر أو ابحث عن الحساب..."
                                   value={line.accountId}
                                   onChange={(val) => handleJournalLineChange(line.id, 'accountId', val || '')}
-                                  data={postingAccounts.map((acc) => ({
-                                    value: acc.id,
-                                    label: acc.nameAr,
-                                  }))}
-                                  renderOption={({ option }: any) => (
-                                    <div className="py-1 px-1 text-xs font-bold text-slate-900">
-                                      {option.label}
-                                    </div>
-                                  )}
-                                  filter={({ options, search }) => {
-                                    const s = search.toLowerCase().trim();
-                                    if (!s) return options;
-                                    return options.filter((opt: any) => {
-                                      const acc = accounts.find((a) => a.id === opt.value);
-                                      if (!acc) return (opt.label || '').toLowerCase().includes(s);
-                                      return acc.nameAr.toLowerCase().includes(s) || (acc.code && acc.code.toLowerCase().includes(s));
-                                    });
-                                  }}
+                                  data={accountSelectData}
+                                  renderOption={renderAccountOption}
+                                  filter={filterAccountOptions}
+                                  limit={ACCOUNT_OPTION_LIMIT}
                                   nothingFoundMessage="لا توجد نتائج مطابقة"
                                   maxDropdownHeight={260}
                                   styles={{
@@ -2432,7 +2451,9 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
         onSuccess={async () => {
           setCreateAccountModalOpened(false);
           try {
-            const accs = await apiRequest('/api/accounts');
+            // Same lite shape the form loaded with; the full endpoint would rescan
+            // every posted journal line right after the cache was just invalidated.
+            const accs = await apiRequest('/api/accounts?lite=1');
             setAccounts(accs || []);
             showSuccessNotification('تم إنشاء الحساب', 'تمت إضافة الحساب المحاسبي بنجاح، ويمكنك اختياره الآن.');
           } catch (e) {
