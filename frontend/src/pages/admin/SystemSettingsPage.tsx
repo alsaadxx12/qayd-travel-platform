@@ -84,6 +84,16 @@ export interface PaymentMethodMapping {
   isActive: boolean;
 }
 
+export interface CustomVoucherAccountMapping {
+  id: string;
+  nameAr: string;
+  targetAccountId: string;
+  targetAccountName?: string;
+  category?: 'RECEIPT' | 'PAYMENT' | 'BOTH';
+  defaultPercentage?: number;
+  isActive: boolean;
+}
+
 export interface CoreAccountsConfig {
   mainCashboxId: string;
   defaultCashCustomerId: string;
@@ -154,6 +164,41 @@ export const SystemSettingsPage: React.FC = () => {
     otherRevenuesParentAccountId: '',
   });
   const [isSavingCoreAccounts, setIsSavingCoreAccounts] = useState(false);
+
+  // Custom Voucher Split & Allocation Accounts State
+  const [customVoucherAccounts, setCustomVoucherAccounts] = useState<CustomVoucherAccountMapping[]>([
+    {
+      id: 'cva-1',
+      nameAr: 'مبيعات التذاكر',
+      targetAccountId: '',
+      targetAccountName: 'حساب مبيعات تذاكر الطيران (1614)',
+      category: 'RECEIPT',
+      defaultPercentage: 60,
+      isActive: true,
+    },
+    {
+      id: 'cva-2',
+      nameAr: 'عمولات وخدمات السفر',
+      targetAccountId: '',
+      targetAccountName: 'حساب عمولات ومستحقات مبيعات (1660)',
+      category: 'RECEIPT',
+      defaultPercentage: 40,
+      isActive: true,
+    },
+    {
+      id: 'cva-3',
+      nameAr: 'إيرادات التأشيرات والفيزا',
+      targetAccountId: '',
+      targetAccountName: 'حساب إيرادات التأشيرات (4112)',
+      category: 'RECEIPT',
+      defaultPercentage: 0,
+      isActive: true,
+    },
+  ]);
+  const [isSavingCustomVoucherAccounts, setIsSavingCustomVoucherAccounts] = useState(false);
+  const [newCustomAccountName, setNewCustomAccountName] = useState('');
+  const [newCustomAccountId, setNewCustomAccountId] = useState('');
+  const [newCustomCategory, setNewCustomCategory] = useState<'RECEIPT' | 'PAYMENT' | 'BOTH'>('RECEIPT');
 
   // Services & Vouchers Accounts Configuration State
   const [servicesAccounts, setServicesAccounts] = useState<ServicesAccountsConfig>({
@@ -508,7 +553,57 @@ export const SystemSettingsPage: React.FC = () => {
         }
       })
       .catch(() => {});
+
+    // Fetch custom voucher accounts allocation from DB
+    fetchPrintTemplate('custom_voucher_accounts')
+      .then((res) => {
+        if (res && res.config && res.config.accounts && Array.isArray(res.config.accounts)) {
+          setCustomVoucherAccounts(res.config.accounts);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const handleSaveCustomVoucherAccounts = async () => {
+    setIsSavingCustomVoucherAccounts(true);
+    try {
+      await savePrintTemplate('custom_voucher_accounts', { accounts: customVoucherAccounts }, 'حسابات القبض والصرف المخصصة');
+      showSuccessNotification('تم الحفظ بنجاح', 'تم حفظ وتثبيت حسابات القبض والصرف المخصصة بنجاح في قاعدة البيانات');
+    } catch (err: any) {
+      showErrorNotification('خطأ في الحفظ', err.message || 'حدث خطأ أثناء حفظ حسابات القبض المخصصة');
+    } finally {
+      setIsSavingCustomVoucherAccounts(false);
+    }
+  };
+
+  const handleAddCustomVoucherAccount = () => {
+    if (!newCustomAccountName.trim()) {
+      showErrorNotification('تنبيه', 'يرجى إدخال اسم الحساب المخصص (مثل: مبيعات التذاكر أو عمولات)');
+      return;
+    }
+    if (!newCustomAccountId) {
+      showErrorNotification('تنبيه', 'يرجى اختيار الحساب من شجرة الحسابات');
+      return;
+    }
+    const acc = accountsList.find((a) => a.id === newCustomAccountId);
+    const newAcc: CustomVoucherAccountMapping = {
+      id: `cva-${Date.now()}`,
+      nameAr: newCustomAccountName.trim(),
+      targetAccountId: newCustomAccountId,
+      targetAccountName: acc ? `${acc.code} - ${acc.nameAr}` : 'حساب مخصص',
+      category: newCustomCategory,
+      defaultPercentage: 0,
+      isActive: true,
+    };
+    setCustomVoucherAccounts((prev) => [...prev, newAcc]);
+    setNewCustomAccountName('');
+    setNewCustomAccountId('');
+    showSuccessNotification('تمت الإضافة', `تمت إضافة "${newAcc.nameAr}" بنجاح، اضغط على حفظ لتثبيت التغييرات`);
+  };
+
+  const handleRemoveCustomVoucherAccount = (id: string) => {
+    setCustomVoucherAccounts((prev) => prev.filter((a) => a.id !== id));
+  };
 
   const getSuggestedCoreAccounts = (allAccs: any[]): CoreAccountsConfig => {
     const mainBox = allAccs.find(a => a.code === '13411' && !a.isParent) || allAccs.find(a => a.code.startsWith('1341') && !a.isParent);
@@ -1799,6 +1894,150 @@ export const SystemSettingsPage: React.FC = () => {
                       }}
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Card 2: Custom Voucher & Split Allocation Accounts (حسابات القبض والصرف المخصصة وتقسيم السندات) */}
+              <div className="bg-white text-slate-800 rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-200 shrink-0">
+                      <IconReceipt size={18} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900">
+                        حسابات القبض والصرف المخصصة وتقسيم السندات (Custom Allocation Accounts)
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        تعيين وربط الحسابات المخصصة للقبض والتوزيع لتظهر تلقائياً في نافذة إنشاء وتعديل سند القبض وفي بند "تقسيم القبض" بالطباعة
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    size="xs"
+                    color="orange"
+                    loading={isSavingCustomVoucherAccounts}
+                    onClick={handleSaveCustomVoucherAccounts}
+                    leftSection={<IconDeviceFloppy size={14} />}
+                    className="shadow-xs font-bold"
+                  >
+                    حفظ حسابات القبض المخصصة
+                  </Button>
+                </div>
+
+                {/* Add New Custom Allocation Account Form */}
+                <div className="bg-orange-50/40 p-3.5 rounded-xl border border-orange-200/70 space-y-3">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-orange-950">
+                    <IconPlus size={14} className="text-orange-600" />
+                    <span>إضافة وتعيين حساب قبض / صرف مخصص جديد:</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                    <div className="sm:col-span-4 space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700">الاسم التعريفي للتقسيم (مثل: مبيعات التذاكر، عمولات، تأشيرات):</label>
+                      <TextInput
+                        size="xs"
+                        placeholder="أدخل الاسم (مثال: مبيعات تذاكر الطيران)..."
+                        value={newCustomAccountName}
+                        onChange={(e) => setNewCustomAccountName(e.currentTarget.value)}
+                        styles={{
+                          input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
+                        }}
+                      />
+                    </div>
+
+                    <div className="sm:col-span-5 space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700">اختيار الحساب المحاسبي من الشجرة:</label>
+                      <Select
+                        size="xs"
+                        searchable
+                        placeholder="ابحث واختر الحساب من الدليل المحاسبي..."
+                        data={accountsList.map((a) => ({
+                          value: a.id,
+                          label: `${a.code} - ${a.nameAr}${a.isParent ? ' (أب)' : ''}`,
+                        }))}
+                        value={newCustomAccountId}
+                        onChange={(val) => setNewCustomAccountId(val || '')}
+                        styles={{
+                          input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
+                        }}
+                      />
+                    </div>
+
+                    <div className="sm:col-span-3">
+                      <Button
+                        size="xs"
+                        color="orange"
+                        fullWidth
+                        onClick={handleAddCustomVoucherAccount}
+                        leftSection={<IconPlus size={14} />}
+                        className="font-bold h-[34px]"
+                      >
+                        إضافة الحساب المخصص
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Configured Custom Allocation Accounts List */}
+                <div className="space-y-2">
+                  <div className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
+                    <span>قائمة حسابات القبض المخصصة المعرفة حالياً ({customVoucherAccounts.length}):</span>
+                    <span className="text-[10px] text-slate-400">تظهر هذه الحسابات في شاشة إنشاء سند القبض والطباعة</span>
+                  </div>
+
+                  {customVoucherAccounts.length === 0 ? (
+                    <div className="p-4 rounded-xl border border-dashed border-slate-200 text-center text-slate-400 text-xs font-bold">
+                      لا توجد حسابات مخصصة مضافة حالياً. استخدم النموذج أعلاه لتعيين حسابات القبض المخصصة.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                      {customVoucherAccounts.map((item, idx) => {
+                        const boundAcc = accountsList.find((a) => a.id === item.targetAccountId);
+                        const displayAccName = boundAcc ? `${boundAcc.code} - ${boundAcc.nameAr}` : (item.targetAccountName || 'حساب غير محدد');
+
+                        return (
+                          <div
+                            key={item.id || idx}
+                            className="bg-slate-50/80 p-3 rounded-xl border border-slate-200 hover:border-orange-300 transition-all flex flex-col justify-between gap-2 shadow-2xs"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-extrabold text-xs text-slate-900 flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full bg-orange-600" />
+                                  {item.nameAr}
+                                </span>
+                                <Badge size="xs" color="orange" variant="light" className="font-bold">
+                                  قبض وصرف
+                                </Badge>
+                              </div>
+
+                              <div className="text-[11px] text-slate-600 font-mono bg-white p-1.5 rounded-lg border border-slate-200">
+                                🔗 {displayAccName}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between border-t border-slate-100 pt-2 mt-1">
+                              <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                ✓ مفعل في سندات القبض
+                              </span>
+                              <Button
+                                size="compact-xs"
+                                variant="subtle"
+                                color="red"
+                                onClick={() => handleRemoveCustomVoucherAccount(item.id)}
+                                leftSection={<IconTrash size={12} />}
+                                className="font-bold text-[10.5px]"
+                              >
+                                حذف
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

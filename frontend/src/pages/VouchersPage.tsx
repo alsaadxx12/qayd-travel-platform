@@ -1057,6 +1057,9 @@ export const VouchersPage: React.FC = () => {
                                 reference: row.reference,
                                 description: row.description,
                                 user: row.userName,
+                                splitAccounts: row.splitAccounts,
+                                splitDescription: row.splitDescription,
+                                customCategory: row.customCategory,
                               });
                               setPrintModalOpen(true);
                             }}
@@ -1267,6 +1270,9 @@ export const VouchersPage: React.FC = () => {
                     reference: selectedVoucher.reference,
                     description: selectedVoucher.description,
                     user: selectedVoucher.userName,
+                    splitAccounts: selectedVoucher.splitAccounts,
+                    splitDescription: selectedVoucher.splitDescription,
+                    customCategory: selectedVoucher.customCategory,
                   });
                   setPrintModalOpen(true);
                 }}

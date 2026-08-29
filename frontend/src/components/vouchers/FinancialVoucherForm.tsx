@@ -148,6 +148,17 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     { id: '2', accountId: '', debit: '', credit: '', currency: 'IQD', exchangeRate: '1500', description: '', costCenter: '' },
   ]);
 
+  // Custom Voucher Allocation & Split State
+  const [configuredCustomAccounts, setConfiguredCustomAccounts] = useState<any[]>([]);
+  const [enableSplitAllocation, setEnableSplitAllocation] = useState<boolean>(false);
+  const [splitAllocations, setSplitAllocations] = useState<Array<{
+    id: string;
+    accountId: string;
+    accountName: string;
+    amount: string;
+    note?: string;
+  }>>([]);
+
   // Accounting Preview Toggle
   const [previewJournalOpened, setPreviewJournalOpened] = useState<boolean>(false);
 
@@ -211,13 +222,14 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     if (opened) {
       const loadData = async () => {
         try {
-          const [accs, receipts, payments, templateRes, emps, journalEntries] = await Promise.all([
+          const [accs, receipts, payments, templateRes, emps, journalEntries, customAccountsRes] = await Promise.all([
             apiRequest('/api/accounts').catch(() => []),
             apiRequest('/api/receipt-vouchers').catch(() => []),
             apiRequest('/api/payment-vouchers').catch(() => []),
             apiRequest('/api/print-templates/payment_methods_mapping').catch(() => null),
             employeesApi.getAll().catch(() => []),
             apiRequest('/api/journal-entries').catch(() => []),
+            apiRequest('/api/print-templates/custom_voucher_accounts').catch(() => null),
           ]);
 
           const loadedAccounts: AccountOption[] = accs || [];
@@ -320,6 +332,21 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
           }
 
           setPaymentMappings(mappings);
+
+          // Load configured custom allocation accounts
+          const customAccs: any[] = customAccountsRes?.config?.accounts || [];
+          setConfiguredCustomAccounts(customAccs);
+          if (customAccs.length > 0) {
+            setSplitAllocations(
+              customAccs.map((ca: any) => ({
+                id: ca.id,
+                accountId: ca.targetAccountId,
+                accountName: ca.nameAr,
+                amount: '',
+                note: '',
+              }))
+            );
+          }
 
           // Apply saved user defaults
           const savedDefaults = getUserDefaults();
@@ -517,6 +544,58 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     }
   };
 
+  const numAmount = Number(amount) || 0;
+
+  // Split Allocations Helpers
+  const totalAllocatedAmount = useMemo(() => {
+    return splitAllocations.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  }, [splitAllocations]);
+
+  const remainingToAllocate = Math.max(0, numAmount - totalAllocatedAmount);
+
+  const handleSplitAmountChange = (id: string, newAmt: string) => {
+    setSplitAllocations((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, amount: newAmt } : item))
+    );
+  };
+
+  const handleDistributeEqually = () => {
+    if (splitAllocations.length === 0 || numAmount <= 0) return;
+    const count = splitAllocations.length;
+    const equalAmt = (numAmount / count).toFixed(2);
+    setSplitAllocations((prev) =>
+      prev.map((item) => ({ ...item, amount: String(equalAmt) }))
+    );
+  };
+
+  const handleFillRemaining = (id: string) => {
+    const othersTotal = splitAllocations
+      .filter((item) => item.id !== id)
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const rem = Math.max(0, numAmount - othersTotal);
+    setSplitAllocations((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, amount: String(rem) } : item))
+    );
+  };
+
+  const handleAddCustomSplitRow = (accId: string) => {
+    if (!accId) return;
+    const acc = accounts.find((a) => a.id === accId);
+    if (!acc) return;
+    const newEntry = {
+      id: `split-${Date.now()}`,
+      accountId: acc.id,
+      accountName: acc.nameAr,
+      amount: '',
+      note: '',
+    };
+    setSplitAllocations((prev) => [...prev, newEntry]);
+  };
+
+  const handleRemoveSplitRow = (id: string) => {
+    setSplitAllocations((prev) => prev.filter((item) => item.id !== id));
+  };
+
   const handleGenerateAutoJournalDescription = () => {
     const debitPart = journalLines
       .filter((l) => Number(l.debit) > 0 && l.accountId)
@@ -570,6 +649,33 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       setOppositeAccountId(voucher.accountId || voucher.oppositeAccountId || '');
     }
 
+    // Restore or initialize split allocations
+    if (voucher.splitAccounts && Array.isArray(voucher.splitAccounts) && voucher.splitAccounts.length > 0) {
+      setEnableSplitAllocation(true);
+      setSplitAllocations(
+        voucher.splitAccounts.map((s: any, idx: number) => ({
+          id: s.id || `split-${idx}`,
+          accountId: s.accountId || '',
+          accountName: s.accountName || s.accountCode || `حساب ${idx + 1}`,
+          amount: String(s.amount || ''),
+          note: s.note || '',
+        }))
+      );
+    } else {
+      setEnableSplitAllocation(false);
+      if (configuredCustomAccounts.length > 0) {
+        setSplitAllocations(
+          configuredCustomAccounts.map((ca: any) => ({
+            id: ca.id,
+            accountId: ca.targetAccountId,
+            accountName: ca.nameAr,
+            amount: '',
+            note: '',
+          }))
+        );
+      }
+    }
+
     setCurrency((voucher.currency as 'IQD' | 'USD') || 'IQD');
     setDescription(voucher.description || '');
     if (voucher.paymentMethodId) {
@@ -597,6 +703,19 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     setAmount('');
     setCurrency(defaults.defaultCurrency || 'IQD');
     setIsManualDescription(false);
+
+    setEnableSplitAllocation(false);
+    if (configuredCustomAccounts.length > 0) {
+      setSplitAllocations(
+        configuredCustomAccounts.map((ca: any) => ({
+          id: ca.id,
+          accountId: ca.targetAccountId,
+          accountName: ca.nameAr,
+          amount: '',
+          note: '',
+        }))
+      );
+    }
 
     if (finalType === 'JOURNAL') {
       setJournalLines([
@@ -687,7 +806,6 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [opened, amount, cashboxAccountId, oppositeAccountId, description, voucherType, date, currency, selectedPaymentMethodId, journalLines, isJournalBalanced]);
 
-  const numAmount = Number(amount) || 0;
   const isReceipt = voucherType === 'RECEIPT';
 
   const cashboxAcc = accounts.find((a) => a.id === cashboxAccountId);
@@ -833,6 +951,22 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       method = 'PUT';
     }
 
+    const activeSplits = enableSplitAllocation
+      ? splitAllocations
+          .filter((s) => Number(s.amount) > 0)
+          .map((s) => ({
+            accountId: s.accountId,
+            accountName: s.accountName,
+            amount: Number(s.amount),
+            currency,
+            note: s.note || '',
+          }))
+      : [];
+
+    const splitDesc = activeSplits.length > 0
+      ? activeSplits.map((s) => `${s.accountName}: ${Number(s.amount).toLocaleString('en-US')} ${currency}`).join(' | ')
+      : undefined;
+
     const payload = {
       voucherNumber,
       amount: numAmount,
@@ -844,6 +978,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       paymentMethodId: selectedPaymentMethodId,
       slipsCount: slipFiles.length,
       status: 'POSTED',
+      splitAccounts: activeSplits.length > 0 ? activeSplits : undefined,
+      splitDescription: splitDesc,
     };
 
     // Capture current values before resetting the form
@@ -863,6 +999,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
         accountId: oppositeAccountId,
         cashboxOrBankAccountId: cashboxAccountId,
         description: payload.description,
+        splitAccounts: activeSplits.length > 0 ? activeSplits : undefined,
+        splitDescription: splitDesc,
       });
       onClose();
 
@@ -892,6 +1030,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       accountId: oppositeAccountId,
       cashboxOrBankAccountId: cashboxAccountId,
       description: payload.description,
+      splitAccounts: activeSplits.length > 0 ? activeSplits : undefined,
+      splitDescription: splitDesc,
     }, ...prev]);
 
     // Notify parent with optimistic data
@@ -905,6 +1045,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       accountId: oppositeAccountId,
       cashboxOrBankAccountId: cashboxAccountId,
       description: payload.description,
+      splitAccounts: activeSplits.length > 0 ? activeSplits : undefined,
+      splitDescription: splitDesc,
     });
 
     // Reset form instantly (user can start next voucher immediately)
@@ -1745,6 +1887,162 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                       </Tooltip>
                     </div>
                   </div>
+                </div>
+
+                {/* ── Custom Allocation & Split Section (تقسيم وتوزيع السند على الحسابات المخصصة) ── */}
+                <div className="bg-orange-50/40 border border-orange-200/80 rounded-xl p-2.5 space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !enableSplitAllocation;
+                        setEnableSplitAllocation(next);
+                        if (next && splitAllocations.length === 0 && configuredCustomAccounts.length > 0) {
+                          setSplitAllocations(
+                            configuredCustomAccounts.map((ca) => ({
+                              id: ca.id,
+                              accountId: ca.targetAccountId,
+                              accountName: ca.nameAr,
+                              amount: '',
+                              note: '',
+                            }))
+                          );
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-xs font-black text-orange-950 hover:text-orange-700 cursor-pointer"
+                    >
+                      <span className="w-5 h-5 rounded-md bg-orange-600 text-white flex items-center justify-center text-[11px]">
+                        ⚡
+                      </span>
+                      <span>تقسيم وتوزيع السند على حسابات مخصصة (Split Allocation)</span>
+                      <Badge size="xs" color="orange" variant={enableSplitAllocation ? 'filled' : 'light'} className="font-bold">
+                        {enableSplitAllocation ? 'مفعل' : 'اختياري'}
+                      </Badge>
+                    </button>
+
+                    {enableSplitAllocation && (
+                      <div className="flex items-center gap-1.5 text-xs font-bold">
+                        <span className="text-slate-600 font-mono">
+                          الموزع: <b className="text-emerald-700 font-mono">{totalAllocatedAmount.toLocaleString('en-US')}</b> /{' '}
+                          <span className="font-mono">{numAmount.toLocaleString('en-US')} {currency}</span>
+                        </span>
+                        {remainingToAllocate > 0 ? (
+                          <Badge size="xs" color="amber" variant="light" className="font-bold">
+                            متبقي: {remainingToAllocate.toLocaleString('en-US')}
+                          </Badge>
+                        ) : totalAllocatedAmount === numAmount && numAmount > 0 ? (
+                          <Badge size="xs" color="emerald" variant="filled" className="font-bold">
+                            ✓ متطابق 100%
+                          </Badge>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Expanded Split Accounts List */}
+                  {enableSplitAllocation && (
+                    <div className="space-y-2 pt-1 border-t border-orange-200/60">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-slate-700">
+                          حدد الحسابات والمبالغ الموزعة (تظهر في الطباعة تحت بند تقسيم القبض):
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={handleDistributeEqually}
+                            disabled={splitAllocations.length === 0 || numAmount <= 0}
+                            className="px-2 py-0.5 rounded bg-white hover:bg-orange-100/60 border border-orange-200 text-[11px] font-bold text-orange-900 cursor-pointer shadow-2xs disabled:opacity-40"
+                          >
+                            ⚡ توزيع بالتساوي
+                          </button>
+                        </div>
+                      </div>
+
+                      {splitAllocations.length === 0 ? (
+                        <div className="p-3 bg-white rounded-lg border border-dashed border-orange-200 text-center text-slate-500 text-xs">
+                          لا توجد حسابات مخصصة. يمكنك إضافة حسابات من الإعدادات أو اختيار حساب أدناه.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-0.5">
+                          {splitAllocations.map((item, sIdx) => (
+                            <div
+                              key={item.id || sIdx}
+                              className="bg-white p-2 rounded-lg border border-slate-200 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 shadow-2xs"
+                            >
+                              <div className="flex items-center gap-1.5 min-w-[160px] flex-1">
+                                <span className="w-2 h-2 rounded-full bg-orange-600 shrink-0" />
+                                <span className="font-bold text-xs text-slate-900 truncate">
+                                  {item.accountName}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <div className="w-36">
+                                  <FormattedNumberInput
+                                    size="xs"
+                                    placeholder="0.00"
+                                    value={item.amount}
+                                    onChange={(v) => handleSplitAmountChange(item.id, v)}
+                                    styles={{
+                                      input: {
+                                        height: '32px',
+                                        fontSize: '13px',
+                                        fontWeight: 800,
+                                        fontFamily: 'monospace',
+                                        textAlign: 'center',
+                                        color: Number(item.amount) > 0 ? '#047857' : '#1e293b',
+                                        backgroundColor: Number(item.amount) > 0 ? '#ecfdf5' : '#ffffff',
+                                        borderColor: Number(item.amount) > 0 ? '#10b981' : '#cbd5e1',
+                                        borderRadius: '8px',
+                                      },
+                                    }}
+                                  />
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleFillRemaining(item.id)}
+                                  title="تعبئة المتبقي من إجمالي السند"
+                                  className="h-[32px] px-2 rounded-lg bg-orange-50 hover:bg-orange-100 text-[10.5px] font-bold text-orange-900 border border-orange-200 cursor-pointer"
+                                >
+                                  المتبقي
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSplitRow(item.id)}
+                                  className="h-[32px] w-[32px] rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer"
+                                >
+                                  <IconTrash size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Quick Add Custom Account to Split from Tree */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <Select
+                          size="xs"
+                          searchable
+                          clearable
+                          placeholder="+ إضافة حساب آخر للتقسيم من شجرة الحسابات..."
+                          data={postingAccounts.map((a) => ({ value: a.id, label: `${a.code} - ${a.nameAr}` }))}
+                          onChange={(val) => {
+                            if (val) {
+                              handleAddCustomSplitRow(val);
+                            }
+                          }}
+                          value={null}
+                          className="flex-1"
+                          styles={{
+                            input: { height: '30px', fontSize: '11px', borderRadius: '8px', backgroundColor: '#ffffff' },
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Description Field */}

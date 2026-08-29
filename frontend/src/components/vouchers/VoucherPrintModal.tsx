@@ -159,6 +159,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   const cardTitleAr = isReceipt ? 'بيانات سند القبض' : 'بيانات سند الصرف والدفع';
   const cardTitleEn = isReceipt ? 'Receipt Voucher Details' : 'Payment Voucher Details';
 
+  const partyName = voucher.accountName || voucher.accountCode || (isEn ? 'Client / Entity' : 'العميل / الطرف المستفيد');
   const partyLabelAr = isReceipt ? 'استلمنا من السيد/السادة :' : 'ادفعوا للسيد/السادة :';
   const partyLabelEn = isReceipt ? 'Received From:' : 'Paid To:';
 
@@ -170,12 +171,12 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
     : null;
 
   const defaultSplitText = isReceipt
-    ? 'حساب مبيعات التذاكر (150,000 IQD) — حساب عمولات ومستحقات (100,000 IQD)'
-    : 'حساب مجهزي الطيران (150,000 IQD) — حساب المصاريف الإدارية (100,000 IQD)';
+    ? `حساب مخصص / مباشر على حـ (${partyName})`
+    : `حساب مخصص / مباشر على حـ (${partyName})`;
 
   const splitDisplayVal = voucher.splitDescription
     || voucher.customCategory
-    || (voucher.reference ? `حساب الإيرادات والمبيعات (${voucher.reference})` : defaultSplitText);
+    || (voucher.reference ? `حساب المقبوضات (${voucher.reference})` : defaultSplitText);
 
   const customCategoryVal = voucher.customCategory || voucher.reference
     ? (isEn ? `Transaction: ${voucher.reference || 'General Receipt'}` : `القبض المخصص: ${voucher.reference || 'قبض عام معتمد'}`)
