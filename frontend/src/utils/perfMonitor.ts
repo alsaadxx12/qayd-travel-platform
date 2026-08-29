@@ -64,13 +64,12 @@ class PerfMonitor {
   private enabled = true;
 
   constructor() {
-    // Survive a reload so a slow first paint can still be inspected afterwards.
+    // Each page load / reload starts a clean session — old accumulated data
+    // was confusing because numbers kept growing across reloads.
+    // We no longer restore from sessionStorage; the monitor only shows
+    // what happened since the *current* page load.
     try {
-      const raw = sessionStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) this.samples = parsed.slice(-MAX_SAMPLES);
-      }
+      sessionStorage.removeItem(STORAGE_KEY);
     } catch {
       /* storage can be unavailable (private mode); profiling is optional */
     }
@@ -303,12 +302,16 @@ class PerfMonitor {
 // ── helpers ────────────────────────────────────────────────────────────────
 
 function apiBase(): string {
+  // Must mirror API_BASE_URL in api/client.ts. Falling back to
+  // window.location.origin was wrong and made the report name the site host rather
+  // than the API host — exactly the detail needed to diagnose where time goes.
   try {
-    return (
-      (import.meta as any).env?.VITE_API_URL ||
-      (import.meta as any).env?.VITE_API_BASE_URL ||
-      window.location.origin
-    );
+    const env = (import.meta as any).env || {};
+    if (env.VITE_API_URL) return env.VITE_API_URL;
+    if (env.VITE_API_BASE_URL) return env.VITE_API_BASE_URL;
+    return env.DEV
+      ? `${window.location.origin}/api (dev proxy)`
+      : 'https://qayd-api-r04m.onrender.com/api (default)';
   } catch {
     return 'unknown';
   }

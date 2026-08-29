@@ -13,6 +13,9 @@ interface CacheEntry {
 const apiCache = new Map<string, CacheEntry>();
 const inFlightRequests = new Map<string, Promise<any>>();
 
+/** Where near-static responses are kept so a page reload does not refetch them. */
+const PERSIST_KEY = 'qayd_api_cache_v1';
+
 // Cache TTL in ms (30 seconds default for GET, keeps UI blazing fast while staying fresh)
 const DEFAULT_TTL = 30000;
 
@@ -54,6 +57,44 @@ function isStablePath(path: string): boolean {
   return STABLE_PREFIXES.some((p) => path.startsWith(p));
 }
 
+/**
+ * Restores only STABLE_PREFIXES entries, and only those still inside their TTL.
+ * Volatile data is never persisted — it must be re-read on a fresh load.
+ */
+function hydratePersistedCache() {
+  try {
+    const raw = sessionStorage.getItem(PERSIST_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, CacheEntry>;
+    const now = Date.now();
+    for (const [key, entry] of Object.entries(parsed)) {
+      if (!entry || typeof entry.timestamp !== 'number') continue;
+      if (now - entry.timestamp >= STABLE_TTL) continue;
+      if (!isStablePath(pathOfKey(key))) continue;
+      apiCache.set(key, entry);
+    }
+  } catch {
+    /* private mode or corrupt payload — start cold */
+  }
+}
+
+let persistTimer: number | null = null;
+function schedulePersist() {
+  if (persistTimer !== null) return;
+  persistTimer = window.setTimeout(() => {
+    persistTimer = null;
+    try {
+      const out: Record<string, CacheEntry> = {};
+      for (const [key, entry] of apiCache) {
+        if (isStablePath(pathOfKey(key))) out[key] = entry;
+      }
+      sessionStorage.setItem(PERSIST_KEY, JSON.stringify(out));
+    } catch {
+      /* quota exceeded — the in-memory cache still works */
+    }
+  }, 800);
+}
+
 export function invalidateApiCache(prefix?: string) {
   if (!prefix) {
     apiCache.clear();
@@ -70,6 +111,11 @@ export function invalidateApiCache(prefix?: string) {
 export function clearApiCache() {
   apiCache.clear();
   inFlightRequests.clear();
+  try {
+    sessionStorage.removeItem(PERSIST_KEY);
+  } catch {
+    /* nothing to do */
+  }
 }
 
 /** Drops volatile entries but keeps near-static ones the write cannot have changed. */
@@ -82,6 +128,9 @@ function invalidateAfterMutation(mutatedPath: string) {
     }
   }
 }
+
+// Warm the cache from the previous page load before the first request goes out.
+hydratePersistedCache();
 
 export async function apiRequest<T = any>(
   endpoint: string,
@@ -190,6 +239,7 @@ export async function apiRequest<T = any>(
 
       if (method === 'GET' && !options.noCache) {
         apiCache.set(cacheKey, { data, timestamp: Date.now() });
+        if (isStablePath(cleanEndpoint)) schedulePersist();
       }
 
       perfMonitor.record({

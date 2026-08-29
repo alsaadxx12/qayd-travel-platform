@@ -249,6 +249,8 @@ export class AccountsService {
   private readonly CACHE_TTL = 60000;
 
   public invalidateCache(companyId?: string) {
+    if (companyId) this.seededCompanies.delete(companyId);
+    else this.seededCompanies.clear();
     if (companyId) {
       for (const key of this.treeCache.keys()) {
         if (key.startsWith(companyId)) this.treeCache.delete(key);
@@ -444,7 +446,22 @@ export class AccountsService {
     };
   }
 
+  /**
+   * Seeding guard. This ran on EVERY /accounts request and cost two sequential
+   * queries before the real one — `company.findUnique` then `account.count` — for a
+   * branch that fires once in a company's lifetime. On the hosted database that was
+   * most of why `/accounts?lite=1` measured 2.4s.
+   *
+   * Once a company is known to have accounts, the check is skipped for the life of
+   * the process. Deleting every account of a company would need a restart (or a call
+   * to `invalidateCache`) before the seed would run again — an acceptable trade for
+   * removing two round trips from a hot path.
+   */
+  private seededCompanies = new Set<string>();
+
   private async ensureDefaultAccounts(companyId: string) {
+    if (this.seededCompanies.has(companyId)) return;
+
     let company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company) {
       try {
@@ -476,7 +493,11 @@ export class AccountsService {
 
     // Check count: if accounts already exist for this company, DO NOT RE-SEED OR OVERWRITE DELETIONS!
     const count = await this.prisma.account.count({ where: { companyId: targetCompanyId } });
-    if (count > 0) return;
+    if (count > 0) {
+      this.seededCompanies.add(companyId);
+      this.seededCompanies.add(targetCompanyId);
+      return;
+    }
 
     // Full Official Unified Iraqi Accounting System Seed (الدليل المحاسبي الموحد العراقي الشامل لشركات السياحة)
     const defaults = [
@@ -589,6 +610,10 @@ export class AccountsService {
 
       codeToIdMap.set(acc.code, accId);
     }
+
+    // Seeded now, so later requests skip the two-query guard entirely.
+    this.seededCompanies.add(companyId);
+    this.seededCompanies.add(targetCompanyId);
   }
 
   async getTree(companyId: string, lite = false) {
