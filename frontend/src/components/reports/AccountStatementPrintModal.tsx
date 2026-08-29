@@ -760,152 +760,42 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
     if (!element) return;
     setExporting(true);
     try {
-      // Collect all stylesheets from the page (these already include <style> and <link> tags)
-      const styleSheets = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-        .map((s) => s.outerHTML)
-        .join('\n');
-
-      // Custom print overrides
-      const customPrintStyles = `
-        @page {
-          size: A4 portrait;
-          margin: 8mm 6mm 36mm 6mm !important;
-        }
-        body { font-family: 'IBM Plex Sans Arabic', 'Tajawal', 'Cairo', sans-serif !important; }
-        #printable-statement-sheet {
-          width: 100% !important;
-          max-width: 100% !important;
-          margin: 0 !important;
-          padding: 0 2mm !important;
-          box-shadow: none !important;
-          border: none !important;
-          background: #ffffff !important;
-        }
-        table {
-          display: table !important;
-          width: 100% !important;
-          border-collapse: collapse !important;
-          page-break-inside: auto !important;
-        }
-        thead {
-          display: table-header-group !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-        thead tr {
-          display: table-row !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-        thead tr:first-child td {
-          padding-top: 4mm !important;
-          padding-bottom: 2mm !important;
-        }
-        tbody {
-          display: table-row-group !important;
-        }
-        tfoot {
-          display: table-footer-group !important;
-        }
-        tfoot tr td {
-          position: fixed !important;
-          bottom: 3mm !important;
-          left: 4mm !important;
-          right: 4mm !important;
-          width: calc(100% - 8mm) !important;
-          background: #ffffff !important;
-          padding-top: 2px !important;
-          padding-bottom: 2px !important;
-          z-index: 9999 !important;
-        }
-        tr {
-          display: table-row !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-        td, th {
-          display: table-cell !important;
-        }
-        .print-summary-block {
-          margin-top: 6px !important;
-          margin-bottom: 14px !important;
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-        .printable-footer-bar {
-          margin-top: 10px !important;
-        }
-        .print-summary-footer-block {
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-        .no-print { display: none !important; }
-        #statement-printable-header { display: none !important; }
-      `;
-
-      const inlineCss = Array.from(document.querySelectorAll('style'))
-        .map((s) => s.textContent || '')
-        .join('\n');
-
-      // Extract printable header element HTML for native Puppeteer repeating header
-      const headerElem = document.getElementById('statement-printable-header');
-      const headerHtml = headerElem ? `
-        <style>
-          ${inlineCss}
-          *, *::before, *::after { box-sizing: border-box !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          body { font-family: 'IBM Plex Sans Arabic', 'Tajawal', sans-serif !important; margin: 0 !important; background: #ffffff !important; }
-        </style>
-        <div dir="${printLang === 'en' ? 'ltr' : 'rtl'}" style="width: 100%; font-family: 'IBM Plex Sans Arabic', 'Tajawal', sans-serif; background: #ffffff;">
-          ${headerElem.outerHTML}
-        </div>
-      ` : undefined;
-      const headerHeightMm = config.headerHeight ? Math.max(Math.round(config.headerHeight * 0.265 + 6), 40) : 48;
-
-      // Build standalone HTML string
-      const html = `
-        ${styleSheets}
-        <style>
-          ${customPrintStyles}
-        </style>
-        ${element.outerHTML}
-      `;
-
-      const filename = `statement_${accountCode || 'report'}_${new Date().toISOString().split('T')[0]}.pdf`;
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/pdf/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          html,
-          headerHtml,
-          lang: printLang,
-          format: 'A4',
-          marginTop: `${headerHeightMm}mm`,
-          marginBottom: '20mm',
-          filename,
-        }),
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
       });
 
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
       }
 
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-
-      // Direct download without opening new tab
-      const downloadLink = document.createElement('a');
-      downloadLink.href = url;
-      downloadLink.download = filename;
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-      document.body.removeChild(downloadLink);
-
-      // Clean up blob URL after delay
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      const filename = `statement_${accountCode || 'report'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(filename);
+      showSuccessNotification(
+        printLang === 'en' ? 'Downloaded' : 'تم التحميل',
+        printLang === 'en' ? 'Account statement PDF exported successfully' : 'تم تصدير وحفظ كشف الحساب بصيغة PDF فورياً'
+      );
     } catch (err: any) {
       console.error('PDF export failed:', err);
       // Fallback to browser print
@@ -1134,76 +1024,7 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
   const handleDownloadPdfDirect = async () => {
     setDownloading(true);
     try {
-      const token = localStorage.getItem('token');
-      const templateRows = rows.map(r => ({
-        ...r,
-        passengers: r.passengersDetail?.map(p => {
-          const rawType = (p.ticketType || 'ADT').toUpperCase();
-          const isChild = rawType === 'CHD' || rawType === 'CHILD' || rawType === 'INF' || rawType === 'INFANT';
-          const isInfant = rawType === 'INF' || rawType === 'INFANT';
-          const displayType = isInfant ? 'INF' : isChild ? 'CHD' : 'ADT';
-          return {
-            fullName: p.name || '',
-            type: displayType,
-            typeClass: isInfant ? 'pax-type-inf' : isChild ? 'pax-type-chd' : 'pax-type-adt',
-            isChild,
-          };
-        }) || [],
-      }));
-
-      try {
-        const res = await fetch(`${API_BASE_URL}/pdf/statement`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            accountName,
-            accountCode,
-            accountPhone,
-            accountEmail,
-            accountAddress,
-            startDate,
-            endDate,
-            rows: templateRows,
-            totals,
-            lang,
-            settings: {
-              ...config,
-              templatePreset: config.templatePreset || 'classic',
-              companyNameAr: config.companyName || config.companyNameAr,
-              companyNameEn: config.companyNameEn || config.companyName,
-              subtitleAr: config.subtitle || config.subtitleAr,
-              subtitleEn: config.subtitleEn || config.subtitle,
-              addressAr: config.address || config.addressAr,
-              addressEn: config.addressEn || config.address,
-              footerTextAr: config.footerText || config.footerTextAr,
-              footerTextEn: config.footerTextEn || config.footerText,
-            },
-          }),
-        });
-
-        if (res.ok) {
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const filename = `كشف_حساب_${accountCode || accountName}_${new Date().toISOString().split('T')[0]}.pdf`;
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(url), 60000);
-          showSuccessNotification('تم التحميل', 'تم تصدير كشف الحساب بصيغة PDF بنجاح');
-          onClose();
-          return;
-        }
-      } catch (err) {
-        console.warn('Backend PDF endpoint error, using direct client-side PDF download:', err);
-      }
-
-      // Direct client-side high-resolution PDF download (Direct file save, zero print dialogs!)
+      // Direct client-side high-resolution PDF download (Instant file save in 1 second)
       await exportDirectPdfFile();
     } catch (e) {
       console.error(e);
