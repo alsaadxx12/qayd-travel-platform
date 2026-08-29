@@ -40,6 +40,26 @@ const STABLE_PREFIXES = [
 /** Near-static data is worth holding for minutes, not seconds. */
 const STABLE_TTL = 5 * 60 * 1000;
 
+/**
+ * Per-endpoint TTLs, longest prefix wins.
+ *
+ * `/exchange-rate` is the interesting one: the backend caches the upstream rate for
+ * 60 seconds, so asking more often than that CANNOT return anything new — it only
+ * buys a round trip. Matching the client TTL to the server's is not a guess about
+ * freshness, it is the exact point past which a request is provably pointless.
+ */
+const TTL_OVERRIDES: Array<[string, number]> = [
+  ['/exchange-rate/history', STABLE_TTL], // historical series; does not move
+  ['/exchange-rate', 60 * 1000], // mirrors the server's own upstream cache
+];
+
+function ttlFor(path: string): number {
+  for (const [prefix, ttl] of TTL_OVERRIDES) {
+    if (path.startsWith(prefix)) return ttl;
+  }
+  return isStablePath(path) ? STABLE_TTL : DEFAULT_TTL;
+}
+
 function currentRoute(): string {
   try {
     return window.location.pathname || '/';
@@ -166,7 +186,7 @@ export async function apiRequest<T = any>(
   // Check memory cache for GET requests
   if (method === 'GET' && !options.noCache) {
     const cached = apiCache.get(cacheKey);
-    const ttl = options.ttl ?? (isStablePath(cleanEndpoint) ? STABLE_TTL : DEFAULT_TTL);
+    const ttl = options.ttl ?? ttlFor(cleanEndpoint);
     if (cached && Date.now() - cached.timestamp < ttl) {
       perfMonitor.record({
         method,
