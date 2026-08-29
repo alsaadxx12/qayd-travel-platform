@@ -1386,73 +1386,13 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
           </div>
 
           {/* ════════════════════════════════════════════════════════════════════
-              2. PAYMENT METHODS & MULTI-SLIPS (Only for Receipt and Payment Vouchers)
+              2. COUNTERPARTY ACCOUNT & ATTACHMENTS (Only for Receipt and Payment Vouchers)
              ════════════════════════════════════════════════════════════════════ */}
           {voucherType !== 'JOURNAL' && (
             <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-2.5 shadow-2xs space-y-2 shrink-0">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 items-end">
-                {/* Payment Methods Buttons Bar */}
-                <div className="lg:col-span-4 min-w-0">
-                  <label className="block font-bold text-slate-700 text-xs mb-1">طريقة التسديد *</label>
-                  <div className="min-h-[42px] flex flex-wrap items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-                    {paymentMappings.map((method) => {
-                      const isSelected = selectedPaymentMethodId === method.id;
-                      return (
-                        <button
-                          key={method.id}
-                          type="button"
-                          onClick={() => handleSelectPaymentMethod(method)}
-                          className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                            isSelected
-                              ? 'bg-[#F45A0A] text-white shadow-2xs font-black'
-                              : 'text-slate-700 hover:bg-slate-100 bg-transparent'
-                          }`}
-                        >
-                          {method.type === 'CASH' ? <IconCash size={14} /> : <IconCreditCard size={14} />}
-                          <span className="truncate">{method.nameAr}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Currency — sits on the payment row, beside the method */}
-                <div className="lg:col-span-2 min-w-0">
-                  <label className="block font-bold text-slate-700 text-xs mb-1">عملة السند</label>
-                  <div className="h-[42px] flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCurrency('IQD');
-                        setJournalLines((prev) => prev.map((l) => ({ ...l, currency: 'IQD' })));
-                      }}
-                      className={`flex-1 h-full rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center ${
-                        currency === 'IQD'
-                          ? 'bg-[#F45A0A] text-white shadow-xs'
-                          : 'text-slate-700 hover:bg-slate-200 bg-transparent'
-                      }`}
-                    >
-                      IQD
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCurrency('USD');
-                        setJournalLines((prev) => prev.map((l) => ({ ...l, currency: 'USD' })));
-                      }}
-                      className={`flex-1 h-full rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center ${
-                        currency === 'USD'
-                          ? 'bg-[#F45A0A] text-white shadow-xs'
-                          : 'text-slate-700 hover:bg-slate-200 bg-transparent'
-                      }`}
-                    >
-                      USD
-                    </button>
-                  </div>
-                </div>
-
-                {/* Opposing account — also promoted onto the payment row */}
-                <div className="lg:col-span-5 min-w-0">
+              <div className="flex items-end gap-2">
+                {/* Opposing account — full width */}
+                <div className="flex-1 min-w-0">
                   <label className="block font-bold text-slate-700 text-xs mb-1 truncate">
                     {isReceipt ? 'الحساب المقابل (الطرف الدائن ⬅️) *' : 'الحساب المقابل (الطرف المدين ➡️) *'}
                   </label>
@@ -1497,7 +1437,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                 </div>
 
                 {/* Multi-Slip Attachment Trigger */}
-                <div className="lg:col-span-1 min-w-0">
+                <div className="shrink-0 w-36 min-w-[130px]">
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -1510,16 +1450,14 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className={`h-[42px] w-full rounded-xl border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs ${
+                      className={`h-[42px] w-full rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs px-3 ${
                         slipFiles.length > 0
                           ? 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100'
                           : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                       }`}
                     >
-                      <IconPaperclip size={15} className="text-teal-600" />
-                      {slipFiles.length > 0 && (
-                        <span className="font-mono font-black tabular-nums">{slipFiles.length}</span>
-                      )}
+                      <IconPaperclip size={15} className="text-teal-600 shrink-0" />
+                      <span>{slipFiles.length > 0 ? `الوصل (${slipFiles.length})` : 'إرفاق وصل'}</span>
                     </button>
                   </Tooltip>
                 </div>
@@ -1844,9 +1782,9 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-end">
                   {/* Amount Field (Centered & Bold) */}
-                  <div className="md:col-span-4">
+                  <div className={currency === 'USD' ? 'md:col-span-4' : 'md:col-span-5'}>
                     <label className="block font-bold text-slate-800 text-xs mb-1">
                       المبلغ المطلوب *
                     </label>
@@ -1856,8 +1794,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                       onChange={setAmount}
                       styles={{
                         input: {
-                          height: '44px',
-                          fontSize: '20px',
+                          height: '42px',
+                          fontSize: '19px',
                           fontWeight: 900,
                           backgroundColor: '#ffffff',
                           borderColor: '#cbd5e1',
@@ -1870,9 +1808,69 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     />
                   </div>
 
+                  {/* Currency — sits directly beside the Amount field */}
+                  <div className="md:col-span-2 min-w-0">
+                    <label className="block font-bold text-slate-700 text-xs mb-1">عملة السند</label>
+                    <div className="h-[42px] flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrency('IQD');
+                          setJournalLines((prev) => prev.map((l) => ({ ...l, currency: 'IQD' })));
+                        }}
+                        className={`flex-1 h-full rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center ${
+                          currency === 'IQD'
+                            ? 'bg-[#F45A0A] text-white shadow-xs'
+                            : 'text-slate-700 hover:bg-slate-200 bg-transparent'
+                        }`}
+                      >
+                        IQD
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrency('USD');
+                          setJournalLines((prev) => prev.map((l) => ({ ...l, currency: 'USD' })));
+                        }}
+                        className={`flex-1 h-full rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center ${
+                          currency === 'USD'
+                            ? 'bg-[#F45A0A] text-white shadow-xs'
+                            : 'text-slate-700 hover:bg-slate-200 bg-transparent'
+                        }`}
+                      >
+                        USD
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Payment Method — sits directly beside Amount & Currency */}
+                  <div className={currency === 'USD' ? 'md:col-span-4 min-w-0' : 'md:col-span-5 min-w-0'}>
+                    <label className="block font-bold text-slate-700 text-xs mb-1">طريقة التسديد *</label>
+                    <div className="min-h-[42px] flex flex-wrap items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                      {paymentMappings.map((method) => {
+                        const isSelected = selectedPaymentMethodId === method.id;
+                        return (
+                          <button
+                            key={method.id}
+                            type="button"
+                            onClick={() => handleSelectPaymentMethod(method)}
+                            className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                              isSelected
+                                ? 'bg-[#F45A0A] text-white shadow-2xs font-black'
+                                : 'text-slate-700 hover:bg-slate-100 bg-transparent'
+                            }`}
+                          >
+                            {method.type === 'CASH' ? <IconCash size={14} /> : <IconCreditCard size={14} />}
+                            <span className="truncate">{method.nameAr}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Clean Numeric Exchange Rate Input when USD */}
                   {currency === 'USD' && (
-                    <div className="md:col-span-3">
+                    <div className="md:col-span-2 min-w-0">
                       <label className="block font-bold text-slate-800 text-xs mb-1">
                         سعر الصرف
                       </label>
@@ -1881,7 +1879,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                         value={exchangeRate}
                         onChange={(e) => setExchangeRate(e.target.value)}
                         placeholder="1550"
-                        className="w-full h-11 px-2.5 rounded-xl border border-slate-300 bg-white font-mono font-black text-sm text-center text-slate-900 focus:outline-none focus:border-[#F45A0A] shadow-2xs"
+                        className="w-full h-[42px] px-2.5 rounded-xl border border-slate-300 bg-white font-mono font-black text-sm text-center text-slate-900 focus:outline-none focus:border-[#F45A0A] shadow-2xs"
                       />
                     </div>
                   )}
