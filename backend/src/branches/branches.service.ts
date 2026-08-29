@@ -335,8 +335,14 @@ export class BranchesService {
   async uploadBranchLogo(fileName: string, fileBase64: string): Promise<{ url: string }> {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
-    if (!supabaseUrl || !supabaseKey) {
-      throw new BadRequestException('تخزين الشعارات غير مُعد. عيّن SUPABASE_URL ومفتاح التخزين في الخادم.');
+    
+    const missing: string[] = [];
+    if (!supabaseUrl) missing.push('SUPABASE_URL');
+    if (!supabaseKey) missing.push('SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY');
+    
+    if (missing.length > 0) {
+      console.error(`[uploadBranchLogo] Missing env vars: ${missing.join(', ')}. Available env keys: ${Object.keys(process.env).filter(k => k.includes('SUPA')).join(', ') || 'NONE'}`);
+      throw new BadRequestException(`تخزين الشعارات غير مُعد. المتغيرات المفقودة: ${missing.join(', ')}. أضفها في إعدادات Render Environment Variables.`);
     }
 
     const cleanBase64 = fileBase64.replace(/^data:image\/\w+;base64,/, '');
