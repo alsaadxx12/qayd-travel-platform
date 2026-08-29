@@ -12,6 +12,7 @@ import {
   IconReceiptOff,
   IconCoins,
   IconFileText,
+  IconPhoto,
 } from '@tabler/icons-react';
 import { fetchPrintTemplate, savePrintTemplate } from '../../api/printTemplates';
 import { branchesApi, type Branch } from '../../api/branches';
@@ -376,6 +377,54 @@ export const PrintSettingsPage: React.FC = () => {
                           <span>{isAr ? 'إظهار العلامة المائية الشفافة (Watermark)' : 'Show watermark'}</span>
                           <Switch size="xs" color="orange" checked={printConfig.showWatermark || false} onChange={(e) => updatePrintConfig('showWatermark', e.currentTarget.checked)} />
                         </div>
+                      </div>
+
+                      {/* Logo Size Control */}
+                      <div className="border-t border-slate-200 pt-3 space-y-2">
+                        <span className="font-extrabold text-slate-900 flex items-center gap-1.5 text-xs">
+                          <IconPhoto size={15} className="text-[#F45A0A]" />
+                          <span>{isAr ? 'حجم الشعار (اللوجو) في المستند' : 'Logo size in document'}</span>
+                        </span>
+                        <div className="flex justify-between text-xs font-bold mb-1">
+                          <span>{isAr ? 'عرض الشعار' : 'Logo width'}</span>
+                          <span className="text-[#F45A0A] font-mono tabular-nums lining-nums">{printConfig.logoWidth || 70}px</span>
+                        </div>
+                        <Slider
+                          size="xs"
+                          color="orange"
+                          min={30}
+                          max={160}
+                          step={5}
+                          value={printConfig.logoWidth || 70}
+                          onChange={(val) => updatePrintConfig('logoWidth', val)}
+                          marks={[
+                            { value: 30, label: isAr ? 'صغير' : 'S' },
+                            { value: 70, label: isAr ? 'متوسط' : 'M' },
+                            { value: 120, label: isAr ? 'كبير' : 'L' },
+                            { value: 160, label: isAr ? 'أكبر' : 'XL' },
+                          ]}
+                          className="pb-4"
+                        />
+                        <div className="flex justify-between text-xs font-bold mb-1 mt-2">
+                          <span>{isAr ? 'ارتفاع الشعار' : 'Logo height'}</span>
+                          <span className="text-[#F45A0A] font-mono tabular-nums lining-nums">{printConfig.logoHeight || 70}px</span>
+                        </div>
+                        <Slider
+                          size="xs"
+                          color="orange"
+                          min={30}
+                          max={160}
+                          step={5}
+                          value={printConfig.logoHeight || 70}
+                          onChange={(val) => updatePrintConfig('logoHeight', val)}
+                          marks={[
+                            { value: 30, label: isAr ? 'صغير' : 'S' },
+                            { value: 70, label: isAr ? 'متوسط' : 'M' },
+                            { value: 120, label: isAr ? 'كبير' : 'L' },
+                            { value: 160, label: isAr ? 'أكبر' : 'XL' },
+                          ]}
+                          className="pb-4"
+                        />
                       </div>
                       {printConfig.showWatermark && (
                         <TextInput label={isAr ? 'نص العلامة المائية' : 'Watermark text'} size="xs" value={printConfig.watermarkText || ''} onChange={(e) => updatePrintConfig('watermarkText', e.target.value)} placeholder="OFFICIAL STATEMENT" className="font-bold mt-2" />

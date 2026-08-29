@@ -327,7 +327,7 @@ export const PrintableAccountStatementSheet: React.FC<{
           {/* Left Column: Logo & TO Info */}
           <div className="flex-1 min-w-0">
             {logoUrl ? (
-              <img src={logoUrl} alt="Logo" className="max-h-[50px] max-w-[180px] object-contain mb-3" />
+              <img src={logoUrl} alt="Logo" className="object-contain mb-3" style={{ maxWidth: config.logoWidth ? `${config.logoWidth}px` : '180px', maxHeight: config.logoHeight ? `${config.logoHeight}px` : '50px' }} />
             ) : (
               <div className="text-2xl font-black mb-2 tracking-tight" style={{ color: titleAccentColor }}>FLY4ALL</div>
             )}
