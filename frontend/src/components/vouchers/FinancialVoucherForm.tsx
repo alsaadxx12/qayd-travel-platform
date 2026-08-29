@@ -34,6 +34,7 @@ import {
   IconCheck,
   IconFileInvoice,
   IconArrowsExchange,
+  IconAlertTriangle,
 } from '@tabler/icons-react';
 import { apiRequest } from '../../api/client';
 import { fetchPrintTemplate } from '../../api/printTemplates';
@@ -183,6 +184,10 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
   // Accounts list
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Reopening the modal quickly used to let an older in-flight load win the race and
+  // overwrite the newer voucher; only the latest run is allowed to touch state.
+  const loadRunRef = useRef(0);
 
   // Logged in user profile
   const loggedInUser = useMemo(() => {
@@ -221,15 +226,35 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
   // Fast load config on open + Auto-detect employee's cashbox + Load Payment Methods
   useEffect(() => {
     if (opened) {
+      const runId = ++loadRunRef.current;
+      setLoadError(null);
       const loadData = async () => {
         try {
           // Fast parallel loading of essential config only (avoiding dumping massive table records)
-          const [accs, templateRes, emps, customAccountsRes] = await Promise.all([
+          const editEndpoint = initialVoucherId
+            ? defaultType === 'RECEIPT'
+              ? `/api/receipt-vouchers/${initialVoucherId}`
+              : defaultType === 'PAYMENT'
+                ? `/api/payment-vouchers/${initialVoucherId}`
+                : `/api/journal-entries/${initialVoucherId}`
+            : null;
+
+          const [accs, templateRes, emps, customAccountsRes, editedRes] = await Promise.all([
             apiRequest('/api/accounts?lite=1').catch(() => apiRequest('/api/accounts').catch(() => [])),
             apiRequest('/api/print-templates/payment_methods_mapping').catch(() => null),
             employeesApi.getAll().catch(() => []),
             apiRequest('/api/print-templates/custom_voucher_accounts').catch(() => null),
+            // Fetched alongside the config instead of after it: on edit this used to be
+            // a fifth round trip that only started once the other four had finished.
+            editEndpoint
+              ? apiRequest(editEndpoint).then(
+                  (r: any) => ({ ok: true, data: r }),
+                  (err: any) => ({ ok: false, error: err }),
+                )
+              : Promise.resolve(null),
           ]);
+
+          if (runId !== loadRunRef.current) return;
 
           const loadedAccounts: AccountOption[] = accs || [];
           setAccounts(loadedAccounts);
@@ -347,20 +372,20 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
           setFormDefaultCashboxId(savedDefaults.defaultCashboxAccountId || defaultCashboxId);
 
           if (initialVoucherId) {
-            try {
-              let single: any = null;
-              if (defaultType === 'RECEIPT') {
-                single = await apiRequest(`/api/receipt-vouchers/${initialVoucherId}`);
-              } else if (defaultType === 'PAYMENT') {
-                single = await apiRequest(`/api/payment-vouchers/${initialVoucherId}`);
-              } else {
-                single = await apiRequest(`/api/journal-entries/${initialVoucherId}`);
-              }
-              if (single) {
-                loadVoucherIntoForm(single, 0);
-                return;
-              }
-            } catch (e) {}
+            if (editedRes && (editedRes as any).ok && (editedRes as any).data) {
+              loadVoucherIntoForm((editedRes as any).data, 0, customAccs);
+              setLoadError(null);
+              return;
+            }
+            // Say so instead of silently presenting an empty "new voucher" that the
+            // user then saves over the top of the record they meant to edit.
+            const err: any = editedRes && (editedRes as any).error;
+            setLoadError(err?.message || 'تعذّر تحميل بيانات السند. تحقق من الاتصال ثم أعد فتح السند.');
+            showErrorNotification(
+              'تعذّر تحميل السند',
+              err?.message || 'لم يتم جلب بيانات السند من الخادم، لذلك لم تُعبَّأ الحقول.',
+            );
+            return;
           }
 
           // Default new voucher state applying saved user preferences
@@ -568,20 +593,6 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     setSplitAllocations((prev) => prev.map((item) => ({ ...item, amount: '' })));
   };
 
-  const handleAddCustomSplitRow = (accId: string) => {
-    if (!accId) return;
-    const acc = accounts.find((a) => a.id === accId);
-    if (!acc) return;
-    const newEntry = {
-      id: `split-${Date.now()}`,
-      accountId: acc.id,
-      accountName: acc.nameAr,
-      amount: '',
-      note: '',
-    };
-    setSplitAllocations((prev) => [...prev, newEntry]);
-  };
-
   const handleRemoveSplitRow = (id: string) => {
     setSplitAllocations((prev) => prev.filter((item) => item.id !== id));
   };
@@ -605,10 +616,25 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
   };
 
   // Load a voucher into the form
-  const loadVoucherIntoForm = (voucher: any, index: number) => {
+  const loadVoucherIntoForm = (
+    voucher: any,
+    index: number,
+    customAccountsOverride?: any[],
+  ) => {
     setCurrentVoucherIndex(index);
     setEditingVoucherId(voucher.id || null);
-    const vType = voucher.voucherType || (voucher.lines ? 'JOURNAL' : voucher.type === 'PAYMENT' || voucher.supplierId ? 'PAYMENT' : 'RECEIPT');
+    // `defaultType` is what the list told us this record is; trust it over shape
+    // sniffing, because a payment voucher with a null supplierId used to read as a
+    // receipt and load into the wrong side of the form.
+    const vType =
+      voucher.voucherType ||
+      (voucher.lines
+        ? 'JOURNAL'
+        : voucher.type === 'PAYMENT' || voucher.supplierId
+          ? 'PAYMENT'
+          : defaultType === 'PAYMENT'
+            ? 'PAYMENT'
+            : 'RECEIPT');
     setVoucherType(vType);
     setDate(voucher.date ? (typeof voucher.date === 'string' ? voucher.date.split('T')[0] : getTodayDate()) : getTodayDate());
     setVoucherNumber(voucher.voucherNumber || voucher.entryNumber || voucher.number || '');
@@ -634,9 +660,15 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
         { id: '2', accountId: '', debit: '', credit: '', currency: 'IQD', exchangeRate: '1500', description: '', costCenter: '' },
       ]);
     } else {
-      setAmount(String(voucher.amount || ''));
-      setCashboxAccountId(voucher.cashboxOrBankAccountId || voucher.accountId || '');
+      const rawAmount = voucher.amount;
+      const numeric = Number(rawAmount);
+      setAmount(Number.isFinite(numeric) && numeric !== 0 ? String(numeric) : '');
+      // No `|| voucher.accountId` fallback here: it used to point the cashbox at the
+      // opposite account whenever cashboxOrBankAccountId was missing, which silently
+      // turned the entry into a self-transfer.
+      setCashboxAccountId(voucher.cashboxOrBankAccountId || '');
       setOppositeAccountId(voucher.accountId || voucher.oppositeAccountId || '');
+      setExchangeRate(voucher.exchangeRate ? String(voucher.exchangeRate) : exchangeRate);
     }
 
     // Restore or initialize split allocations
@@ -653,9 +685,12 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       );
     } else {
       setEnableSplitAllocation(false);
-      if (configuredCustomAccounts.length > 0) {
+      // On the first load the state setter above has not committed yet, so read the
+      // freshly fetched list when it is handed to us.
+      const configured = customAccountsOverride ?? configuredCustomAccounts;
+      if (configured.length > 0) {
         setSplitAllocations(
-          configuredCustomAccounts.map((ca: any) => ({
+          configured.map((ca: any) => ({
             id: ca.id,
             accountId: ca.targetAccountId,
             accountName: ca.nameAr,
@@ -668,6 +703,9 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
 
     setCurrency((voucher.currency as 'IQD' | 'USD') || 'IQD');
     setDescription(voucher.description || '');
+    // Mark it manual, otherwise the auto-description effect fires on the next render
+    // and overwrites the stored text with a freshly generated sentence.
+    setIsManualDescription(Boolean(voucher.description));
     if (voucher.paymentMethodId) {
       setSelectedPaymentMethodId(voucher.paymentMethodId);
     }
@@ -849,10 +887,53 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       const savedVoucherNumber = voucherNumber;
 
       if (isEditing) {
-        onSuccess({
-          id: editingVoucherId,
-          entryNumber: savedVoucherNumber,
-          voucherNumber: savedVoucherNumber,
+        // The write is awaited. Firing it in the background and closing immediately
+        // meant the page refreshed its list before the PATCH had landed, so the user
+        // saw their own edit reverted and concluded saving was broken.
+        setLoading(true);
+        try {
+          const saved = await apiRequest(endpoint, { method, body: JSON.stringify(payload) });
+          showSuccessNotification(
+            'تم حفظ التعديلات',
+            `تم تحديث سند القيد [${savedVoucherNumber || ''}] بنجاح.`,
+          );
+          onSuccess({
+            id: saved?.id || editingVoucherId,
+            entryNumber: saved?.entryNumber || savedVoucherNumber,
+            voucherNumber: saved?.entryNumber || savedVoucherNumber,
+            voucherType: 'JOURNAL',
+            sourceType: 'JOURNAL',
+            totalDebit: totalJournalDebit,
+            totalCredit: totalJournalCredit,
+            amount: totalJournalDebit,
+            currency,
+            date,
+            description: payload.description,
+            lines: payload.lines,
+          });
+          onClose();
+        } catch (err: any) {
+          // Keep the modal open so the typed work is not lost.
+          showErrorNotification('خطأ في تعديل القيد', err?.message || 'حدث خطأ أثناء حفظ التعديلات.');
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const saved = await apiRequest(endpoint, { method, body: JSON.stringify(payload) });
+
+        showSuccessNotification(
+          'تم حفظ سند القيد',
+          `تم حفظ سند القيد [${saved?.entryNumber || savedVoucherNumber || 'الجديد'}] وترحيل الحركة بنجاح.`
+        );
+
+        const savedRow = {
+          id: saved?.id,
+          entryNumber: saved?.entryNumber || savedVoucherNumber,
+          voucherNumber: saved?.entryNumber || savedVoucherNumber,
           voucherType: 'JOURNAL',
           sourceType: 'JOURNAL',
           totalDebit: totalJournalDebit,
@@ -860,78 +941,19 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
           amount: totalJournalDebit,
           currency,
           date,
+          createdAt: new Date().toISOString(),
           description: payload.description,
           lines: payload.lines,
-        });
-        onClose();
+        };
 
-        apiRequest(endpoint, { method, body: JSON.stringify(payload) }).catch((err) => {
-          showErrorNotification('خطأ في تعديل القيد', err.message || 'حدث خطأ أثناء حفظ التعديلات.');
-        });
-        return;
+        setVouchersList((prev) => [savedRow, ...prev]);
+        onSuccess(savedRow);
+        handleNewVoucher('JOURNAL');
+      } catch (err: any) {
+        showErrorNotification('خطأ في حفظ القيد', err?.message || 'حدث خطأ أثناء حفظ سند القيد.');
+      } finally {
+        setLoading(false);
       }
-
-      showSuccessNotification(
-        'تم حفظ سند القيد',
-        `تم حفظ سند القيد [${savedVoucherNumber || 'الجديد'}] وترحيل الحركة بنجاح.`
-      );
-
-      const tempId = `temp-${Date.now()}`;
-      setVouchersList((prev) => [{
-        id: tempId,
-        voucherType: 'JOURNAL',
-        entryNumber: savedVoucherNumber,
-        voucherNumber: savedVoucherNumber,
-        totalDebit: totalJournalDebit,
-        totalCredit: totalJournalCredit,
-        amount: totalJournalDebit,
-        currency,
-        date,
-        createdAt: new Date().toISOString(),
-        description: payload.description,
-        lines: payload.lines,
-      }, ...prev]);
-
-      onSuccess({
-        id: tempId,
-        entryNumber: savedVoucherNumber,
-        voucherNumber: savedVoucherNumber,
-        voucherType: 'JOURNAL',
-        sourceType: 'JOURNAL',
-        totalDebit: totalJournalDebit,
-        totalCredit: totalJournalCredit,
-        amount: totalJournalDebit,
-        currency,
-        date,
-        description: payload.description,
-        lines: payload.lines,
-      });
-
-      handleNewVoucher('JOURNAL');
-
-      apiRequest(endpoint, { method, body: JSON.stringify(payload) }).then((savedRes) => {
-        if (savedRes?.id) {
-          setVouchersList((prev) =>
-            prev.map((v) => (v.id === tempId ? { ...v, id: savedRes.id, entryNumber: savedRes.entryNumber || v.entryNumber, voucherNumber: savedRes.entryNumber || v.voucherNumber } : v))
-          );
-          onSuccess({
-            _replaceTemp: tempId,
-            id: savedRes.id,
-            entryNumber: savedRes.entryNumber || savedVoucherNumber,
-            voucherNumber: savedRes.entryNumber || savedVoucherNumber,
-            voucherType: 'JOURNAL',
-            sourceType: 'JOURNAL',
-            amount: numAmount,
-            currency,
-            date,
-            description: payload.description,
-          });
-        }
-      }).catch((err) => {
-        showErrorNotification('خطأ في حفظ القيد', err.message || 'حدث خطأ أثناء حفظ سند القيد.');
-        setVouchersList((prev) => prev.filter((v) => v.id !== tempId));
-        onSuccess({ _removeTemp: tempId });
-      });
       return;
     }
 
@@ -993,101 +1015,57 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     const savedVoucherNumber = voucherNumber;
     const savedVoucherType = voucherType;
 
-    // ── Optimistic: Instant UI feedback ──
-    if (isEditing) {
-      // For edits: notify parent, close modal, fire API in background
-      onSuccess({
-        id: editingVoucherId,
-        voucherType,
-        voucherNumber: savedVoucherNumber,
+    // The write is awaited in both branches. The previous "optimistic" version told
+    // the page it had saved and fired the request afterwards, so the page's refresh
+    // raced the write: on edit it always read the pre-edit row back.
+    setLoading(true);
+    try {
+      const saved = await apiRequest(endpoint, { method, body: JSON.stringify(payload) });
+
+      const savedRow = {
+        id: saved?.id || editingVoucherId,
+        voucherType: savedVoucherType,
+        type: savedVoucherType,
+        voucherNumber: saved?.voucherNumber || savedVoucherNumber,
         amount: numAmount,
         currency,
         date,
+        createdAt: saved?.createdAt || new Date().toISOString(),
         accountId: oppositeAccountId,
         cashboxOrBankAccountId: cashboxAccountId,
         description: payload.description,
+        paymentMethodId: selectedPaymentMethodId,
         splitAccounts: activeSplits.length > 0 ? activeSplits : undefined,
         splitDescription: splitDesc,
-      });
-      onClose();
+      };
 
-      // Fire API in background (don't await)
-      apiRequest(endpoint, { method, body: JSON.stringify(payload) }).catch((err) => {
-        showErrorNotification('خطأ في تعديل السند', err.message || 'حدث خطأ أثناء حفظ التعديلات.');
-      });
-      return;
-    }
-
-    // For new vouchers: show notification and reset form instantly
-    showSuccessNotification(
-      'تم حفظ السند',
-      `تم حفظ السند [${savedVoucherNumber || 'الجديد'}] بنجاح.`
-    );
-
-    // Add optimistic entry to navigation list
-    const tempId = `temp-${Date.now()}`;
-    setVouchersList((prev) => [{
-      id: tempId,
-      voucherType: savedVoucherType,
-      voucherNumber: savedVoucherNumber,
-      amount: numAmount,
-      currency,
-      date,
-      createdAt: new Date().toISOString(),
-      accountId: oppositeAccountId,
-      cashboxOrBankAccountId: cashboxAccountId,
-      description: payload.description,
-      splitAccounts: activeSplits.length > 0 ? activeSplits : undefined,
-      splitDescription: splitDesc,
-    }, ...prev]);
-
-    // Notify parent with optimistic data
-    onSuccess({
-      id: tempId,
-      voucherType: savedVoucherType,
-      voucherNumber: savedVoucherNumber,
-      amount: numAmount,
-      currency,
-      date,
-      accountId: oppositeAccountId,
-      cashboxOrBankAccountId: cashboxAccountId,
-      description: payload.description,
-      splitAccounts: activeSplits.length > 0 ? activeSplits : undefined,
-      splitDescription: splitDesc,
-    });
-
-    // Reset form instantly (user can start next voucher immediately)
-    handleNewVoucher(savedVoucherType);
-
-    // Fire API in background (don't block the UI)
-    apiRequest(endpoint, { method, body: JSON.stringify(payload) }).then((savedRes) => {
-      // Replace temp ID with real server ID in navigation list
-      if (savedRes?.id) {
-        setVouchersList((prev) =>
-          prev.map((v) => (v.id === tempId ? { ...v, id: savedRes.id, voucherNumber: savedRes.voucherNumber || v.voucherNumber } : v))
+      if (isEditing) {
+        showSuccessNotification(
+          'تم حفظ التعديلات',
+          `تم تحديث السند [${savedRow.voucherNumber || ''}] بنجاح.`
         );
-        // Also update the parent page's list with the real ID
-        onSuccess({
-          _replaceTemp: tempId,
-          id: savedRes.id,
-          voucherType: savedVoucherType,
-          voucherNumber: savedRes.voucherNumber || savedVoucherNumber,
-          amount: numAmount,
-          currency,
-          date,
-          accountId: oppositeAccountId,
-          cashboxOrBankAccountId: cashboxAccountId,
-          description: payload.description,
-          paymentMethodId: selectedPaymentMethodId,
-        });
+        onSuccess(savedRow);
+        onClose();
+        return;
       }
-    }).catch((err) => {
-      showErrorNotification('خطأ في الحفظ', err.message || 'حدث خطأ أثناء حفظ السند.');
-      // Remove the optimistic entry on failure
-      setVouchersList((prev) => prev.filter((v) => v.id !== tempId));
-      // Also remove from parent page
-      onSuccess({ _removeTemp: tempId });
-    });
+
+      showSuccessNotification(
+        'تم حفظ السند',
+        `تم حفظ السند [${savedRow.voucherNumber || 'الجديد'}] بنجاح.`
+      );
+      setVouchersList((prev) => [savedRow, ...prev]);
+      onSuccess(savedRow);
+      // Clear the form so the next voucher can be typed straight away.
+      handleNewVoucher(savedVoucherType);
+    } catch (err: any) {
+      // Modal stays open on failure so nothing typed is thrown away.
+      showErrorNotification(
+        isEditing ? 'خطأ في تعديل السند' : 'خطأ في الحفظ',
+        err?.message || 'حدث خطأ أثناء حفظ السند.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   saveHandlerRef.current = handleSaveVoucher;
@@ -1206,6 +1184,19 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
         }
       >
         <div className="flex-1 flex flex-col justify-between space-y-2.5 text-xs select-none h-full overflow-hidden" dir="rtl">
+          {/* A failed load is stated, not hidden behind an empty-looking form. */}
+          {loadError && (
+            <div className="shrink-0 bg-rose-50 border border-rose-200 rounded-2xl px-3 py-2.5 flex items-start gap-2">
+              <IconAlertTriangle size={16} className="text-rose-600 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-extrabold text-[12.5px] text-rose-900 leading-tight">
+                  لم تُحمَّل بيانات السند
+                </p>
+                <p className="text-[11.5px] text-rose-700 font-medium leading-snug">{loadError}</p>
+              </div>
+            </div>
+          )}
+
           {/* ════════════════════════════════════════════════════════════════════
               1. TOP MASTER BAR: Voucher Type + Auto-detected Cashbox + Advanced Date + User + Settings Icon
              ════════════════════════════════════════════════════════════════════ */}
@@ -1281,45 +1272,27 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                 </div>
               </div>
 
-              {/* Dynamic Context: Employee Cashbox OR Journal Voucher Info */}
-              <div className="md:col-span-3">
-                {voucherType === 'JOURNAL' ? (
-                  <div>
-                    <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
-                      <IconFileInvoice size={14} className="text-[#F45A0A]" />
-                      <span>تصنيف السند المحاسبي</span>
-                    </label>
-                    <div className="h-8.5 bg-orange-50/60 border border-orange-200 rounded-xl px-3 flex items-center justify-between text-xs font-bold text-orange-950 shadow-2xs">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className="h-2 w-2 rounded-full bg-[#F45A0A] shrink-0" />
-                        <span className="truncate">قيد محاسبي مزدوج / مركب</span>
-                      </div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-orange-100 text-orange-800 font-bold">
-                        JV
-                      </span>
+              {/* Journal-only context. The employee cashbox now lives in the bottom bar. */}
+              {voucherType === 'JOURNAL' && (
+                <div className="md:col-span-3">
+                  <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
+                    <IconFileInvoice size={14} className="text-[#F45A0A]" />
+                    <span>تصنيف السند المحاسبي</span>
+                  </label>
+                  <div className="h-8.5 bg-orange-50/60 border border-orange-200 rounded-xl px-3 flex items-center justify-between text-xs font-bold text-orange-950 shadow-2xs">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="h-2 w-2 rounded-full bg-[#F45A0A] shrink-0" />
+                      <span className="truncate">قيد محاسبي مزدوج / مركب</span>
                     </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-orange-100 text-orange-800 font-bold">
+                      JV
+                    </span>
                   </div>
-                ) : (
-                  <div>
-                    <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
-                      <IconBuildingBank size={14} className="text-amber-600" />
-                      <span>الصندوق المرتبط بالموظف</span>
-                    </label>
-                    <div className="h-8.5 bg-white border border-slate-200 rounded-xl px-3 flex items-center justify-between text-xs font-bold text-slate-800 shadow-2xs">
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
-                        <span className="truncate">{cashboxDisplayName}</span>
-                      </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">
-                        نشط
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Advanced Accounting Date Picker */}
-              <div className="md:col-span-2">
+              <div className={voucherType === 'JOURNAL' ? 'md:col-span-2' : 'md:col-span-3'}>
                 <label className="block font-bold text-slate-700 text-xs mb-1">تاريخ السند *</label>
                 <AccountingDatePicker
                   value={date}
@@ -1329,7 +1302,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
               </div>
 
               {/* User Creator & Settings + Audit Icons */}
-              <div className="md:col-span-2 flex items-end justify-between gap-1.5">
+              <div className={`${voucherType === 'JOURNAL' ? 'md:col-span-2' : 'md:col-span-4'} flex items-end justify-between gap-1.5`}>
                 <div className="flex-1 min-w-0">
                   <label className="block font-bold text-slate-700 text-xs mb-1 truncate">المستخدم</label>
                   <div className="h-8.5 px-2 bg-white border border-slate-200 rounded-xl flex items-center gap-1.5 truncate text-[11px] font-bold text-slate-800 shadow-2xs">
@@ -1370,12 +1343,11 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
              ════════════════════════════════════════════════════════════════════ */}
           {voucherType !== 'JOURNAL' && (
             <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-2.5 shadow-2xs space-y-2 shrink-0">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 items-end">
                 {/* Payment Methods Buttons Bar */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-bold text-slate-700 text-xs">طريقة التسديد:</span>
-
-                  <div className="flex flex-wrap items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="lg:col-span-4 min-w-0">
+                  <label className="block font-bold text-slate-700 text-xs mb-1">طريقة التسديد *</label>
+                  <div className="min-h-[42px] flex flex-wrap items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
                     {paymentMappings.map((method) => {
                       const isSelected = selectedPaymentMethodId === method.id;
                       return (
@@ -1383,22 +1355,116 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                           key={method.id}
                           type="button"
                           onClick={() => handleSelectPaymentMethod(method)}
-                          className={`h-7 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          className={`h-8 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                             isSelected
                               ? 'bg-[#F45A0A] text-white shadow-2xs font-black'
                               : 'text-slate-700 hover:bg-slate-100 bg-transparent'
                           }`}
                         >
                           {method.type === 'CASH' ? <IconCash size={14} /> : <IconCreditCard size={14} />}
-                          <span>{method.nameAr}</span>
+                          <span className="truncate">{method.nameAr}</span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
+                {/* Currency — sits on the payment row, beside the method */}
+                <div className="lg:col-span-2 min-w-0">
+                  <label className="block font-bold text-slate-700 text-xs mb-1">عملة السند</label>
+                  <div className="h-[42px] flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrency('IQD');
+                        setJournalLines((prev) => prev.map((l) => ({ ...l, currency: 'IQD' })));
+                      }}
+                      className={`flex-1 h-full rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center ${
+                        currency === 'IQD'
+                          ? 'bg-[#F45A0A] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-200 bg-transparent'
+                      }`}
+                    >
+                      IQD
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrency('USD');
+                        setJournalLines((prev) => prev.map((l) => ({ ...l, currency: 'USD' })));
+                      }}
+                      className={`flex-1 h-full rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center ${
+                        currency === 'USD'
+                          ? 'bg-[#F45A0A] text-white shadow-xs'
+                          : 'text-slate-700 hover:bg-slate-200 bg-transparent'
+                      }`}
+                    >
+                      USD
+                    </button>
+                  </div>
+                </div>
+
+                {/* Opposing account — also promoted onto the payment row */}
+                <div className="lg:col-span-5 min-w-0">
+                  <label className="block font-bold text-slate-700 text-xs mb-1 truncate">
+                    {isReceipt ? 'الحساب المقابل (الطرف الدائن ⬅️) *' : 'الحساب المقابل (الطرف المدين ➡️) *'}
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex-1 min-w-0">
+                      <Select
+                        searchable
+                        clearable
+                        placeholder="ابحث بالاسم (عميل، مورد، مكتب بورصة، شركة)..."
+                        value={oppositeAccountId}
+                        onChange={(val) => setOppositeAccountId(val || '')}
+                        data={postingAccounts.map((acc) => ({
+                          value: acc.id,
+                          label: acc.nameAr,
+                        }))}
+                        renderOption={({ option }: any) => (
+                          <div className="py-1 px-1 text-xs font-bold text-slate-900">
+                            {option.label}
+                          </div>
+                        )}
+                        filter={({ options, search }) => {
+                          const q = search.toLowerCase().trim();
+                          if (!q) return options;
+                          return options.filter((opt: any) => {
+                            const acc = accounts.find((a) => a.id === opt.value);
+                            if (!acc) return (opt.label || '').toLowerCase().includes(q);
+                            return acc.nameAr.toLowerCase().includes(q) || (acc.code && acc.code.toLowerCase().includes(q));
+                          });
+                        }}
+                        nothingFoundMessage="لا توجد نتائج مطابقة"
+                        maxDropdownHeight={280}
+                        styles={{
+                          input: {
+                            height: '42px',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            backgroundColor: '#ffffff',
+                            borderColor: '#cbd5e1',
+                            borderRadius: '12px',
+                          },
+                        }}
+                        required
+                      />
+                    </div>
+
+                    <Tooltip label="إضافة حساب جديد في الدليل" withArrow>
+                      <button
+                        type="button"
+                        onClick={() => setCreateAccountModalOpened(true)}
+                        className="h-[42px] w-[42px] min-w-[42px] rounded-xl border border-slate-200 bg-white hover:bg-orange-50 hover:border-orange-300 text-slate-700 hover:text-[#F45A0A] flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+                      >
+                        <IconUserPlus size={17} />
+                      </button>
+                    </Tooltip>
+                  </div>
+                </div>
+
                 {/* Multi-Slip Attachment Trigger */}
-                <div>
+                <div className="lg:col-span-1 min-w-0">
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -1407,19 +1473,22 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     onChange={handleMultipleFilesChange}
                     className="hidden"
                   />
-
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`h-[32px] px-3 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
-                      slipFiles.length > 0
-                        ? 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <IconPaperclip size={14} className="text-teal-600" />
-                    <span>{slipFiles.length > 0 ? `+ إضافة وصل آخر (${slipFiles.length})` : 'إرفاق وصل التسديد 📎'}</span>
-                  </button>
+                  <Tooltip label={slipFiles.length > 0 ? `إضافة وصل آخر (${slipFiles.length} مرفق)` : 'إرفاق وصل التسديد'} withArrow>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`h-[42px] w-full rounded-xl border text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs ${
+                        slipFiles.length > 0
+                          ? 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <IconPaperclip size={15} className="text-teal-600" />
+                      {slipFiles.length > 0 && (
+                        <span className="font-mono font-black tabular-nums">{slipFiles.length}</span>
+                      )}
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
 
@@ -1758,7 +1827,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
               <div className="space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                   {/* Amount Field (Centered & Bold) */}
-                  <div className="md:col-span-3">
+                  <div className="md:col-span-4">
                     <label className="block font-bold text-slate-800 text-xs mb-1">
                       المبلغ المطلوب *
                     </label>
@@ -1782,47 +1851,9 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     />
                   </div>
 
-                  {/* Currency Toggle Directly Next to Amount Field */}
-                  <div className={currency === 'USD' ? 'md:col-span-2' : 'md:col-span-3'}>
-                    <label className="block font-bold text-slate-800 text-xs mb-1">
-                      <span>عملة السند</span>
-                    </label>
-                    <div className="h-11 flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCurrency('IQD');
-                          setJournalLines((prev) => prev.map((l) => ({ ...l, currency: 'IQD' })));
-                        }}
-                        className={`flex-1 h-full rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                          currency === 'IQD'
-                            ? 'bg-[#F45A0A] text-white shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-200 bg-transparent'
-                        }`}
-                      >
-                        IQD (د.ع)
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCurrency('USD');
-                          setJournalLines((prev) => prev.map((l) => ({ ...l, currency: 'USD' })));
-                        }}
-                        className={`flex-1 h-full rounded-lg text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                          currency === 'USD'
-                            ? 'bg-[#F45A0A] text-white shadow-xs'
-                            : 'text-slate-700 hover:bg-slate-200 bg-transparent'
-                        }`}
-                      >
-                        USD ($)
-                      </button>
-                    </div>
-                  </div>
-
                   {/* Clean Numeric Exchange Rate Input when USD */}
                   {currency === 'USD' && (
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-3">
                       <label className="block font-bold text-slate-800 text-xs mb-1">
                         سعر الصرف
                       </label>
@@ -1835,90 +1866,22 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                       />
                     </div>
                   )}
-
-                  {/* Searchable Opposing Account */}
-                  <div className={currency === 'USD' ? 'md:col-span-5' : 'md:col-span-6'}>
-                    <label className="block font-bold text-slate-800 text-xs mb-1">
-                      {isReceipt ? 'الحساب المقابل (الطرف الدائن ⬅️) *' : 'الحساب المقابل (الطرف المدين ➡️) *'}
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex-1">
-                        <Select
-                          searchable
-                          clearable
-                          placeholder="ابحث بالاسم (عميل، مورد، مكتب بورصة، شركة)..."
-                          value={oppositeAccountId}
-                          onChange={(val) => setOppositeAccountId(val || '')}
-                          data={postingAccounts.map((acc) => ({
-                            value: acc.id,
-                            label: acc.nameAr,
-                          }))}
-                          renderOption={({ option }: any) => (
-                            <div className="py-1 px-1 text-xs font-bold text-slate-900">
-                              {option.label}
-                            </div>
-                          )}
-                          filter={({ options, search }) => {
-                            const s = search.toLowerCase().trim();
-                            if (!s) return options;
-                            return options.filter((opt: any) => {
-                              const acc = accounts.find((a) => a.id === opt.value);
-                              if (!acc) return (opt.label || '').toLowerCase().includes(s);
-                              return acc.nameAr.toLowerCase().includes(s) || (acc.code && acc.code.toLowerCase().includes(s));
-                            });
-                          }}
-                          nothingFoundMessage="لا توجد نتائج مطابقة"
-                          maxDropdownHeight={280}
-                          styles={{
-                            input: {
-                              height: '44px',
-                              fontSize: '13px',
-                              fontWeight: 700,
-                              backgroundColor: '#ffffff',
-                              borderColor: '#cbd5e1',
-                              borderRadius: '12px',
-                            },
-                          }}
-                          required
-                        />
-                      </div>
-
-                      <Tooltip label="إضافة حساب جديد في الدليل" withArrow>
-                        <button
-                          type="button"
-                          onClick={() => setCreateAccountModalOpened(true)}
-                          className="h-11 w-11 min-w-[44px] rounded-xl border border-slate-200 bg-white hover:bg-orange-50 hover:border-orange-300 text-slate-700 hover:text-[#F45A0A] flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
-                        >
-                          <IconUserPlus size={18} />
-                        </button>
-                      </Tooltip>
-                    </div>
-                  </div>
                 </div>
 
                 {/* ── Custom Allocation & Split Section (Side-by-Side Unified Container) ── */}
                 <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-3 space-y-2.5 shadow-2xs">
-                  <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-200/70 pb-2">
-                    <div>
-                      <span className="font-extrabold text-xs text-slate-900 block leading-tight">
-                        تقسيم وتوزيع السند المالي على الحسابات (Split Allocation)
-                      </span>
-                      <span className="text-[10.5px] text-slate-500 font-medium">
-                        حساب النظام يحتسب الرصيد تلقائياً ويقل بمجرد كتابة المبلغ في الحساب المخصص بجانبه
-                      </span>
-                    </div>
+                  <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-200/70 pb-1.5">
+                    <span className="font-extrabold text-xs text-slate-900">التقسيم</span>
 
-                    <div className="flex items-center gap-2">
-                      {isOverAllocated ? (
-                        <Badge size="xs" color="red" variant="filled" className="font-bold">
-                          تجاوز الإجمالي ({totalCustomSplitsAmount.toLocaleString('en-US')} {currency})
-                        </Badge>
-                      ) : (
-                        <Badge size="xs" color="emerald" variant="light" className="font-bold">
-                          متطابق 100% مع إجمالي السند ({numAmount.toLocaleString('en-US')} {currency})
-                        </Badge>
-                      )}
-                    </div>
+                    {isOverAllocated ? (
+                      <Badge size="xs" color="red" variant="filled" className="font-bold">
+                        تجاوز {totalCustomSplitsAmount.toLocaleString('en-US')} {currency}
+                      </Badge>
+                    ) : (
+                      <Badge size="xs" color="emerald" variant="light" className="font-bold">
+                        متطابق {numAmount.toLocaleString('en-US')} {currency}
+                      </Badge>
+                    )}
                   </div>
 
                   {/* Side-by-Side Grid (واحد بجانب الآخر في نفس الحاوية) */}
@@ -1941,7 +1904,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                           </span>
                         </div>
                         <span className="text-[10px] text-slate-600 font-bold bg-slate-100 px-2 py-1.5 rounded border border-slate-200 shrink-0">
-                          محسوب آلياً
+                          آلي
                         </span>
                       </div>
                     </div>
@@ -1955,9 +1918,6 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                         <div className="min-w-0 flex-1">
                           <span className="font-bold text-xs text-slate-800 block truncate">
                             {item.accountName}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium block">
-                            حساب مخصص
                           </span>
                         </div>
 
@@ -1997,28 +1957,9 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     ))}
                   </div>
 
-                  {/* Bottom Line: Add Account & Reset */}
-                  <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70">
-                    <div className="flex-1 min-w-[240px]">
-                      <Select
-                        size="xs"
-                        searchable
-                        clearable
-                        placeholder="+ إضافة حساب مخصص آخر للتقسيم من شجرة الحسابات..."
-                        data={postingAccounts.map((a) => ({ value: a.id, label: `${a.code} - ${a.nameAr}` }))}
-                        onChange={(val) => {
-                          if (val) {
-                            handleAddCustomSplitRow(val);
-                          }
-                        }}
-                        value={null}
-                        styles={{
-                          input: { height: '32px', fontSize: '11px', borderRadius: '8px', backgroundColor: '#ffffff', borderColor: '#cbd5e1' },
-                        }}
-                      />
-                    </div>
-
-                    {hasCustomSplits && (
+                  {/* Split accounts are configured in Settings, so no inline picker here. */}
+                  {hasCustomSplits && (
+                    <div className="pt-1 flex items-center justify-end border-t border-slate-200/70">
                       <button
                         type="button"
                         onClick={handleResetCustomSplits}
@@ -2026,8 +1967,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                       >
                         تصفير المبالغ المخصصة ↺
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Description Field */}
@@ -2229,6 +2170,21 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                 </button>
               </Tooltip>
             </div>
+
+            {/* Employee cashbox — moved here off the top bar, where it reads as context
+                rather than as another field to fill. */}
+            {voucherType !== 'JOURNAL' && (
+              <Tooltip label="الصندوق المرتبط بالموظف" withArrow>
+                <div className="hidden md:flex items-center gap-2 h-9 px-2.5 min-w-0 bg-white border border-slate-200 rounded-xl shadow-2xs">
+                  <IconBuildingBank size={14} className="text-amber-600 shrink-0" />
+                  <span className="text-[10.5px] text-slate-500 font-bold shrink-0">الصندوق:</span>
+                  <span className="text-[11.5px] font-bold text-slate-800 truncate max-w-[190px]">
+                    {cashboxDisplayName}
+                  </span>
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                </div>
+              </Tooltip>
+            )}
 
             {/* Left: Cancel + Save Buttons */}
             <div className="flex items-center gap-2">

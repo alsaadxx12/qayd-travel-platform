@@ -88,17 +88,35 @@ export class ReceiptVouchersService {
     if (customerId && !customer) throw new BadRequestException('العميل المحدد لا ينتمي إلى الشركة الحالية');
   }
 
-  async findAll(companyId: string) {
+  /**
+   * List view only. It used to `include: { journalEntry: true }` with no `take`,
+   * so every receipt voucher ever written came back with its whole journal entry
+   * attached — the single biggest cost on the vouchers page. The list needs none
+   * of that; `findOne` still returns the full record with its entry and lines.
+   */
+  async findAll(companyId: string, requestedLimit?: number) {
+    const take = Math.min(Math.max(Number(requestedLimit) || 150, 1), 300);
     return this.prisma.receiptVoucher.findMany({
       where: { companyId },
-      include: {
+      select: {
+        id: true,
+        voucherNumber: true,
+        date: true,
+        amount: true,
+        accountId: true,
+        cashboxOrBankAccountId: true,
+        customerId: true,
+        reference: true,
+        description: true,
+        status: true,
+        createdAt: true,
         account: { select: { id: true, code: true, nameAr: true } },
         cashboxOrBankAccount: { select: { id: true, code: true, nameAr: true } },
         customer: { select: { id: true, code: true, nameAr: true } },
         createdBy: { select: { id: true, name: true } },
-        journalEntry: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      take,
     });
   }
 

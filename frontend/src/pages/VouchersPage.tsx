@@ -393,6 +393,8 @@ export const VouchersPage: React.FC = () => {
 
   const handleVoucherSaved = (savedItem?: any) => {
     if (!savedItem) return;
+    // The form only calls this after the server has confirmed the write, so a single
+    // refresh is both correct and sufficient.
     fetchAllData(true);
   };
 

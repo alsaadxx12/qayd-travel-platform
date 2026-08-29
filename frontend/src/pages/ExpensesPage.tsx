@@ -1143,10 +1143,7 @@ export const ExpensesPage: React.FC = () => {
                 <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-orange-50 text-[#C2410C] border border-orange-200 font-mono tabular-nums lining-nums font-black">
                   {selectedIds.length.toLocaleString('en-US')}
                 </span>
-                {isAr ? 'محدد' : 'selected'}
-                {selectionTotalsLabel ? (
-                  <span className="text-slate-400 font-mono tabular-nums lining-nums">· {selectionTotalsLabel}</span>
-                ) : null}
+                <span>{isAr ? 'محدد' : 'selected'}</span>
               </span>
 
               <Menu shadow="md" width={200} position={isAr ? 'bottom-start' : 'bottom-end'} withinPortal>
