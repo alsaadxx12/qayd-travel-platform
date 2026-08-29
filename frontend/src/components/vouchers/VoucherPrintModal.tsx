@@ -424,38 +424,36 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
             </div>
 
-            {/* Field 2: المبلغ رقماً + العملة بجانبه */}
-            <div className="grid grid-cols-12 gap-3">
-              {/* المبلغ رقماً (8 cols) */}
-              <div className="col-span-8 flex items-center gap-3">
-                <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
-                  <IconCoins size={16} style={{ color: primaryColor }} />
-                  <span>{isEn ? 'Amount (Digits) :' : 'المبلغ رقماً :'}</span>
-                </span>
+            {/* Field 2: المبلغ رقماً (CENTERED AMOUNT) + شارة العملة الأنيقة على الطرف دون التأثير على التوسط */}
+            <div className="flex items-center gap-3">
+              <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
+                <IconCoins size={16} style={{ color: primaryColor }} />
+                <span>{isEn ? 'Amount (Digits) :' : 'المبلغ رقماً :'}</span>
+              </span>
 
+              <div
+                className="flex-1 relative flex items-center justify-center rounded-xl p-2.5 px-4 min-h-[44px] border shadow-2xs"
+                style={{
+                  backgroundColor: fieldBgColor,
+                  borderColor: fieldBorderColor,
+                }}
+              >
+                {/* المبلغ في الوسط تماماً 100% بدون أي انزياح */}
                 <div
-                  className="flex-1 rounded-xl p-2.5 px-4 text-center font-mono font-black text-lg tracking-wider border"
-                  style={{
-                    backgroundColor: fieldBgColor,
-                    borderColor: fieldBorderColor,
-                    color: amountTextColor,
-                  }}
+                  className="font-mono font-black text-xl tracking-wider text-center"
+                  style={{ color: amountTextColor }}
                 >
                   {amountFormatted}
                 </div>
-              </div>
 
-              {/* العملة (4 cols) بجانب المبلغ */}
-              <div className="col-span-4 flex items-center gap-2">
-                <span className="font-black text-xs text-slate-700 flex items-center gap-1 shrink-0">
-                  <IconWorld size={15} style={{ color: primaryColor }} />
-                  <span>{isEn ? 'Currency :' : 'العملة :'}</span>
-                </span>
+                {/* حقل العملة الأنيق على طرف الحاوية (موضع مطلق لا يؤثر على توسيط المبلغ) */}
                 <div
-                  className="flex-1 rounded-xl p-2.5 px-3 text-center font-bold text-xs text-slate-800 border truncate font-mono"
-                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 px-3 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold flex items-center gap-1.5 shadow-2xs"
                 >
-                  {currencyName}
+                  <IconWorld size={14} style={{ color: primaryColor }} />
+                  <span className="font-black text-xs" style={{ color: primaryColor }}>
+                    {currencyName}
+                  </span>
                 </div>
               </div>
             </div>
