@@ -1007,8 +1007,6 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       paymentMethodId: selectedPaymentMethodId,
       slipsCount: slipFiles.length,
       status: 'POSTED',
-      splitAccounts: activeSplits.length > 0 ? activeSplits : undefined,
-      splitDescription: splitDesc,
     };
 
     // Capture current values before resetting the form
@@ -1173,7 +1171,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
           content: {
             maxWidth: '1120px',
             width: '1120px',
-            maxHeight: '94vh',
+            height: '92vh',
+            maxHeight: '92vh',
             display: 'flex',
             flexDirection: 'column',
           },
