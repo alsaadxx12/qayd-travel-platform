@@ -219,7 +219,12 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                  - Option B: 3-Section Clean Header (Meta Right, Title Center, Logo Left)
              ═══════════════════════════════════════════════════════ */}
           {cfg.useFullHeaderImage && cfg.headerImageUrl ? (
-            <div className="space-y-2 pb-1.5 mb-3.5 border-b border-slate-100">
+            <div
+              className="space-y-2 pb-1.5 mb-3.5 border-b border-slate-100 transition-transform"
+              style={{
+                marginTop: `${cfg.bannerOffsetY || 0}px`,
+              }}
+            >
               {/* Full Width Header Banner Image (Flush Top & Full Width) */}
               <div className="w-full flex items-center justify-center overflow-hidden rounded-lg bg-white">
                 <img

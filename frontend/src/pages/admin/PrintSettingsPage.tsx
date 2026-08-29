@@ -927,8 +927,9 @@ export const PrintSettingsPage: React.FC = () => {
                       </div>
 
                       {/* Upload & Preset Actions */}
-                      <div className="flex items-center gap-2">
-                        <label className="flex-1">
+                      {/* Upload Banner Action (Full Width) */}
+                      <div>
+                        <label className="block w-full">
                           <input
                             type="file"
                             accept="image/*"
@@ -948,60 +949,44 @@ export const PrintSettingsPage: React.FC = () => {
                             {isAr ? 'رفع صورة ترويسة جديدة ☁️' : 'Upload Banner Image'}
                           </Button>
                         </label>
-
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          color="blue"
-                          onClick={() => {
-                            updateCurrentConfig(
-                              'headerImageUrl',
-                              'https://mgsgslrjbbjwkhhmdype.supabase.co/storage/v1/object/public/branch-images/voucher_header_banner_1788007955181.png'
-                            );
-                            updateCurrentConfig('useFullHeaderImage', true);
-                            showSuccessNotification(
-                              isAr ? 'تم تعيين الترويسة المعتمدة' : 'Official Banner Set',
-                              isAr ? 'تم تعيين ترويسة شركة الروضتين المعتمدة' : 'Official RODA 10 banner applied'
-                            );
-                          }}
-                          className="font-bold text-[10px]"
-                        >
-                          {isAr ? 'ترويسة الروضتين ⚡' : 'RODA 10 Preset'}
-                        </Button>
                       </div>
 
-                      {/* Header Banner Height & Top Spacing Sliders */}
+                      {/* Header Banner Height & Vertical Offset Sliders */}
                       {currentConfig.useFullHeaderImage && (
-                        <div className="space-y-2">
+                        <div className="space-y-2.5 pt-1 border-t border-blue-100">
+                          {/* Banner Height */}
                           <div>
                             <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
                               <span>{isAr ? 'ارتفاع الترويسة الكاملة:' : 'Full Banner Height:'}</span>
-                              <span className="font-mono text-blue-600">{currentConfig.headerImageHeight || 115}px</span>
+                              <span className="font-mono text-blue-600 font-black">{currentConfig.headerImageHeight || 115}px</span>
                             </div>
                             <Slider
                               size="xs"
                               color="blue"
                               min={40}
-                              max={240}
+                              max={260}
                               step={5}
                               value={currentConfig.headerImageHeight || 115}
                               onChange={(v) => updateCurrentConfig('headerImageHeight', v)}
                             />
                           </div>
 
+                          {/* Move Banner Up/Down (bannerOffsetY) */}
                           <div>
                             <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
-                              <span>{isAr ? 'المسافة من أعلى الصفحة:' : 'Top Page Margin:'}</span>
-                              <span className="font-mono text-blue-600">{currentConfig.headerMarginTop ?? 4}mm</span>
+                              <span>{isAr ? 'تحريك الترويسة (للأعلى ⬆️ / للأسفل ⬇️):' : 'Vertical Move (Up/Down):'}</span>
+                              <span className="font-mono text-blue-600 font-black">
+                                {currentConfig.bannerOffsetY || 0}px {currentConfig.bannerOffsetY < 0 ? '(أعلى)' : currentConfig.bannerOffsetY > 0 ? '(أسفل)' : '(وسط)'}
+                              </span>
                             </div>
                             <Slider
                               size="xs"
                               color="blue"
-                              min={0}
-                              max={25}
+                              min={-40}
+                              max={50}
                               step={1}
-                              value={currentConfig.headerMarginTop ?? 4}
-                              onChange={(v) => updateCurrentConfig('headerMarginTop', v)}
+                              value={currentConfig.bannerOffsetY || 0}
+                              onChange={(v) => updateCurrentConfig('bannerOffsetY', v)}
                             />
                           </div>
                         </div>
