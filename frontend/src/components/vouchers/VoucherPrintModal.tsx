@@ -470,10 +470,10 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
             </div>
 
-            {/* Field 5: حقول القبض المخصص والعملة (CUSTOM / CATEGORY FIELDS) */}
-            <div className="grid grid-cols-2 gap-3 pt-0.5">
-              {/* العملة */}
-              <div className="space-y-1">
+            {/* Field 5: حقول القبض المخصص والعملة (COMPACT CURRENCY + EXPANDED CUSTOM CATEGORY) */}
+            <div className="flex items-center gap-3 pt-0.5">
+              {/* العملة (COMPACT) */}
+              <div className="w-40 shrink-0 space-y-1">
                 <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
                   <IconWorld size={14} style={{ color: primaryColor }} />
                   <span>{isEn ? 'Currency :' : 'العملة :'}</span>
@@ -482,13 +482,13 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                   className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between"
                   style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
                 >
-                  <span>{currencyName}</span>
+                  <span className="truncate">{currencyName}</span>
                   <span className="text-[10px] text-slate-400">▾</span>
                 </div>
               </div>
 
-              {/* نوع القبض المخصص / المرجع */}
-              <div className="space-y-1">
+              {/* نوع القبض المخصص / المرجع (EXPANDED) */}
+              <div className="flex-1 space-y-1">
                 <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
                   <IconTag size={14} style={{ color: primaryColor }} />
                   <span>{isEn ? 'Custom Category / Ref :' : (isReceipt ? 'نوع القبض المخصص :' : 'نوع الصرف المخصص :')}</span>
