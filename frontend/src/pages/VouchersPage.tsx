@@ -939,83 +939,81 @@ export const VouchersPage: React.FC = () => {
       {/* ── 3. Main Vouchers Table ── */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
 
-        {/* Bulk Actions Toolbar */}
+        {/* Bulk Actions Toolbar — fixed height with spacing */}
         {selectedIds.size > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-[#FFF3E8] border-b border-orange-200">
-            <CheckSquare size={16} className="text-[#F45A0A]" />
+          <div className="flex items-center gap-3 px-4 py-2.5 bg-[#FFF3E8] border-b border-orange-200">
+            <CheckSquare size={15} className="text-[#F45A0A]" />
             <span className="text-xs font-bold text-[#F45A0A]">
               {isAr ? `تم تحديد ${selectedIds.size} سند` : `${selectedIds.size} selected`}
             </span>
-            <div className="flex items-center gap-1 ms-auto">
-              <Tooltip label={isAr ? 'معاينة' : 'View'} withArrow>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const first = currentGridData.find((r: any) => selectedIds.has(r.id));
-                    if (first) { setSelectedVoucher(first); setDrawerOpen(true); }
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Eye size={13} />
-                  <span>{isAr ? 'معاينة' : 'View'}</span>
-                </button>
-              </Tooltip>
-              <Tooltip label={isAr ? 'طباعة' : 'Print'} withArrow>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const first = currentGridData.find((r: any) => selectedIds.has(r.id));
-                    if (first) {
-                      setVoucherToPrint({
-                        voucherNumber: first.voucherNumber, type: first.type, date: first.date,
-                        amount: first.amount, currency: first.currency, accountName: first.accountName,
-                        accountCode: first.accountCode, cashboxName: first.cashboxName,
-                        reference: first.reference, description: first.description, user: first.userName,
-                        splitAccounts: first.splitAccounts, splitDescription: first.splitDescription,
-                        customCategory: first.customCategory,
-                      });
-                      setPrintModalOpen(true);
-                    }
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-emerald-300 hover:text-emerald-600 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Printer size={13} />
-                  <span>{isAr ? 'طباعة' : 'Print'}</span>
-                </button>
-              </Tooltip>
-              <Tooltip label={isAr ? 'تعديل' : 'Edit'} withArrow>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const first = currentGridData.find((r: any) => selectedIds.has(r.id));
-                    if (first) handleOpenEditModal(first);
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Edit size={13} />
-                  <span>{isAr ? 'تعديل' : 'Edit'}</span>
-                </button>
-              </Tooltip>
-              <Tooltip label={isAr ? 'حذف' : 'Delete'} withArrow>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const first = currentGridData.find((r: any) => selectedIds.has(r.id));
-                    if (first) { setVoucherToDelete(first); setDeleteConfirmOpen(true); }
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:border-rose-300 hover:text-rose-600 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Trash2 size={13} />
-                  <span>{isAr ? 'حذف' : 'Delete'}</span>
-                </button>
-              </Tooltip>
+            <div className="flex items-center gap-1.5 ms-auto">
+              <Menu shadow="md" width={180} position="bottom-end" withArrow>
+                <Menu.Target>
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg bg-[#F45A0A] text-white text-[11px] font-bold flex items-center gap-1.5 cursor-pointer hover:bg-[#DD4F05] transition-colors shadow-xs"
+                  >
+                    <span>{isAr ? 'إجراءات' : 'Actions'}</span>
+                    <ChevronDown size={12} />
+                  </button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item
+                    leftSection={<Eye size={14} />}
+                    onClick={() => {
+                      const first = currentGridData.find((r: any) => selectedIds.has(r.id));
+                      if (first) { setSelectedVoucher(first); setDrawerOpen(true); }
+                    }}
+                  >
+                    {isAr ? 'معاينة السند' : 'View Voucher'}
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<Printer size={14} />}
+                    onClick={() => {
+                      const first = currentGridData.find((r: any) => selectedIds.has(r.id));
+                      if (first) {
+                        setVoucherToPrint({
+                          voucherNumber: first.voucherNumber, type: first.type, date: first.date,
+                          amount: first.amount, currency: first.currency, accountName: first.accountName,
+                          accountCode: first.accountCode, cashboxName: first.cashboxName,
+                          reference: first.reference, description: first.description, user: first.userName,
+                          splitAccounts: first.splitAccounts, splitDescription: first.splitDescription,
+                          customCategory: first.customCategory,
+                        });
+                        setPrintModalOpen(true);
+                      }
+                    }}
+                  >
+                    {isAr ? 'طباعة' : 'Print'}
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<Edit size={14} />}
+                    onClick={() => {
+                      const first = currentGridData.find((r: any) => selectedIds.has(r.id));
+                      if (first) handleOpenEditModal(first);
+                    }}
+                  >
+                    {isAr ? 'تعديل' : 'Edit'}
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Item
+                    color="red"
+                    leftSection={<Trash2 size={14} />}
+                    onClick={() => {
+                      const first = currentGridData.find((r: any) => selectedIds.has(r.id));
+                      if (first) { setVoucherToDelete(first); setDeleteConfirmOpen(true); }
+                    }}
+                  >
+                    {isAr ? 'حذف' : 'Delete'}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
               <button
                 type="button"
                 onClick={() => setSelectedIds(new Set())}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ms-1"
+                className="p-1.5 rounded-lg text-slate-500 hover:bg-white hover:text-slate-800 cursor-pointer transition-colors"
               >
-                <X size={13} />
-                <span>{isAr ? 'إلغاء' : 'Cancel'}</span>
+                <X size={14} />
               </button>
             </div>
           </div>
@@ -1023,185 +1021,209 @@ export const VouchersPage: React.FC = () => {
 
         <div className="w-full overflow-auto h-[58vh] min-h-[360px] overscroll-contain">
           <table className="w-full text-xs text-start border-collapse font-sans whitespace-nowrap min-w-full">
-            <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-slate-50 [&_th]:shadow-[inset_0_-1px_0_#e2e8f0]">
-              <tr className="border-b border-slate-200 text-slate-700 font-bold h-[44px]">
-                <th className="py-2.5 px-3 text-center w-10">
-                  <input
-                    type="checkbox"
-                    checked={currentGridData.length > 0 && selectedIds.size === currentGridData.length}
-                    onChange={toggleSelectAll}
-                    className="w-3.5 h-3.5 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer accent-[#F45A0A]"
-                  />
+            <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-slate-50/95 [&_th]:backdrop-blur-sm [&_th]:shadow-[inset_0_-1px_0_#e2e8f0]">
+              <tr className="text-slate-600 font-bold h-[40px] text-[11px]">
+                <th className="py-2 px-2.5 text-center w-10">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer border ${
+                      currentGridData.length > 0 && selectedIds.size === currentGridData.length
+                        ? 'bg-[#F45A0A] border-[#F45A0A] text-white'
+                        : 'bg-white border-slate-300 text-transparent hover:border-[#F45A0A]'
+                    }`}
+                  >
+                    <CheckSquare size={11} />
+                  </button>
                 </th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap w-10 font-mono font-bold text-slate-500">#</th>
-                <th className="py-2.5 px-3 text-start whitespace-nowrap w-36">{isAr ? 'رقم السند' : 'Voucher No'}</th>
-                <th className="py-2.5 px-3 text-start whitespace-nowrap min-w-[180px]">
+                <th className="py-2 px-2 text-center w-8 font-mono text-slate-400">#</th>
+                <th className="py-2 px-2.5 text-center w-16">{isAr ? 'النوع' : 'Type'}</th>
+                <th className="py-2 px-2.5 text-start w-40">{isAr ? 'رقم السند' : 'Voucher No'}</th>
+                <th className="py-2 px-2.5 text-start min-w-[160px]">
                   {activeTab === 'RECEIPT'
-                    ? (isAr ? 'المستلم منه (العميل)' : 'Received From')
+                    ? (isAr ? 'المستلم منه' : 'Received From')
                     : activeTab === 'PAYMENT'
-                    ? (isAr ? 'المدفوع له (المورد)' : 'Paid To')
-                    : (isAr ? 'الحساب المقابل / الدائن' : 'Credit Account')}
+                    ? (isAr ? 'المدفوع له' : 'Paid To')
+                    : (isAr ? 'الحساب الدائن' : 'Credit Account')}
                 </th>
-                <th className="py-2.5 px-3 text-start whitespace-nowrap min-w-[140px]">
+                <th className="py-2 px-2.5 text-start min-w-[130px]">
                   {activeTab === 'RECEIPT'
-                    ? (isAr ? 'صندوق القبض' : 'Receipt Cashbox')
+                    ? (isAr ? 'صندوق القبض' : 'Cashbox')
                     : activeTab === 'PAYMENT'
-                    ? (isAr ? 'صندوق الصرف' : 'Payment Cashbox')
-                    : (isAr ? 'حساب الطرف المدين' : 'Debit Account')}
+                    ? (isAr ? 'صندوق الصرف' : 'Cashbox')
+                    : (isAr ? 'الحساب المدين' : 'Debit Account')}
                 </th>
-                <th className="py-2.5 px-3 text-start whitespace-nowrap min-w-[240px]">{isAr ? 'البيان وشرح السند المحاسبي' : 'Description & Notes'}</th>
-                <th className="py-2.5 px-3 text-end whitespace-nowrap w-36 font-mono">{isAr ? 'المبلغ والعملة' : 'Amount & Currency'}</th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap w-28 font-mono">{isAr ? 'تاريخ السند' : 'Date'}</th>
-                <th className="py-2.5 px-3 text-start whitespace-nowrap w-32">{isAr ? 'المستخدم المنشئ' : 'Created By'}</th>
+                <th className="py-2 px-2.5 text-start min-w-[120px]">{isAr ? 'حساب التقسيم' : 'Split Account'}</th>
+                <th className="py-2 px-2.5 text-start min-w-[200px]">{isAr ? 'البيان' : 'Description'}</th>
+                <th className="py-2 px-2.5 text-end w-28 font-mono">{isAr ? 'المبلغ' : 'Amount'}</th>
+                <th className="py-2 px-2.5 text-center w-14">{isAr ? 'العملة' : 'Curr.'}</th>
+                <th className="py-2 px-2.5 text-center w-24 font-mono">{isAr ? 'التاريخ' : 'Date'}</th>
+                <th className="py-2 px-2.5 text-start w-28">{isAr ? 'المنشئ' : 'By'}</th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100/80">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-slate-500 font-bold">
+                  <td colSpan={12} className="py-16 text-center text-slate-500 font-bold">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={24} className="animate-spin text-[#F45A0A]" />
-                      <span>{isAr ? 'جارٍ تحميل قيود وسجلات السندات المالية...' : 'Loading Financial Vouchers...'}</span>
+                      <span>{isAr ? 'جارٍ تحميل السندات المالية...' : 'Loading Vouchers...'}</span>
                     </div>
                   </td>
                 </tr>
               ) : currentGridData.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-slate-500 font-bold">
+                  <td colSpan={12} className="py-16 text-center text-slate-500 font-bold">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#F45A0A] flex items-center justify-center">
                         <Receipt size={24} />
                       </div>
                       <span className="text-sm font-black text-slate-800">
-                        {isAr ? 'لا توجد سندات مالية مطابقة للبحث أو الفلاتر' : 'No vouchers matching current criteria'}
+                        {isAr ? 'لا توجد سندات مطابقة' : 'No vouchers found'}
                       </span>
                       <span className="text-xs text-slate-400 font-medium">
-                        {isAr ? 'يمكنك إنشاء سند جديد أو تعديل معايير البحث والتاريخ' : 'Create a new voucher or adjust date filters'}
+                        {isAr ? 'أنشئ سنداً جديداً أو عدّل معايير البحث' : 'Create a new voucher or adjust filters'}
                       </span>
                     </div>
                   </td>
                 </tr>
               ) : (
-                currentGridData.map((row, idx) => (
+                currentGridData.map((row, idx) => {
+                  const isRowSelected = selectedIds.has(row.id);
+                  return (
                   <tr
                     key={row.id}
                     onClick={() => {
                       setSelectedVoucher(row);
                       setDrawerOpen(true);
                     }}
-                    className={`h-[44px] transition-colors cursor-pointer group ${
-                      selectedIds.has(row.id) ? 'bg-orange-50/40' : 'hover:bg-orange-50/20'
+                    className={`h-[42px] transition-colors cursor-pointer group ${
+                      isRowSelected ? 'bg-orange-50/50' : 'hover:bg-slate-50/80'
                     }`}
                   >
-                    {/* Checkbox Column */}
-                    <td className="py-2 px-3 text-center w-10" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(row.id)}
-                        onChange={() => toggleSelect(row.id)}
-                        className="w-3.5 h-3.5 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer accent-[#F45A0A]"
-                      />
+                    {/* Toggle Selection */}
+                    <td className="py-1.5 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => toggleSelect(row.id)}
+                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer border ${
+                          isRowSelected
+                            ? 'bg-[#F45A0A] border-[#F45A0A] text-white'
+                            : 'bg-white border-slate-300 text-transparent hover:border-[#F45A0A] group-hover:border-slate-400'
+                        }`}
+                      >
+                        <CheckSquare size={11} />
+                      </button>
                     </td>
-                    {/* Sequence Column */}
-                    <td className="py-2 px-3 text-center font-mono font-bold text-slate-400 text-xs w-10 tabular-nums">
+
+                    {/* # */}
+                    <td className="py-1.5 px-2 text-center font-mono text-slate-400 text-[10px] tabular-nums lining-nums">
                       {idx + 1}
                     </td>
 
-                    {/* Voucher Number & Type Badge */}
-                    <td className="py-2 px-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 font-mono">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-black shrink-0 ${
-                            row.type === 'RECEIPT'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : row.type === 'PAYMENT'
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                              : 'bg-orange-50 text-[#F45A0A] border border-orange-200'
-                          }`}
-                        >
-                          {row.type === 'RECEIPT' ? (isAr ? 'قبض' : 'REC') : row.type === 'PAYMENT' ? (isAr ? 'دفع' : 'PAY') : (isAr ? 'قيد' : 'JV')}
-                        </span>
-                        <span className="font-bold text-slate-950 tabular-nums">{row.voucherNumber}</span>
-                      </div>
+                    {/* Type Badge */}
+                    <td className="py-1.5 px-2.5 text-center">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-black ${
+                          row.type === 'RECEIPT'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : row.type === 'PAYMENT'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : 'bg-orange-50 text-[#F45A0A] border border-orange-200'
+                        }`}
+                      >
+                        {row.type === 'RECEIPT' ? (isAr ? 'قبض' : 'REC') : row.type === 'PAYMENT' ? (isAr ? 'دفع' : 'PAY') : (isAr ? 'قيد' : 'JV')}
+                      </span>
+                    </td>
+
+                    {/* Voucher Number */}
+                    <td className="py-1.5 px-2.5">
+                      <span className="font-mono font-bold text-slate-950 text-[12px] tabular-nums lining-nums">{row.voucherNumber}</span>
                     </td>
 
                     {/* Account Name */}
-                    <td className="py-2 px-3 font-bold text-slate-900 whitespace-nowrap">
+                    <td className="py-1.5 px-2.5 font-bold text-slate-900 truncate max-w-[180px]" title={row.accountName}>
                       {row.accountName}
                     </td>
 
                     {/* Cashbox Name */}
-                    <td className="py-2 px-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`h-2 w-2 rounded-full shrink-0 ${row.type === 'JOURNAL' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
-                        <span className="font-medium text-slate-700">{row.cashboxName}</span>
-                      </div>
+                    <td className="py-1.5 px-2.5 truncate max-w-[150px]" title={row.cashboxName}>
+                      <span className="font-medium text-slate-700">{row.cashboxName}</span>
+                    </td>
+
+                    {/* Split Account */}
+                    <td className="py-1.5 px-2.5 text-slate-500 text-[11px] truncate max-w-[120px]">
+                      {row.splitAccounts?.length > 0
+                        ? row.splitAccounts.map((s: any) => s.accountName).join(', ')
+                        : <span className="text-slate-300">—</span>}
                     </td>
 
                     {/* Description */}
-                    <td className="py-2 px-3 text-slate-700 max-w-[280px] truncate" title={row.description}>
-                      <span className="truncate block font-medium">{row.description || '—'}</span>
+                    <td className="py-1.5 px-2.5 text-slate-700 max-w-[220px] truncate" title={row.description}>
+                      <span className="truncate block font-medium text-[11px]">{row.description || '—'}</span>
                     </td>
 
-                    {/* Amount & Currency */}
-                    <td className="py-2 px-3 text-end font-mono font-black tabular-nums whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <span
-                          className={`text-[12.5px] ${
-                            row.type === 'RECEIPT'
-                              ? 'text-emerald-700'
-                              : row.type === 'PAYMENT'
-                              ? 'text-rose-700'
-                              : 'text-slate-950'
-                          }`}
-                        >
-                          {Number(row.amount).toLocaleString('en-US', { minimumFractionDigits: row.currency === 'USD' ? 2 : 0 })}
-                        </span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">
-                          {row.currency === 'USD' ? '$ USD' : isAr ? 'د.ع' : 'IQD'}
-                        </span>
-                      </div>
+                    {/* Amount */}
+                    <td className="py-1.5 px-2.5 text-end font-mono font-black tabular-nums lining-nums">
+                      <span
+                        className={`text-[12.5px] ${
+                          row.type === 'RECEIPT'
+                            ? 'text-emerald-700'
+                            : row.type === 'PAYMENT'
+                            ? 'text-rose-700'
+                            : 'text-slate-950'
+                        }`}
+                      >
+                        {Number(row.amount).toLocaleString('en-US', { minimumFractionDigits: row.currency === 'USD' ? 2 : 0 })}
+                      </span>
+                    </td>
+
+                    {/* Currency */}
+                    <td className="py-1.5 px-2.5 text-center">
+                      <span className="text-[10px] font-bold text-slate-600 font-mono tabular-nums">
+                        {row.currency === 'USD' ? 'USD' : 'IQD'}
+                      </span>
                     </td>
 
                     {/* Date */}
-                    <td className="py-2 px-3 text-center font-mono text-slate-600 text-xs tabular-nums whitespace-nowrap">
+                    <td className="py-1.5 px-2.5 text-center font-mono text-slate-600 text-[11px] tabular-nums lining-nums">
                       {row.dateFormatted}
                     </td>
 
                     {/* User */}
-                    <td className="py-2 px-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1 text-slate-600">
-                        <User size={12} className="text-slate-400 shrink-0" />
-                        <span className="text-[11px] font-medium truncate">{row.userName}</span>
+                    <td className="py-1.5 px-2.5">
+                      <div className="flex items-center gap-1 text-slate-500">
+                        <User size={11} className="text-slate-400 shrink-0" />
+                        <span className="text-[10px] font-medium truncate max-w-[90px]">{row.userName}</span>
                       </div>
                     </td>
-
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
-        {/* Table Footer Count Strip */}
+        {/* Table Footer */}
         <div className="bg-slate-50/80 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between text-xs font-bold text-slate-700">
           <div className="flex items-center gap-2">
-            <span>{isAr ? 'إجمالي السجلات المعروضة:' : 'Total Displayed Records:'}</span>
-            <span className="font-mono font-black text-slate-950">{currentGridData.length}</span>
+            <span>{isAr ? 'السجلات:' : 'Records:'}</span>
+            <span className="font-mono font-black text-slate-950 tabular-nums lining-nums">{currentGridData.length}</span>
           </div>
 
-          <div className="flex items-center gap-4 font-mono font-bold text-slate-800">
+          <div className="flex items-center gap-4 font-mono font-bold text-slate-800 tabular-nums lining-nums">
             <span>
-              {isAr ? 'إجمالي الدينار:' : 'Total IQD:'}{' '}
+              IQD{' '}
               <strong className="font-black text-slate-950">
-                {currentGridData.filter((x) => x.currency !== 'USD').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString()} د.ع
+                {currentGridData.filter((x) => x.currency !== 'USD').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString('en-US')}
               </strong>
             </span>
             <span>
-              {isAr ? 'إجمالي الدولار:' : 'Total USD:'}{' '}
+              USD{' '}
               <strong className="font-black text-blue-700">
-                ${currentGridData.filter((x) => x.currency === 'USD').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {currentGridData.filter((x) => x.currency === 'USD').reduce((sum, x) => sum + Number(x.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </strong>
             </span>
           </div>
