@@ -387,16 +387,17 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
             </div>
 
             {/* Field 1: استلمنا من السيد/السادة */}
-            <div className="pb-2.5 border-b border-dashed border-slate-200">
-              <div className="flex items-center justify-between gap-4">
-                <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 shrink-0">
-                  <IconUser size={16} style={{ color: primaryColor }} />
-                  <span>{isEn ? partyLabelEn : partyLabelAr}</span>
-                </span>
-                <span className="font-black text-sm text-slate-900 text-end flex-1" style={{ color: '#0f172a' }}>
-                  {voucher.accountCode ? `${voucher.accountCode} - ` : ''}
-                  {voucher.accountName || 'شركة النور للتجارة العامة'}
-                </span>
+            <div className="flex items-center gap-3">
+              <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
+                <IconUser size={16} style={{ color: primaryColor }} />
+                <span>{isEn ? partyLabelEn : partyLabelAr}</span>
+              </span>
+              <div
+                className="flex-1 rounded-xl p-2.5 px-4 font-black text-sm text-slate-900 border"
+                style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
+              >
+                {voucher.accountCode ? `${voucher.accountCode} - ` : ''}
+                {voucher.accountName || 'شركة النور للتجارة العامة'}
               </div>
             </div>
 
@@ -412,7 +413,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
               >
                 <div
-                  className="px-4 py-2 text-xs font-black font-mono border-l flex items-center justify-center shrink-0"
+                  className="px-3.5 py-2 text-xs font-black font-mono border-l flex items-center justify-center shrink-0"
                   style={{
                     backgroundColor: '#E2E8F0',
                     borderColor: '#CBD5E1',
@@ -470,42 +471,40 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
             </div>
 
-            {/* Field 5: حقول القبض المخصص والعملة (COMPACT CURRENCY + EXPANDED CUSTOM CATEGORY) */}
-            <div className="flex items-center gap-3 pt-0.5">
-              {/* العملة (COMPACT) */}
-              <div className="w-40 shrink-0 space-y-1">
-                <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
-                  <IconWorld size={14} style={{ color: primaryColor }} />
-                  <span>{isEn ? 'Currency :' : 'العملة :'}</span>
+            {/* Field 5: نوع القبض / التصنيف المخصص والعملة */}
+            <div className="grid grid-cols-12 gap-3">
+              {/* نوع القبض المخصص (8 cols) */}
+              <div className="col-span-8 flex items-center gap-3">
+                <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
+                  <IconTag size={16} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Category :' : (isReceipt ? 'نوع القبض :' : 'نوع الصرف :')}</span>
                 </span>
                 <div
-                  className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between"
-                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
-                >
-                  <span className="truncate">{currencyName}</span>
-                  <span className="text-[10px] text-slate-400">▾</span>
-                </div>
-              </div>
-
-              {/* نوع القبض المخصص / المرجع (EXPANDED) */}
-              <div className="flex-1 space-y-1">
-                <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
-                  <IconTag size={14} style={{ color: primaryColor }} />
-                  <span>{isEn ? 'Custom Category / Ref :' : (isReceipt ? 'نوع القبض المخصص :' : 'نوع الصرف المخصص :')}</span>
-                </span>
-                <div
-                  className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between truncate"
+                  className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-800 border truncate"
                   style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
                 >
                   <span className="truncate">{customCategoryVal}</span>
-                  <span className="text-[10px] text-slate-400">▾</span>
+                </div>
+              </div>
+
+              {/* العملة (4 cols) */}
+              <div className="col-span-4 flex items-center gap-2">
+                <span className="font-black text-xs text-slate-700 flex items-center gap-1 shrink-0">
+                  <IconWorld size={15} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Currency:' : 'العملة:'}</span>
+                </span>
+                <div
+                  className="flex-1 rounded-xl p-2.5 px-3 text-center font-bold text-xs text-slate-800 border truncate font-mono"
+                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
+                >
+                  {currencyName}
                 </div>
               </div>
             </div>
 
             {/* Field 6: ملاحظات */}
-            <div className="flex items-start gap-3 pt-0.5">
-              <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0 pt-1.5">
+            <div className="flex items-start gap-3">
+              <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0 pt-2">
                 <IconMessageDots size={16} style={{ color: primaryColor }} />
                 <span>{isEn ? 'Notes :' : 'ملاحظات :'}</span>
               </span>
