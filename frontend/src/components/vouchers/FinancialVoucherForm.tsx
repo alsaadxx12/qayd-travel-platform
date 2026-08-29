@@ -36,6 +36,7 @@ import {
   IconArrowsExchange,
 } from '@tabler/icons-react';
 import { apiRequest } from '../../api/client';
+import { fetchPrintTemplate } from '../../api/printTemplates';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { getNextSequenceNumber } from '../../utils/sequenceUtils';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
@@ -379,6 +380,24 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
             }
           }
 
+          // Load Custom Voucher Split Accounts configured in System Settings
+          try {
+            const customAccountsRes = await fetchPrintTemplate('custom_voucher_accounts');
+            if (customAccountsRes?.config?.accounts && Array.isArray(customAccountsRes.config.accounts)) {
+              const activeCustoms = customAccountsRes.config.accounts.filter((a: any) => a.isActive !== false);
+              setConfiguredCustomAccounts(activeCustoms);
+              setSplitAllocations(
+                activeCustoms.map((ca: any) => ({
+                  id: ca.id || `split-${Math.random()}`,
+                  accountId: ca.targetAccountId || '',
+                  accountName: ca.nameAr,
+                  amount: '',
+                  note: '',
+                }))
+              );
+            }
+          } catch (e) {}
+
           // Default new voucher state applying saved user preferences
           handleNewVoucher(defaultType, savedDefaults, mappings, defaultCashboxId);
         } catch (e) {
@@ -546,12 +565,14 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
 
   const numAmount = Number(amount) || 0;
 
-  // Split Allocations Helpers
-  const totalAllocatedAmount = useMemo(() => {
+  // Split Allocations Helpers (حساب النظام يحتسب الرصيد المتبقي تلقائياً ويقل مع الحسابات المخصصة)
+  const totalCustomSplitsAmount = useMemo(() => {
     return splitAllocations.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   }, [splitAllocations]);
 
-  const remainingToAllocate = Math.max(0, numAmount - totalAllocatedAmount);
+  const systemAccountAmount = Math.max(0, numAmount - totalCustomSplitsAmount);
+  const isOverAllocated = totalCustomSplitsAmount > numAmount;
+  const hasCustomSplits = splitAllocations.some((s) => Number(s.amount) > 0);
 
   const handleSplitAmountChange = (id: string, newAmt: string) => {
     setSplitAllocations((prev) =>
@@ -576,6 +597,10 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     setSplitAllocations((prev) =>
       prev.map((item) => (item.id === id ? { ...item, amount: String(rem) } : item))
     );
+  };
+
+  const handleResetCustomSplits = () => {
+    setSplitAllocations((prev) => prev.map((item) => ({ ...item, amount: '' })));
   };
 
   const handleAddCustomSplitRow = (accId: string) => {
@@ -951,16 +976,31 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       method = 'PUT';
     }
 
-    const activeSplits = enableSplitAllocation
-      ? splitAllocations
-          .filter((s) => Number(s.amount) > 0)
-          .map((s) => ({
-            accountId: s.accountId,
-            accountName: s.accountName,
-            amount: Number(s.amount),
-            currency,
-            note: s.note || '',
-          }))
+    const activeCustomSplits = splitAllocations
+      .filter((s) => Number(s.amount) > 0)
+      .map((s) => ({
+        accountId: s.accountId,
+        accountName: s.accountName,
+        amount: Number(s.amount),
+        currency,
+        note: s.note || '',
+      }));
+
+    const activeSplits = hasCustomSplits
+      ? [
+          ...(systemAccountAmount > 0
+            ? [
+                {
+                  accountId: oppositeAccountId || '',
+                  accountName: `النظام (${oppositeAcc?.nameAr || 'الرصيد الأساسي'})`,
+                  amount: systemAccountAmount,
+                  currency,
+                  note: 'رصيد حساب النظام الأساسي',
+                },
+              ]
+            : []),
+          ...activeCustomSplits,
+        ]
       : [];
 
     const splitDesc = activeSplits.length > 0
@@ -1136,11 +1176,9 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
         centered
         styles={{
           content: {
-            maxWidth: '1100px',
-            width: '1100px',
-            height: '685px',
-            minHeight: '685px',
-            maxHeight: '92vh',
+            maxWidth: '1120px',
+            width: '1120px',
+            maxHeight: '94vh',
             display: 'flex',
             flexDirection: 'column',
           },
@@ -1148,9 +1186,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            overflow: 'hidden',
+            overflowY: 'auto',
             padding: '16px',
-            height: 'calc(100% - 60px)',
           },
         }}
         title={
@@ -1889,160 +1926,157 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                   </div>
                 </div>
 
-                {/* ── Custom Allocation & Split Section (تقسيم وتوزيع السند على الحسابات المخصصة) ── */}
-                <div className="bg-orange-50/40 border border-orange-200/80 rounded-xl p-2.5 space-y-2">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = !enableSplitAllocation;
-                        setEnableSplitAllocation(next);
-                        if (next && splitAllocations.length === 0 && configuredCustomAccounts.length > 0) {
-                          setSplitAllocations(
-                            configuredCustomAccounts.map((ca) => ({
-                              id: ca.id,
-                              accountId: ca.targetAccountId,
-                              accountName: ca.nameAr,
-                              amount: '',
-                              note: '',
-                            }))
-                          );
-                        }
-                      }}
-                      className="flex items-center gap-1.5 text-xs font-black text-orange-950 hover:text-orange-700 cursor-pointer"
-                    >
-                      <span className="w-5 h-5 rounded-md bg-orange-600 text-white flex items-center justify-center text-[11px]">
+                {/* ── Custom Allocation & Split Section (تقسيم وتوزيع السند مع حساب النظام التلقائي) ── */}
+                <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-200/70 pb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-orange-600 text-white flex items-center justify-center text-xs font-black shadow-2xs">
                         ⚡
-                      </span>
-                      <span>تقسيم وتوزيع السند على حسابات مخصصة (Split Allocation)</span>
-                      <Badge size="xs" color="orange" variant={enableSplitAllocation ? 'filled' : 'light'} className="font-bold">
-                        {enableSplitAllocation ? 'مفعل' : 'اختياري'}
-                      </Badge>
-                    </button>
-
-                    {enableSplitAllocation && (
-                      <div className="flex items-center gap-1.5 text-xs font-bold">
-                        <span className="text-slate-600 font-mono">
-                          الموزع: <b className="text-emerald-700 font-mono">{totalAllocatedAmount.toLocaleString('en-US')}</b> /{' '}
-                          <span className="font-mono">{numAmount.toLocaleString('en-US')} {currency}</span>
-                        </span>
-                        {remainingToAllocate > 0 ? (
-                          <Badge size="xs" color="amber" variant="light" className="font-bold">
-                            متبقي: {remainingToAllocate.toLocaleString('en-US')}
-                          </Badge>
-                        ) : totalAllocatedAmount === numAmount && numAmount > 0 ? (
-                          <Badge size="xs" color="emerald" variant="filled" className="font-bold">
-                            ✓ متطابق 100%
-                          </Badge>
-                        ) : null}
                       </div>
-                    )}
+                      <div>
+                        <span className="font-extrabold text-xs text-slate-900 block leading-tight">
+                          تقسيم وتوزيع السند المالي على الحسابات (Split Allocation)
+                        </span>
+                        <span className="text-[10.5px] text-slate-500 font-medium">
+                          حساب النظام يحتسب الرصيد المتبقي تلقائياً ويقل بمجرد كتابة المبلغ في الحسابات المخصصة
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isOverAllocated ? (
+                        <Badge size="xs" color="red" variant="filled" className="font-bold">
+                          ⚠️ تجاوز الإجمالي ({totalCustomSplitsAmount.toLocaleString('en-US')} {currency})
+                        </Badge>
+                      ) : (
+                        <Badge size="xs" color="emerald" variant="light" className="font-bold">
+                          ✓ متطابق 100% مع إجمالي السند ({numAmount.toLocaleString('en-US')} {currency})
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Expanded Split Accounts List */}
-                  {enableSplitAllocation && (
-                    <div className="space-y-2 pt-1 border-t border-orange-200/60">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-bold text-slate-700">
-                          حدد الحسابات والمبالغ الموزعة (تظهر في الطباعة تحت بند تقسيم القبض):
+                  {/* List of Split Rows: 1. Main System Account (Auto-calculated) + 2. Custom Accounts */}
+                  <div className="space-y-2">
+                    {/* Row 1: System Account (حساب النظام - الرصيد الأساسي التلقائي) */}
+                    <div className="bg-gradient-to-r from-blue-50/80 to-indigo-50/60 p-2.5 rounded-xl border border-blue-200/90 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shadow-2xs">
+                      <div className="flex items-center gap-2 min-w-[200px] flex-1">
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
+                        <div>
+                          <span className="font-black text-xs text-blue-950 block">
+                            🏢 حساب النظام (الرصيد الأساسي)
+                          </span>
+                          <span className="text-[10.5px] text-blue-700 font-bold">
+                            🔗 {oppositeAcc?.nameAr ? `${oppositeAcc.nameAr} (الحساب المقابل)` : 'حساب النظام الرئيسي'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="w-40 h-[34px] rounded-lg bg-white border border-blue-300 px-3 flex items-center justify-center shadow-2xs">
+                          <span className="font-mono font-black text-sm text-blue-800 tabular-nums">
+                            {systemAccountAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <span className="text-[10.5px] text-blue-700 font-bold bg-blue-100/70 px-2 py-1 rounded-md border border-blue-200">
+                          محسوب آلياً
                         </span>
-                        <div className="flex items-center gap-1">
+                      </div>
+                    </div>
+
+                    {/* Custom Accounts List */}
+                    {splitAllocations.map((item, sIdx) => (
+                      <div
+                        key={item.id || sIdx}
+                        className="bg-white p-2.5 rounded-xl border border-slate-200 hover:border-orange-300 transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shadow-2xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-[180px] flex-1">
+                          <span className="w-2.5 h-2.5 rounded-full bg-orange-600 shrink-0" />
+                          <div>
+                            <span className="font-bold text-xs text-slate-900 block">
+                              🏷️ {item.accountName}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              حساب تقسيم مخصص
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="w-40">
+                            <FormattedNumberInput
+                              size="xs"
+                              placeholder="0.00"
+                              value={item.amount}
+                              onChange={(v) => handleSplitAmountChange(item.id, v)}
+                              styles={{
+                                input: {
+                                  height: '34px',
+                                  fontSize: '14px',
+                                  fontWeight: 800,
+                                  fontFamily: 'monospace',
+                                  textAlign: 'center',
+                                  color: Number(item.amount) > 0 ? '#047857' : '#1e293b',
+                                  backgroundColor: Number(item.amount) > 0 ? '#ecfdf5' : '#ffffff',
+                                  borderColor: Number(item.amount) > 0 ? '#10b981' : '#cbd5e1',
+                                  borderRadius: '8px',
+                                },
+                              }}
+                            />
+                          </div>
+
                           <button
                             type="button"
-                            onClick={handleDistributeEqually}
-                            disabled={splitAllocations.length === 0 || numAmount <= 0}
-                            className="px-2 py-0.5 rounded bg-white hover:bg-orange-100/60 border border-orange-200 text-[11px] font-bold text-orange-900 cursor-pointer shadow-2xs disabled:opacity-40"
+                            onClick={() => handleFillRemaining(item.id)}
+                            title="تعبئة كامل المبلغ المتبقي لهذا الحساب"
+                            className="h-[34px] px-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[11px] font-bold text-orange-900 border border-orange-200 cursor-pointer shadow-2xs transition-colors"
                           >
-                            ⚡ توزيع بالتساوي
+                            المتبقي
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSplitRow(item.id)}
+                            className="h-[34px] w-[34px] rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors"
+                          >
+                            <IconTrash size={14} />
                           </button>
                         </div>
                       </div>
+                    ))}
+                  </div>
 
-                      {splitAllocations.length === 0 ? (
-                        <div className="p-3 bg-white rounded-lg border border-dashed border-orange-200 text-center text-slate-500 text-xs">
-                          لا توجد حسابات مخصصة. يمكنك إضافة حسابات من الإعدادات أو اختيار حساب أدناه.
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-0.5">
-                          {splitAllocations.map((item, sIdx) => (
-                            <div
-                              key={item.id || sIdx}
-                              className="bg-white p-2 rounded-lg border border-slate-200 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 shadow-2xs"
-                            >
-                              <div className="flex items-center gap-1.5 min-w-[160px] flex-1">
-                                <span className="w-2 h-2 rounded-full bg-orange-600 shrink-0" />
-                                <span className="font-bold text-xs text-slate-900 truncate">
-                                  {item.accountName}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <div className="w-36">
-                                  <FormattedNumberInput
-                                    size="xs"
-                                    placeholder="0.00"
-                                    value={item.amount}
-                                    onChange={(v) => handleSplitAmountChange(item.id, v)}
-                                    styles={{
-                                      input: {
-                                        height: '32px',
-                                        fontSize: '13px',
-                                        fontWeight: 800,
-                                        fontFamily: 'monospace',
-                                        textAlign: 'center',
-                                        color: Number(item.amount) > 0 ? '#047857' : '#1e293b',
-                                        backgroundColor: Number(item.amount) > 0 ? '#ecfdf5' : '#ffffff',
-                                        borderColor: Number(item.amount) > 0 ? '#10b981' : '#cbd5e1',
-                                        borderRadius: '8px',
-                                      },
-                                    }}
-                                  />
-                                </div>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleFillRemaining(item.id)}
-                                  title="تعبئة المتبقي من إجمالي السند"
-                                  className="h-[32px] px-2 rounded-lg bg-orange-50 hover:bg-orange-100 text-[10.5px] font-bold text-orange-900 border border-orange-200 cursor-pointer"
-                                >
-                                  المتبقي
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveSplitRow(item.id)}
-                                  className="h-[32px] w-[32px] rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer"
-                                >
-                                  <IconTrash size={13} />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Quick Add Custom Account to Split from Tree */}
-                      <div className="flex items-center gap-2 pt-1">
-                        <Select
-                          size="xs"
-                          searchable
-                          clearable
-                          placeholder="+ إضافة حساب آخر للتقسيم من شجرة الحسابات..."
-                          data={postingAccounts.map((a) => ({ value: a.id, label: `${a.code} - ${a.nameAr}` }))}
-                          onChange={(val) => {
-                            if (val) {
-                              handleAddCustomSplitRow(val);
-                            }
-                          }}
-                          value={null}
-                          className="flex-1"
-                          styles={{
-                            input: { height: '30px', fontSize: '11px', borderRadius: '8px', backgroundColor: '#ffffff' },
-                          }}
-                        />
-                      </div>
+                  {/* Add Another Custom Split Row & Reset Action */}
+                  <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70">
+                    <div className="flex-1 min-w-[240px]">
+                      <Select
+                        size="xs"
+                        searchable
+                        clearable
+                        placeholder="+ إضافة حساب مخصص آخر للتقسيم من شجرة الحسابات..."
+                        data={postingAccounts.map((a) => ({ value: a.id, label: `${a.code} - ${a.nameAr}` }))}
+                        onChange={(val) => {
+                          if (val) {
+                            handleAddCustomSplitRow(val);
+                          }
+                        }}
+                        value={null}
+                        styles={{
+                          input: { height: '32px', fontSize: '11.5px', borderRadius: '8px', backgroundColor: '#ffffff' },
+                        }}
+                      />
                     </div>
-                  )}
+
+                    {hasCustomSplits && (
+                      <button
+                        type="button"
+                        onClick={handleResetCustomSplits}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 cursor-pointer transition-colors"
+                      >
+                        تصفير المبالغ المخصصة ↺
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Description Field */}
