@@ -9,7 +9,6 @@ import {
   IconCoins,
   IconEdit,
   IconFileDescription,
-  IconCreditCard,
   IconBuildingBank,
   IconWorld,
   IconMessageDots,
@@ -19,6 +18,7 @@ import {
   IconFileText,
   IconMail,
   IconPhone,
+  IconTag,
 } from '@tabler/icons-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
@@ -46,6 +46,7 @@ export interface VoucherPrintItem {
   user?: string;
   receivedFromOrPaidTo?: string;
   time?: string;
+  customCategory?: string;
 }
 
 export const DEFAULT_VOUCHER_CONFIG = {
@@ -63,7 +64,7 @@ export const DEFAULT_VOUCHER_CONFIG = {
   logoWidth: 140,
   logoHeight: 50,
   logoBorderRadius: 6,
-  primaryColor: '#0066FF', // Vibrant Electric Blue matching reference
+  primaryColor: '#0066FF', // Vibrant Electric Blue
   headerBgColor: '#0066FF',
   fieldBgColor: '#F0F7FF',
   fieldBorderColor: '#BFDBFE',
@@ -81,17 +82,16 @@ export const DEFAULT_VOUCHER_CONFIG = {
   showSignatures: true,
   showTafqeet: true,
   thankYouText: 'نشكر لكم ثقتكم ونتطلع إلى المزيد من التعاملات',
-  managerSignTitle: 'المدير',
-  accountantSignTitle: 'المحاسب',
-  receiverSignTitle: 'توقيع المستلم',
+  payerSignTitle: 'توقيع الدافع / المسلّم للمبلغ',
+  receiverSignTitle: 'توقيع المستلم / المحاسب',
   notesText: '',
   footerText: 'جميع الحقوق محفوظة © 2026',
   fontSizes: {
-    companyTitle: 15,
+    companyTitle: 16,
     subtitle: 11,
     docTitle: 24,
     body: 11,
-    amount: 18,
+    amount: 19,
   },
 };
 
@@ -102,9 +102,11 @@ export const DEFAULT_PAYMENT_VOUCHER_CONFIG = {
   tafqeetTextColor: '#0066FF',
   summaryBorderColor: '#0066FF',
   summaryTotalColor: '#0066FF',
+  payerSignTitle: 'توقيع المحاسب / الآمر بالصرف',
+  receiverSignTitle: 'توقيع المستلم / المورد المستفيد',
 };
 
-// ── Printable Voucher Sheet Component (Matches exact user design & rich colors) ──
+// ── Printable Voucher Sheet Component (Centered Header, Centered Amounts, 2-Signatures) ──
 export interface PrintableVoucherSheetProps {
   voucher: VoucherPrintItem;
   config?: any;
@@ -152,12 +154,9 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   const partyLabelAr = isReceipt ? 'استلمنا من السيد/السادة :' : 'ادفعوا للسيد/السادة :';
   const partyLabelEn = isReceipt ? 'Received From:' : 'Paid To:';
 
-  const methodLabelAr = isReceipt ? 'طريقة القبض :' : 'طريقة الصرف :';
-  const methodLabelEn = isReceipt ? 'Payment Method:' : 'Disbursement Method:';
-
-  const paymentMethodVal = voucher.cashboxName?.toLowerCase().includes('مصرف') || voucher.cashboxName?.toLowerCase().includes('bank')
-    ? (isEn ? 'Bank Transfer' : 'تحويل مصرفي')
-    : (isEn ? 'Cash Payment' : 'نقداً (كاش)');
+  const customCategoryVal = voucher.customCategory || voucher.reference
+    ? (isEn ? `Transaction: ${voucher.reference || 'General Receipt'}` : `القبض المخصص: ${voucher.reference || 'قبض عام معتمد'}`)
+    : (isEn ? 'General Receipt Voucher' : 'قبض نقدي / تحويل مالي معتمد');
 
   const dateFormatted = voucher.date
     ? new Date(voucher.date).toISOString().split('T')[0]
@@ -211,16 +210,29 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
       <div className="relative flex flex-col justify-between" style={{ zIndex: 1, minHeight: '269mm' }}>
         <div>
           {/* ═══════════════════════════════════════════════════════
-              1. TOP HEADER SECTION (Exact matching user design)
+              1. TOP HEADER SECTION (Centered Company Branding & Document Title)
              ═══════════════════════════════════════════════════════ */}
-          <div className="flex items-start justify-between gap-4 pb-6 mb-6">
-            {/* Top Right (in RTL): Company Branding & Logo */}
-            <div className="space-y-1 max-w-[35%]">
+          <div className="flex items-center justify-between gap-4 pb-4 mb-5 border-b border-slate-100">
+            {/* Header Right (in RTL): Company Details */}
+            <div className="space-y-1 max-w-[28%] text-start">
+              <p className="text-[10px] text-slate-600 font-bold leading-relaxed">
+                📍 {cfg.address || 'العراق - بغداد - المنصور - شارع الصناعة'}
+              </p>
+              {cfg.phone && (
+                <p className="text-[10.5px] text-slate-700 font-black" dir="ltr">
+                  📞 {cfg.phone}
+                </p>
+              )}
+            </div>
+
+            {/* Header Center (CENTERED): Logo, Company Name & Document Title */}
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-2">
+              {/* Logo / Brand */}
               {logoUrl ? (
                 <img
                   src={logoUrl}
                   alt="Company Logo"
-                  className="mb-1"
+                  className="mb-1.5"
                   style={{
                     maxHeight: cfg.logoHeight ? `${cfg.logoHeight}px` : '50px',
                     maxWidth: cfg.logoWidth ? `${cfg.logoWidth}px` : '180px',
@@ -229,90 +241,75 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                   }}
                 />
               ) : (
-                <div className="flex items-center gap-1.5 font-black text-xl tracking-tight mb-1">
+                <div className="flex items-center gap-1.5 font-black text-2xl tracking-tight mb-1">
                   <span style={{ color: primaryColor }}>RODA</span>
                   <span style={{ color: '#FF7A00' }}>10</span>
                 </div>
               )}
+
+              {/* Centered Company Title */}
               <h2
-                className="font-black text-slate-800 leading-tight pt-0.5"
-                style={{ fontSize: `${cfg.fontSizes?.companyTitle || 13}px` }}
+                className="font-black text-slate-900 tracking-tight leading-tight"
+                style={{ fontSize: `${cfg.fontSizes?.companyTitle || 16}px` }}
               >
                 {isEn ? (cfg.companyNameEn || cfg.companyName) : cfg.companyName}
               </h2>
-              <div className="w-8 h-0.5 mt-1" style={{ backgroundColor: primaryColor }} />
-              <p className="text-[10px] text-slate-500 font-bold leading-relaxed pt-1">
-                {cfg.address || 'العراق - بغداد - المنصور - شارع الصناعة'}
-              </p>
-              {cfg.phone && (
-                <p className="text-[10px] text-slate-500 font-bold">
-                  {isEn ? `Tel: ${cfg.phone}` : `هاتف: ${cfg.phone}`}
-                </p>
-              )}
-            </div>
 
-            {/* Top Center: Document Icon & Big Title */}
-            <div className="flex flex-col items-center justify-center text-center pt-2">
-              <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center mb-1.5 shadow-2xs"
-                style={{ backgroundColor: fieldBgColor, border: `1.5px solid ${primaryColor}` }}
-              >
-                <div className="relative">
-                  <IconFileText size={24} style={{ color: primaryColor }} />
-                  <div
-                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white"
-                    style={{ backgroundColor: primaryColor }}
-                  >
-                    <span className="text-[9px] font-black leading-none">↓</span>
-                  </div>
+              {/* Document Icon & Title */}
+              <div className="flex items-center justify-center gap-2 mt-2">
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center shadow-2xs shrink-0"
+                  style={{ backgroundColor: fieldBgColor, border: `1.5px solid ${primaryColor}` }}
+                >
+                  <IconFileText size={18} style={{ color: primaryColor }} />
                 </div>
+                <h1
+                  className="font-black tracking-tight"
+                  style={{
+                    fontSize: `${cfg.fontSizes?.docTitle || 22}px`,
+                    color: '#0f172a',
+                  }}
+                >
+                  {isEn ? docTitleEn : docTitleAr}
+                </h1>
               </div>
-              <h1
-                className="font-black tracking-tight"
-                style={{
-                  fontSize: `${cfg.fontSizes?.docTitle || 24}px`,
-                  color: '#0f172a',
-                }}
-              >
-                {isEn ? docTitleEn : docTitleAr}
-              </h1>
-              <div className="w-12 h-0.5 mt-1 rounded-full" style={{ backgroundColor: primaryColor }} />
+              <div className="w-16 h-0.5 mt-1 rounded-full" style={{ backgroundColor: primaryColor }} />
             </div>
 
-            {/* Top Left (in RTL): Meta Box */}
+            {/* Header Left (in RTL): Meta Box (Clean LTR/RTL Alignment) */}
             <div
-              className="bg-white rounded-xl border p-3 min-w-[210px] space-y-1.5 shadow-2xs text-xs font-bold"
+              className="bg-white rounded-xl border p-2.5 min-w-[195px] space-y-1 shadow-2xs text-xs font-bold shrink-0"
               style={{ borderColor: fieldBorderColor }}
             >
               <div className="flex items-center justify-between pb-1 border-b border-slate-100">
                 <span className="text-slate-600 font-bold">{isEn ? 'Voucher No :' : 'رقم السند :'}</span>
-                <span className="font-mono font-black tracking-wider text-sm" style={{ color: primaryColor }}>
+                <span className="font-mono font-black tracking-wider text-xs" dir="ltr" style={{ color: primaryColor }}>
                   {voucher.voucherNumber || 'RCV-2025-000123'}
                 </span>
               </div>
 
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 flex items-center gap-1 font-bold">
-                  <IconCalendar size={13} className="text-slate-400" />
+                  <IconCalendar size={12} className="text-slate-400" />
                   <span>{isEn ? 'Date :' : 'التاريخ :'}</span>
                 </span>
-                <span className="font-mono font-black text-slate-800">{dateFormatted}</span>
+                <span className="font-mono font-bold text-slate-800" dir="ltr">{dateFormatted}</span>
               </div>
 
               <div className="flex items-center justify-between">
                 <span className="text-slate-600 flex items-center gap-1 font-bold">
-                  <IconClock size={13} className="text-slate-400" />
+                  <IconClock size={12} className="text-slate-400" />
                   <span>{isEn ? 'Issue Time :' : 'وقت الإصدار :'}</span>
                 </span>
-                <span className="font-mono font-black text-slate-800">{timeFormatted}</span>
+                <span className="font-mono font-bold text-slate-800" dir="ltr">{timeFormatted}</span>
               </div>
 
               <div className="flex items-center justify-between pt-0.5">
                 <span className="text-slate-600 flex items-center gap-1 font-bold">
-                  <IconFileDescription size={13} className="text-slate-400" />
+                  <IconFileDescription size={12} className="text-slate-400" />
                   <span>{isEn ? 'Page :' : 'الصفحة :'}</span>
                 </span>
-                <span className="font-mono font-black text-slate-800">1 / 1</span>
+                <span className="font-mono font-bold text-slate-800" dir="ltr">1 / 1</span>
               </div>
             </div>
           </div>
@@ -321,7 +318,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               2. MAIN CARD: بيانات سند القبض / الصرف
              ═══════════════════════════════════════════════════════ */}
           <div
-            className="rounded-2xl border-2 bg-white relative p-6 pt-7 mb-5 shadow-2xs space-y-4"
+            className="rounded-2xl border-2 bg-white relative p-5 pt-7 mb-5 shadow-2xs space-y-3.5"
             style={{ borderColor: primaryColor }}
           >
             {/* Top Pill Badge (Floating on Card Header) */}
@@ -333,7 +330,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
             </div>
 
             {/* Field 1: استلمنا من السيد/السادة */}
-            <div className="pb-3 border-b border-dashed border-slate-200">
+            <div className="pb-2.5 border-b border-dashed border-slate-200">
               <div className="flex items-center justify-between gap-4">
                 <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 shrink-0">
                   <IconUser size={16} style={{ color: primaryColor }} />
@@ -346,7 +343,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
             </div>
 
-            {/* Field 2: المبلغ رقماً */}
+            {/* Field 2: المبلغ رقماً (CENTERED AMOUNT) */}
             <div className="flex items-center gap-3">
               <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
                 <IconCoins size={16} style={{ color: primaryColor }} />
@@ -367,8 +364,9 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 >
                   {currencyCode}
                 </div>
+                {/* CENTERED NUMERICAL AMOUNT */}
                 <div
-                  className="flex-1 px-4 py-2 text-end font-mono font-black text-base tracking-wider"
+                  className="flex-1 px-4 py-2 text-center font-mono font-black text-lg tracking-wider"
                   style={{ color: amountTextColor }}
                 >
                   {amountFormatted}
@@ -376,7 +374,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
             </div>
 
-            {/* Field 3: المبلغ كتابة */}
+            {/* Field 3: المبلغ كتابة (CENTERED TAFQEET) */}
             {cfg.showTafqeet && (
               <div className="flex items-center gap-3">
                 <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
@@ -415,23 +413,8 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
             </div>
 
-            {/* Field 5: Grid (طريقة القبض / العملة / الحساب) */}
-            <div className="grid grid-cols-3 gap-3 pt-1">
-              {/* طريقة القبض */}
-              <div className="space-y-1">
-                <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
-                  <IconCreditCard size={14} style={{ color: primaryColor }} />
-                  <span>{isEn ? methodLabelEn : methodLabelAr}</span>
-                </span>
-                <div
-                  className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between"
-                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
-                >
-                  <span>{paymentMethodVal}</span>
-                  <span className="text-[10px] text-slate-400">▾</span>
-                </div>
-              </div>
-
+            {/* Field 5: حقول القبض المخصص والعملة (CUSTOM / CATEGORY FIELDS) */}
+            <div className="grid grid-cols-2 gap-3 pt-0.5">
               {/* العملة */}
               <div className="space-y-1">
                 <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
@@ -447,31 +430,31 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 </div>
               </div>
 
-              {/* الحساب */}
+              {/* نوع القبض المخصص / المرجع */}
               <div className="space-y-1">
                 <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
-                  <IconBuildingBank size={14} style={{ color: primaryColor }} />
-                  <span>{isEn ? 'Account / Cashbox :' : 'الحساب :'}</span>
+                  <IconTag size={14} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Custom Category / Ref :' : (isReceipt ? 'نوع القبض المخصص :' : 'نوع الصرف المخصص :')}</span>
                 </span>
                 <div
                   className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between truncate"
                   style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
                 >
-                  <span className="truncate">{voucher.cashboxName || 'مصرف الرافدين - 123456789'}</span>
+                  <span className="truncate">{customCategoryVal}</span>
                   <span className="text-[10px] text-slate-400">▾</span>
                 </div>
               </div>
             </div>
 
             {/* Field 6: ملاحظات */}
-            <div className="flex items-start gap-3 pt-1">
+            <div className="flex items-start gap-3 pt-0.5">
               <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0 pt-1.5">
                 <IconMessageDots size={16} style={{ color: primaryColor }} />
                 <span>{isEn ? 'Notes :' : 'ملاحظات :'}</span>
               </span>
 
               <div
-                className="flex-1 rounded-xl p-3 px-4 font-bold text-xs text-slate-700 border min-h-[44px] leading-relaxed"
+                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-700 border min-h-[42px] leading-relaxed"
                 style={{
                   backgroundColor: fieldBgColor,
                   borderColor: fieldBorderColor,
@@ -485,10 +468,10 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           </div>
 
           {/* ═══════════════════════════════════════════════════════
-              3. SUMMARY CARD: ملخص السند
+              3. SUMMARY CARD: ملخص السند (3 CENTERED COLUMNS)
              ═══════════════════════════════════════════════════════ */}
           <div
-            className="rounded-2xl border-2 bg-white relative p-4 mb-6 shadow-2xs"
+            className="rounded-2xl border-2 bg-white relative p-3.5 mb-5 shadow-2xs"
             style={{ borderColor: summaryBorderColor }}
           >
             {/* Top Pill Badge */}
@@ -499,20 +482,20 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               <span>{isEn ? 'Voucher Summary' : 'ملخص السند'}</span>
             </div>
 
-            <div className="grid grid-cols-4 gap-3 text-center pt-2">
-              {/* إجمالي المبلغ */}
+            <div className="grid grid-cols-3 gap-3 text-center pt-2">
+              {/* إجمالي المبلغ (CENTERED) */}
               <div className="space-y-1">
                 <span className="font-black text-[11px] text-slate-600 flex items-center justify-center gap-1">
                   <IconCoins size={13} style={{ color: primaryColor }} />
                   <span>{isEn ? 'Total Amount :' : 'إجمالي المبلغ :'}</span>
                 </span>
-                <div className="font-mono font-black text-sm tracking-tight" style={{ color: summaryTotalColor }}>
+                <div className="font-mono font-black text-base tracking-tight" style={{ color: summaryTotalColor }}>
                   {amountFormatted} {currencyCode}
                 </div>
               </div>
 
-              {/* العملة */}
-              <div className="space-y-1 border-r border-slate-200">
+              {/* العملة (CENTERED) */}
+              <div className="space-y-1 border-r border-l border-slate-200">
                 <span className="font-black text-[11px] text-slate-600 flex items-center justify-center gap-1">
                   <IconWorld size={13} style={{ color: primaryColor }} />
                   <span>{isEn ? 'Currency :' : 'العملة :'}</span>
@@ -522,19 +505,8 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 </div>
               </div>
 
-              {/* طريقة القبض */}
-              <div className="space-y-1 border-r border-slate-200">
-                <span className="font-black text-[11px] text-slate-600 flex items-center justify-center gap-1">
-                  <IconCreditCard size={13} style={{ color: primaryColor }} />
-                  <span>{isEn ? methodLabelEn : methodLabelAr}</span>
-                </span>
-                <div className="font-black text-xs text-slate-800 truncate px-1">
-                  {paymentMethodVal}
-                </div>
-              </div>
-
-              {/* الحالة */}
-              <div className="space-y-1 border-r border-slate-200">
+              {/* الحالة (CENTERED) */}
+              <div className="space-y-1">
                 <span className="font-black text-[11px] text-slate-600 flex items-center justify-center gap-1">
                   <IconCheck size={13} style={{ color: statusColor }} />
                   <span>{isEn ? 'Status :' : 'الحالة :'}</span>
@@ -549,7 +521,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           {/* ═══════════════════════════════════════════════════════
               4. THANK YOU & SLOGAN SEPARATOR
              ═══════════════════════════════════════════════════════ */}
-          <div className="flex items-center justify-center gap-4 my-5">
+          <div className="flex items-center justify-center gap-4 my-4">
             <div className="h-0.5 flex-1 rounded-full" style={{ backgroundColor: primaryColor }} />
             <span className="font-black text-xs text-slate-800 px-3 tracking-wide select-none">
               {cfg.thankYouText || (isEn ? 'Thank you for your trust and business' : 'نشكر لكم ثقتكم ونتطلع إلى المزيد من التعاملات')}
@@ -558,41 +530,29 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           </div>
 
           {/* ═══════════════════════════════════════════════════════
-              5. SIGNATURES SECTION (3 Columns)
+              5. SIGNATURES SECTION (2 Columns: Payer & Receiver Only)
              ═══════════════════════════════════════════════════════ */}
           {cfg.showSignatures && (
-            <div className="grid grid-cols-3 gap-6 text-center pt-2 mb-6">
-              {/* توقيع المستلم */}
+            <div className="grid grid-cols-2 gap-12 text-center pt-2 mb-4 max-w-xl mx-auto">
+              {/* توقيع الدافع / المسلّم للمبلغ */}
               <div className="space-y-3">
                 <div className="flex items-center justify-center gap-1 font-black text-xs text-slate-800">
                   <IconEdit size={14} style={{ color: primaryColor }} />
-                  <span>{cfg.receiverSignTitle || (isReceipt ? 'توقيع المستلم' : 'توقيع الدافع')}</span>
+                  <span>{cfg.payerSignTitle || (isReceipt ? 'توقيع الدافع / المسلّم للمبلغ' : 'توقيع المحاسب / الآمر بالصرف')}</span>
                 </div>
-                <div className="h-10 border-b border-slate-300 mx-4"></div>
+                <div className="h-10 border-b border-slate-300 mx-6"></div>
                 <div className="font-mono text-[11px] text-slate-500 font-bold">
                   {isEn ? `Date: ${yearFormatted} /   / ` : `التاريخ :  ${yearFormatted}  /   / `}
                 </div>
               </div>
 
-              {/* المحاسب */}
+              {/* توقيع المستلم / المحاسب */}
               <div className="space-y-3">
                 <div className="flex items-center justify-center gap-1 font-black text-xs text-slate-800">
                   <IconBuildingBank size={14} style={{ color: primaryColor }} />
-                  <span>{cfg.accountantSignTitle || 'المحاسب'}</span>
+                  <span>{cfg.receiverSignTitle || (isReceipt ? 'توقيع المستلم / المحاسب' : 'توقيع المستلم / المورد المستفيد')}</span>
                 </div>
-                <div className="h-10 border-b border-slate-300 mx-4"></div>
-                <div className="font-mono text-[11px] text-slate-500 font-bold">
-                  {isEn ? `Date: ${yearFormatted} /   / ` : `التاريخ :  ${yearFormatted}  /   / `}
-                </div>
-              </div>
-
-              {/* المدير */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-center gap-1 font-black text-xs text-slate-800">
-                  <IconUser size={14} style={{ color: primaryColor }} />
-                  <span>{cfg.managerSignTitle || 'المدير'}</span>
-                </div>
-                <div className="h-10 border-b border-slate-300 mx-4"></div>
+                <div className="h-10 border-b border-slate-300 mx-6"></div>
                 <div className="font-mono text-[11px] text-slate-500 font-bold">
                   {isEn ? `Date: ${yearFormatted} /   / ` : `التاريخ :  ${yearFormatted}  /   / `}
                 </div>
@@ -627,7 +587,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               )}
             </div>
 
-            {/* Decorative 3x3 Blue Mosaic Dots (as seen in the reference) */}
+            {/* Decorative 3x3 Blue Mosaic Dots */}
             <div className="flex items-center gap-1">
               <div className="grid grid-cols-3 gap-1">
                 <div className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: primaryColor }} />

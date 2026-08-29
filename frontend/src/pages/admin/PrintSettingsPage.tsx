@@ -1135,37 +1135,25 @@ export const PrintSettingsPage: React.FC = () => {
 
                       <div>
                         <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'مسمى توقيع المدير' : 'Manager Signature Title'}
+                          {isAr ? 'مسمى توقيع الدافع / المسلّم للمبلغ' : 'Payer Signature Title'}
                         </label>
                         <TextInput
                           size="xs"
-                          value={currentConfig.managerSignTitle || ''}
-                          onChange={(e) => updateCurrentConfig('managerSignTitle', e.target.value)}
-                          placeholder="المدير"
+                          value={currentConfig.payerSignTitle || ''}
+                          onChange={(e) => updateCurrentConfig('payerSignTitle', e.target.value)}
+                          placeholder="توقيع الدافع / المسلّم للمبلغ"
                         />
                       </div>
 
                       <div>
                         <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'مسمى توقيع المحاسب' : 'Accountant Signature Title'}
-                        </label>
-                        <TextInput
-                          size="xs"
-                          value={currentConfig.accountantSignTitle || ''}
-                          onChange={(e) => updateCurrentConfig('accountantSignTitle', e.target.value)}
-                          placeholder="المحاسب"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'مسمى توقيع المستلم / الدافع' : 'Receiver / Payer Signature Title'}
+                          {isAr ? 'مسمى توقيع المستلم / المحاسب' : 'Receiver / Cashier Signature Title'}
                         </label>
                         <TextInput
                           size="xs"
                           value={currentConfig.receiverSignTitle || ''}
                           onChange={(e) => updateCurrentConfig('receiverSignTitle', e.target.value)}
-                          placeholder="توقيع المستلم"
+                          placeholder="توقيع المستلم / المحاسب"
                         />
                       </div>
                     </div>
