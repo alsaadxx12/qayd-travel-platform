@@ -861,7 +861,7 @@ export const AddonsStorePage: React.FC = () => {
               thousandSeparator=","
               prefix="$ "
               value={grantInput}
-              onChange={setGrantInput}
+              onChange={(val) => setGrantInput(typeof val === 'bigint' ? Number(val) : val)}
               label={isAr ? 'الرصيد المخصص ($)' : 'Allocated budget ($)'}
               styles={{ input: { fontFamily: 'monospace', fontWeight: 700 } }}
             />
