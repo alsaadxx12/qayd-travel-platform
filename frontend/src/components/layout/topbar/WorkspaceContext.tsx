@@ -185,12 +185,12 @@ export const WorkspaceContext: React.FC = () => {
           >
             <div className="flex items-center gap-2.5 min-w-0 flex-1">
               {/* Logo / Store Icon */}
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0">
                 {activeBranchLogo ? (
-                  <img src={activeBranchLogo} alt={activeBranchName} className="w-7 h-7 object-contain rounded" />
+                  <img src={activeBranchLogo} alt={activeBranchName} className="w-10 h-10 object-contain rounded-lg" />
                 ) : (
-                  <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center">
-                    <IconBuildingStore size={20} className="text-[#F45A0A]" />
+                  <div className="w-10 h-10 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center">
+                    <IconBuildingStore size={22} className="text-[#F45A0A]" />
                   </div>
                 )}
               </div>
