@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { apiRequest } from '../api/client';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { FinancialVoucherForm } from '../components/vouchers/FinancialVoucherForm';
+import { VoucherPrintModal, type VoucherPrintItem } from '../components/vouchers/VoucherPrintModal';
 import { useLanguageStore } from '../store/useLanguageStore';
 import { useAiPageContext } from '../hooks/useAiPageContext';
 import { SegmentedDatePicker } from '../components/ui/SegmentedDatePicker';
@@ -63,6 +64,8 @@ export const VouchersPage: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [slipModalOpen, setSlipModalOpen] = useState(false);
   const [selectedSlipVoucher, setSelectedSlipVoucher] = useState<any>(null);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [voucherToPrint, setVoucherToPrint] = useState<VoucherPrintItem | null>(null);
 
   const openVoucher = selectedVoucher || selectedSlipVoucher;
   useAiPageContext({
@@ -1037,6 +1040,32 @@ export const VouchersPage: React.FC = () => {
                           </button>
                         </Tooltip>
 
+                        <Tooltip label={isAr ? 'طباعة وتصدير السند' : 'Print & Export'} withArrow position="top">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setVoucherToPrint({
+                                voucherNumber: row.voucherNumber,
+                                type: row.type,
+                                date: row.date,
+                                amount: row.amount,
+                                currency: row.currency,
+                                accountName: row.accountName,
+                                accountCode: row.accountCode,
+                                cashboxName: row.cashboxName,
+                                reference: row.reference,
+                                description: row.description,
+                                user: row.userName,
+                              });
+                              setPrintModalOpen(true);
+                            }}
+                            className="p-1.5 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Printer size={14} />
+                          </button>
+                        </Tooltip>
+
                         {row.type !== 'JOURNAL' && (
                           <Tooltip label={isAr ? `إشعارات ووصولات (${row.slipsCount || 0})` : `Receipt Slips (${row.slipsCount || 0})`} withArrow position="top">
                             <button
@@ -1224,11 +1253,27 @@ export const VouchersPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => {
+                  if (!selectedVoucher) return;
+                  setVoucherToPrint({
+                    voucherNumber: selectedVoucher.voucherNumber,
+                    type: selectedVoucher.type,
+                    date: selectedVoucher.date,
+                    amount: selectedVoucher.amount,
+                    currency: selectedVoucher.currency,
+                    accountName: selectedVoucher.accountName,
+                    accountCode: selectedVoucher.accountCode,
+                    cashboxName: selectedVoucher.cashboxName,
+                    reference: selectedVoucher.reference,
+                    description: selectedVoucher.description,
+                    user: selectedVoucher.userName,
+                  });
+                  setPrintModalOpen(true);
+                }}
                 className="flex-1 h-[38px] rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
               >
                 <Printer size={14} className="text-orange-400" />
-                <span>{isAr ? 'طباعة السند' : 'Print Voucher'}</span>
+                <span>{isAr ? 'معاينة وطباعة السند' : 'Print Voucher'}</span>
               </button>
             </div>
           </div>
@@ -1352,6 +1397,12 @@ export const VouchersPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+      {/* ── 8. Modern Voucher Print & Export Modal ── */}
+      <VoucherPrintModal
+        opened={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        voucher={voucherToPrint}
+      />
     </div>
   );
 };

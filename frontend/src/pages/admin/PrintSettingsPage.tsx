@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Paper, Button, TextInput, Checkbox, Select, ColorInput, Slider, Switch, Badge, Tabs } from '@mantine/core';
+import { Paper, Button, TextInput, Select, ColorInput, Slider, Switch, Tabs } from '@mantine/core';
 import {
   IconPrinter,
   IconDeviceFloppy,
@@ -12,8 +12,10 @@ import {
   IconReceiptOff,
   IconCoins,
   IconFileText,
-  IconPhoto,
+  IconFileTypePdf,
 } from '@tabler/icons-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas-pro';
 import { fetchPrintTemplate, savePrintTemplate } from '../../api/printTemplates';
 import { branchesApi, type Branch } from '../../api/branches';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
@@ -22,128 +24,318 @@ import {
   PrintableAccountStatementSheet,
   type StatementMovementItem,
 } from '../../components/reports/AccountStatementPrintModal';
+import {
+  PrintableVoucherSheet,
+  DEFAULT_VOUCHER_CONFIG,
+  DEFAULT_PAYMENT_VOUCHER_CONFIG,
+  type VoucherPrintItem,
+} from '../../components/vouchers/VoucherPrintModal';
+
+// Sample mock data for live statement preview
+const MOCK_STATEMENT_ROWS: StatementMovementItem[] = [
+  {
+    rowNumber: 1,
+    date: new Date().toISOString().split('T')[0],
+    docRef: 'TK-10492',
+    pnr: 'BGW-IST-01',
+    route: 'BGW -> IST',
+    statement: 'إصدار تذكرة طيران بغداد - إسطنبول (الخطوط الجوية العراقية)',
+    debit: 450000,
+    credit: 0,
+    runningBalance: 450000,
+    currency: 'IQD',
+  },
+  {
+    rowNumber: 2,
+    date: new Date().toISOString().split('T')[0],
+    docRef: 'RV-2026-004',
+    pnr: '',
+    route: '',
+    statement: 'تسديد دفعة نقدية من رصيد الحساب باليد',
+    debit: 0,
+    credit: 250000,
+    runningBalance: 200000,
+    currency: 'IQD',
+  },
+];
+
+const MOCK_STATEMENT_TOTALS = {
+  totalDebit: 450000,
+  totalCredit: 250000,
+  finalBalance: 200000,
+  openingBalance: 0,
+  previousBalance: 0,
+};
+
+// Sample mock data for live receipt voucher preview
+const MOCK_RECEIPT_VOUCHER: VoucherPrintItem = {
+  id: 'rv-demo',
+  voucherNumber: 'RV-2026-0012',
+  type: 'RECEIPT',
+  date: new Date().toISOString().split('T')[0],
+  amount: 1550000,
+  currency: 'IQD',
+  accountName: 'شركة الأفق للسياحة والخدمات',
+  accountCode: '110204',
+  accountPhone: '+964 770 999 8888',
+  cashboxName: 'صندوق الإدارة الرئيسي (كاش)',
+  reference: 'REC-901824',
+  description: 'تسديد دفعة نقدية عن حجز تذاكر طيران كروب أربيل - دبي',
+  user: 'أحمد المحاسب',
+};
+
+// Sample mock data for live payment voucher preview
+const MOCK_PAYMENT_VOUCHER: VoucherPrintItem = {
+  id: 'pv-demo',
+  voucherNumber: 'PV-2026-0008',
+  type: 'PAYMENT',
+  date: new Date().toISOString().split('T')[0],
+  amount: 850000,
+  currency: 'IQD',
+  accountName: 'شركة الخطوط الجوية العراقية',
+  accountCode: '210105',
+  accountPhone: '+964 771 222 3333',
+  cashboxName: 'حساب مصرف بغداد التجاري',
+  reference: 'TRANS-66712',
+  description: 'سداد دفعة حساب مستحقات تذاكر طيران الخطوط لشهر شباط',
+  user: 'علي جعفر',
+};
 
 export const PrintSettingsPage: React.FC = () => {
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
 
   const [activeDocTab, setActiveDocTab] = useState<string | null>('statement');
+  const [printTab, setPrintTab] = useState<'colors' | 'fonts' | 'info' | 'toggles'>('colors');
 
-  // Print Statement Customization State
-  const [printConfig, setPrintConfig] = useState<any>({
-    primaryColor: '#059669',
-    headerBgColor: '#059669',
-    fontFamily: 'IBM Plex Sans Arabic',
-    isTableBold: false,
-    subtitle: 'قسم المحاسبة والمالية — كشف حساب تفصيلي',
-    notesText: 'ملاحظة: هذا الكشف يعتبر مطبقاً وموافقاً عليه رسمياً ما لم يتم الإعتراض خلال 7 أيام من تاريخ صدوره.',
-    footerText: 'شركة الفرسان للسياحة والسفر — جميع الحقوق محفوظة © 2026',
-    showFinancialSummary: true,
-    showOpeningBalance: true,
-    showSignatures: true,
-    fontSizes: {
-      companyTitle: 17,
-      tableHeader: 11,
-      tableBody: 10,
+  // Multi-doc configs state mapped by docType
+  const [configs, setConfigs] = useState<Record<string, any>>({
+    statement: {
+      companyName: 'شركة الروضتين للسفر والسياحة',
+      companyNameEn: 'Al-Rawdatan Travel & Tourism',
+      subtitle: 'قسم المحاسبة والمالية — كشف حساب تفصيلي',
+      subtitleEn: 'Accounting & Finance — Detailed Statement',
+      commercialReg: 'س.ت: 90182471 / بغداد',
+      taxNumber: 'الرقم الضريبي: 300012345600003',
+      phone: '+964 770 123 4567',
+      email: 'finance@alrawdatan-travel.com',
+      address: 'العراق — كربلاء المقدسة / بغداد',
+      primaryColor: '#059669',
+      headerBgColor: '#059669',
+      fontFamily: 'IBM Plex Sans Arabic',
+      isTableBold: false,
+      notesText: 'ملاحظة: هذا الكشف يعتبر مطبقاً وموافقاً عليه رسمياً ما لم يتم الإعتراض خلال 7 أيام من تاريخ صدوره.',
+      footerText: 'شركة الروضتين للسياحة والسفر — جميع الحقوق محفوظة © 2026',
+      showFinancialSummary: true,
+      showOpeningBalance: true,
+      showSignatures: true,
+      showWatermark: true,
+      showQrCode: true,
+      logoWidth: 70,
+      logoHeight: 70,
+      fontSizes: {
+        companyTitle: 17,
+        subtitle: 11,
+        tableHeader: 11,
+        tableBody: 10,
+      },
+    },
+    receipt_voucher: {
+      ...DEFAULT_VOUCHER_CONFIG,
+      primaryColor: '#059669',
+      headerBgColor: '#059669',
+    },
+    payment_voucher: {
+      ...DEFAULT_PAYMENT_VOUCHER_CONFIG,
+      primaryColor: '#e11d48',
+      headerBgColor: '#e11d48',
+    },
+    expense_report: {
+      companyName: 'شركة الروضتين للسفر والسياحة',
+      companyNameEn: 'Al-Rawdatan Travel & Tourism',
+      subtitle: 'تقرير المصاريف التشغيلية والإدارية المعتمد',
+      subtitleEn: 'Operational & Administrative Expenses Report',
+      commercialReg: 'س.ت: 90182471 / بغداد',
+      taxNumber: 'الرقم الضريبي: 300012345600003',
+      phone: '+964 770 123 4567',
+      email: 'finance@alrawdatan-travel.com',
+      address: 'العراق — كربلاء المقدسة / بغداد',
+      primaryColor: '#d97706', // Amber / Orange for expenses
+      headerBgColor: '#d97706',
+      fontFamily: 'IBM Plex Sans Arabic',
+      isTableBold: false,
+      notesText: 'ملاحظة: هذا التقرير يوضح المصاريف المعتمدة والمقيدة في السجلات المالية الرسمية.',
+      footerText: 'شركة الروضتين للسياحة والسفر — جميع الحقوق محفوظة © 2026',
+      showFinancialSummary: true,
+      showSignatures: true,
+      showWatermark: true,
+      showQrCode: true,
+      logoWidth: 70,
+      logoHeight: 70,
+      fontSizes: {
+        companyTitle: 17,
+        subtitle: 11,
+        tableHeader: 11,
+        tableBody: 10,
+      },
     },
   });
-  const [isSavingPrintConfig, setIsSavingPrintConfig] = useState(false);
-  const [printTab, setPrintTab] = useState<'colors' | 'fonts' | 'info' | 'toggles'>('colors');
-  const [existingTemplateConfig, setExistingTemplateConfig] = useState<any>({});
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [isExportingTestPdf, setIsExportingTestPdf] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
 
-  // Active logo from existing config
-  const activeLogoUrl = useMemo(() => {
-    return existingTemplateConfig?.logoUrl || printConfig?.logoUrl || '';
-  }, [existingTemplateConfig, printConfig]);
+  const currentDocKey = activeDocTab || 'statement';
+  const currentConfig = configs[currentDocKey] || configs.statement;
 
+  // Load all 4 doc templates on mount
   useEffect(() => {
-    // Load existing template config
-    fetchPrintTemplate('statement')
-      .then((res) => {
-        if (res && res.config) {
-          setExistingTemplateConfig(res.config);
-          setPrintConfig((prev: any) => ({ ...prev, ...res.config }));
-        }
-      })
-      .catch(() => {});
+    const docTypes = ['statement', 'receipt_voucher', 'payment_voucher', 'expense_report'];
+    docTypes.forEach((dt) => {
+      fetchPrintTemplate(dt)
+        .then((res) => {
+          if (res && res.config) {
+            setConfigs((prev) => ({
+              ...prev,
+              [dt]: { ...prev[dt], ...res.config },
+            }));
+          }
+        })
+        .catch(() => {});
+    });
 
     branchesApi.getAll().then((data) => {
       if (Array.isArray(data)) setBranches(data);
     }).catch(() => {});
   }, []);
 
-  const updatePrintConfig = (field: string, value: any) => {
-    setPrintConfig((prev: any) => {
+  const updateCurrentConfig = (field: string, value: any) => {
+    setConfigs((prev) => {
+      const active = { ...(prev[currentDocKey] || {}) };
       if (field.startsWith('fontSizes.')) {
         const fontKey = field.split('.')[1];
-        return {
-          ...prev,
-          fontSizes: {
-            ...prev.fontSizes,
-            [fontKey]: value,
-          },
+        active.fontSizes = {
+          ...(active.fontSizes || {}),
+          [fontKey]: value,
         };
+      } else {
+        active[field] = value;
       }
       return {
         ...prev,
-        [field]: value,
+        [currentDocKey]: active,
       };
     });
   };
 
-  const handleSavePrintConfig = async () => {
-    setIsSavingPrintConfig(true);
+  const handleSaveCurrentConfig = async () => {
+    setIsSaving(true);
     try {
-      let baseConfig = existingTemplateConfig;
+      let baseConfig = currentConfig;
       try {
-        const latest = await fetchPrintTemplate('statement');
+        const latest = await fetchPrintTemplate(currentDocKey);
         if (latest && latest.config) {
-          baseConfig = latest.config;
+          baseConfig = { ...latest.config, ...currentConfig };
         }
       } catch {}
 
-      const newConfig = {
-        ...baseConfig,
-        ...printConfig,
-        logoUrl: activeLogoUrl || baseConfig?.logoUrl || printConfig?.logoUrl || '',
-      };
+      await savePrintTemplate(currentDocKey, baseConfig);
 
-      await savePrintTemplate('statement', newConfig);
-      setExistingTemplateConfig(newConfig);
+      const titles: Record<string, string> = {
+        statement: isAr ? 'كشف الحساب' : 'Account Statement',
+        receipt_voucher: isAr ? 'سند القبض' : 'Receipt Voucher',
+        payment_voucher: isAr ? 'سند الدفع' : 'Payment Voucher',
+        expense_report: isAr ? 'تقرير المصاريف' : 'Expense Report',
+      };
 
       showSuccessNotification(
         isAr ? 'تم حفظ إعدادات الطباعة' : 'Print Settings Saved',
-        isAr ? 'تم حفظ ألوان وخطوط ونصوص الكشف بنجاح في قاعدة البيانات وتحديث كشوفات الحساب فورياً' : 'Print settings saved and applied successfully'
+        isAr
+          ? `تم حفظ ألوان وخطوط ونصوص قالب [${titles[currentDocKey] || currentDocKey}] بنجاح في قاعدة البيانات وتحديثها فورياً.`
+          : `Print template for [${titles[currentDocKey] || currentDocKey}] saved and applied successfully.`
       );
     } catch (err) {
       showErrorNotification(
         isAr ? 'خطأ في الحفظ' : 'Save Error',
-        isAr ? 'تعذر حفظ إعدادات الطباعة والكشف في قاعدة البيانات' : 'Failed to save print settings'
+        isAr ? 'تعذر حفظ إعدادات الطباعة في قاعدة البيانات' : 'Failed to save print settings'
       );
     } finally {
-      setIsSavingPrintConfig(false);
+      setIsSaving(false);
     }
   };
 
-  const comingSoonPlaceholder = (docType: string) => (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#F45A0A] mb-4">
-        <IconPrinter size={28} />
-      </div>
-      <h3 className="font-black text-base text-slate-900 mb-2">
-        {isAr ? `إعدادات طباعة ${docType}` : `${docType} Print Settings`}
-      </h3>
-      <p className="text-sm text-slate-500 font-bold max-w-md">
-        {isAr
-          ? 'سيتم إضافة إعدادات تخصيص طباعة هذا المستند قريباً. حالياً يمكنك تخصيص إعدادات كشف الحساب من التبويب الأول.'
-          : 'Print customization settings for this document will be available soon.'}
-      </p>
-      <Badge size="lg" color="orange" variant="light" className="font-black mt-4">
-        {isAr ? 'قريباً' : 'Coming Soon'}
-      </Badge>
-    </div>
-  );
+  // Instant Client PDF test export for the active preview
+  const handleExportTestPdf = async () => {
+    const previewId = currentDocKey === 'statement' || currentDocKey === 'expense_report'
+      ? 'printable-statement-sheet'
+      : 'printable-voucher-sheet';
+
+    const element = document.getElementById(previewId);
+    if (!element) return;
+
+    setIsExportingTestPdf(true);
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save(`test_template_${currentDocKey}_${Date.now()}.pdf`);
+      showSuccessNotification(
+        isAr ? 'تم تصدير PDF التجريبي' : 'Test PDF Exported',
+        isAr ? 'تم تنزيل عينة المعاينة بصيغة PDF فورياً بجودة عالية' : 'Sample PDF exported instantly'
+      );
+    } catch (err: any) {
+      console.error('Test export failed:', err);
+      showErrorNotification(isAr ? 'خطأ في التصدير' : 'Export Failed', err.message);
+    } finally {
+      setIsExportingTestPdf(false);
+    }
+  };
+
+  const docTitles: Record<string, { title: string; desc: string }> = {
+    statement: {
+      title: isAr ? 'إعدادات وتصميم كشف الحساب' : 'Account Statement Settings',
+      desc: isAr ? 'تخصيص ألوان وتصميم وترويسة وتذييل كشوفات الحساب المالية' : 'Customize statement colors, headers, tables, and footers',
+    },
+    receipt_voucher: {
+      title: isAr ? 'إعدادات وتصميم سند القبض (وصل الاستلام)' : 'Receipt Voucher Settings',
+      desc: isAr ? 'تخصيص ألوان وتصميم وسندات واستلام المبالغ النقدية والتحويلات' : 'Customize receipt vouchers, amounts, Tafqeet, and signatures',
+    },
+    payment_voucher: {
+      title: isAr ? 'إعدادات وتصميم سند الدفع والصرف' : 'Payment Voucher Settings',
+      desc: isAr ? 'تخصيص سندات صرف ودفع المبالغ للشركات والموردين والخطوط' : 'Customize disbursement vouchers, amounts, Tafqeet, and signatures',
+    },
+    expense_report: {
+      title: isAr ? 'إعدادات وتصميم تقرير المصاريف' : 'Expense Report Settings',
+      desc: isAr ? 'تخصيص تقارير المصاريف التشغيلية والإدارية والعمومية' : 'Customize operational and administrative expenses print reports',
+    },
+  };
 
   return (
     <div
@@ -151,7 +343,7 @@ export const PrintSettingsPage: React.FC = () => {
       dir={direction}
       style={{ fontFamily: isAr ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}
     >
-      {/* Page Header */}
+      {/* ── Page Header ── */}
       <Paper p="sm" radius="md" withBorder className="bg-white shadow-2xs">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -164,7 +356,7 @@ export const PrintSettingsPage: React.FC = () => {
               </h1>
               <p className="text-[11px] text-slate-500 font-bold mt-0.5">
                 {isAr
-                  ? 'تخصيص تصميم وإعدادات طباعة المستندات الرسمية: كشوفات الحساب، سندات القبض والدفع، وتقارير المصاريف'
+                  ? 'تخصيص تصميم وقوالب طباعة المستندات: كشوفات الحساب، سندات القبض والدفع، وتقارير المصاريف'
                   : 'Customize print design for statements, receipt vouchers, payment vouchers, and expense reports'}
               </p>
             </div>
@@ -172,7 +364,7 @@ export const PrintSettingsPage: React.FC = () => {
         </div>
       </Paper>
 
-      {/* Document Type Tabs */}
+      {/* ── Document Type Tabs ── */}
       <Paper p="md" radius="md" withBorder className="bg-white shadow-2xs">
         <Tabs value={activeDocTab} onChange={setActiveDocTab} color="orange">
           <Tabs.List grow className="font-bold">
@@ -206,290 +398,480 @@ export const PrintSettingsPage: React.FC = () => {
             </Tabs.Tab>
           </Tabs.List>
 
-          {/* Statement Tab */}
-          <Tabs.Panel value="statement" pt="md">
-            <div className="space-y-4 text-xs">
-              <div className="flex items-center justify-between border-b pb-2">
-                <div>
-                  <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
-                    <IconPrinter size={20} className="text-[#F45A0A]" />
-                    <span>{isAr ? 'إعدادات وتصاميم كشف الحساب والطباعة' : 'Statement Print Design & Settings'}</span>
-                  </h3>
-                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                    {isAr ? 'معاينة حية وتعديل العبارات والنصوص الرسمية لكشف الحساب' : 'Live preview and edit official statement texts'}
-                  </p>
-                </div>
+          {/* Unified Editor Panel for the Selected Document */}
+          <div className="pt-4 space-y-4 text-xs">
+            {/* Action Bar */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                  <IconPrinter size={18} className="text-[#F45A0A]" />
+                  <span>{docTitles[currentDocKey]?.title}</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  {docTitles[currentDocKey]?.desc}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="light"
+                  color="gray"
+                  size="xs"
+                  loading={isExportingTestPdf}
+                  leftSection={<IconFileTypePdf size={15} />}
+                  onClick={handleExportTestPdf}
+                  className="font-bold"
+                >
+                  {isAr ? 'تصدير PDF تجريبي' : 'Test PDF'}
+                </Button>
+
                 <Button
                   color="orange"
                   size="xs"
-                  loading={isSavingPrintConfig}
+                  loading={isSaving}
                   leftSection={<IconDeviceFloppy size={16} />}
-                  onClick={handleSavePrintConfig}
+                  onClick={handleSaveCurrentConfig}
                   className="font-extrabold px-4 shadow-xs bg-[#F45A0A] hover:bg-[#DD4F05]"
                 >
-                  {isAr ? 'حفظ إعدادات الكشف والطباعة' : 'Save Print Settings'}
+                  {isAr ? 'حفظ إعدادات القالب' : 'Save Template'}
                 </Button>
               </div>
+            </div>
 
-              {/* Grid: Controls (4 cols) & Live Preview (8 cols) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-                {/* Tabbed Controls (4 cols) */}
-                <div className="lg:col-span-4 space-y-3.5 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-                  {/* Modern Pill Tab Selector */}
-                  <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-                    <div className="grid grid-cols-4 gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setPrintTab('colors')}
-                        className={`flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
-                          printTab === 'colors'
-                            ? 'bg-[#F45A0A] text-white shadow-xs scale-[1.02]'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        <IconPalette size={14} />
-                        <span>{isAr ? 'الألوان' : 'Colors'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPrintTab('fonts')}
-                        className={`flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
-                          printTab === 'fonts'
-                            ? 'bg-[#F45A0A] text-white shadow-xs scale-[1.02]'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        <IconTypography size={14} />
-                        <span>{isAr ? 'الخطوط' : 'Fonts'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPrintTab('info')}
-                        className={`flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
-                          printTab === 'info'
-                            ? 'bg-[#F45A0A] text-white shadow-xs scale-[1.02]'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        <IconBuilding size={14} />
-                        <span>{isAr ? 'البيانات' : 'Info'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPrintTab('toggles')}
-                        className={`flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
-                          printTab === 'toggles'
-                            ? 'bg-[#F45A0A] text-white shadow-xs scale-[1.02]'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                        }`}
-                      >
-                        <IconAdjustments size={14} />
-                        <span>{isAr ? 'العناصر' : 'Toggles'}</span>
-                      </button>
-                    </div>
+            {/* Grid: Controls (4 cols) & Live Preview (8 cols) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+              {/* Tabbed Controls (4 cols) */}
+              <div className="lg:col-span-4 space-y-3.5 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                {/* Modern Pill Tab Selector */}
+                <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="grid grid-cols-4 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setPrintTab('colors')}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        printTab === 'colors'
+                          ? 'bg-[#F45A0A] text-white shadow-xs scale-[1.02]'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                      }`}
+                    >
+                      <IconPalette size={14} />
+                      <span>{isAr ? 'الألوان' : 'Colors'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrintTab('info')}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        printTab === 'info'
+                          ? 'bg-[#F45A0A] text-white shadow-xs scale-[1.02]'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                      }`}
+                    >
+                      <IconBuilding size={14} />
+                      <span>{isAr ? 'الشركة' : 'Info'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrintTab('fonts')}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        printTab === 'fonts'
+                          ? 'bg-[#F45A0A] text-white shadow-xs scale-[1.02]'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                      }`}
+                    >
+                      <IconTypography size={14} />
+                      <span>{isAr ? 'الخطوط' : 'Fonts'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrintTab('toggles')}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                        printTab === 'toggles'
+                          ? 'bg-[#F45A0A] text-white shadow-xs scale-[1.02]'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                      }`}
+                    >
+                      <IconAdjustments size={14} />
+                      <span>{isAr ? 'خيارات' : 'Options'}</span>
+                    </button>
                   </div>
-
-                  {/* Tab Panels */}
-                  {printTab === 'colors' && (
-                    <div className="space-y-3 bg-white p-3 rounded-xl border border-slate-200">
-                      <span className="font-extrabold text-slate-900 flex items-center gap-1.5 text-xs border-b pb-1.5">
-                        <IconPalette size={15} className="text-[#F45A0A]" />
-                        <span>{isAr ? 'تخصيص ألوان أجزاء المستند' : 'Customize document colors'}</span>
-                      </span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <ColorInput label={isAr ? 'شريط عنوان الكشف' : 'Title accent'} size="xs" value={printConfig.titleAccentColor || '#64748b'} onChange={(val) => updatePrintConfig('titleAccentColor', val)} format="hex" swatches={['#64748b', '#059669', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0f172a']} />
-                        <ColorInput label={isAr ? 'خلفية رأس الجدول' : 'Table header bg'} size="xs" value={printConfig.tableHeaderBgColor || '#e2e8f0'} onChange={(val) => updatePrintConfig('tableHeaderBgColor', val)} format="hex" swatches={['#e2e8f0', '#059669', '#1e293b', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444']} />
-                        <ColorInput label={isAr ? 'نص رأس الجدول' : 'Table header text'} size="xs" value={printConfig.tableHeaderTextColor || '#0f172a'} onChange={(val) => updatePrintConfig('tableHeaderTextColor', val)} format="hex" swatches={['#0f172a', '#ffffff', '#334155', '#1e293b', '#047857']} />
-                        <ColorInput label={isAr ? 'خلفية ملخص الحساب' : 'Summary bg'} size="xs" value={printConfig.summaryHeaderBgColor || '#e2e8f0'} onChange={(val) => updatePrintConfig('summaryHeaderBgColor', val)} format="hex" swatches={['#e2e8f0', '#ecfdf5', '#f1f5f9', '#eff6ff', '#fef3c7']} />
-                        <ColorInput label={isAr ? 'نص ملخص الحساب' : 'Summary text'} size="xs" value={printConfig.summaryHeaderTextColor || '#0f172a'} onChange={(val) => updatePrintConfig('summaryHeaderTextColor', val)} format="hex" swatches={['#0f172a', '#065f46', '#1e40af', '#92400e', '#ffffff']} />
-                        <ColorInput label={isAr ? 'صفوف الجدول الزوجية' : 'Striped rows'} size="xs" value={printConfig.tableRowStripedColor || '#f8fafc'} onChange={(val) => updatePrintConfig('tableRowStripedColor', val)} format="hex" swatches={['#f8fafc', '#f0fdf4', '#f0f9ff', '#fefce8', '#ffffff']} />
-                        <ColorInput label={isAr ? 'نصوص حركات الجدول' : 'Table text'} size="xs" value={printConfig.tableTextColor || '#0f172a'} onChange={(val) => updatePrintConfig('tableTextColor', val)} format="hex" swatches={['#0f172a', '#334155', '#1e293b', '#475569']} />
-                        <ColorInput label={isAr ? 'لون الرصيد النهائي' : 'Balance color'} size="xs" value={printConfig.balanceDueColor || '#0f172a'} onChange={(val) => updatePrintConfig('balanceDueColor', val)} format="hex" swatches={['#0f172a', '#dc2626', '#059669', '#2563eb', '#d97706']} />
-                      </div>
-                    </div>
-                  )}
-
-                  {printTab === 'fonts' && (
-                    <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200">
-                      <span className="font-extrabold text-slate-900 flex items-center gap-1.5 text-xs border-b pb-1.5">
-                        <IconTypography size={15} className="text-[#F45A0A]" />
-                        <span>{isAr ? 'أنواع الخطوط والأحجام' : 'Fonts & Sizes'}</span>
-                      </span>
-                      <Select label={isAr ? 'نوع الخط المستخدم بالكشف' : 'Statement font'} size="xs" data={['IBM Plex Sans Arabic', 'Tajawal', 'Cairo', 'Inter', 'Roboto']} value={printConfig.fontFamily || 'IBM Plex Sans Arabic'} onChange={(val) => updatePrintConfig('fontFamily', val || 'IBM Plex Sans Arabic')} className="font-bold" />
-                      <div>
-                        <div className="flex justify-between text-xs font-bold mb-1">
-                          <span>{isAr ? 'حجم خط عنوان المستند' : 'Doc title size'}</span>
-                          <span className="text-[#F45A0A] font-mono">{printConfig.docTitleSize || 20}px</span>
-                        </div>
-                        <Slider size="xs" color="orange" min={16} max={28} step={1} value={printConfig.docTitleSize || 20} onChange={(val) => updatePrintConfig('docTitleSize', val)} />
-                      </div>
-                      <div>
-                        <div className="flex justify-between text-xs font-bold mb-1">
-                          <span>{isAr ? 'حجم خط جدول الحركات' : 'Table font size'}</span>
-                          <span className="text-[#F45A0A] font-mono">{printConfig.tableFontSize || 10}px</span>
-                        </div>
-                        <Slider size="xs" color="orange" min={8} max={14} step={0.5} value={printConfig.tableFontSize || 10} onChange={(val) => updatePrintConfig('tableFontSize', val)} />
-                      </div>
-                      <div>
-                        <div className="flex justify-between text-xs font-bold mb-1">
-                          <span>{isAr ? 'حجم خط التذييل والفوتر' : 'Footer font size'}</span>
-                          <span className="text-[#F45A0A] font-mono">{printConfig.footerFontSize || 10}px</span>
-                        </div>
-                        <Slider size="xs" color="orange" min={8} max={13} step={0.5} value={printConfig.footerFontSize || 10} onChange={(val) => updatePrintConfig('footerFontSize', val)} />
-                      </div>
-                      <div className="pt-1 border-t border-slate-100">
-                        <Checkbox label={isAr ? 'تغميق الخطوط بجدول الحركات (Bold Text)' : 'Bold table text'} size="xs" checked={printConfig.isTableBold || false} onChange={(e) => updatePrintConfig('isTableBold', e.currentTarget.checked)} className="font-bold" />
-                      </div>
-                    </div>
-                  )}
-
-                  {printTab === 'info' && (
-                    <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200">
-                      <span className="font-extrabold text-slate-900 flex items-center gap-1.5 text-xs border-b pb-1.5">
-                        <IconBuilding size={15} className="text-[#F45A0A]" />
-                        <span>{isAr ? 'بيانات الشركة والعبارات الرسمية' : 'Company data & texts'}</span>
-                      </span>
-                      <TextInput label={isAr ? 'اسم الشركة / الفرع بالكشف' : 'Company name'} size="xs" value={printConfig.companyName || ''} onChange={(e) => updatePrintConfig('companyName', e.target.value)} placeholder="FLY4ALL" className="font-bold" />
-                      <TextInput label={isAr ? 'العنوان الفرعي للكشف' : 'Subtitle'} size="xs" value={printConfig.subtitle || ''} onChange={(e) => updatePrintConfig('subtitle', e.target.value)} placeholder="Detailed Account Statement" className="font-bold" />
-                      <TextInput label={isAr ? 'رقم الهاتف المعروض بالكشف' : 'Phone'} size="xs" value={printConfig.phone || ''} onChange={(e) => updatePrintConfig('phone', e.target.value)} placeholder="07700003377" className="font-bold" />
-                      <TextInput label={isAr ? 'البريد الإلكتروني المعروض بالكشف' : 'Email'} size="xs" value={printConfig.email || ''} onChange={(e) => updatePrintConfig('email', e.target.value)} placeholder="Support@Fly4all.com" className="font-bold" />
-                      <TextInput label={isAr ? 'عنوان الشركة / الفرع بالكشف' : 'Address'} size="xs" value={printConfig.address || ''} onChange={(e) => updatePrintConfig('address', e.target.value)} placeholder={isAr ? 'العراق - بغداد' : 'Iraq - Baghdad'} className="font-bold" />
-                      <TextInput label={isAr ? 'نص التذييل والفوتر (Footer Text)' : 'Footer text'} size="xs" value={printConfig.footerText || ''} onChange={(e) => updatePrintConfig('footerText', e.target.value)} className="font-bold" />
-                    </div>
-                  )}
-
-                  {printTab === 'toggles' && (
-                    <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200">
-                      <span className="font-extrabold text-slate-900 flex items-center gap-1.5 text-xs border-b pb-1.5">
-                        <IconAdjustments size={15} className="text-[#F45A0A]" />
-                        <span>{isAr ? 'خيارات إظهار وإخفاء عناصر الكشف' : 'Show/hide statement elements'}</span>
-                      </span>
-                      <div className="space-y-2 text-[11px] font-bold">
-                        <div className="flex items-center justify-between py-1">
-                          <span>{isAr ? 'إظهار كارت ملخص الحساب (Account summary)' : 'Show account summary'}</span>
-                          <Switch size="xs" color="orange" checked={printConfig.showAccountSummary !== false} onChange={(e) => updatePrintConfig('showAccountSummary', e.currentTarget.checked)} />
-                        </div>
-                        <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                          <span>{isAr ? 'إظهار رمز الـ QR Code في تذييل الكشف' : 'Show QR code in footer'}</span>
-                          <Switch size="xs" color="orange" checked={printConfig.showQrCode !== false} onChange={(e) => updatePrintConfig('showQrCode', e.currentTarget.checked)} />
-                        </div>
-                        <div className="flex items-center justify-between border-t border-slate-100 pt-2">
-                          <span>{isAr ? 'إظهار العلامة المائية الشفافة (Watermark)' : 'Show watermark'}</span>
-                          <Switch size="xs" color="orange" checked={printConfig.showWatermark || false} onChange={(e) => updatePrintConfig('showWatermark', e.currentTarget.checked)} />
-                        </div>
-                      </div>
-
-                      {/* Logo Size Control */}
-                      <div className="border-t border-slate-200 pt-3 space-y-2">
-                        <span className="font-extrabold text-slate-900 flex items-center gap-1.5 text-xs">
-                          <IconPhoto size={15} className="text-[#F45A0A]" />
-                          <span>{isAr ? 'حجم الشعار (اللوجو) في المستند' : 'Logo size in document'}</span>
-                        </span>
-                        <div className="flex justify-between text-xs font-bold mb-1">
-                          <span>{isAr ? 'عرض الشعار' : 'Logo width'}</span>
-                          <span className="text-[#F45A0A] font-mono tabular-nums lining-nums">{printConfig.logoWidth || 70}px</span>
-                        </div>
-                        <Slider
-                          size="xs"
-                          color="orange"
-                          min={30}
-                          max={160}
-                          step={5}
-                          value={printConfig.logoWidth || 70}
-                          onChange={(val) => updatePrintConfig('logoWidth', val)}
-                          marks={[
-                            { value: 30, label: isAr ? 'صغير' : 'S' },
-                            { value: 70, label: isAr ? 'متوسط' : 'M' },
-                            { value: 120, label: isAr ? 'كبير' : 'L' },
-                            { value: 160, label: isAr ? 'أكبر' : 'XL' },
-                          ]}
-                          className="pb-4"
-                        />
-                        <div className="flex justify-between text-xs font-bold mb-1 mt-2">
-                          <span>{isAr ? 'ارتفاع الشعار' : 'Logo height'}</span>
-                          <span className="text-[#F45A0A] font-mono tabular-nums lining-nums">{printConfig.logoHeight || 70}px</span>
-                        </div>
-                        <Slider
-                          size="xs"
-                          color="orange"
-                          min={30}
-                          max={160}
-                          step={5}
-                          value={printConfig.logoHeight || 70}
-                          onChange={(val) => updatePrintConfig('logoHeight', val)}
-                          marks={[
-                            { value: 30, label: isAr ? 'صغير' : 'S' },
-                            { value: 70, label: isAr ? 'متوسط' : 'M' },
-                            { value: 120, label: isAr ? 'كبير' : 'L' },
-                            { value: 160, label: isAr ? 'أكبر' : 'XL' },
-                          ]}
-                          className="pb-4"
-                        />
-                      </div>
-                      {printConfig.showWatermark && (
-                        <TextInput label={isAr ? 'نص العلامة المائية' : 'Watermark text'} size="xs" value={printConfig.watermarkText || ''} onChange={(e) => updatePrintConfig('watermarkText', e.target.value)} placeholder="OFFICIAL STATEMENT" className="font-bold mt-2" />
-                      )}
-                    </div>
-                  )}
                 </div>
 
-                {/* Official Live Preview (8 cols) */}
-                <div className="lg:col-span-8 bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-2 sticky top-2">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <span className="font-extrabold text-slate-900 flex items-center gap-1.5 text-xs">
-                      <IconEye size={16} className="text-[#F45A0A]" />
-                      <span>{isAr ? 'معاينة حية ومباشرة للكشف المعتمد (Official Live Preview)' : 'Official Live Preview'}</span>
-                    </span>
-                    <Badge color="orange" variant="light" size="sm" className="font-bold">
-                      {isAr ? 'التصميم الرسمي الثابت ⚡' : 'Official Design ⚡'}
-                    </Badge>
-                  </div>
+                {/* Sub-Tab 1: Colors & Badges */}
+                {printTab === 'colors' && (
+                  <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">
+                      <IconPalette size={14} className="text-[#F45A0A]" />
+                      <span>{isAr ? 'تخصيص الألوان والشارات' : 'Colors & Accents'}</span>
+                    </h4>
 
-                  <div className="overflow-x-auto max-h-[720px] overflow-y-auto p-4 bg-slate-100/90 rounded-xl border border-slate-200 flex justify-center items-start" dir="ltr" style={{ direction: 'ltr', textAlign: 'left' }}>
-                    <div className="scale-90 origin-top flex justify-center w-full min-w-[780px]" dir="ltr" style={{ direction: 'ltr', textAlign: 'left' }}>
-                      <PrintableAccountStatementSheet
-                        accountName="حساب العميل علي السعدي"
-                        accountCode="1413"
-                        startDate="2026/08/01"
-                        endDate="2026/08/31"
-                        rows={[
-                          { rowNumber: 1, date: '2026/08/01', docRef: 'OB-2026', statement: 'رصيد افتتاحي مرحل من الدورة المالية السابقة', debit: 0, credit: 0, runningBalance: 0 },
-                          { rowNumber: 2, date: '2026/08/02', docRef: 'INV-01005', pnr: 'PRMCK', route: 'BGW ➔ MHD', statement: 'مبيعات تذاكر طيران خطوط كاسبيان | المسافرين (3): Mr SALAM ALSHAMOOSI', debit: 1250000, credit: 0, runningBalance: 1250000 },
-                          { rowNumber: 3, date: '2026/08/04', docRef: 'RV-0042', statement: 'سند قبض نقدي دفعة أولى لحساب حجز التذاكر', debit: 0, credit: 500000, runningBalance: 750000 },
-                        ]}
-                        totals={{ totalDebit: 1250000, totalCredit: 500000, finalBalance: 750000, openingBalance: 0, previousBalance: 0 }}
-                        config={{
-                          ...existingTemplateConfig,
-                          ...printConfig,
-                          logoPosX: 0,
-                          logoPosY: 0,
-                          logoUrl: activeLogoUrl || existingTemplateConfig?.logoUrl || printConfig?.logoUrl || '',
-                        }}
-                        lang="ar"
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'اللون الرئيسي وهوية المستند' : 'Primary Accent Color'}
+                      </label>
+                      <ColorInput
+                        value={currentConfig.primaryColor || '#059669'}
+                        onChange={(v) => updateCurrentConfig('primaryColor', v)}
+                        size="xs"
+                        format="hex"
+                        swatches={['#059669', '#0284c7', '#7c3aed', '#e11d48', '#d97706', '#0f172a', '#F45A0A']}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'لون شارة الترويسة والعنوان' : 'Header Badge Color'}
+                      </label>
+                      <ColorInput
+                        value={currentConfig.headerBgColor || currentConfig.primaryColor || '#059669'}
+                        onChange={(v) => updateCurrentConfig('headerBgColor', v)}
+                        size="xs"
+                        format="hex"
+                        swatches={['#059669', '#0284c7', '#7c3aed', '#e11d48', '#d97706', '#0f172a', '#F45A0A']}
                       />
                     </div>
                   </div>
+                )}
+
+                {/* Sub-Tab 2: Company Info & Texts */}
+                {printTab === 'info' && (
+                  <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">
+                      <IconBuilding size={14} className="text-[#F45A0A]" />
+                      <span>{isAr ? 'بيانات الترويسة والتذييل' : 'Company & Header Info'}</span>
+                    </h4>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'اسم الشركة (بالعربية)' : 'Company Name (Arabic)'}
+                      </label>
+                      <TextInput
+                        size="xs"
+                        value={currentConfig.companyName || ''}
+                        onChange={(e) => updateCurrentConfig('companyName', e.target.value)}
+                        placeholder="شركة الروضتين للسفر والسياحة"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'اسم الشركة (بالإنجليزية)' : 'Company Name (English)'}
+                      </label>
+                      <TextInput
+                        size="xs"
+                        value={currentConfig.companyNameEn || ''}
+                        onChange={(e) => updateCurrentConfig('companyNameEn', e.target.value)}
+                        placeholder="Al-Rawdatan Travel & Tourism"
+                        dir="ltr"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'العنوان الفرعي / الوصف' : 'Subtitle'}
+                      </label>
+                      <TextInput
+                        size="xs"
+                        value={currentConfig.subtitle || ''}
+                        onChange={(e) => updateCurrentConfig('subtitle', e.target.value)}
+                        placeholder="قسم المحاسبة والمالية"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'السجل التجاري' : 'Commercial Reg'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.commercialReg || ''}
+                          onChange={(e) => updateCurrentConfig('commercialReg', e.target.value)}
+                          placeholder="س.ت: 90182471"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'الرقم الضريبي' : 'Tax Number'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.taxNumber || ''}
+                          onChange={(e) => updateCurrentConfig('taxNumber', e.target.value)}
+                          placeholder="300012345600003"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'الهاتف' : 'Phone'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.phone || ''}
+                          onChange={(e) => updateCurrentConfig('phone', e.target.value)}
+                          placeholder="+964 770 123 4567"
+                          dir="ltr"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'البريد' : 'Email'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.email || ''}
+                          onChange={(e) => updateCurrentConfig('email', e.target.value)}
+                          placeholder="finance@alrawdatan-travel.com"
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'العنوان' : 'Address'}
+                      </label>
+                      <TextInput
+                        size="xs"
+                        value={currentConfig.address || ''}
+                        onChange={(e) => updateCurrentConfig('address', e.target.value)}
+                        placeholder="العراق — كربلاء المقدسة / بغداد"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'نص التذييل وحقوق الحفظ' : 'Footer Copyright Text'}
+                      </label>
+                      <TextInput
+                        size="xs"
+                        value={currentConfig.footerText || ''}
+                        onChange={(e) => updateCurrentConfig('footerText', e.target.value)}
+                        placeholder="شركة الروضتين للسياحة — جميع الحقوق محفوظة © 2026"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-Tab 3: Fonts & Typography */}
+                {printTab === 'fonts' && (
+                  <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">
+                      <IconTypography size={14} className="text-[#F45A0A]" />
+                      <span>{isAr ? 'أنواع وأحجام الخطوط' : 'Typography & Font Sizes'}</span>
+                    </h4>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'نوع الخط المعتمد للطباعة' : 'Font Family'}
+                      </label>
+                      <Select
+                        size="xs"
+                        value={currentConfig.fontFamily || 'IBM Plex Sans Arabic'}
+                        onChange={(v) => updateCurrentConfig('fontFamily', v || 'IBM Plex Sans Arabic')}
+                        data={[
+                          { value: 'IBM Plex Sans Arabic', label: 'IBM Plex Sans Arabic (رسمي ومعتمد)' },
+                          { value: 'Tajawal', label: 'Tajawal (تجوال عصري)' },
+                          { value: 'Cairo', label: 'Cairo (القاهرة واضح)' },
+                          { value: 'system-ui', label: 'System Default' },
+                        ]}
+                      />
+                    </div>
+
+                    <div className="space-y-2 pt-1 border-t border-slate-100">
+                      <div>
+                        <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                          <span>{isAr ? 'حجم عنوان الشركة:' : 'Company Title Size:'}</span>
+                          <span className="font-mono">{currentConfig.fontSizes?.companyTitle || 16}px</span>
+                        </div>
+                        <Slider
+                          min={13}
+                          max={24}
+                          step={1}
+                          size="xs"
+                          color="orange"
+                          value={currentConfig.fontSizes?.companyTitle || 16}
+                          onChange={(v) => updateCurrentConfig('fontSizes.companyTitle', v)}
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                          <span>{isAr ? 'حجم النص والبيانات:' : 'Body Font Size:'}</span>
+                          <span className="font-mono">{currentConfig.fontSizes?.tableBody || currentConfig.fontSizes?.body || 10}px</span>
+                        </div>
+                        <Slider
+                          min={8}
+                          max={14}
+                          step={1}
+                          size="xs"
+                          color="orange"
+                          value={currentConfig.fontSizes?.tableBody || currentConfig.fontSizes?.body || 10}
+                          onChange={(v) => {
+                            updateCurrentConfig('fontSizes.tableBody', v);
+                            updateCurrentConfig('fontSizes.body', v);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-Tab 4: Toggles & Signatures */}
+                {printTab === 'toggles' && (
+                  <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">
+                      <IconAdjustments size={14} className="text-[#F45A0A]" />
+                      <span>{isAr ? 'خيارات العرض والعلامة المائية' : 'Toggles & Signatures'}</span>
+                    </h4>
+
+                    <div className="space-y-2.5">
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار العلامة المائية الخلفية' : 'Show Watermark'}
+                        checked={currentConfig.showWatermark !== false}
+                        onChange={(e) => updateCurrentConfig('showWatermark', e.currentTarget.checked)}
+                      />
+
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار رمز QR للتوثيق' : 'Show Verification QR Code'}
+                        checked={currentConfig.showQrCode !== false}
+                        onChange={(e) => updateCurrentConfig('showQrCode', e.currentTarget.checked)}
+                      />
+
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار قسم التواقيع الرسمية' : 'Show Signatures'}
+                        checked={currentConfig.showSignatures !== false}
+                        onChange={(e) => updateCurrentConfig('showSignatures', e.currentTarget.checked)}
+                      />
+
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار التفقيط (المبلغ كتابةً)' : 'Show Amount in Words (Tafqeet)'}
+                        checked={currentConfig.showTafqeet !== false}
+                        onChange={(e) => updateCurrentConfig('showTafqeet', e.currentTarget.checked)}
+                      />
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'مسمى توقيع المدير العام' : 'Manager Signature Title'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.managerSignTitle || ''}
+                          onChange={(e) => updateCurrentConfig('managerSignTitle', e.target.value)}
+                          placeholder="توقيع المدير العام / المعتمد"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'مسمى توقيع المحاسب / أمين الصندوق' : 'Accountant Signature Title'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.accountantSignTitle || ''}
+                          onChange={(e) => updateCurrentConfig('accountantSignTitle', e.target.value)}
+                          placeholder="توقيع المحاسب / الصندوق"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'مسمى توقيع المستلم / الدافع' : 'Receiver / Payer Signature Title'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.receiverSignTitle || ''}
+                          onChange={(e) => updateCurrentConfig('receiverSignTitle', e.target.value)}
+                          placeholder="توقيع المستلم / الدافع"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'نص الملاحظات والشروط' : 'Notes & Conditions Text'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.notesText || ''}
+                          onChange={(e) => updateCurrentConfig('notesText', e.target.value)}
+                          placeholder="ملاحظة: هذا المستند معتمد رسمياً..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Live Interactive Preview (8 cols) */}
+              <div className="lg:col-span-8 space-y-2">
+                <div className="flex items-center justify-between bg-slate-100/70 p-2.5 rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <IconEye size={16} className="text-slate-600" />
+                    <span className="font-extrabold text-xs text-slate-800">
+                      {isAr ? 'المعاينة الحية الفورية للمستند' : 'Live Interactive Document Preview'}
+                    </span>
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-500 font-mono">
+                    A4 Portrait Standard
+                  </span>
+                </div>
+
+                <div className="bg-slate-200/60 p-3 rounded-xl border border-slate-300/80 overflow-x-auto flex justify-center shadow-inner min-h-[500px]">
+                  {currentDocKey === 'statement' ? (
+                    <PrintableAccountStatementSheet
+                      accountName="شركة الأفق للسياحة والخدمات المحدودة"
+                      accountCode="110204"
+                      startDate="2026-02-01"
+                      endDate="2026-02-28"
+                      rows={MOCK_STATEMENT_ROWS}
+                      totals={MOCK_STATEMENT_TOTALS}
+                      config={currentConfig}
+                      lang="ar"
+                    />
+                  ) : currentDocKey === 'receipt_voucher' ? (
+                    <PrintableVoucherSheet
+                      voucher={MOCK_RECEIPT_VOUCHER}
+                      config={currentConfig}
+                      lang="ar"
+                    />
+                  ) : currentDocKey === 'payment_voucher' ? (
+                    <PrintableVoucherSheet
+                      voucher={MOCK_PAYMENT_VOUCHER}
+                      config={currentConfig}
+                      lang="ar"
+                    />
+                  ) : (
+                    <PrintableAccountStatementSheet
+                      accountName="تقرير المصاريف العمومية والإدارية"
+                      accountCode="510001"
+                      startDate="2026-02-01"
+                      endDate="2026-02-28"
+                      rows={MOCK_STATEMENT_ROWS}
+                      totals={MOCK_STATEMENT_TOTALS}
+                      config={currentConfig}
+                      lang="ar"
+                    />
+                  )}
                 </div>
               </div>
             </div>
-          </Tabs.Panel>
-
-          {/* Receipt Voucher Tab */}
-          <Tabs.Panel value="receipt_voucher" pt="md">
-            {comingSoonPlaceholder(isAr ? 'سند القبض' : 'Receipt Voucher')}
-          </Tabs.Panel>
-
-          {/* Payment Voucher Tab */}
-          <Tabs.Panel value="payment_voucher" pt="md">
-            {comingSoonPlaceholder(isAr ? 'سند الدفع' : 'Payment Voucher')}
-          </Tabs.Panel>
-
-          {/* Expense Report Tab */}
-          <Tabs.Panel value="expense_report" pt="md">
-            {comingSoonPlaceholder(isAr ? 'تقرير المصاريف' : 'Expense Report')}
-          </Tabs.Panel>
+          </div>
         </Tabs>
       </Paper>
     </div>
   );
 };
+
+export default PrintSettingsPage;

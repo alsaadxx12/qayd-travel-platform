@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiRequest } from '../api/client';
 import { useAiPageContext } from '../hooks/useAiPageContext';
 import { Plus, ArrowUpRight, Printer } from 'lucide-react';
+import { VoucherPrintModal, type VoucherPrintItem } from '../components/vouchers/VoucherPrintModal';
 
 export const PaymentVouchersPage: React.FC = () => {
   const [vouchers, setVouchers] = useState<any[]>([]);
@@ -271,77 +272,27 @@ export const PaymentVouchersPage: React.FC = () => {
         </div>
       )}
 
-      {/* Printable Payment Voucher Layout */}
-      {selectedVoucher && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-xl overflow-hidden border border-slate-200 print-container">
-            <div className="bg-slate-900 px-4 py-3 text-white flex justify-between items-center no-print">
-              <h3 className="text-xs font-bold">سند دفع رسمي - شركة الفرسان للسياحة والسفر</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-semibold cursor-pointer flex items-center gap-1"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>طباعة</span>
-                </button>
-                <button onClick={() => setSelectedVoucher(null)} className="text-slate-400 hover:text-white cursor-pointer">
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6 text-right">
-              <div className="flex justify-between items-start border-b border-slate-200 pb-4">
-                <div>
-                  <h2 className="text-base font-bold text-slate-900">شركة الفرسان للسياحة والسفر</h2>
-                  <p className="text-xs text-slate-500">سجل تجاري: 1010998877 | الرقم الضريبي: 300012345600003</p>
-                </div>
-                <div className="text-left font-mono">
-                  <div className="text-sm font-bold text-rose-700">{selectedVoucher.voucherNumber}</div>
-                  <div className="text-xs text-slate-500">التاريخ: {new Date(selectedVoucher.date).toLocaleDateString('ar-SA')}</div>
-                </div>
-              </div>
-
-              <div className="text-center py-2 bg-rose-50 border border-rose-200 rounded">
-                <h3 className="text-sm font-bold text-rose-800">سنـد دفـع رسمـي (PAYMENT VOUCHER)</h3>
-              </div>
-
-              <div className="space-y-3 text-xs border border-slate-200 p-4 rounded bg-slate-50/50">
-                <div className="flex justify-between border-b border-slate-200 pb-2">
-                  <span className="font-bold text-slate-700">ادفعوا لجميع السيد/الشركة:</span>
-                  <span className="font-semibold text-slate-900">{selectedVoucher.account?.nameAr}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-200 pb-2">
-                  <span className="font-bold text-slate-700">مبلغ وقدره:</span>
-                  <span className="font-bold text-rose-700 font-mono text-sm">
-                    {Number(selectedVoucher.amount).toLocaleString()} SAR (ريال سعودي)
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-slate-200 pb-2">
-                  <span className="font-bold text-slate-700">وذلك عن:</span>
-                  <span className="text-slate-800">{selectedVoucher.description}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-bold text-slate-700">طريقة الصرف / المرجع:</span>
-                  <span className="font-mono text-slate-800">{selectedVoucher.reference || 'تحويل بنكي / نقدي'}</span>
-                </div>
-              </div>
-
-              <div className="pt-8 grid grid-cols-2 text-center text-xs gap-4 font-semibold text-slate-700">
-                <div>
-                  <p>توقيع المحاسب / المدير المالي</p>
-                  <div className="h-12 border-b border-dashed border-slate-300 mt-2"></div>
-                </div>
-                <div>
-                  <p>توقيع المستلم / المورد</p>
-                  <div className="h-12 border-b border-dashed border-slate-300 mt-2"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Modern Voucher Print & Export Modal ── */}
+      <VoucherPrintModal
+        opened={!!selectedVoucher}
+        onClose={() => setSelectedVoucher(null)}
+        voucher={
+          selectedVoucher
+            ? {
+                voucherNumber: selectedVoucher.voucherNumber,
+                type: 'PAYMENT',
+                date: selectedVoucher.date,
+                amount: selectedVoucher.amount,
+                currency: 'IQD',
+                accountName: selectedVoucher.account?.nameAr || selectedVoucher.accountName || 'حساب المستفيد',
+                cashboxName: cashboxesAndBanks.find((cb) => cb.id === selectedVoucher.cashboxOrBankAccountId)?.nameAr,
+                reference: selectedVoucher.reference,
+                description: selectedVoucher.description,
+                user: selectedVoucher.createdBy?.name,
+              }
+            : null
+        }
+      />
     </div>
   );
 };
