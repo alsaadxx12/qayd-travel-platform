@@ -47,6 +47,14 @@ export interface VoucherPrintItem {
   receivedFromOrPaidTo?: string;
   time?: string;
   customCategory?: string;
+  splitDescription?: string;
+  splitAccounts?: Array<{
+    accountName: string;
+    accountCode?: string;
+    amount?: number;
+    currency?: string;
+    note?: string;
+  }>;
 }
 
 export const DEFAULT_VOUCHER_CONFIG = {
@@ -153,6 +161,21 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
 
   const partyLabelAr = isReceipt ? 'استلمنا من السيد/السادة :' : 'ادفعوا للسيد/السادة :';
   const partyLabelEn = isReceipt ? 'Received From:' : 'Paid To:';
+
+  const splitLabelAr = isReceipt ? 'تقسيم القبض :' : 'تقسيم الصرف :';
+  const splitLabelEn = isReceipt ? 'Split Receipt:' : 'Split Payment:';
+
+  const splitAccountsList = voucher.splitAccounts && voucher.splitAccounts.length > 0
+    ? voucher.splitAccounts
+    : null;
+
+  const defaultSplitText = isReceipt
+    ? 'حساب مبيعات التذاكر (150,000 IQD) — حساب عمولات ومستحقات (100,000 IQD)'
+    : 'حساب مجهزي الطيران (150,000 IQD) — حساب المصاريف الإدارية (100,000 IQD)';
+
+  const splitDisplayVal = voucher.splitDescription
+    || voucher.customCategory
+    || (voucher.reference ? `حساب الإيرادات والمبيعات (${voucher.reference})` : defaultSplitText);
 
   const customCategoryVal = voucher.customCategory || voucher.reference
     ? (isEn ? `Transaction: ${voucher.reference || 'General Receipt'}` : `القبض المخصص: ${voucher.reference || 'قبض عام معتمد'}`)
@@ -471,34 +494,41 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
             </div>
 
-            {/* Field 5: نوع القبض / التصنيف المخصص والعملة */}
-            <div className="grid grid-cols-12 gap-3">
-              {/* نوع القبض المخصص (8 cols) */}
-              <div className="col-span-8 flex items-center gap-3">
-                <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
-                  <IconTag size={16} style={{ color: primaryColor }} />
-                  <span>{isEn ? 'Category :' : (isReceipt ? 'نوع القبض :' : 'نوع الصرف :')}</span>
-                </span>
-                <div
-                  className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-800 border truncate"
-                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
-                >
-                  <span className="truncate">{customCategoryVal}</span>
-                </div>
-              </div>
+            {/* Field 5: تقسيم القبض / تقسيم الصرف (بسطر لوحده ممتد) */}
+            <div className="flex items-center gap-3">
+              <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
+                <IconTag size={16} style={{ color: primaryColor }} />
+                <span>{isEn ? splitLabelEn : splitLabelAr}</span>
+              </span>
 
-              {/* العملة (4 cols) */}
-              <div className="col-span-4 flex items-center gap-2">
-                <span className="font-black text-xs text-slate-700 flex items-center gap-1 shrink-0">
-                  <IconWorld size={15} style={{ color: primaryColor }} />
-                  <span>{isEn ? 'Currency:' : 'العملة:'}</span>
-                </span>
-                <div
-                  className="flex-1 rounded-xl p-2.5 px-3 text-center font-bold text-xs text-slate-800 border truncate font-mono"
-                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
-                >
-                  {currencyName}
-                </div>
+              <div
+                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-800 border flex items-center gap-2 overflow-hidden flex-wrap"
+                style={{
+                  backgroundColor: fieldBgColor,
+                  borderColor: fieldBorderColor,
+                }}
+              >
+                {splitAccountsList ? (
+                  splitAccountsList.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 shadow-2xs font-mono font-bold text-xs flex items-center gap-1.5"
+                    >
+                      <span className="text-slate-800">{item.accountName}</span>
+                      {item.amount && (
+                        <span className="text-blue-600 font-black">
+                          ({Number(item.amount).toLocaleString('en-US')} {item.currency || currencyCode})
+                        </span>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex items-center gap-2 font-mono text-slate-800 font-bold text-xs">
+                    <span className="px-2.5 py-0.5 rounded-lg bg-white border border-slate-200 text-blue-700 font-black">
+                      {splitDisplayVal}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
