@@ -408,7 +408,7 @@ export const AddonsStorePage: React.FC = () => {
       </div>
 
       {/* ── Addons Grid ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5">
         {addonsList.map((addon) => {
           const Icon = addon.icon;
           const isEnabled = enabledAddons[addon.id] ?? true;
@@ -418,14 +418,14 @@ export const AddonsStorePage: React.FC = () => {
           return (
             <div
               key={addon.id}
-              className={`bg-white border rounded-xl p-3 flex flex-col justify-between space-y-2.5 transition-all duration-200 ${
+              className={`bg-white border rounded-xl p-2.5 flex flex-col justify-between gap-2 transition-all duration-200 ${
                 isEnabled
                   ? 'border-slate-200/90 shadow-2xs hover:shadow-md hover:border-orange-300'
                   : 'border-slate-200/60 bg-slate-50/70 opacity-75'
               }`}
             >
               {/* 1. Top Section: Type Tag, Status Badge, Title & Icon Box */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   {/* Left: Tag Badge */}
                   <span className={`text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-50 text-[#C2410C] border border-orange-200/80`}>
@@ -443,47 +443,50 @@ export const AddonsStorePage: React.FC = () => {
                       <span>{isEnabled ? (isAr ? 'متصلة ونشطة' : 'Active') : (isAr ? 'معطلة' : 'Disabled')}</span>
                     </span>
 
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${addon.iconBg}`}>
-                      <Icon size={18} className={addon.iconColor} />
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${addon.iconBg}`}>
+                      <Icon size={15} className={addon.iconColor} />
                     </div>
                   </div>
                 </div>
 
                 {/* Title & Subtitle */}
                 <div>
-                  <h3 className="font-black text-slate-900 text-[13px] leading-tight">
+                  <h3 className="font-black text-slate-900 text-[12px] leading-tight line-clamp-1" title={isAr ? addon.nameAr : addon.nameEn}>
                     {isAr ? addon.nameAr : addon.nameEn}
                   </h3>
-                  <span className="text-[10px] text-slate-400 font-bold block font-mono">
+                  <span className="text-[9.5px] text-slate-400 font-bold block font-mono truncate">
                     {isAr ? addon.nameEn : addon.nameAr}
                   </span>
                 </div>
 
                 {/* Description Text */}
-                <p className="text-slate-600 text-[11px] leading-snug font-medium">
+                <p
+                  className="text-slate-600 text-[10.5px] leading-snug font-medium line-clamp-2"
+                  title={addon.description}
+                >
                   {addon.description}
                 </p>
               </div>
 
               {/* 2. Middle Section: Real Technical Metrics */}
-              <div className="bg-[#FFF7ED] border border-orange-200/60 rounded-lg p-2.5 grid grid-cols-3 text-center divide-x divide-orange-200/60">
+              <div className="bg-[#FFF7ED] border border-orange-200/60 rounded-lg p-1.5 grid grid-cols-3 text-center divide-x divide-orange-200/60">
                 <div className="px-1">
-                  <span className="text-[9px] text-[#C2410C] font-bold block">{addon.statLabel1}</span>
-                  <span className="font-mono font-black text-slate-900 text-xs block mt-0.5 tabular-nums lining-nums">{addon.statVal1}</span>
+                  <span className="text-[8.5px] text-[#C2410C] font-bold block truncate">{addon.statLabel1}</span>
+                  <span className="font-mono font-black text-slate-900 text-[11px] block mt-0.5 tabular-nums lining-nums truncate">{addon.statVal1}</span>
                 </div>
                 <div className="px-1">
-                  <span className="text-[9px] text-[#C2410C] font-bold block">{addon.statLabel2}</span>
-                  <span className="font-mono font-black text-slate-900 text-xs block mt-0.5 tabular-nums lining-nums">{addon.statVal2}</span>
+                  <span className="text-[8.5px] text-[#C2410C] font-bold block truncate">{addon.statLabel2}</span>
+                  <span className="font-mono font-black text-slate-900 text-[11px] block mt-0.5 tabular-nums lining-nums truncate">{addon.statVal2}</span>
                 </div>
                 <div className="px-1">
-                  <span className="text-[9px] text-[#C2410C] font-bold block">{addon.statLabel3}</span>
-                  <span className="font-mono font-black text-slate-900 text-xs block mt-0.5 tabular-nums lining-nums">{addon.statVal3}</span>
+                  <span className="text-[8.5px] text-[#C2410C] font-bold block truncate">{addon.statLabel3}</span>
+                  <span className="font-mono font-black text-slate-900 text-[11px] block mt-0.5 tabular-nums lining-nums truncate">{addon.statVal3}</span>
                 </div>
               </div>
 
               {/* 3. Bottom Section: Active Switch, Manage Button */}
-              <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
-                <div className="flex items-center gap-1.5 bg-slate-100/80 px-2 py-0.5 rounded-lg border border-slate-200/80">
+              <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 bg-slate-100/80 px-1.5 py-0.5 rounded-lg border border-slate-200/80 shrink-0">
                   <Switch
                     size="xs"
                     color="emerald"
@@ -508,14 +511,14 @@ export const AddonsStorePage: React.FC = () => {
                         fetchAiBilling(true);
                       }
                     }}
-                    className="flex items-center gap-1 text-[11px] font-black text-orange-700 hover:text-white bg-orange-50 hover:bg-[#F45A0A] border border-orange-200/90 px-2.5 py-1 rounded-lg transition-all shadow-2xs cursor-pointer active:scale-95"
+                    className="flex items-center gap-1 min-w-0 text-[10px] font-black text-orange-700 hover:text-white bg-orange-50 hover:bg-[#F45A0A] border border-orange-200/90 px-2 py-1 rounded-lg transition-all shadow-2xs cursor-pointer active:scale-95"
                   >
-                    <IconPlugConnected size={13} />
-                    <span>{addon.manageLabel}</span>
+                    <IconPlugConnected size={12} className="shrink-0" />
+                    <span className="truncate">{addon.manageLabel}</span>
                   </button>
                 ) : (
-                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
-                    <IconCheck size={13} className="text-emerald-600" />
+                  <div className="flex items-center gap-1 text-[9.5px] font-bold text-slate-500 shrink-0">
+                    <IconCheck size={12} className="text-emerald-600" />
                     <span>{isAr ? 'مدمجة بالنظام' : 'Native Core'}</span>
                   </div>
                 )}

@@ -1139,6 +1139,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       <Modal
         opened={opened}
         onClose={onClose}
+        transitionProps={{ duration: 0 }}
         size="1100px"
         padding="md"
         radius="16px"

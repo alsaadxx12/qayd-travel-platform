@@ -1355,6 +1355,7 @@ export const ExpensesPage: React.FC = () => {
       <Modal
         opened={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
+        transitionProps={{ duration: 0 }}
         title={
           <div className="flex items-center gap-3 pe-8" dir={direction}>
             <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#F45A0A] shrink-0">
@@ -1653,6 +1654,7 @@ export const ExpensesPage: React.FC = () => {
         onClose={() => {
           if (!deleteExpenseMutation.isPending) setPendingDeleteExpense(null);
         }}
+        transitionProps={{ duration: 0 }}
         title={
           <div className="flex items-center gap-3 pe-8" dir={direction}>
             <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
@@ -1730,6 +1732,7 @@ export const ExpensesPage: React.FC = () => {
         onClose={() => {
           if (!bulkBusy) setPendingBulkDelete(false);
         }}
+        transitionProps={{ duration: 0 }}
         title={
           <div className="flex items-center gap-3 pe-8" dir={direction}>
             <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
