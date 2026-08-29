@@ -31,6 +31,7 @@ import {
   Building2,
   Search,
   Plus,
+  Trash2,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FlightRouteSelector } from './FlightRouteSelector';
@@ -43,8 +44,8 @@ import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { ParsedTicketData } from './SmartTicketImportModal';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { CurrencySegmentedControl } from '../ui/CurrencySegmentedControl';
-import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
-import { SegmentedTimePicker } from '../ui/SegmentedTimePicker';
+import { DateTimeField } from '../ui/DateTimeField';
+import { DeleteInvoiceModal } from '../ui/DeleteInvoiceModal';
 import { partnersApi, Customer, Supplier } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
 import { airlinesApi, AirlineItem } from '../../api/airlines';
@@ -1411,6 +1412,36 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     },
   });
 
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Permanent deletion. Explicitly requested by the owner; guarded by a typed
+  // confirmation in the modal, and only ever reachable for a saved invoice.
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const idToDelete = initialData?.id;
+      if (!idToDelete) {
+        throw new Error(isAr ? 'لا يمكن حذف فاتورة غير محفوظة' : 'Cannot delete an unsaved invoice');
+      }
+      return await ticketsApi.delete(idToDelete);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets-list'] });
+      setDeleteModalOpen(false);
+      setIsDirty(false);
+      showSuccessNotification(
+        isAr ? 'تم حذف الفاتورة' : 'Invoice deleted',
+        isAr ? `حُذفت الفاتورة ${invoiceNumber} نهائياً` : `Invoice ${invoiceNumber} was permanently deleted`,
+      );
+      onClose();
+    },
+    onError: (err: any) => {
+      showErrorNotification(
+        isAr ? 'فشل الحذف' : 'Delete failed',
+        err?.message || (isAr ? 'تعذر حذف الفاتورة' : 'Could not delete the invoice'),
+      );
+    },
+  });
+
   // Cancel Mutation
   const cancelMutation = useMutation({
     mutationFn: async () => {
@@ -1588,6 +1619,14 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
               >
                 {isAr ? 'إلغاء الفاتورة' : 'Cancel Invoice'}
               </Menu.Item>
+              <Menu.Item
+                color="red"
+                leftSection={<Trash2 size={14} />}
+                onClick={() => setDeleteModalOpen(true)}
+                disabled={!initialData?.id}
+              >
+                {isAr ? 'حذف الفاتورة' : 'Delete Invoice'}
+              </Menu.Item>
             </Menu.Dropdown>
           </Menu>
         </div>
@@ -1707,29 +1746,18 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                   </div>
 
                   <div id="field-entry-date">
-                    <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
-                      {isAr ? 'تاريخ ووقت الإدخال' : 'Entry Date & Time'}
-                    </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_160px] gap-2">
-                      <SegmentedDatePicker
-                        value={entryDate}
-                        onChange={(date) => {
-                          if (!date) return;
-                          const next = new Date(date);
-                          next.setHours(entryDate.getHours(), entryDate.getMinutes(), entryDate.getSeconds(), 0);
-                          setEntryDate(next);
-                          markDirty();
-                        }}
-                        clearable={false}
-                      />
-                      <SegmentedTimePicker
-                        value={entryDate}
-                        onChange={(updated) => {
-                          setEntryDate(updated);
-                          markDirty();
-                        }}
-                      />
-                    </div>
+                    {/* One field, one popover: the calendar and the clock together.
+                        The old pair of segmented pickers needed six separate edits
+                        to set a single moment. */}
+                    <DateTimeField
+                      label={isAr ? 'تاريخ ووقت الإدخال' : 'Entry Date & Time'}
+                      isArabic={isAr}
+                      value={entryDate}
+                      onChange={(next) => {
+                        setEntryDate(next);
+                        markDirty();
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -1870,22 +1898,23 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                       error={errors.supplierAccount}
                     />
                     <div id="field-airline">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                          <span>{isAr ? 'شركة الطيران' : 'Airline'}</span>
-                        </label>
-                        <Tooltip label={isAr ? 'إدارة وإضافة شركات الطيران المسجلة في النظام' : 'Manage & Add Airlines'} position="top">
-                          <button
-                            type="button"
-                            onClick={() => setManageAirlinesModalOpened(true)}
-                            className="text-[11px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 hover:underline cursor-pointer bg-orange-50/70 hover:bg-orange-100/80 px-2 py-0.5 rounded-lg border border-orange-200/60 transition-all"
-                          >
-                            <Plus size={12} className="stroke-[2.5]" />
-                            <span>{isAr ? 'إضافة / إدارة' : 'Add / Manage'}</span>
-                          </button>
-                        </Tooltip>
-                      </div>
                       <SearchableCombobox
+                        label={isAr ? 'شركة الطيران' : 'Airline'}
+                        labelAction={
+                          <Tooltip
+                            label={isAr ? 'إدارة وإضافة شركات الطيران المسجلة في النظام' : 'Manage & Add Airlines'}
+                            position="top"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setManageAirlinesModalOpened(true)}
+                              className="h-[18px] text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50/70 hover:bg-orange-100/80 px-1.5 rounded-md border border-orange-200/60 transition-colors leading-none"
+                            >
+                              <Plus size={11} className="stroke-[2.5]" />
+                              <span>{isAr ? 'إضافة / إدارة' : 'Add / Manage'}</span>
+                            </button>
+                          </Tooltip>
+                        }
                         value={airline}
                         onChange={(val) => {
                           setAirline(val);
@@ -2310,6 +2339,16 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
             radius="md"
             styles={{ input: { fontSize: 12 } }}
           />
+
+      <DeleteInvoiceModal
+        opened={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        invoiceNumber={invoiceNumber}
+        docLabel={isAr ? 'فاتورة التذكرة' : 'ticket invoice'}
+        isArabic={isAr}
+        posted={status === 'POSTED'}
+        onConfirm={() => deleteMutation.mutateAsync()}
+      />
 
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
             <Button size="xs" variant="default" radius="md" onClick={() => setCancelModalOpen(false)}>

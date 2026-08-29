@@ -105,7 +105,7 @@ export const PasswordField: React.FC<PasswordFieldProps> = ({
           }
           className={`w-full ${
             isAr ? 'pl-11 pr-11' : 'pr-11 pl-11'
-          } h-[52px] animate-none rounded-xl border text-base font-semibold tracking-[0.08em] transition-none placeholder:tracking-normal focus:border-[#C2410C] focus:outline-none focus:ring-[3px] focus:ring-[#FF5F0A]/18 disabled:cursor-not-allowed disabled:opacity-65 sm:text-sm ${
+          } h-[52px] animate-none rounded-xl border text-base font-semibold tracking-[0.08em] transition-none placeholder:tracking-normal focus:border-[#FF5F0A] focus:outline-none disabled:cursor-not-allowed disabled:opacity-65 sm:text-sm ${
             isDark
               ? 'border-slate-700 bg-slate-900/70 text-slate-100 placeholder:text-slate-500 focus:bg-slate-900'
               : 'border-[#94A3B8] bg-[#F8FAFC] text-[#17243D] placeholder:text-[#64748B] hover:border-[#64748B] focus:bg-white'

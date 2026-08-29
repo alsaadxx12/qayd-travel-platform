@@ -547,12 +547,10 @@ export const LoginPage: React.FC = () => {
         .scanner-laser-idle { animation: scannerSweepIdle 4.2s ease-in-out infinite; }
         .scanner-laser-loading { animation: scannerSweepFast .85s linear infinite; }
         .scanner-laser-success { animation: scannerSweepFast .55s ease-out 1; }
-        .reticle-lock { animation: reticleLockAnim 3.2s ease-in-out infinite; }
         .login-control:focus-visible,
         .login-page a:focus-visible,
         .login-page button:focus-visible {
-          outline: 3px solid rgba(255, 95, 10, .28);
-          outline-offset: 3px;
+          outline: none;
         }
         @media (min-width: 1024px) {
           .login-ticket-shell {
@@ -727,7 +725,7 @@ export const LoginPage: React.FC = () => {
                           fieldErrors.identifier || statusMessage?.type === 'error' ? 'true' : undefined
                         }
                         aria-describedby={fieldErrors.identifier ? 'login-identifier-error' : undefined}
-                        className={`login-control h-[52px] w-full animate-none rounded-xl border border-[#94A3B8] bg-[#F8FAFC] text-base font-semibold text-[#17243D] placeholder:font-normal placeholder:text-[#64748B] transition-none hover:border-[#64748B] focus:border-[#C2410C] focus:bg-white focus:placeholder:text-[#94A3B8] focus:outline-none focus:ring-[3px] focus:ring-[#FF5F0A]/18 disabled:cursor-not-allowed disabled:opacity-65 sm:text-sm ${
+                        className={`login-control h-[52px] w-full animate-none rounded-xl border border-[#94A3B8] bg-[#F8FAFC] text-base font-semibold text-[#17243D] placeholder:font-normal placeholder:text-[#64748B] transition-none hover:border-[#64748B] focus:border-[#FF5F0A] focus:bg-white focus:placeholder:text-[#94A3B8] focus:outline-none disabled:cursor-not-allowed disabled:opacity-65 sm:text-sm ${
                           isAr ? 'pl-4 pr-11 text-left' : 'pl-11 pr-4 text-left'
                         }`}
                       />

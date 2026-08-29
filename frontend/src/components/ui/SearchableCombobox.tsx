@@ -14,6 +14,12 @@ export interface ComboboxOption {
 
 interface SearchableComboboxProps {
   label?: React.ReactNode;
+  /**
+   * Optional control rendered at the end of the label row (e.g. "add / manage").
+   * It lives INSIDE the fixed-height label row, so adding one can never push this
+   * field's input below a neighbouring field that has no action.
+   */
+  labelAction?: React.ReactNode;
   value?: string;
   onChange: (value: string) => void;
   options: ComboboxOption[];
@@ -33,6 +39,7 @@ interface SearchableComboboxProps {
 
 export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   label,
+  labelAction,
   value = '',
   onChange,
   options,
@@ -203,11 +210,16 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
 
   return (
     <div className={`relative w-full ${className}`} ref={containerRef} dir="rtl">
-      {label && (
-        <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
-          {label}
-          {required && <span className="text-red-500 mr-0.5">*</span>}
-        </label>
+      {(label || labelAction) && (
+        // Fixed row height keeps every field's input on the same baseline across the
+        // grid, whether or not the field carries an action button.
+        <div className="flex items-center justify-between gap-2 min-h-[20px] mb-[7px]">
+          <label className="block text-[12.5px] font-medium text-[#6B7280] leading-[20px] truncate">
+            {label}
+            {required && <span className="text-red-500 mr-0.5">*</span>}
+          </label>
+          {labelAction ? <span className="shrink-0 flex items-center">{labelAction}</span> : null}
+        </div>
       )}
 
       {/* ── Main Trigger Field (Calm #FAFAFA, hover #FFFFFF, focus/open #FFFFFF with #F45A0A border) ── */}

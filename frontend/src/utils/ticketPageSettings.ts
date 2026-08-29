@@ -1,5 +1,21 @@
 export const TICKET_PAGE_SETTINGS_KEY = 'ticket_page_defaults';
 
+/**
+ * Editor screens that share the same "window settings" panel.
+ * Each keeps its own saved defaults — a hotel booking and a ticket rarely want the
+ * same currency or the same default customer.
+ */
+export type EditorModule = 'tickets' | 'hotels' | 'visas' | 'refunds';
+
+const MODULE_KEY: Record<EditorModule, string> = {
+  // 'tickets' intentionally keeps the original key so settings saved before this
+  // panel was generalised are not silently lost.
+  tickets: TICKET_PAGE_SETTINGS_KEY,
+  hotels: 'hotel_page_defaults',
+  visas: 'visa_page_defaults',
+  refunds: 'refund_page_defaults',
+};
+
 export interface TicketPageSettings {
   defaultCurrency: 'IQD' | 'USD';
   defaultCustomerName: string;
@@ -22,13 +38,22 @@ export const DEFAULT_TICKET_PAGE_SETTINGS: TicketPageSettings = {
   entryDateIncludesTime: true,
 };
 
-function storageKey(companyId?: string) {
-  return companyId ? `${TICKET_PAGE_SETTINGS_KEY}_${companyId}` : TICKET_PAGE_SETTINGS_KEY;
+function storageKey(companyId?: string, module: EditorModule = 'tickets') {
+  const base = MODULE_KEY[module] || TICKET_PAGE_SETTINGS_KEY;
+  return companyId ? `${base}_${companyId}` : base;
 }
 
-export function loadTicketPageSettings(companyId?: string): TicketPageSettings {
+/**
+ * Settings live in this browser, so each employee keeps their own defaults without
+ * changing anything for a colleague.
+ */
+export function loadTicketPageSettings(
+  companyId?: string,
+  module: EditorModule = 'tickets',
+): TicketPageSettings {
   try {
-    const raw = localStorage.getItem(storageKey(companyId)) || localStorage.getItem(TICKET_PAGE_SETTINGS_KEY);
+    const base = MODULE_KEY[module] || TICKET_PAGE_SETTINGS_KEY;
+    const raw = localStorage.getItem(storageKey(companyId, module)) || localStorage.getItem(base);
     if (!raw) return { ...DEFAULT_TICKET_PAGE_SETTINGS };
     const parsed = JSON.parse(raw);
     return { ...DEFAULT_TICKET_PAGE_SETTINGS, ...parsed };
@@ -37,8 +62,12 @@ export function loadTicketPageSettings(companyId?: string): TicketPageSettings {
   }
 }
 
-export function saveTicketPageSettings(settings: TicketPageSettings, companyId?: string) {
-  localStorage.setItem(storageKey(companyId), JSON.stringify(settings));
+export function saveTicketPageSettings(
+  settings: TicketPageSettings,
+  companyId?: string,
+  module: EditorModule = 'tickets',
+) {
+  localStorage.setItem(storageKey(companyId, module), JSON.stringify(settings));
 }
 
 export function findDefaultCashCustomer(
