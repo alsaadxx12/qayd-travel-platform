@@ -5,6 +5,21 @@ import {
   IconReceipt,
   IconLanguage,
   IconFileTypePdf,
+  IconUser,
+  IconCoins,
+  IconEdit,
+  IconFileDescription,
+  IconCreditCard,
+  IconBuildingBank,
+  IconWorld,
+  IconMessageDots,
+  IconCheck,
+  IconCalendar,
+  IconClock,
+  IconFileText,
+  IconMail,
+  IconPhone,
+  IconBuilding,
 } from '@tabler/icons-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
@@ -31,51 +46,54 @@ export interface VoucherPrintItem {
   costCenter?: string;
   user?: string;
   receivedFromOrPaidTo?: string;
+  time?: string;
 }
 
 export const DEFAULT_VOUCHER_CONFIG = {
-  companyName: 'شركة الروضتين للسفر والسياحة',
-  companyNameEn: 'Al-Rawdatan Travel & Tourism',
-  subtitle: 'قسم الحسابات والإدارة المالية',
-  subtitleEn: 'Financial & Accounting Department',
+  companyName: 'رودا 10 للبرمجيات والحلول المحاسبية',
+  companyNameEn: 'RODA 10 Software & Accounting Solutions',
+  subtitle: 'شركة البرمجيات والحلول المالية المتقدمة',
+  subtitleEn: 'Advanced Software & Accounting Solutions',
   commercialReg: 'س.ت: 90182471 / بغداد',
   taxNumber: 'الرقم الضريبي: 300012345600003',
-  phone: '+964 770 123 4567',
-  email: 'finance@alrawdatan-travel.com',
-  address: 'العراق — كربلاء المقدسة / بغداد',
+  phone: '7714569870',
+  email: 'info@roda10.com',
+  website: 'www.roda10.com',
+  address: 'العراق - بغداد - المنصور - شارع الصناعة',
   logoUrl: '',
-  logoWidth: 70,
-  logoHeight: 70,
-  primaryColor: '#059669', // Emerald for Receipt, Rose for Payment by default
-  headerBgColor: '#059669',
+  logoWidth: 130,
+  logoHeight: 45,
+  primaryColor: '#0066FF', // Vibrant Electric Blue matching reference
+  headerBgColor: '#0066FF',
   fontFamily: 'IBM Plex Sans Arabic',
   isTableBold: false,
   showWatermark: true,
-  watermarkText: 'سند مالي رسمي معتمد',
+  watermarkText: 'نسخة رسمية',
   showQrCode: true,
   showSignatures: true,
   showTafqeet: true,
-  managerSignTitle: 'توقيع المدير العام / المعتمد',
-  accountantSignTitle: 'توقيع المحاسب / أمين الصندوق',
-  receiverSignTitle: 'توقيع المستلم / الدافع',
-  notesText: 'ملاحظة: يعتبر هذا السند إشعاراً ووصلاً رسمياً معتمداً ومسجلاً في قيود النظام المحاسبي.',
-  footerText: 'شركة الروضتين للسفر والسياحة — هاتف خدمة العملاء: 6012 — جميع الحقوق محفوظة © 2026',
+  thankYouText: 'نشكر لكم ثقتكم ونتطلع إلى المزيد من التعاملات',
+  managerSignTitle: 'المدير',
+  accountantSignTitle: 'المحاسب',
+  receiverSignTitle: 'توقيع المستلم',
+  notesText: '',
+  footerText: 'جميع الحقوق محفوظة © 2026',
   fontSizes: {
-    companyTitle: 16,
+    companyTitle: 15,
     subtitle: 11,
-    docTitle: 14,
+    docTitle: 24,
     body: 11,
-    amount: 17,
+    amount: 18,
   },
 };
 
 export const DEFAULT_PAYMENT_VOUCHER_CONFIG = {
   ...DEFAULT_VOUCHER_CONFIG,
-  primaryColor: '#e11d48', // Rose / Red for payment
-  headerBgColor: '#e11d48',
+  primaryColor: '#0066FF', // Can be customized to Rose #e11d48 or Blue #0066FF
+  headerBgColor: '#0066FF',
 };
 
-// ── Printable Voucher Sheet Component ──
+// ── Printable Voucher Sheet Component (Matches exact user design) ──
 export interface PrintableVoucherSheetProps {
   voucher: VoucherPrintItem;
   config?: any;
@@ -92,26 +110,40 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   const defaultConfig = isReceipt ? DEFAULT_VOUCHER_CONFIG : DEFAULT_PAYMENT_VOUCHER_CONFIG;
   const cfg = { ...defaultConfig, ...userConfig };
 
-  const primaryColor = cfg.primaryColor || (isReceipt ? '#059669' : '#e11d48');
-  const headerBgColor = cfg.headerBgColor || primaryColor;
-  const currencySymbol = voucher.currency === 'USD' || voucher.currency === '$' ? '$' : (isEn ? 'IQD' : 'د.ع');
+  const primaryColor = cfg.primaryColor || '#0066FF';
+  const currencyCode = voucher.currency === 'USD' || voucher.currency === '$' ? 'USD' : 'IQD';
+  const currencyNameAr = currencyCode === 'USD' ? 'دولار أمريكي (USD)' : 'دينار عراقي (IQD)';
+  const currencyName = isEn ? (currencyCode === 'USD' ? 'US Dollar (USD)' : 'Iraqi Dinar (IQD)') : currencyNameAr;
+
   const amountFormatted = Number(voucher.amount || 0).toLocaleString('en-US', {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 
   const tafqeetText = tafqeetArabic(voucher.amount || 0);
 
-  const docTitleAr = isReceipt ? 'سَنَـد قَبْـض مَالِي' : 'سَنَـد صَـرْف وَدَفْـع مَالِي';
-  const docTitleEn = isReceipt ? 'OFFICIAL RECEIPT VOUCHER' : 'OFFICIAL PAYMENT VOUCHER';
+  const docTitleAr = isReceipt ? 'سند قبض' : 'سند صرف ودفع';
+  const docTitleEn = isReceipt ? 'RECEIPT VOUCHER' : 'PAYMENT VOUCHER';
 
-  const partyLabel = isReceipt
-    ? (isEn ? 'Received From:' : 'استلمنا من السيد / السادة:')
-    : (isEn ? 'Pay To:' : 'ادفعوا للسيد / السادة:');
+  const cardTitleAr = isReceipt ? 'بيانات سند القبض' : 'بيانات سند الصرف والدفع';
+  const cardTitleEn = isReceipt ? 'Receipt Voucher Details' : 'Payment Voucher Details';
 
-  const methodLabel = isReceipt
-    ? (isEn ? 'Deposit Cashbox / Bank:' : 'الصندوق / الحساب المودع فيه:')
-    : (isEn ? 'Disbursement Cashbox / Bank:' : 'الصندوق / الحساب المصروف منه:');
+  const partyLabelAr = isReceipt ? 'استلمنا من السيد/السادة :' : 'ادفعوا للسيد/السادة :';
+  const partyLabelEn = isReceipt ? 'Received From:' : 'Paid To:';
+
+  const methodLabelAr = isReceipt ? 'طريقة القبض :' : 'طريقة الصرف :';
+  const methodLabelEn = isReceipt ? 'Payment Method:' : 'Disbursement Method:';
+
+  const paymentMethodVal = voucher.cashboxName?.toLowerCase().includes('مصرف') || voucher.cashboxName?.toLowerCase().includes('bank')
+    ? (isEn ? 'Bank Transfer' : 'تحويل مصرفي')
+    : (isEn ? 'Cash Payment' : 'نقداً (كاش)');
+
+  const dateFormatted = voucher.date
+    ? new Date(voucher.date).toISOString().split('T')[0]
+    : new Date().toISOString().split('T')[0];
+
+  const timeFormatted = voucher.time || '11:00 AM';
+  const yearFormatted = dateFormatted.split('-')[0] || '2026';
 
   return (
     <div
@@ -121,262 +153,467 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
       style={{
         width: '100%',
         maxWidth: '210mm',
-        minHeight: '148mm', // Half A4 or full A4
-        padding: '12mm 14mm',
+        minHeight: '297mm', // Standard A4
+        padding: '14mm 16mm',
         fontFamily: cfg.fontFamily || "'IBM Plex Sans Arabic', sans-serif",
         boxSizing: 'border-box',
         backgroundColor: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '12px',
         position: 'relative',
         overflow: 'hidden',
+        color: '#1e293b',
       }}
     >
-      {/* ── Watermark (Optional) ── */}
+      {/* ── Background Watermark ── */}
       {cfg.showWatermark && (
         <div
           className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden"
           style={{ zIndex: 0 }}
         >
           <span
-            className="font-black text-slate-100 uppercase tracking-widest"
+            className="font-black tracking-widest select-none"
             style={{
-              fontSize: '48px',
-              transform: 'rotate(-25deg)',
-              opacity: 0.35,
+              fontSize: '85px',
+              transform: 'rotate(-28deg)',
+              opacity: 0.045,
               whiteSpace: 'nowrap',
               color: primaryColor,
+              fontWeight: 900,
             }}
           >
-            {cfg.watermarkText || (isReceipt ? 'RECEIPT VOUCHER' : 'PAYMENT VOUCHER')}
+            {cfg.watermarkText || 'نسخة رسمية'}
           </span>
         </div>
       )}
 
-      <div className="relative" style={{ zIndex: 1 }}>
-        {/* ── 1. Official Header ── */}
-        <div className="flex items-start justify-between border-b-2 pb-4 mb-4" style={{ borderColor: primaryColor }}>
-          {/* Company Details (Right in RTL / Left in LTR) */}
-          <div className="space-y-1 max-w-[65%]">
-            <h1
-              className="font-black leading-tight"
-              style={{
-                fontSize: `${cfg.fontSizes?.companyTitle || 16}px`,
-                color: '#0f172a',
-              }}
+      <div className="relative flex flex-col justify-between" style={{ zIndex: 1, minHeight: '269mm' }}>
+        <div>
+          {/* ═══════════════════════════════════════════════════════
+              1. TOP HEADER SECTION (Exact matching user design)
+             ═══════════════════════════════════════════════════════ */}
+          <div className="flex items-start justify-between gap-4 pb-6 mb-6">
+            {/* Top Right (in RTL): Company Branding */}
+            <div className="space-y-1 max-w-[35%]">
+              {cfg.logoUrl ? (
+                <img
+                  src={cfg.logoUrl}
+                  alt="Company Logo"
+                  style={{
+                    maxHeight: '48px',
+                    maxWidth: '180px',
+                    objectFit: 'contain',
+                  }}
+                />
+              ) : (
+                <div className="flex items-center gap-1.5 font-black text-xl tracking-tight">
+                  <span style={{ color: primaryColor }}>RODA</span>
+                  <span style={{ color: '#FF7A00' }}>10</span>
+                </div>
+              )}
+              <h2
+                className="font-black text-slate-800 leading-tight pt-0.5"
+                style={{ fontSize: `${cfg.fontSizes?.companyTitle || 13}px` }}
+              >
+                {isEn ? (cfg.companyNameEn || cfg.companyName) : cfg.companyName}
+              </h2>
+              <div className="w-8 h-0.5 mt-1" style={{ backgroundColor: primaryColor }} />
+              <p className="text-[10px] text-slate-500 font-bold leading-relaxed pt-1">
+                {cfg.address || 'العراق - بغداد - المنصور - شارع الصناعة'}
+              </p>
+              {cfg.phone && (
+                <p className="text-[10px] text-slate-500 font-bold">
+                  {isEn ? `Tel: ${cfg.phone}` : `هاتف: ${cfg.phone}`}
+                </p>
+              )}
+            </div>
+
+            {/* Top Center: Document Icon & Big Title */}
+            <div className="flex flex-col items-center justify-center text-center pt-2">
+              <div
+                className="w-12 h-12 rounded-2xl flex items-center justify-center mb-1.5 shadow-2xs"
+                style={{ backgroundColor: '#EEF6FF', border: `1.5px solid ${primaryColor}` }}
+              >
+                <div className="relative">
+                  <IconFileText size={24} style={{ color: primaryColor }} />
+                  <div
+                    className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-white"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    <span className="text-[9px] font-black leading-none">↓</span>
+                  </div>
+                </div>
+              </div>
+              <h1
+                className="font-black tracking-tight"
+                style={{
+                  fontSize: `${cfg.fontSizes?.docTitle || 24}px`,
+                  color: '#0f172a',
+                }}
+              >
+                {isEn ? docTitleEn : docTitleAr}
+              </h1>
+              <div className="w-12 h-0.5 mt-1 rounded-full" style={{ backgroundColor: primaryColor }} />
+            </div>
+
+            {/* Top Left (in RTL): Meta Box */}
+            <div
+              className="bg-white rounded-xl border p-3 min-w-[210px] space-y-1.5 shadow-2xs text-xs font-bold"
+              style={{ borderColor: '#BFDBFE' }}
             >
-              {isEn ? (cfg.companyNameEn || cfg.companyName) : cfg.companyName}
-            </h1>
-            <p
-              className="font-bold text-slate-600 text-xs"
-              style={{ fontSize: `${cfg.fontSizes?.subtitle || 11}px` }}
-            >
-              {isEn ? (cfg.subtitleEn || cfg.subtitle) : cfg.subtitle}
-            </p>
-            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px] text-slate-500 font-bold pt-1">
-              {cfg.commercialReg && <span>{cfg.commercialReg}</span>}
-              {cfg.taxNumber && <span>{cfg.taxNumber}</span>}
-              {cfg.phone && <span dir="ltr">📞 {cfg.phone}</span>}
-              {cfg.address && <span>📍 {cfg.address}</span>}
+              <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                <span className="text-slate-600 font-bold">{isEn ? 'Voucher No :' : 'رقم السند :'}</span>
+                <span className="font-mono font-black tracking-wider text-sm" style={{ color: primaryColor }}>
+                  {voucher.voucherNumber || 'RCV-2025-000123'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 flex items-center gap-1 font-bold">
+                  <IconCalendar size={13} className="text-slate-400" />
+                  <span>{isEn ? 'Date :' : 'التاريخ :'}</span>
+                </span>
+                <span className="font-mono font-black text-slate-800">{dateFormatted}</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600 flex items-center gap-1 font-bold">
+                  <IconClock size={13} className="text-slate-400" />
+                  <span>{isEn ? 'Issue Time :' : 'وقت الإصدار :'}</span>
+                </span>
+                <span className="font-mono font-black text-slate-800">{timeFormatted}</span>
+              </div>
+
+              <div className="flex items-center justify-between pt-0.5">
+                <span className="text-slate-600 flex items-center gap-1 font-bold">
+                  <IconFileDescription size={13} className="text-slate-400" />
+                  <span>{isEn ? 'Page :' : 'الصفحة :'}</span>
+                </span>
+                <span className="font-mono font-black text-slate-800">1 / 1</span>
+              </div>
             </div>
           </div>
 
-          {/* Logo & Document Reference */}
-          <div className="flex flex-col items-end gap-2 shrink-0">
-            {cfg.logoUrl ? (
-              <img
-                src={cfg.logoUrl}
-                alt="Company Logo"
-                style={{
-                  width: `${cfg.logoWidth || 70}px`,
-                  height: `${cfg.logoHeight || 70}px`,
-                  objectFit: 'contain',
-                  borderRadius: '8px',
-                }}
-              />
-            ) : (
+          {/* ═══════════════════════════════════════════════════════
+              2. MAIN CARD: بيانات سند القبض / الصرف
+             ═══════════════════════════════════════════════════════ */}
+          <div
+            className="rounded-2xl border-2 bg-white relative p-6 pt-7 mb-5 shadow-2xs space-y-4"
+            style={{ borderColor: primaryColor }}
+          >
+            {/* Top Pill Badge (Floating on Card Header) */}
+            <div
+              className="absolute -top-3.5 right-6 px-5 py-1 rounded-full text-white font-black text-xs tracking-wide shadow-xs flex items-center gap-1.5"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <span>{isEn ? cardTitleEn : cardTitleAr}</span>
+            </div>
+
+            {/* Field 1: استلمنا من السيد/السادة */}
+            <div className="pb-3 border-b border-dashed border-slate-200">
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 shrink-0">
+                  <IconUser size={16} style={{ color: primaryColor }} />
+                  <span>{isEn ? partyLabelEn : partyLabelAr}</span>
+                </span>
+                <span className="font-black text-sm text-slate-900 text-end flex-1" style={{ color: '#0f172a' }}>
+                  {voucher.accountCode ? `${voucher.accountCode} - ` : ''}
+                  {voucher.accountName || 'شركة النور للتجارة العامة'}
+                </span>
+              </div>
+            </div>
+
+            {/* Field 2: المبلغ رقماً */}
+            <div className="flex items-center gap-3">
+              <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
+                <IconCoins size={16} style={{ color: primaryColor }} />
+                <span>{isEn ? 'Amount (Digits) :' : 'المبلغ رقماً :'}</span>
+              </span>
+
               <div
-                className="rounded-xl flex items-center justify-center font-bold text-white shadow-xs"
-                style={{
-                  width: `${cfg.logoWidth || 60}px`,
-                  height: `${cfg.logoHeight || 60}px`,
-                  backgroundColor: primaryColor,
-                }}
+                className="flex-1 flex items-center rounded-xl overflow-hidden border"
+                style={{ backgroundColor: '#F0F7FF', borderColor: '#BFDBFE' }}
               >
-                <IconReceipt size={32} />
+                <div
+                  className="px-4 py-2 text-xs font-black font-mono border-l flex items-center justify-center shrink-0"
+                  style={{
+                    backgroundColor: '#E2E8F0',
+                    borderColor: '#CBD5E1',
+                    color: '#334155',
+                  }}
+                >
+                  {currencyCode}
+                </div>
+                <div className="flex-1 px-4 py-2 text-end font-mono font-black text-base text-slate-900 tracking-wider">
+                  {amountFormatted}
+                </div>
+              </div>
+            </div>
+
+            {/* Field 3: المبلغ كتابة */}
+            {cfg.showTafqeet && (
+              <div className="flex items-center gap-3">
+                <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
+                  <IconEdit size={16} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Amount (Words) :' : 'المبلغ كتابة :'}</span>
+                </span>
+
+                <div
+                  className="flex-1 rounded-xl p-2.5 px-4 text-center font-bold text-xs border"
+                  style={{
+                    backgroundColor: '#F0F7FF',
+                    borderColor: '#BFDBFE',
+                    color: primaryColor,
+                  }}
+                >
+                  {tafqeetText || 'مائتان وخمسون ألف دينار عراقي لا غير'}
+                </div>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* ── 2. Document Title Banner & Meta Grid ── */}
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3 p-3 rounded-xl mb-4 border" style={{ backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }}>
-          {/* Badge & Voucher Type */}
-          <div className="flex items-center gap-2.5">
-            <div
-              className="px-3.5 py-1.5 rounded-lg text-white font-black text-xs md:text-sm tracking-wide shadow-xs flex items-center gap-1.5"
-              style={{ backgroundColor: headerBgColor }}
-            >
-              <IconReceipt size={16} />
-              <span>{isEn ? docTitleEn : docTitleAr}</span>
-            </div>
-            <span className="text-xs font-bold text-slate-500">
-              {isEn ? (isReceipt ? 'Credit Slip' : 'Debit Slip') : (isReceipt ? 'إشعار قبض معتمد' : 'إشعار صرف معتمد')}
-            </span>
-          </div>
+            {/* Field 4: وذلك عن */}
+            <div className="flex items-center gap-3">
+              <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0">
+                <IconFileDescription size={16} style={{ color: primaryColor }} />
+                <span>{isEn ? 'Being For :' : 'وذلك عن :'}</span>
+              </span>
 
-          {/* Number & Date Meta */}
-          <div className="flex items-center gap-4 text-xs">
-            <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
-              <span className="text-slate-400 font-bold text-[10px] block">{isEn ? 'Voucher No:' : 'رقم السند:'}</span>
-              <strong className="font-mono font-black text-sm tracking-wider" style={{ color: primaryColor }}>
-                {voucher.voucherNumber || 'RV-0000'}
-              </strong>
-            </div>
-            <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs">
-              <span className="text-slate-400 font-bold text-[10px] block">{isEn ? 'Date:' : 'التاريخ:'}</span>
-              <strong className="font-mono font-bold text-slate-800 text-xs">
-                {voucher.date ? new Date(voucher.date).toLocaleDateString(isEn ? 'en-US' : 'ar-IQ') : '-'}
-              </strong>
-            </div>
-          </div>
-        </div>
-
-        {/* ── 3. Big Amount Hero Banner ── */}
-        <div
-          className="p-3.5 rounded-xl border mb-4 flex items-center justify-between flex-wrap gap-2"
-          style={{
-            backgroundColor: isReceipt ? '#ecfdf5' : '#fff1f2',
-            borderColor: isReceipt ? '#a7f3d0' : '#fecdd3',
-          }}
-        >
-          <div>
-            <span className="text-xs font-bold block" style={{ color: primaryColor }}>
-              {isEn ? 'Total Amount Received / Paid:' : 'المبلغ المالي الصافي:'}
-            </span>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <span
-                className="font-mono font-black tracking-tight"
+              <div
+                className="flex-1 rounded-xl p-2.5 px-4 text-center font-bold text-xs text-slate-800 border"
                 style={{
-                  fontSize: `${cfg.fontSizes?.amount || 20}px`,
-                  color: primaryColor,
+                  backgroundColor: '#F0F7FF',
+                  borderColor: '#BFDBFE',
                 }}
               >
-                {amountFormatted}
+                {voucher.description || 'تسديد جزء من قيمة الفاتورة رقم INV-2025-0456'}
+              </div>
+            </div>
+
+            {/* Field 5: Grid (طريقة القبض / العملة / الحساب) */}
+            <div className="grid grid-cols-3 gap-3 pt-1">
+              {/* طريقة القبض */}
+              <div className="space-y-1">
+                <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
+                  <IconCreditCard size={14} style={{ color: primaryColor }} />
+                  <span>{isEn ? methodLabelEn : methodLabelAr}</span>
+                </span>
+                <div
+                  className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between"
+                  style={{ backgroundColor: '#F0F7FF', borderColor: '#BFDBFE' }}
+                >
+                  <span>{paymentMethodVal}</span>
+                  <span className="text-[10px] text-slate-400">▾</span>
+                </div>
+              </div>
+
+              {/* العملة */}
+              <div className="space-y-1">
+                <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
+                  <IconWorld size={14} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Currency :' : 'العملة :'}</span>
+                </span>
+                <div
+                  className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between"
+                  style={{ backgroundColor: '#F0F7FF', borderColor: '#BFDBFE' }}
+                >
+                  <span>{currencyName}</span>
+                  <span className="text-[10px] text-slate-400">▾</span>
+                </div>
+              </div>
+
+              {/* الحساب */}
+              <div className="space-y-1">
+                <span className="font-black text-[11px] text-slate-700 flex items-center gap-1">
+                  <IconBuildingBank size={14} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Account / Cashbox :' : 'الحساب :'}</span>
+                </span>
+                <div
+                  className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between truncate"
+                  style={{ backgroundColor: '#F0F7FF', borderColor: '#BFDBFE' }}
+                >
+                  <span className="truncate">{voucher.cashboxName || 'مصرف الرافدين - 123456789'}</span>
+                  <span className="text-[10px] text-slate-400">▾</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Field 6: ملاحظات */}
+            <div className="flex items-start gap-3 pt-1">
+              <span className="font-black text-xs text-slate-700 flex items-center gap-1.5 w-32 shrink-0 pt-1.5">
+                <IconMessageDots size={16} style={{ color: primaryColor }} />
+                <span>{isEn ? 'Notes :' : 'ملاحظات :'}</span>
               </span>
-              <span className="font-bold text-xs text-slate-700 font-mono">
-                {currencySymbol} ({voucher.currency || (isEn ? 'IQD' : 'د.ع')})
-              </span>
+
+              <div
+                className="flex-1 rounded-xl p-3 px-4 font-bold text-xs text-slate-700 border min-h-[44px] leading-relaxed"
+                style={{
+                  backgroundColor: '#F0F7FF',
+                  borderColor: '#BFDBFE',
+                }}
+              >
+                {voucher.reference
+                  ? `المرجع: ${voucher.reference} — ${cfg.notesText || 'تحويل من حساب شركة النور للتجارة العامة'}`
+                  : (cfg.notesText || 'تحويل من حساب شركة النور للتجارة العامة')}
+              </div>
             </div>
           </div>
 
-          {/* Tafqeet (Amount in words) */}
-          {cfg.showTafqeet && (
-            <div className="max-w-[60%] text-start bg-white/80 px-3 py-2 rounded-lg border border-slate-200/80">
-              <span className="text-[10px] font-bold text-slate-400 block">{isEn ? 'Amount in Words:' : 'المبلغ كتابةً:'}</span>
-              <span className="text-xs font-bold text-slate-800 leading-snug">
-                {tafqeetText}
-              </span>
+          {/* ═══════════════════════════════════════════════════════
+              3. SUMMARY CARD: ملخص السند
+             ═══════════════════════════════════════════════════════ */}
+          <div
+            className="rounded-2xl border-2 bg-white relative p-4 mb-6 shadow-2xs"
+            style={{ borderColor: primaryColor }}
+          >
+            {/* Top Pill Badge */}
+            <div
+              className="absolute -top-3.5 right-6 px-4 py-1 rounded-full text-white font-black text-xs tracking-wide shadow-xs flex items-center gap-1"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <span>{isEn ? 'Voucher Summary' : 'ملخص السند'}</span>
             </div>
-          )}
-        </div>
 
-        {/* ── 4. Main Voucher Details Grid ── */}
-        <div className="space-y-2.5 text-xs mb-4">
-          {/* Party (Account Name) */}
-          <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
-            <span className="font-bold text-slate-600 shrink-0 w-44">{partyLabel}</span>
-            <strong className="font-black text-slate-900 text-[13px] text-end flex-1">
-              {voucher.accountCode ? `${voucher.accountCode} — ` : ''}{voucher.accountName}
-            </strong>
+            <div className="grid grid-cols-4 gap-3 text-center pt-2">
+              {/* إجمالي المبلغ */}
+              <div className="space-y-1">
+                <span className="font-black text-[11px] text-slate-600 flex items-center justify-center gap-1">
+                  <IconCoins size={13} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Total Amount :' : 'إجمالي المبلغ :'}</span>
+                </span>
+                <div className="font-mono font-black text-sm tracking-tight" style={{ color: primaryColor }}>
+                  {amountFormatted} {currencyCode}
+                </div>
+              </div>
+
+              {/* العملة */}
+              <div className="space-y-1 border-r border-slate-200">
+                <span className="font-black text-[11px] text-slate-600 flex items-center justify-center gap-1">
+                  <IconWorld size={13} style={{ color: primaryColor }} />
+                  <span>{isEn ? 'Currency :' : 'العملة :'}</span>
+                </span>
+                <div className="font-mono font-black text-xs text-slate-800">
+                  {currencyCode}
+                </div>
+              </div>
+
+              {/* طريقة القبض */}
+              <div className="space-y-1 border-r border-slate-200">
+                <span className="font-black text-[11px] text-slate-600 flex items-center justify-center gap-1">
+                  <IconCreditCard size={13} style={{ color: primaryColor }} />
+                  <span>{isEn ? methodLabelEn : methodLabelAr}</span>
+                </span>
+                <div className="font-black text-xs text-slate-800 truncate px-1">
+                  {paymentMethodVal}
+                </div>
+              </div>
+
+              {/* الحالة */}
+              <div className="space-y-1 border-r border-slate-200">
+                <span className="font-black text-[11px] text-slate-600 flex items-center justify-center gap-1">
+                  <IconCheck size={13} className="text-emerald-600" />
+                  <span>{isEn ? 'Status :' : 'الحالة :'}</span>
+                </span>
+                <div className="font-black text-xs text-emerald-700">
+                  {isEn ? 'POSTED' : 'مُسجَّل'}
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Payment Method & Cashbox */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
-              <span className="font-bold text-slate-600 shrink-0">{methodLabel}</span>
-              <span className="font-bold text-slate-900 text-end truncate">
-                {voucher.cashboxName || (isEn ? 'Main Cashbox' : 'الصندوق الرئيسي')}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-lg">
-              <span className="font-bold text-slate-600 shrink-0">{isEn ? 'Ref / Check No:' : 'المرجع / رقم الإشعار:'}</span>
-              <span className="font-mono font-bold text-slate-800 text-end">
-                {voucher.reference || '—'}
-              </span>
-            </div>
-          </div>
-
-          {/* Description & Accounting Purpose */}
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
-            <span className="font-bold text-slate-500 text-[11px] block">
-              {isEn ? 'Accounting Description & Details:' : 'البيان وشرح الحركة المحاسبية:'}
+          {/* ═══════════════════════════════════════════════════════
+              4. THANK YOU & SLOGAN SEPARATOR
+             ═══════════════════════════════════════════════════════ */}
+          <div className="flex items-center justify-center gap-4 my-5">
+            <div className="h-0.5 flex-1 rounded-full" style={{ backgroundColor: primaryColor }} />
+            <span className="font-black text-xs text-slate-800 px-3 tracking-wide select-none">
+              {cfg.thankYouText || (isEn ? 'Thank you for your trust and business' : 'نشكر لكم ثقتكم ونتطلع إلى المزيد من التعاملات')}
             </span>
-            <p className="font-medium text-slate-800 text-xs leading-relaxed">
-              {voucher.description || (isEn ? 'No description provided.' : 'لا يوجد شرح إضافي مسجل.')}
-            </p>
+            <div className="h-0.5 flex-1 rounded-full" style={{ backgroundColor: primaryColor }} />
           </div>
-        </div>
 
-        {/* ── 5. Notes & Verification ── */}
-        <div className="flex items-center justify-between gap-4 py-2 border-t border-b border-slate-200 mb-6 text-[11px] text-slate-600">
-          <p className="font-bold max-w-[75%] leading-relaxed">
-            {cfg.notesText || 'ملاحظة: هذا السند يعتبر إشعاراً رسمياً مسجلاً ومعتمداً في قيود الحسابات.'}
-          </p>
-
-          {cfg.showQrCode && (
-            <div className="shrink-0 flex items-center gap-2 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
-              <div className="text-[9px] font-bold text-slate-500 text-end">
-                <span>{isEn ? 'Verified' : 'موثق'}</span>
-                <span className="block font-mono text-[8px] text-slate-400">QR-AUTH</span>
+          {/* ═══════════════════════════════════════════════════════
+              5. SIGNATURES SECTION (3 Columns)
+             ═══════════════════════════════════════════════════════ */}
+          {cfg.showSignatures && (
+            <div className="grid grid-cols-3 gap-6 text-center pt-2 mb-6">
+              {/* توقيع المستلم */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-center gap-1 font-black text-xs text-slate-800">
+                  <IconEdit size={14} style={{ color: primaryColor }} />
+                  <span>{cfg.receiverSignTitle || (isReceipt ? 'توقيع المستلم' : 'توقيع الدافع')}</span>
+                </div>
+                <div className="h-10 border-b border-slate-300 mx-4"></div>
+                <div className="font-mono text-[11px] text-slate-500 font-bold">
+                  {isEn ? `Date: ${yearFormatted} /   / ` : `التاريخ :  ${yearFormatted}  /   / `}
+                </div>
               </div>
-              <div className="w-8 h-8 bg-slate-900 rounded p-1 flex items-center justify-center text-white">
-                <svg viewBox="0 0 100 100" className="w-full h-full fill-white">
-                  <rect x="5" y="5" width="35" height="35" />
-                  <rect x="12" y="12" width="21" height="21" fill="#0f172a" />
-                  <rect x="60" y="5" width="35" height="35" />
-                  <rect x="67" y="12" width="21" height="21" fill="#0f172a" />
-                  <rect x="5" y="60" width="35" height="35" />
-                  <rect x="12" y="67" width="21" height="21" fill="#0f172a" />
-                  <rect x="45" y="45" width="10" height="10" />
-                </svg>
+
+              {/* المحاسب */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-center gap-1 font-black text-xs text-slate-800">
+                  <IconBuildingBank size={14} style={{ color: primaryColor }} />
+                  <span>{cfg.accountantSignTitle || 'المحاسب'}</span>
+                </div>
+                <div className="h-10 border-b border-slate-300 mx-4"></div>
+                <div className="font-mono text-[11px] text-slate-500 font-bold">
+                  {isEn ? `Date: ${yearFormatted} /   / ` : `التاريخ :  ${yearFormatted}  /   / `}
+                </div>
+              </div>
+
+              {/* المدير */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-center gap-1 font-black text-xs text-slate-800">
+                  <IconUser size={14} style={{ color: primaryColor }} />
+                  <span>{cfg.managerSignTitle || 'المدير'}</span>
+                </div>
+                <div className="h-10 border-b border-slate-300 mx-4"></div>
+                <div className="font-mono text-[11px] text-slate-500 font-bold">
+                  {isEn ? `Date: ${yearFormatted} /   / ` : `التاريخ :  ${yearFormatted}  /   / `}
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* ── 6. Signatures Grid ── */}
-        {cfg.showSignatures && (
-          <div className="grid grid-cols-3 gap-4 text-center pt-2 mb-4">
-            <div className="space-y-6">
-              <span className="font-bold text-slate-700 text-xs block">
-                {cfg.receiverSignTitle || (isReceipt ? 'توقيع المستلم' : 'توقيع الدافع')}
-              </span>
-              <div className="h-8 border-b border-dashed border-slate-300 mx-4"></div>
+        {/* ═══════════════════════════════════════════════════════
+            6. FOOTER WITH CONTACT INFO & MOSAIC PATTERN
+           ═══════════════════════════════════════════════════════ */}
+        <div className="pt-3 border-t-2" style={{ borderColor: primaryColor }}>
+          <div className="flex items-center justify-between text-[10px] text-slate-600 font-bold">
+            <div className="flex items-center gap-6">
+              {cfg.email && (
+                <div className="flex items-center gap-1">
+                  <IconMail size={13} style={{ color: primaryColor }} />
+                  <span dir="ltr">{cfg.email}</span>
+                </div>
+              )}
+              {cfg.phone && (
+                <div className="flex items-center gap-1">
+                  <IconPhone size={13} style={{ color: primaryColor }} />
+                  <span dir="ltr">{cfg.phone}</span>
+                </div>
+              )}
+              {cfg.website && (
+                <div className="flex items-center gap-1">
+                  <IconWorld size={13} style={{ color: primaryColor }} />
+                  <span dir="ltr">{cfg.website}</span>
+                </div>
+              )}
             </div>
 
-            <div className="space-y-6">
-              <span className="font-bold text-slate-700 text-xs block">
-                {cfg.accountantSignTitle || 'توقيع المحاسب / الصندوق'}
-              </span>
-              <div className="h-8 border-b border-dashed border-slate-300 mx-4"></div>
-            </div>
-
-            <div className="space-y-6">
-              <span className="font-bold text-slate-700 text-xs block">
-                {cfg.managerSignTitle || 'توقيع المدير المالي'}
-              </span>
-              <div className="h-8 border-b border-dashed border-slate-300 mx-4"></div>
+            {/* Decorative 3x3 Blue Mosaic Dots (as seen in the reference) */}
+            <div className="flex items-center gap-1">
+              <div className="grid grid-cols-3 gap-1">
+                <div className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: primaryColor }} />
+                <div className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: primaryColor }} />
+                <div className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: primaryColor }} />
+                <div className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: primaryColor }} />
+                <div className="w-1.5 h-1.5 rounded-xs opacity-0" />
+                <div className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: primaryColor }} />
+                <div className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: primaryColor }} />
+                <div className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: primaryColor }} />
+                <div className="w-1.5 h-1.5 rounded-xs" style={{ backgroundColor: primaryColor }} />
+              </div>
             </div>
           </div>
-        )}
-
-        {/* ── 7. Footer ── */}
-        <div className="pt-2 text-center text-[10px] text-slate-400 font-bold border-t border-slate-100 flex items-center justify-between">
-          <span>{voucher.user ? `بواسطة: ${voucher.user}` : 'النظام المحاسبي'}</span>
-          <span>{cfg.footerText}</span>
-          <span dir="ltr">{new Date().toISOString().split('T')[0]}</span>
         </div>
       </div>
     </div>
@@ -483,7 +720,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
       size="xl"
       title={
         <div className="flex items-center gap-2 text-slate-900 font-extrabold text-sm">
-          <IconReceipt size={18} className={isReceipt ? 'text-emerald-600' : 'text-rose-600'} />
+          <IconReceipt size={18} className="text-blue-600" />
           <span>
             {printLang === 'en'
               ? `Preview & Export Voucher [${voucher.voucherNumber}]`
@@ -495,7 +732,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
     >
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 6mm !important; }
+          @page { size: A4 portrait; margin: 4mm !important; }
           body, html { background: #ffffff !important; color: #000000 !important; margin: 0 !important; padding: 0 !important; }
           .no-print, header, nav, aside, footer, button, .mantine-Modal-header, .mantine-Modal-close, .mantine-Overlay-root { display: none !important; }
           .mantine-Modal-content { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; width: 100% !important; background: transparent !important; }
@@ -505,7 +742,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
 
       {loading ? (
         <div className="flex flex-col items-center justify-center p-12 space-y-3">
-          <Loader color={isReceipt ? 'emerald' : 'red'} size="md" />
+          <Loader color="blue" size="md" />
           <span className="text-xs font-bold text-slate-600">
             {printLang === 'en' ? 'Fetching approved template...' : 'جارٍ استجلاب قالب السند المعتمد...'}
           </span>
@@ -514,8 +751,8 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200 no-print">
             <div className="flex items-center gap-2">
-              <Badge color={isReceipt ? 'emerald' : 'red'} size="md" variant="filled">
-                {isReceipt ? (printLang === 'en' ? 'Receipt Voucher' : 'سند قبض معتمد ✓') : (printLang === 'en' ? 'Payment Voucher' : 'سند دفع معتمد ✓')}
+              <Badge color="blue" size="md" variant="filled">
+                {isReceipt ? (printLang === 'en' ? 'Receipt Voucher' : 'سند قبض معتمد ✓') : (printLang === 'en' ? 'Payment Voucher' : 'سند صرف ودفع معتمد ✓')}
               </Badge>
               <span className="text-xs font-bold text-slate-700">
                 {voucher.accountName}
@@ -538,7 +775,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
               </div>
               <Button
                 size="xs"
-                color={isReceipt ? 'teal' : 'rose'}
+                color="blue"
                 leftSection={<IconFileTypePdf size={15} />}
                 onClick={handleExportPdf}
                 loading={exporting}
@@ -562,7 +799,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
             </Group>
           </div>
 
-          <div className="bg-slate-100/50 p-2 rounded-xl border border-slate-200 overflow-x-auto flex justify-center print:bg-white print:p-0 print:border-none">
+          <div className="bg-slate-100/60 p-2 rounded-xl border border-slate-200 overflow-x-auto flex justify-center print:bg-white print:p-0 print:border-none shadow-inner">
             <PrintableVoucherSheet
               voucher={voucher}
               config={config}

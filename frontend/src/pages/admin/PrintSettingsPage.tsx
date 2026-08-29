@@ -67,37 +67,35 @@ const MOCK_STATEMENT_TOTALS = {
   previousBalance: 0,
 };
 
-// Sample mock data for live receipt voucher preview
+// Sample mock data for live receipt voucher preview (matching reference image)
 const MOCK_RECEIPT_VOUCHER: VoucherPrintItem = {
   id: 'rv-demo',
-  voucherNumber: 'RV-2026-0012',
+  voucherNumber: 'RCV-2025-000123',
   type: 'RECEIPT',
-  date: new Date().toISOString().split('T')[0],
-  amount: 1550000,
+  date: '2025-06-29',
+  time: '11:00 AM',
+  amount: 250000,
   currency: 'IQD',
-  accountName: 'شركة الأفق للسياحة والخدمات',
-  accountCode: '110204',
-  accountPhone: '+964 770 999 8888',
-  cashboxName: 'صندوق الإدارة الرئيسي (كاش)',
-  reference: 'REC-901824',
-  description: 'تسديد دفعة نقدية عن حجز تذاكر طيران كروب أربيل - دبي',
+  accountName: 'شركة النور للتجارة العامة',
+  cashboxName: 'مصرف الرافدين - 123456789',
+  reference: 'INV-2025-0456',
+  description: 'تسديد جزء من قيمة الفاتورة رقم INV-2025-0456',
   user: 'أحمد المحاسب',
 };
 
 // Sample mock data for live payment voucher preview
 const MOCK_PAYMENT_VOUCHER: VoucherPrintItem = {
   id: 'pv-demo',
-  voucherNumber: 'PV-2026-0008',
+  voucherNumber: 'PV-2025-000045',
   type: 'PAYMENT',
-  date: new Date().toISOString().split('T')[0],
-  amount: 850000,
+  date: '2025-06-29',
+  time: '11:30 AM',
+  amount: 450000,
   currency: 'IQD',
   accountName: 'شركة الخطوط الجوية العراقية',
-  accountCode: '210105',
-  accountPhone: '+964 771 222 3333',
-  cashboxName: 'حساب مصرف بغداد التجاري',
-  reference: 'TRANS-66712',
-  description: 'سداد دفعة حساب مستحقات تذاكر طيران الخطوط لشهر شباط',
+  cashboxName: 'مصرف الرافدين - 123456789',
+  reference: 'BILL-88912',
+  description: 'سداد دفعة حساب مستحقات تذاكر طيران الخطوط لشهر حزيران',
   user: 'علي جعفر',
 };
 
