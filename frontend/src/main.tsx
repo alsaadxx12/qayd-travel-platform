@@ -9,6 +9,26 @@ import App from './App';
 
 import 'dayjs/locale/ar';
 
+// Auto-reload on Vite Chunk Preload Errors after new deployments
+window.addEventListener('vite:preloadError', (event) => {
+  console.warn('Vite preload error detected, reloading page for new deployment...', event);
+  window.location.reload();
+});
+
+window.addEventListener('error', (e) => {
+  const msg = e.message || '';
+  if (
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Expected a JavaScript-or-Wasm module script')
+  ) {
+    if (!sessionStorage.getItem('chunk_reload_lock')) {
+      sessionStorage.setItem('chunk_reload_lock', '1');
+      console.warn('Dynamic import chunk error detected, reloading...', msg);
+      window.location.reload();
+    }
+  }
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
