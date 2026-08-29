@@ -1054,70 +1054,43 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
       let pdfBase64: string | undefined = undefined;
 
       try {
-        const token = localStorage.getItem('token');
-        const templateRows = rows.map(r => ({
-          ...r,
-          passengers: r.passengersDetail?.map(p => {
-            const rawType = (p.ticketType || 'ADT').toUpperCase();
-            const isChild = rawType === 'CHD' || rawType === 'CHILD' || rawType === 'INF' || rawType === 'INFANT';
-            const isInfant = rawType === 'INF' || rawType === 'INFANT';
-            const displayType = isInfant ? 'INF' : isChild ? 'CHD' : 'ADT';
-            return {
-              fullName: p.name || '',
-              type: displayType,
-              typeClass: isInfant ? 'pax-type-inf' : isChild ? 'pax-type-chd' : 'pax-type-adt',
-              isChild,
-            };
-          }) || [],
-        }));
-
-        const res = await fetch(`${API_BASE_URL}/pdf/statement`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            accountName,
-            accountCode,
-            accountPhone,
-            accountEmail: targetEmail,
-            accountAddress,
-            startDate,
-            endDate,
-            rows: templateRows,
-            totals,
-            lang,
-            settings: {
-              ...config,
-              templatePreset: config.templatePreset || 'classic',
-              companyNameAr: config.companyName || config.companyNameAr,
-              companyNameEn: config.companyNameEn || config.companyName,
-              subtitleAr: config.subtitle || config.subtitleAr,
-              subtitleEn: config.subtitleEn || config.subtitle,
-              addressAr: config.address || config.addressAr,
-              addressEn: config.addressEn || config.address,
-              footerTextAr: config.footerText || config.footerTextAr,
-              footerTextEn: config.footerTextEn || config.footerText,
-            },
-          }),
-        });
-
-        if (res.ok) {
-          const blob = await res.blob();
-          const base64Promise = new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              const resStr = reader.result as string;
-              resolve(resStr.split(',')[1] || resStr);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
+        const printableElement = document.getElementById('printable-statement-sheet');
+        if (printableElement) {
+          const canvas = await html2canvas(printableElement, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
           });
-          pdfBase64 = await base64Promise;
+
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4',
+          });
+
+          const imgWidth = 210;
+          const pageHeight = 297;
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+          let heightLeft = imgHeight;
+          let position = 0;
+
+          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+
+          while (heightLeft > 0) {
+            position = heightLeft - imgHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pageHeight;
+          }
+
+          const dataUri = pdf.output('datauristring');
+          pdfBase64 = dataUri.split(',')[1] || dataUri;
         }
       } catch (pdfErr) {
-        console.warn('PDF generation error:', pdfErr);
+        console.warn('Client PDF generation error for email:', pdfErr);
       }
 
       await apiRequest('/api/email/send-statement', {

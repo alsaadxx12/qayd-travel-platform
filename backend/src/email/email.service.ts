@@ -524,9 +524,10 @@ export class EmailService {
 
     const attachments: Array<{ name: string; content: string }> = [];
     if (dto.pdfBase64) {
+      const cleanContent = dto.pdfBase64.replace(/^data:[^;]+;base64,/, '');
       attachments.push({
         name: `كشف_حساب_${dto.accountName.replace(/\s+/g, '_')}.pdf`,
-        content: dto.pdfBase64,
+        content: cleanContent,
       });
     }
 
