@@ -11,6 +11,18 @@ import { AccountType, AccountCategory } from '@prisma/client';
 export class AccountsController {
   constructor(private readonly accountsService: AccountsService) {}
 
+  @Get('balances/verify')
+  @ApiOperation({
+    summary: 'مقارنة أرصدة الحسابات بين الحساب المجمّع (SQL) والحساب القديم (مسح السطور) للتحقق قبل الاعتماد',
+  })
+  async verifyBalances(@Req() req: any, @Query('tolerance') tolerance?: string) {
+    const tol = Number(tolerance);
+    return this.accountsService.verifyBalanceAggregation(
+      req.user.companyId,
+      Number.isFinite(tol) && tol >= 0 ? tol : 0.01,
+    );
+  }
+
   @Get('tree')
   @ApiOperation({ summary: 'جلب شجرة الحسابات الهرمية كاملة' })
   async getTree(@Req() req: any, @Query('lite') lite?: string) {

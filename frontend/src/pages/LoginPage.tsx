@@ -909,6 +909,10 @@ export const LoginPage: React.FC = () => {
                                 <img
                                   src={slide.image}
                                   alt={slide.title}
+                                  width={290}
+                                  height={290}
+                                  loading="lazy"
+                                  decoding="async"
                                   className="h-full w-full rounded-full object-cover select-none transition-transform duration-500 group-hover:scale-105"
                                   draggable={false}
                                 />
@@ -921,6 +925,10 @@ export const LoginPage: React.FC = () => {
                             <img
                               src={slide.image}
                               alt={slide.title}
+                              width={480}
+                              height={360}
+                              loading="lazy"
+                              decoding="async"
                               aria-hidden="true"
                               className="mx-auto h-[330px] sm:h-[360px] w-full max-w-[480px] select-none object-contain drop-shadow-xl scale-115 transition-transform duration-500 hover:scale-120"
                               draggable={false}
@@ -929,7 +937,7 @@ export const LoginPage: React.FC = () => {
                         </div>
 
                         {/* Interactive Slide Dots */}
-                        <div className="mt-2 flex items-center justify-center gap-1.5">
+                        <div className="mt-2 flex items-center justify-center gap-1.5" role="tablist" aria-label={isAr ? 'شرائح العرض' : 'Presentation slides'}>
                           {slides.map((_, i) => (
                             <button
                               key={i}
@@ -938,7 +946,8 @@ export const LoginPage: React.FC = () => {
                               className={`h-1.5 rounded-full transition-all duration-300 ${
                                 i === activeSlide ? 'w-6 bg-[#E95408]' : 'w-1.5 bg-slate-300 hover:bg-slate-400'
                               }`}
-                              aria-label={`Go to slide ${i + 1}`}
+                              aria-label={isAr ? `الانتقال إلى الشريحة ${i + 1}` : `Go to slide ${i + 1}`}
+                              title={isAr ? `الشريحة ${i + 1}` : `Slide ${i + 1}`}
                             />
                           ))}
                         </div>

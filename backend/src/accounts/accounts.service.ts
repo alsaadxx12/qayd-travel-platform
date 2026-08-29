@@ -268,6 +268,182 @@ export class AccountsService {
     return 'MULTI';
   }
 
+
+  // ── Journal-line balance aggregation ────────────────────────────────────────
+  //
+  // `findAll` used to load EVERY posted journal line in the company into memory
+  // just to sum debit/credit per account. On a company with a real ticket history
+  // that is tens of thousands of rows on every cold-cache call.
+  //
+  // The sums are now done by Postgres. The one thing that cannot be pushed down
+  // naively is the currency split, which is decided by looking for text markers in
+  // the line and its entry. That test is defined once, below, and used by both the
+  // aggregate path and the row-scan path kept for verification.
+
+  private static readonly USD_TEXT_MARKS = ['USD', 'دولار'];
+
+  /** Mirrors the JS test: upper-cased(line.description + entry.description + entry.reference) contains USD / دولار / $ */
+  private usdLineWhere(companyId: string): Prisma.JournalEntryLineWhereInput {
+    const lineOr: Prisma.JournalEntryLineWhereInput[] = [
+      ...AccountsService.USD_TEXT_MARKS.map((m) => ({
+        description: { contains: m, mode: 'insensitive' as const },
+      })),
+      { description: { contains: '$' } },
+    ];
+
+    const entryOr: Prisma.JournalEntryWhereInput[] = [
+      ...AccountsService.USD_TEXT_MARKS.map((m) => ({
+        description: { contains: m, mode: 'insensitive' as const },
+      })),
+      ...AccountsService.USD_TEXT_MARKS.map((m) => ({
+        reference: { contains: m, mode: 'insensitive' as const },
+      })),
+      { description: { contains: '$' } },
+      { reference: { contains: '$' } },
+    ];
+
+    return {
+      journalEntry: { companyId, status: 'POSTED' },
+      OR: [...lineOr, { journalEntry: { OR: entryOr } }],
+    };
+  }
+
+  /**
+   * Two grouped queries: the grand total per account, and the USD subset.
+   * IQD is derived as (total - USD) rather than by a negated text match, because
+   * `NOT (description ILIKE ...)` is NULL in SQL when description is NULL, which
+   * would silently drop those lines from BOTH buckets. description is nullable, so
+   * that mistake would quietly understate balances.
+   */
+  private async computeLineTotalsAggregated(companyId: string) {
+    const [totals, usdTotals] = await Promise.all([
+      this.prisma.journalEntryLine.groupBy({
+        by: ['accountId'],
+        where: { journalEntry: { companyId, status: 'POSTED' } },
+        _sum: { debit: true, credit: true },
+      }),
+      this.prisma.journalEntryLine.groupBy({
+        by: ['accountId'],
+        where: this.usdLineWhere(companyId),
+        _sum: { debit: true, credit: true },
+      }),
+    ]);
+
+    const map = new Map<string, { debitUSD: number; creditUSD: number; debitIQD: number; creditIQD: number }>();
+
+    totals.forEach((row) => {
+      if (!row.accountId) return;
+      map.set(row.accountId, {
+        debitUSD: 0,
+        creditUSD: 0,
+        debitIQD: Number(row._sum.debit || 0),
+        creditIQD: Number(row._sum.credit || 0),
+      });
+    });
+
+    usdTotals.forEach((row) => {
+      if (!row.accountId) return;
+      const cur = map.get(row.accountId) || { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
+      const d = Number(row._sum.debit || 0);
+      const c = Number(row._sum.credit || 0);
+      cur.debitUSD = d;
+      cur.creditUSD = c;
+      cur.debitIQD -= d;
+      cur.creditIQD -= c;
+      map.set(row.accountId, cur);
+    });
+
+    return map;
+  }
+
+  /** The original row-by-row computation. Retained solely so the aggregate can be checked against it. */
+  private async computeLineTotalsByScan(companyId: string) {
+    const journalLines = await this.prisma.journalEntryLine.findMany({
+      where: { journalEntry: { companyId, status: 'POSTED' } },
+      select: {
+        accountId: true,
+        debit: true,
+        credit: true,
+        description: true,
+        journalEntry: { select: { description: true, reference: true } },
+      },
+    });
+
+    const map = new Map<string, { debitUSD: number; creditUSD: number; debitIQD: number; creditIQD: number }>();
+    journalLines.forEach((l) => {
+      if (!l.accountId) return;
+      const fullText = `${l.description || ''} ${(l as any).journalEntry?.description || ''} ${(l as any).journalEntry?.reference || ''}`.toUpperCase();
+      const isUSD =
+        fullText.includes('USD') ||
+        fullText.includes('$') ||
+        fullText.includes('دولار') ||
+        fullText.includes('OPENING-USD-');
+      let cur = map.get(l.accountId);
+      if (!cur) {
+        cur = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
+        map.set(l.accountId, cur);
+      }
+      if (isUSD) {
+        cur.debitUSD += Number(l.debit || 0);
+        cur.creditUSD += Number(l.credit || 0);
+      } else {
+        cur.debitIQD += Number(l.debit || 0);
+        cur.creditIQD += Number(l.credit || 0);
+      }
+    });
+    return map;
+  }
+
+  /**
+   * Runs both paths on the live data and reports every account whose numbers differ
+   * by more than `tolerance`. Intended to be called once against real data before
+   * trusting the fast path.
+   */
+  async verifyBalanceAggregation(companyId: string, tolerance = 0.01) {
+    const startedAt = Date.now();
+    const scanStart = Date.now();
+    const scan = await this.computeLineTotalsByScan(companyId);
+    const scanMs = Date.now() - scanStart;
+
+    const aggStart = Date.now();
+    const agg = await this.computeLineTotalsAggregated(companyId);
+    const aggMs = Date.now() - aggStart;
+
+    const accountIds = new Set<string>([...scan.keys(), ...agg.keys()]);
+    const zero = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
+    const fields: Array<keyof typeof zero> = ['debitIQD', 'creditIQD', 'debitUSD', 'creditUSD'];
+
+    const mismatches: any[] = [];
+    accountIds.forEach((id) => {
+      const a = scan.get(id) || zero;
+      const b = agg.get(id) || zero;
+      const diffs: Record<string, { scan: number; aggregate: number; diff: number }> = {};
+      fields.forEach((f) => {
+        const d = Math.abs(a[f] - b[f]);
+        if (d > tolerance) diffs[f] = { scan: a[f], aggregate: b[f], diff: a[f] - b[f] };
+      });
+      if (Object.keys(diffs).length > 0) mismatches.push({ accountId: id, ...diffs });
+    });
+
+    const codes = new Map<string, string>();
+    if (mismatches.length > 0) {
+      const rows = await this.prisma.account.findMany({
+        where: { id: { in: mismatches.slice(0, 50).map((m) => m.accountId) } },
+        select: { id: true, code: true, nameAr: true },
+      });
+      rows.forEach((r) => codes.set(r.id, `${r.code} - ${r.nameAr}`));
+    }
+
+    return {
+      ok: mismatches.length === 0,
+      tolerance,
+      accountsCompared: accountIds.size,
+      mismatchCount: mismatches.length,
+      timing: { scanMs, aggregateMs: aggMs, totalMs: Date.now() - startedAt },
+      mismatches: mismatches.slice(0, 50).map((m) => ({ ...m, account: codes.get(m.accountId) || m.accountId })),
+    };
+  }
+
   private async ensureDefaultAccounts(companyId: string) {
     let company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company) {
@@ -721,7 +897,7 @@ export class AccountsService {
       return liteAccounts;
     }
 
-    const [accounts, journalLines, openingEntries] = await Promise.all([
+    const [accounts, jlMap, openingEntries] = await Promise.all([
       this.prisma.account.findMany({
         where: {
           companyId,
@@ -735,16 +911,8 @@ export class AccountsService {
           },
         },
       }),
-      this.prisma.journalEntryLine.findMany({
-        where: { journalEntry: { companyId, status: 'POSTED' } },
-        select: {
-          accountId: true,
-          debit: true,
-          credit: true,
-          description: true,
-          journalEntry: { select: { description: true, reference: true } },
-        },
-      }),
+      // Summed by Postgres instead of by loading every posted line into Node.
+      this.computeLineTotalsAggregated(companyId),
       this.prisma.journalEntry.findMany({
         where: {
           companyId,
@@ -797,26 +965,7 @@ export class AccountsService {
       });
     });
 
-    // 2. Pre-index Journal Lines by AccountId in a single pass O(M)
-    const jlMap = new Map<string, { debitUSD: number; creditUSD: number; debitIQD: number; creditIQD: number }>();
-    journalLines.forEach((l) => {
-      if (!l.accountId) return;
-      const fullText = `${l.description || ''} ${(l as any).journalEntry?.description || ''} ${(l as any).journalEntry?.reference || ''}`.toUpperCase();
-      const isUSD = fullText.includes('USD') || fullText.includes('$') || fullText.includes('دولار') || fullText.includes('OPENING-USD-');
-      let cur = jlMap.get(l.accountId);
-      if (!cur) {
-        cur = { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
-        jlMap.set(l.accountId, cur);
-      }
-      if (isUSD) {
-        cur.debitUSD += Number(l.debit || 0);
-        cur.creditUSD += Number(l.credit || 0);
-      } else {
-        cur.debitIQD += Number(l.debit || 0);
-        cur.creditIQD += Number(l.credit || 0);
-      }
-    });
-
+    // 2. Journal-line totals already arrive keyed by accountId.
     const result = accounts.map((acc) => {
       const jl = jlMap.get(acc.id) || { debitUSD: 0, creditUSD: 0, debitIQD: 0, creditIQD: 0 };
 

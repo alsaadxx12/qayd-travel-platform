@@ -7,7 +7,7 @@ import { useLanguageStore } from '../store/useLanguageStore';
 import { useAiPageContext } from '../hooks/useAiPageContext';
 import { SegmentedDatePicker } from '../components/ui/SegmentedDatePicker';
 import { CurrencySegmentedControl } from '../components/ui/CurrencySegmentedControl';
-import { Modal, Drawer, Menu, Tooltip, Switch } from '@mantine/core';
+import { Modal, Drawer, Menu, Tooltip } from '@mantine/core';
 import * as XLSX from 'xlsx';
 import {
   Receipt,
@@ -32,8 +32,7 @@ import {
   TrendingUp,
   TrendingDown,
   Layers,
-  X,
-  Pencil,
+  X
 } from 'lucide-react';
 
 type TabType = 'RECEIPT' | 'PAYMENT' | 'JOURNAL' | 'EXCHANGE';
@@ -80,11 +79,6 @@ export const VouchersPage: React.FC = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [voucherToDelete, setVoucherToDelete] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  // Row selection states
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
 
   // Ref to accountsMap for name resolution
   const accountsMapRef = React.useRef<Record<string, string>>({});
@@ -341,100 +335,6 @@ export const VouchersPage: React.FC = () => {
       return true;
     });
   }, [activeTab, receiptsList, paymentsList, journalVouchersList, exchangeList, selectedCurrency, selectedCashboxFilter, startDate, endDate, searchQuery]);
-
-  const visibleIds = useMemo(() => currentGridData.map((item: any) => String(item.id)), [currentGridData]);
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const selectedVouchers = useMemo(
-    () => currentGridData.filter((item: any) => selectedSet.has(String(item.id))),
-    [currentGridData, selectedSet]
-  );
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id: string) => selectedSet.has(id));
-
-  // Drop ids that scrolled out or when activeTab changes
-  useEffect(() => {
-    setSelectedIds((current) => {
-      const next = current.filter((id) => visibleIds.includes(id));
-      return next.length === current.length ? current : next;
-    });
-  }, [visibleIds]);
-
-  const toggleSelectAllVisible = () => {
-    if (allVisibleSelected) {
-      setSelectedIds((current) => current.filter((id) => !visibleIds.includes(id)));
-    } else {
-      setSelectedIds((current) => Array.from(new Set([...current, ...visibleIds])));
-    }
-  };
-
-  const toggleRowSelection = (id: string) => {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((x) => x !== id) : [...current, id]
-    );
-  };
-
-  const clearSelection = () => setSelectedIds([]);
-
-  // Bulk Actions
-  const handleBulkPrint = () => {
-    if (selectedVouchers.length === 0) return;
-    const v = selectedVouchers[0];
-    setVoucherToPrint({
-      voucherNumber: v.voucherNumber,
-      type: v.type,
-      date: v.date,
-      amount: v.amount,
-      currency: v.currency,
-      accountName: v.accountName,
-      accountCode: v.accountCode,
-      cashboxName: v.cashboxName,
-      reference: v.reference,
-      description: v.description,
-      user: v.userName,
-      splitAccounts: v.splitAccounts,
-      splitDescription: v.splitDescription,
-      customCategory: v.customCategory,
-    });
-    setPrintModalOpen(true);
-  };
-
-  const handleBulkPreviewSlip = () => {
-    if (selectedVouchers.length === 0) return;
-    const slipVoucher = selectedVouchers.find((v) => v.slipsCount > 0) || selectedVouchers[0];
-    setSelectedSlipVoucher(slipVoucher);
-    setSlipModalOpen(true);
-  };
-
-  const handleBulkEdit = () => {
-    if (selectedVouchers.length === 0) return;
-    handleOpenEditModal(selectedVouchers[0]);
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedVouchers.length === 0) return;
-    setBulkBusy(true);
-    let done = 0;
-    for (const v of selectedVouchers) {
-      try {
-        const endpoint = v.type === 'RECEIPT'
-          ? `/api/receipt-vouchers/${v.id}`
-          : v.type === 'PAYMENT'
-          ? `/api/payment-vouchers/${v.id}`
-          : `/api/journal-entries/${v.id}`;
-        await apiRequest(endpoint, { method: 'DELETE' });
-        done += 1;
-      } catch (e) {}
-    }
-    await fetchAllData(true);
-    setSelectedIds([]);
-    setBulkBusy(false);
-    setPendingBulkDelete(false);
-    if (done > 0) {
-      showSuccessNotification(
-        isAr ? 'تم الحذف' : 'Deleted',
-        isAr ? `تم حذف ${done} سند بنجاح` : `${done} vouchers deleted successfully`
-      );
-    }
-  };
 
   // Delete Voucher Action
   const handleDeleteVoucher = async () => {
@@ -990,116 +890,10 @@ export const VouchersPage: React.FC = () => {
 
       {/* ── 3. Main Vouchers Table ── */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-        {/* Table Top Header with Title and Selection Bar */}
-        <div className="p-3 sm:p-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <Receipt size={18} className="text-[#F45A0A]" />
-            <span className="font-extrabold text-slate-900 text-sm">
-              {activeTab === 'RECEIPT'
-                ? (isAr ? 'قائمة سندات القبض' : 'Receipt Vouchers')
-                : activeTab === 'PAYMENT'
-                ? (isAr ? 'قائمة سندات الصرف والدفع' : 'Payment Vouchers')
-                : (isAr ? 'قائمة سندات القيد اليومية' : 'Journal Vouchers')}
-            </span>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-black font-mono tabular-nums lining-nums bg-orange-50 text-[#F45A0A] border border-orange-200">
-              {currentGridData.length.toLocaleString('en-US')}
-            </span>
-          </div>
-
-          {selectedIds.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-600">
-                <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-orange-50 text-[#C2410C] border border-orange-200 font-mono tabular-nums lining-nums font-black">
-                  {selectedIds.length.toLocaleString('en-US')}
-                </span>
-                <span>{isAr ? 'محدد' : 'selected'}</span>
-              </span>
-
-              <Menu shadow="md" width={220} position={isAr ? 'bottom-start' : 'bottom-end'} withinPortal>
-                <Menu.Target>
-                  <button
-                    type="button"
-                    disabled={bulkBusy}
-                    className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-[#F45A0A] hover:bg-[#DC4F09] text-white text-xs font-extrabold shadow-xs cursor-pointer disabled:opacity-60 transition-colors"
-                  >
-                    {bulkBusy ? <RefreshCw size={13} className="animate-spin" /> : <Receipt size={13} />}
-                    <span>{isAr ? 'إجراءات' : 'Actions'}</span>
-                    <ChevronDown size={13} />
-                  </button>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Menu.Label>
-                    {isAr ? `${selectedIds.length} سند محدد` : `${selectedIds.length} selected`}
-                  </Menu.Label>
-                  
-                  <Menu.Item
-                    leftSection={<Printer size={14} className="text-emerald-600" />}
-                    onClick={handleBulkPrint}
-                    disabled={bulkBusy}
-                  >
-                    {isAr ? 'طباعة السند' : 'Print'}
-                  </Menu.Item>
-
-                  <Menu.Item
-                    leftSection={<Paperclip size={14} className="text-blue-600" />}
-                    onClick={handleBulkPreviewSlip}
-                    disabled={bulkBusy}
-                  >
-                    {isAr ? 'معاينة الوصل (إشعار الدفع)' : 'Preview Slip'}
-                  </Menu.Item>
-
-                  {selectedIds.length === 1 && (
-                    <Menu.Item
-                      leftSection={<Pencil size={14} className="text-orange-500" />}
-                      onClick={handleBulkEdit}
-                      disabled={bulkBusy}
-                    >
-                      {isAr ? 'تعديل بيانات السند' : 'Edit Voucher'}
-                    </Menu.Item>
-                  )}
-
-                  <Menu.Divider />
-                  <Menu.Item
-                    color="red"
-                    leftSection={<Trash2 size={14} />}
-                    onClick={() => setPendingBulkDelete(true)}
-                    disabled={bulkBusy}
-                  >
-                    {isAr ? 'حذف السندات المحددة' : 'Delete Selected'}
-                  </Menu.Item>
-                </Menu.Dropdown>
-              </Menu>
-
-              <Tooltip label={isAr ? 'إلغاء التحديد' : 'Clear selection'}>
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  disabled={bulkBusy}
-                  className="h-8 w-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 flex items-center justify-center cursor-pointer disabled:opacity-40 transition-colors shadow-2xs"
-                  aria-label={isAr ? 'إلغاء التحديد' : 'Clear selection'}
-                >
-                  <X size={14} />
-                </button>
-              </Tooltip>
-            </div>
-          )}
-        </div>
-
-        <div className="overflow-x-auto w-full">
+        <div className="w-full overflow-auto h-[58vh] min-h-[360px] overscroll-contain">
           <table className="w-full text-xs text-start border-collapse font-sans whitespace-nowrap min-w-full">
-            <thead>
-              <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-700 font-bold h-[44px]">
-                <th className="py-2.5 px-3 text-center w-14">
-                  <Switch
-                    size="xs"
-                    color="orange"
-                    checked={allVisibleSelected}
-                    onChange={toggleSelectAllVisible}
-                    disabled={visibleIds.length === 0}
-                    aria-label={isAr ? 'تحديد كل الأسطر' : 'Select all rows'}
-                    styles={{ track: { cursor: visibleIds.length === 0 ? 'not-allowed' : 'pointer' } }}
-                  />
-                </th>
+            <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-slate-50 [&_th]:shadow-[inset_0_-1px_0_#e2e8f0]">
+              <tr className="border-b border-slate-200 text-slate-700 font-bold h-[44px]">
                 <th className="py-2.5 px-3 text-center whitespace-nowrap w-12 font-mono font-bold text-slate-500">{isAr ? '#' : '#'}</th>
                 <th className="py-2.5 px-3 text-start whitespace-nowrap w-36">{isAr ? 'رقم السند' : 'Voucher No'}</th>
                 <th className="py-2.5 px-3 text-start whitespace-nowrap min-w-[180px]">
@@ -1120,14 +914,14 @@ export const VouchersPage: React.FC = () => {
                 <th className="py-2.5 px-3 text-end whitespace-nowrap w-36 font-mono">{isAr ? 'المبلغ والعملة' : 'Amount & Currency'}</th>
                 <th className="py-2.5 px-3 text-center whitespace-nowrap w-28 font-mono">{isAr ? 'تاريخ السند' : 'Date'}</th>
                 <th className="py-2.5 px-3 text-start whitespace-nowrap w-32">{isAr ? 'المستخدم المنشئ' : 'Created By'}</th>
-                <th className="py-2.5 px-3 text-center whitespace-nowrap w-36">{isAr ? 'الإجراءات' : 'Actions'}</th>
+                <th className="py-2.5 px-3 text-center whitespace-nowrap w-28">{isAr ? 'الإجراءات' : 'Actions'}</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-slate-500 font-bold">
+                  <td colSpan={9} className="py-16 text-center text-slate-500 font-bold">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={24} className="animate-spin text-[#F45A0A]" />
                       <span>{isAr ? 'جارٍ تحميل قيود وسجلات السندات المالية...' : 'Loading Financial Vouchers...'}</span>
@@ -1136,7 +930,7 @@ export const VouchersPage: React.FC = () => {
                 </tr>
               ) : currentGridData.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-slate-500 font-bold">
+                  <td colSpan={9} className="py-16 text-center text-slate-500 font-bold">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#F45A0A] flex items-center justify-center">
                         <Receipt size={24} />
@@ -1158,22 +952,8 @@ export const VouchersPage: React.FC = () => {
                       setSelectedVoucher(row);
                       setDrawerOpen(true);
                     }}
-                    className={`h-[44px] transition-colors cursor-pointer group ${
-                      selectedSet.has(String(row.id)) ? 'bg-orange-50/70' : 'hover:bg-orange-50/20'
-                    }`}
+                    className="h-[44px] hover:bg-orange-50/20 transition-colors cursor-pointer group"
                   >
-                    {/* Selection Switch Column */}
-                    <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <Switch
-                        size="xs"
-                        color="orange"
-                        checked={selectedSet.has(String(row.id))}
-                        onChange={() => toggleRowSelection(String(row.id))}
-                        aria-label={isAr ? `تحديد السند ${row.voucherNumber || ''}` : `Select ${row.voucherNumber || 'voucher'}`}
-                        styles={{ track: { cursor: 'pointer' } }}
-                      />
-                    </td>
-
                     {/* Sequence Column */}
                     <td className="py-2 px-3 text-center font-mono font-bold text-slate-400 text-xs w-12 tabular-nums">
                       {idx + 1}
@@ -1251,17 +1031,17 @@ export const VouchersPage: React.FC = () => {
                     {/* Row Actions */}
                     <td className="py-2 px-3 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1">
-                        <Tooltip label={isAr ? 'تعديل السند' : 'Edit'} withArrow position="top">
+                        <Tooltip label={isAr ? 'معاينة السند' : 'View Details'} withArrow position="top">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenEditModal(row);
+                              setSelectedVoucher(row);
+                              setDrawerOpen(true);
                             }}
-                            className="h-7 px-2 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#F45A0A] font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors border border-orange-200 shadow-2xs"
+                            className="p-1.5 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
                           >
-                            <Pencil size={12} />
-                            <span>{isAr ? 'تعديل' : 'Edit'}</span>
+                            <Eye size={14} />
                           </button>
                         </Tooltip>
 
@@ -1288,14 +1068,14 @@ export const VouchersPage: React.FC = () => {
                               });
                               setPrintModalOpen(true);
                             }}
-                            className="h-7 w-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 flex items-center justify-center cursor-pointer transition-colors border border-emerald-200 shadow-2xs shrink-0"
+                            className="p-1.5 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 rounded-lg transition-colors cursor-pointer"
                           >
-                            <Printer size={13} />
+                            <Printer size={14} />
                           </button>
                         </Tooltip>
 
                         {row.type !== 'JOURNAL' && (
-                          <Tooltip label={isAr ? `معاينة الوصل (${row.slipsCount || 0})` : `Receipt Slips (${row.slipsCount || 0})`} withArrow position="top">
+                          <Tooltip label={isAr ? `إشعارات ووصولات (${row.slipsCount || 0})` : `Receipt Slips (${row.slipsCount || 0})`} withArrow position="top">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -1303,14 +1083,27 @@ export const VouchersPage: React.FC = () => {
                                 setSelectedSlipVoucher(row);
                                 setSlipModalOpen(true);
                               }}
-                              className={`h-7 w-7 rounded-lg flex items-center justify-center transition-colors cursor-pointer border shadow-2xs shrink-0 ${
-                                row.slipsCount > 0 ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:text-slate-700'
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                row.slipsCount > 0 ? 'bg-teal-50 text-teal-600 hover:bg-teal-100' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'
                               }`}
                             >
-                              <Paperclip size={13} />
+                              <Paperclip size={14} />
                             </button>
                           </Tooltip>
                         )}
+
+                        <Tooltip label={isAr ? 'تعديل السند' : 'Edit'} withArrow position="top">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditModal(row);
+                            }}
+                            className="p-1.5 hover:bg-orange-50 text-slate-500 hover:text-orange-600 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Edit size={14} />
+                          </button>
+                        </Tooltip>
 
                         <Tooltip label={isAr ? 'حذف السند' : 'Delete'} withArrow position="top">
                           <button
@@ -1320,9 +1113,9 @@ export const VouchersPage: React.FC = () => {
                               setVoucherToDelete(row);
                               setDeleteConfirmOpen(true);
                             }}
-                            className="h-7 w-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors border border-rose-200 shadow-2xs shrink-0"
+                            className="p-1.5 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={14} />
                           </button>
                         </Tooltip>
                       </div>
@@ -1615,72 +1408,6 @@ export const VouchersPage: React.FC = () => {
           </div>
         </div>
       </Modal>
-
-      {/* ── Bulk Delete Confirmation Modal ── */}
-      <Modal
-        opened={pendingBulkDelete}
-        onClose={() => {
-          if (!bulkBusy) setPendingBulkDelete(false);
-        }}
-        transitionProps={{ duration: 0 }}
-        title={
-          <div className="flex items-center gap-3 pe-8" dir={direction}>
-            <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
-              <Trash2 size={18} />
-            </div>
-            <h3 className="font-extrabold text-[14.5px] text-slate-900">
-              {isAr ? 'حذف السندات المحددة' : 'Delete selected vouchers'}
-            </h3>
-          </div>
-        }
-        size="460px"
-        radius="16px"
-        centered
-        dir={direction}
-        closeOnClickOutside={!bulkBusy}
-        closeOnEscape={!bulkBusy}
-      >
-        <div className="space-y-4" dir={direction}>
-          <p className="text-[13px] font-semibold text-slate-700 leading-relaxed">
-            {isAr
-              ? `سيتم حذف ${selectedVouchers.length} سند مالي مع القيود المحاسبية المرتبطة بها وعكس أثرها على أرصدة الحسابات بالكامل. لا يمكن التراجع عن هذا الإجراء.`
-              : `${selectedVouchers.length} vouchers and their linked journal entries will be deleted and balances reversed. This cannot be undone.`}
-          </p>
-
-          <div className="rounded-xl border border-slate-200 bg-[#FAFAFA] px-3 py-2.5 space-y-1 max-h-[190px] overflow-y-auto">
-            {selectedVouchers.map((item: any) => (
-              <div key={item.id} className="flex items-center justify-between gap-3">
-                <span className="text-[12px] font-bold text-slate-700 truncate max-w-[220px]">
-                  {item.voucherNumber} · {item.accountName}
-                </span>
-                <span className="font-mono text-[12px] font-extrabold tabular-nums lining-nums text-slate-900" dir="ltr">
-                  {(Number(item.amount) || 0).toLocaleString('en-US')} {item.currency}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              type="button"
-              disabled={bulkBusy}
-              onClick={() => setPendingBulkDelete(false)}
-              className="h-10 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold text-xs cursor-pointer disabled:opacity-50"
-            >
-              {isAr ? 'إلغاء' : 'Cancel'}
-            </button>
-            <button
-              type="button"
-              disabled={bulkBusy}
-              onClick={handleBulkDelete}
-              className="h-10 px-5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer disabled:opacity-50"
-            >
-              {bulkBusy ? (isAr ? 'جارٍ الحذف...' : 'Deleting...') : (isAr ? 'تأكيد الحذف' : 'Delete')}
-            </button>
-          </div>
-        </div>
-      </Modal>
-
       {/* ── 8. Modern Voucher Print & Export Modal ── */}
       <VoucherPrintModal
         opened={printModalOpen}
