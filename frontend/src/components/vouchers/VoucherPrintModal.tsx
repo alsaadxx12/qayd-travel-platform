@@ -210,70 +210,67 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
       <div className="relative flex flex-col justify-between" style={{ zIndex: 1, minHeight: '269mm' }}>
         <div>
           {/* ═══════════════════════════════════════════════════════
-              1. TOP HEADER SECTION (Centered Company Branding & Document Title)
+              1. TOP HEADER SECTION (Clean 3-Section Header)
              ═══════════════════════════════════════════════════════ */}
-          <div className="flex items-center justify-between gap-4 pb-4 mb-5 border-b border-slate-100">
-            {/* Header Right (in RTL): Company Details */}
-            <div className="space-y-1 max-w-[28%] text-start">
-              <p className="text-[10px] text-slate-600 font-bold leading-relaxed">
-                📍 {cfg.address || 'العراق - بغداد - المنصور - شارع الصناعة'}
-              </p>
-              {cfg.phone && (
-                <p className="text-[10.5px] text-slate-700 font-black" dir="ltr">
-                  📞 {cfg.phone}
-                </p>
-              )}
-            </div>
-
-            {/* Header Center (CENTERED): Logo, Company Name & Document Title */}
-            <div className="flex-1 flex flex-col items-center justify-center text-center px-2">
-              {/* Logo / Brand */}
+          <div className="flex items-start justify-between gap-4 pb-4 mb-5 border-b border-slate-100">
+            {/* Header Right (in RTL): Company Logo & Sub-info */}
+            <div className="space-y-1 max-w-[32%] text-start">
               {logoUrl ? (
                 <img
                   src={logoUrl}
                   alt="Company Logo"
-                  className="mb-1.5"
+                  className="mb-1"
                   style={{
                     maxHeight: cfg.logoHeight ? `${cfg.logoHeight}px` : '50px',
-                    maxWidth: cfg.logoWidth ? `${cfg.logoWidth}px` : '180px',
+                    maxWidth: cfg.logoWidth ? `${cfg.logoWidth}px` : '160px',
                     objectFit: 'contain',
                     borderRadius: `${cfg.logoBorderRadius || 6}px`,
                   }}
                 />
               ) : (
-                <div className="flex items-center gap-1.5 font-black text-2xl tracking-tight mb-1">
-                  <span style={{ color: primaryColor }}>RODA</span>
+                <div className="flex items-center gap-1 font-black text-2xl tracking-tight mb-1">
                   <span style={{ color: '#FF7A00' }}>10</span>
+                  <span style={{ color: primaryColor }}>RODA</span>
                 </div>
               )}
 
-              {/* Centered Company Title */}
-              <h2
-                className="font-black text-slate-900 tracking-tight leading-tight"
-                style={{ fontSize: `${cfg.fontSizes?.companyTitle || 16}px` }}
-              >
-                {isEn ? (cfg.companyNameEn || cfg.companyName) : cfg.companyName}
-              </h2>
+              <p className="text-[10px] text-slate-500 font-bold leading-relaxed pt-0.5">
+                {cfg.address || 'العراق - بغداد - المنصور - شارع الصناعة'}
+              </p>
+              {cfg.phone && (
+                <p className="text-[10px] text-slate-500 font-bold" dir="ltr">
+                  {isEn ? `Tel: ${cfg.phone}` : `هاتف: ${cfg.phone}`}
+                </p>
+              )}
+            </div>
 
-              {/* Document Icon & Title */}
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center shadow-2xs shrink-0"
-                  style={{ backgroundColor: fieldBgColor, border: `1.5px solid ${primaryColor}` }}
-                >
-                  <IconFileText size={18} style={{ color: primaryColor }} />
+            {/* Header Center (CENTERED): Clean Document Icon & Title Only */}
+            <div className="flex flex-col items-center justify-center text-center pt-1">
+              <div
+                className="w-11 h-11 rounded-2xl flex items-center justify-center mb-1 shadow-2xs"
+                style={{ backgroundColor: fieldBgColor, border: `1.5px solid ${primaryColor}` }}
+              >
+                <div className="relative">
+                  <IconFileText size={22} style={{ color: primaryColor }} />
+                  <div
+                    className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-white"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    <span className="text-[8px] font-black leading-none">↓</span>
+                  </div>
                 </div>
-                <h1
-                  className="font-black tracking-tight"
-                  style={{
-                    fontSize: `${cfg.fontSizes?.docTitle || 22}px`,
-                    color: '#0f172a',
-                  }}
-                >
-                  {isEn ? docTitleEn : docTitleAr}
-                </h1>
               </div>
-              <div className="w-16 h-0.5 mt-1 rounded-full" style={{ backgroundColor: primaryColor }} />
+
+              <h1
+                className="font-black tracking-tight"
+                style={{
+                  fontSize: `${cfg.fontSizes?.docTitle || 24}px`,
+                  color: '#0f172a',
+                }}
+              >
+                {isEn ? docTitleEn : docTitleAr}
+              </h1>
+              <div className="w-12 h-0.5 mt-1 rounded-full" style={{ backgroundColor: primaryColor }} />
             </div>
 
             {/* Header Left (in RTL): Meta Box (Clean LTR/RTL Alignment) */}
