@@ -334,10 +334,15 @@ export const SystemSettingsPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (evt) => {
-        const result = evt.target?.result as string;
-        setCustomLogoUrl(result);
-        setLogoSourceMode('CUSTOM');
+      reader.onload = async (evt) => {
+        const base64 = evt.target?.result as string;
+        try {
+          const res = await branchesApi.uploadLogo(file.name, base64);
+          setCustomLogoUrl(res.url);
+          setLogoSourceMode('CUSTOM');
+        } catch (err) {
+          showErrorNotification('تعذر رفع الشعار', 'تعذر رفع الصورة لخادم التخزين. تأكد من إعداد Supabase Storage.');
+        }
       };
       reader.readAsDataURL(file);
     }

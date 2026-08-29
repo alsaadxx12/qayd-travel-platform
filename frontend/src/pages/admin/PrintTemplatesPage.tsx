@@ -1272,9 +1272,15 @@ export const PrintTemplatesPage: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        updateConfig('logoUrl', reader.result as string);
-        showSuccessNotification('تم رفع اللوكو بنجاح', 'تم تحديث شعار المؤسسة في القالب.');
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        try {
+          const res = await branchesApi.uploadLogo(file.name, base64);
+          updateConfig('logoUrl', res.url);
+          showSuccessNotification('تم رفع اللوكو بنجاح', 'تم رفع الشعار كرابط URL (بدون تخزين base64 في قاعدة البيانات).');
+        } catch (err) {
+          showErrorNotification('تعذر رفع الشعار', 'تعذر رفع الصورة لخادم التخزين. تأكد من إعداد Supabase Storage.');
+        }
       };
       reader.readAsDataURL(file);
     }

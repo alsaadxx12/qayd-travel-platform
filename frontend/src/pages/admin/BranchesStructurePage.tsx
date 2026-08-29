@@ -1797,7 +1797,7 @@ export const BranchesStructurePage: React.FC = () => {
                                     setLogo(res.url);
                                     showSuccessNotification(isAr ? 'تم رفع الشعار' : 'Logo Uploaded', isAr ? 'تم حفظ الشعار في حاوية Supabase بنجاح.' : 'Logo uploaded successfully.');
                                   } catch (err: any) {
-                                    setLogo(base64);
+                                    showErrorNotification(isAr ? 'تعذر رفع الشعار' : 'Upload Failed', isAr ? 'تعذر رفع الشعار لخادم التخزين. تأكد من إعداد Supabase Storage.' : 'Failed to upload logo to storage.');
                                   }
                                 };
                                 reader.readAsDataURL(file);

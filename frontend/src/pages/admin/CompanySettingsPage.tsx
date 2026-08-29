@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Paper, Button, Select, SegmentedControl, Badge } from '@mantine/core';
+import { Paper, Button, Select, SegmentedControl, Badge, Loader } from '@mantine/core';
 import {
   IconBuilding,
   IconDeviceFloppy,
@@ -23,6 +23,7 @@ export const CompanySettingsPage: React.FC = () => {
   const [customLogoUrl, setCustomLogoUrl] = useState<string>('');
   const [existingTemplateConfig, setExistingTemplateConfig] = useState<any>({});
   const [isSavingLogo, setIsSavingLogo] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   const activeLogoUrl = useMemo(() => {
@@ -36,11 +37,28 @@ export const CompanySettingsPage: React.FC = () => {
   const handleCustomLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setIsUploadingLogo(true);
       const reader = new FileReader();
-      reader.onload = (evt) => {
-        const result = evt.target?.result as string;
-        setCustomLogoUrl(result);
-        setLogoSourceMode('CUSTOM');
+      reader.onload = async (evt) => {
+        const base64 = evt.target?.result as string;
+        try {
+          // Upload to Supabase Storage and get public URL
+          const res = await branchesApi.uploadLogo(file.name, base64);
+          setCustomLogoUrl(res.url);
+          setLogoSourceMode('CUSTOM');
+          showSuccessNotification(
+            isAr ? 'تم رفع الشعار' : 'Logo Uploaded',
+            isAr ? 'تم رفع الشعار بنجاح وحفظ الرابط (بدون تخزين الصورة كنص في قاعدة البيانات)' : 'Logo uploaded as URL, not base64'
+          );
+        } catch (err) {
+          // Fallback: still set locally for preview but warn user
+          showErrorNotification(
+            isAr ? 'تعذر رفع الشعار' : 'Upload Failed',
+            isAr ? 'تعذر رفع الصورة لخادم التخزين. تأكد من إعداد Supabase Storage.' : 'Failed to upload to storage server.'
+          );
+        } finally {
+          setIsUploadingLogo(false);
+        }
       };
       reader.readAsDataURL(file);
     }
