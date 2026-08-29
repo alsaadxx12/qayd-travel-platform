@@ -218,31 +218,21 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     return getNextSequenceNumber(key);
   };
 
-  // Load vouchers list & accounts on open + Auto-detect employee's cashbox + Load Payment Methods
+  // Fast load config on open + Auto-detect employee's cashbox + Load Payment Methods
   useEffect(() => {
     if (opened) {
       const loadData = async () => {
         try {
-          const [accs, receipts, payments, templateRes, emps, journalEntries, customAccountsRes] = await Promise.all([
-            apiRequest('/api/accounts').catch(() => []),
-            apiRequest('/api/receipt-vouchers').catch(() => []),
-            apiRequest('/api/payment-vouchers').catch(() => []),
+          // Fast parallel loading of essential config only (avoiding dumping massive table records)
+          const [accs, templateRes, emps, customAccountsRes] = await Promise.all([
+            apiRequest('/api/accounts?lite=1').catch(() => apiRequest('/api/accounts').catch(() => [])),
             apiRequest('/api/print-templates/payment_methods_mapping').catch(() => null),
             employeesApi.getAll().catch(() => []),
-            apiRequest('/api/journal-entries').catch(() => []),
             apiRequest('/api/print-templates/custom_voucher_accounts').catch(() => null),
           ]);
 
           const loadedAccounts: AccountOption[] = accs || [];
           setAccounts(loadedAccounts);
-
-          const all = [
-            ...(receipts || []).map((r: any) => ({ ...r, voucherType: 'RECEIPT' })),
-            ...(payments || []).map((p: any) => ({ ...p, voucherType: 'PAYMENT' })),
-            ...(journalEntries || []).map((j: any) => ({ ...j, voucherType: 'JOURNAL' })),
-          ].sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
-
-          setVouchersList(all);
 
           // Find current employee in database
           const currentEmp = (emps || []).find((e: any) =>
@@ -335,13 +325,13 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
           setPaymentMappings(mappings);
 
           // Load configured custom allocation accounts
-          const customAccs: any[] = customAccountsRes?.config?.accounts || [];
+          const customAccs: any[] = (customAccountsRes?.config?.accounts || []).filter((a: any) => a.isActive !== false);
           setConfiguredCustomAccounts(customAccs);
           if (customAccs.length > 0) {
             setSplitAllocations(
               customAccs.map((ca: any) => ({
-                id: ca.id,
-                accountId: ca.targetAccountId,
+                id: ca.id || `split-${Math.random()}`,
+                accountId: ca.targetAccountId || '',
                 accountName: ca.nameAr,
                 amount: '',
                 note: '',
@@ -357,46 +347,21 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
           setFormDefaultCashboxId(savedDefaults.defaultCashboxAccountId || defaultCashboxId);
 
           if (initialVoucherId) {
-            const found = all.find((v: any) => v.id === initialVoucherId);
-            const idx = all.findIndex((v: any) => v.id === initialVoucherId);
-            if (found) {
-              loadVoucherIntoForm(found, idx);
-              return;
-            } else {
-              try {
-                let single: any = null;
-                if (defaultType === 'RECEIPT') {
-                  single = await apiRequest(`/api/receipt-vouchers/${initialVoucherId}`);
-                } else if (defaultType === 'PAYMENT') {
-                  single = await apiRequest(`/api/payment-vouchers/${initialVoucherId}`);
-                } else {
-                  single = await apiRequest(`/api/journal-entries/${initialVoucherId}`);
-                }
-                if (single) {
-                  loadVoucherIntoForm(single, 0);
-                  return;
-                }
-              } catch (e) {}
-            }
+            try {
+              let single: any = null;
+              if (defaultType === 'RECEIPT') {
+                single = await apiRequest(`/api/receipt-vouchers/${initialVoucherId}`);
+              } else if (defaultType === 'PAYMENT') {
+                single = await apiRequest(`/api/payment-vouchers/${initialVoucherId}`);
+              } else {
+                single = await apiRequest(`/api/journal-entries/${initialVoucherId}`);
+              }
+              if (single) {
+                loadVoucherIntoForm(single, 0);
+                return;
+              }
+            } catch (e) {}
           }
-
-          // Load Custom Voucher Split Accounts configured in System Settings
-          try {
-            const customAccountsRes = await fetchPrintTemplate('custom_voucher_accounts');
-            if (customAccountsRes?.config?.accounts && Array.isArray(customAccountsRes.config.accounts)) {
-              const activeCustoms = customAccountsRes.config.accounts.filter((a: any) => a.isActive !== false);
-              setConfiguredCustomAccounts(activeCustoms);
-              setSplitAllocations(
-                activeCustoms.map((ca: any) => ({
-                  id: ca.id || `split-${Math.random()}`,
-                  accountId: ca.targetAccountId || '',
-                  accountName: ca.nameAr,
-                  amount: '',
-                  note: '',
-                }))
-              );
-            }
-          } catch (e) {}
 
           // Default new voucher state applying saved user preferences
           handleNewVoucher(defaultType, savedDefaults, mappings, defaultCashboxId);
@@ -818,18 +783,20 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     }
   };
 
-  // Shortcut hotkeys (Ctrl+S saves without closing)
+  // Shortcut hotkeys (Ctrl+S saves without closing) using ref for high performance
+  const saveHandlerRef = useRef<() => void>(() => {});
+
   useEffect(() => {
+    if (!opened) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!opened) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        handleSaveVoucher();
+        saveHandlerRef.current();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [opened, amount, cashboxAccountId, oppositeAccountId, description, voucherType, date, currency, selectedPaymentMethodId, journalLines, isJournalBalanced]);
+  }, [opened]);
 
   const isReceipt = voucherType === 'RECEIPT';
 
@@ -1122,6 +1089,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       onSuccess({ _removeTemp: tempId });
     });
   };
+
+  saveHandlerRef.current = handleSaveVoucher;
 
   // Only Operational / Sub-Accounts (No Parent Group Accounts)
   const postingAccounts = useMemo(() => {
@@ -2021,14 +1990,6 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                             className="h-[38px] px-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-[11px] font-bold text-slate-700 border border-slate-200 cursor-pointer shadow-2xs transition-colors shrink-0"
                           >
                             المتبقي
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSplitRow(item.id)}
-                            className="h-[38px] w-[34px] rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center cursor-pointer transition-colors shrink-0"
-                          >
-                            <IconTrash size={14} />
                           </button>
                         </div>
                       </div>
