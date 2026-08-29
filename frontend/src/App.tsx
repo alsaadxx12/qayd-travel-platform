@@ -29,6 +29,8 @@ const ClearingAccountProfilePage = lazy(() => import('./pages/ClearingAccountPro
 const BranchesStructurePage = lazy(() => import('./pages/admin/BranchesStructurePage').then((m) => ({ default: m.BranchesStructurePage })));
 const PermissionGroupsPage = lazy(() => import('./pages/admin/PermissionGroupsPage').then((m) => ({ default: m.PermissionGroupsPage })));
 const SystemSettingsPage = lazy(() => import('./pages/admin/SystemSettingsPage').then((m) => ({ default: m.SystemSettingsPage })));
+const CompanySettingsPage = lazy(() => import('./pages/admin/CompanySettingsPage').then((m) => ({ default: m.CompanySettingsPage })));
+const PrintSettingsPage = lazy(() => import('./pages/admin/PrintSettingsPage').then((m) => ({ default: m.PrintSettingsPage })));
 const AddonsStorePage = lazy(() => import('./pages/AddonsStorePage').then((m) => ({ default: m.AddonsStorePage })));
 const FiscalYearsPage = lazy(() => import('./pages/FiscalYearsPage').then((m) => ({ default: m.FiscalYearsPage })));
 const SubCashboxesSettlementPage = lazy(() => import('./pages/SubCashboxesSettlementPage').then((m) => ({ default: m.SubCashboxesSettlementPage })));
@@ -333,6 +335,22 @@ export const App: React.FC = () => {
               element={
                 <PermissionRouteGuard routePath="/system-settings">
                   <SystemSettingsPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/company-settings"
+              element={
+                <PermissionRouteGuard routePath="/system-settings">
+                  <CompanySettingsPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/print-settings"
+              element={
+                <PermissionRouteGuard routePath="/system-settings">
+                  <PrintSettingsPage />
                 </PermissionRouteGuard>
               }
             />

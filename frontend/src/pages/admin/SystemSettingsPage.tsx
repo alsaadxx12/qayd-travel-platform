@@ -811,14 +811,6 @@ export const SystemSettingsPage: React.FC = () => {
       ],
     },
     {
-      title: 'إعدادات المؤسسة والمستندات',
-      isAccountingGroup: false,
-      items: [
-        { id: 'company', label: 'إعدادات الشركة والشعار', icon: IconBuilding },
-        { id: 'print_statement', label: 'إعدادات الكشف والطباعة', icon: IconPrinter },
-      ],
-    },
-    {
       title: 'النظام والمظهر',
       isAccountingGroup: false,
       items: [

@@ -131,6 +131,8 @@ const DEFAULT_SIDEBAR_SECTIONS: NavSection[] = [
       { id: 'feedback-tickets', title: 'مركز البلاغات والدعم الفني', path: '/feedback-tickets', iconKey: 'MessageSquare' },
       { id: 'saas-admin', title: 'لوحة إدارة المنصة (SaaS)', path: '/saas-admin', iconKey: 'Sparkles' },
       { id: 'deleted-records', title: 'سجل المحذوفات', path: '/deleted-records', iconKey: 'Trash2' },
+      { id: 'company-settings', title: 'إعدادات الشركة والشعار', path: '/company-settings', iconKey: 'Building' },
+      { id: 'print-settings', title: 'إعدادات الطباعة', path: '/print-settings', iconKey: 'Printer' },
       { id: 'system-settings', title: 'إعدادات النظام', path: '/system-settings', iconKey: 'Settings' },
     ],
   },
