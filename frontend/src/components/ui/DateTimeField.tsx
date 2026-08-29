@@ -24,6 +24,25 @@ const MONTHS_EN = [
 const WEEKDAYS_AR = ['أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
 const WEEKDAYS_EN = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
+/**
+ * Arabic UI fonts ship a `locl` feature that rewrites ASCII digits as Arabic-Indic
+ * (٠١٢…) whenever the surrounding text language is Arabic. Accountants read ledgers
+ * in Latin digits, so every numeric surface here switches that feature off and
+ * declares itself English.
+ */
+const LATIN_DIGITS: React.CSSProperties = {
+  fontFeatureSettings: '"locl" 0',
+  fontVariantNumeric: 'lining-nums tabular-nums',
+};
+
+const ARABIC_INDIC = /[٠-٩۰-۹]/g;
+/** Accepts a keypad that types ٣ and stores 3. */
+const toLatinDigits = (raw: string) =>
+  raw.replace(ARABIC_INDIC, (d) => {
+    const code = d.charCodeAt(0);
+    return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+  });
+
 const pad = (n: number) => String(n).padStart(2, '0');
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -47,6 +66,10 @@ export const DateTimeField: React.FC<Props> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => new Date(value.getFullYear(), value.getMonth(), 1));
+  // While a field is mid-edit the raw keystrokes live here, so clearing it to type
+  // a new number doesn't snap back to 12 on the first empty render.
+  const [hourDraft, setHourDraft] = useState<string | null>(null);
+  const [minuteDraft, setMinuteDraft] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
   const months = isArabic ? MONTHS_AR : MONTHS_EN;
@@ -55,6 +78,12 @@ export const DateTimeField: React.FC<Props> = ({
   useEffect(() => {
     if (open) setView(new Date(value.getFullYear(), value.getMonth(), 1));
   }, [open, value]);
+
+  useEffect(() => {
+    if (open) return;
+    setHourDraft(null);
+    setMinuteDraft(null);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -120,10 +149,24 @@ export const DateTimeField: React.FC<Props> = ({
     commit(next);
   };
 
+  const onHourInput = (raw: string) => {
+    const digits = toLatinDigits(raw).replace(/\D/g, '').slice(0, 2);
+    setHourDraft(digits);
+    if (digits !== '') setHour12(Number(digits));
+  };
+
+  const onMinuteInput = (raw: string) => {
+    const digits = toLatinDigits(raw).replace(/\D/g, '').slice(0, 2);
+    setMinuteDraft(digits);
+    if (digits !== '') setMinute(Number(digits));
+  };
+
   const shiftMonth = (delta: number) =>
     setView((v) => new Date(v.getFullYear(), v.getMonth() + delta, 1));
 
   const meridiemLabel = isArabic ? (isPm ? 'مساءً' : 'صباحاً') : isPm ? 'PM' : 'AM';
+  const numberInputClass =
+    'w-12 h-9 text-center rounded-lg border border-[#E5E7EB] bg-white font-mono text-[13.5px] font-extrabold text-[#111827] outline-none focus:border-[#F45A0A] focus:ring-2 focus:ring-orange-100 transition-colors';
 
   return (
     <div className={`relative w-full ${className}`} ref={boxRef} dir={isArabic ? 'rtl' : 'ltr'}>
@@ -146,35 +189,47 @@ export const DateTimeField: React.FC<Props> = ({
         } ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <IconCalendarEvent size={17} className={open ? 'text-[#F45A0A]' : 'text-[#9CA3AF]'} />
-        <span dir="ltr" className="font-mono tabular-nums lining-nums text-[13.5px] font-extrabold text-[#111827]">
+        <span
+          dir="ltr"
+          lang="en"
+          style={LATIN_DIGITS}
+          className="font-mono text-[13.5px] font-extrabold text-[#111827]"
+        >
           {pad(value.getDate())}/{pad(value.getMonth() + 1)}/{value.getFullYear()}
         </span>
         <span className="w-px h-4 bg-[#E5E7EB]" />
-        <span dir="ltr" className="font-mono tabular-nums lining-nums text-[13.5px] font-extrabold text-[#111827]">
+        <span
+          dir="ltr"
+          lang="en"
+          style={LATIN_DIGITS}
+          className="font-mono text-[13.5px] font-extrabold text-[#111827]"
+        >
           {pad(hours12)}:{pad(value.getMinutes())}
         </span>
-        <span className="text-[11px] font-bold text-[#6B7280]">{meridiemLabel}</span>
+        <span className="text-[11px] font-bold text-[#6B7280] whitespace-nowrap">{meridiemLabel}</span>
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-2 w-[290px] rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_12px_32px_-12px_rgba(15,23,42,0.28)] overflow-hidden">
+        <div className="absolute z-50 mt-2 w-[318px] rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_12px_32px_-12px_rgba(15,23,42,0.28)] overflow-hidden">
           <div className="flex items-center justify-between px-2.5 py-2 border-b border-slate-100 bg-[#FFFAF6]">
             <button
               type="button"
               onClick={() => shiftMonth(-1)}
-              className="w-7 h-7 grid place-items-center rounded-lg text-slate-500 hover:bg-orange-50 hover:text-[#F45A0A]"
+              className="w-7 h-7 grid place-items-center rounded-lg text-slate-500 hover:bg-orange-50 hover:text-[#F45A0A] cursor-pointer"
               aria-label="previous month"
             >
               <IconChevronRight size={16} />
             </button>
             <div className="text-[12.5px] font-bold text-[#111827]">
               {months[view.getMonth()]}{' '}
-              <span dir="ltr" className="font-mono tabular-nums">{view.getFullYear()}</span>
+              <span dir="ltr" lang="en" style={LATIN_DIGITS} className="font-mono">
+                {view.getFullYear()}
+              </span>
             </div>
             <button
               type="button"
               onClick={() => shiftMonth(1)}
-              className="w-7 h-7 grid place-items-center rounded-lg text-slate-500 hover:bg-orange-50 hover:text-[#F45A0A]"
+              className="w-7 h-7 grid place-items-center rounded-lg text-slate-500 hover:bg-orange-50 hover:text-[#F45A0A] cursor-pointer"
               aria-label="next month"
             >
               <IconChevronLeft size={16} />
@@ -193,13 +248,15 @@ export const DateTimeField: React.FC<Props> = ({
               {cells.map((day, i) => {
                 if (!day) return <div key={`x${i}`} className="h-8" />;
                 const selected = sameDay(day, value);
-                const isToday = sameDay(day, today);
+                const isToday = sameDay(day, value) === false && sameDay(day, today);
                 return (
                   <button
                     key={day.toISOString()}
                     type="button"
+                    lang="en"
+                    style={LATIN_DIGITS}
                     onClick={() => pickDay(day)}
-                    className={`h-8 rounded-lg font-mono tabular-nums text-[12px] font-bold transition-colors ${
+                    className={`h-8 rounded-lg font-mono text-[12px] font-bold transition-colors cursor-pointer ${
                       selected
                         ? 'bg-[#F45A0A] text-white'
                         : isToday
@@ -214,57 +271,68 @@ export const DateTimeField: React.FC<Props> = ({
             </div>
           </div>
 
-          <div className="border-t border-slate-100 px-2.5 py-2.5 bg-[#FCFCFC]">
+          <div className="border-t border-slate-100 px-2.5 py-2.5 bg-[#FCFCFC] space-y-2">
             <div className="flex items-center gap-2">
               <IconClock size={15} className="text-[#9CA3AF] shrink-0" />
-              <div dir="ltr" className="flex items-center gap-1">
+
+              <div dir="ltr" className="flex items-center gap-1 shrink-0">
                 <input
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={pad(hours12)}
-                  onChange={(e) => setHour12(Number(e.target.value))}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={2}
+                  lang="en"
+                  style={LATIN_DIGITS}
+                  value={hourDraft ?? pad(hours12)}
+                  onChange={(e) => onHourInput(e.target.value)}
                   onFocus={(e) => e.currentTarget.select()}
-                  className="w-11 h-8 text-center rounded-lg border border-[#E5E7EB] bg-white font-mono tabular-nums text-[13px] font-extrabold text-[#111827] outline-none focus:border-[#F45A0A] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  onBlur={() => setHourDraft(null)}
+                  aria-label={isArabic ? 'الساعة' : 'Hour'}
+                  className={numberInputClass}
                 />
                 <span className="font-mono font-extrabold text-[#9CA3AF]">:</span>
                 <input
-                  type="number"
-                  min={0}
-                  max={59}
-                  value={pad(value.getMinutes())}
-                  onChange={(e) => setMinute(Number(e.target.value))}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={2}
+                  lang="en"
+                  style={LATIN_DIGITS}
+                  value={minuteDraft ?? pad(value.getMinutes())}
+                  onChange={(e) => onMinuteInput(e.target.value)}
                   onFocus={(e) => e.currentTarget.select()}
-                  className="w-11 h-8 text-center rounded-lg border border-[#E5E7EB] bg-white font-mono tabular-nums text-[13px] font-extrabold text-[#111827] outline-none focus:border-[#F45A0A] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                  onBlur={() => setMinuteDraft(null)}
+                  aria-label={isArabic ? 'الدقيقة' : 'Minute'}
+                  className={numberInputClass}
                 />
               </div>
 
-              <div className="flex rounded-lg border border-[#E5E7EB] overflow-hidden">
+              <div className="flex rounded-lg border border-[#E5E7EB] overflow-hidden shrink-0 ms-auto">
                 {[false, true].map((pm) => (
                   <button
                     key={String(pm)}
                     type="button"
                     onClick={() => setMeridiem(pm)}
-                    className={`h-8 px-2 text-[10.5px] font-bold transition-colors ${
-                      isPm === pm ? 'bg-[#F45A0A] text-white' : 'bg-white text-[#6B7280] hover:bg-slate-50'
+                    className={`h-9 px-2.5 min-w-[52px] text-[11px] font-bold whitespace-nowrap leading-none transition-colors cursor-pointer ${
+                      isPm === pm
+                        ? 'bg-[#F45A0A] text-white'
+                        : 'bg-white text-[#6B7280] hover:bg-slate-50'
                     }`}
                   >
                     {isArabic ? (pm ? 'مساءً' : 'صباحاً') : pm ? 'PM' : 'AM'}
                   </button>
                 ))}
               </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  commit(new Date());
-                  setOpen(false);
-                }}
-                className="ms-auto h-8 px-2.5 rounded-lg bg-white border border-orange-200 text-[11px] font-bold text-[#C2410C] hover:bg-[#FFF3E8] transition-colors"
-              >
-                {isArabic ? 'الآن' : 'Now'}
-              </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                commit(new Date());
+                setOpen(false);
+              }}
+              className="w-full h-8 rounded-lg bg-white border border-orange-200 text-[11.5px] font-bold text-[#C2410C] hover:bg-[#FFF3E8] transition-colors cursor-pointer"
+            >
+              {isArabic ? 'الآن' : 'Now'}
+            </button>
           </div>
         </div>
       )}

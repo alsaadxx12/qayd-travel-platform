@@ -9,4 +9,5 @@ build/
 frontend_backup/
 .system_generated/
 *.log
+.wrangler/
 

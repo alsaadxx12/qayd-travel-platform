@@ -4,6 +4,7 @@ import {
   Modal,
   Switch,
   Tooltip,
+  Menu,
 } from '@mantine/core';
 import {
   Coins,
@@ -15,13 +16,17 @@ import {
   DollarSign,
   Receipt,
   RefreshCw,
-  Eye,
   ChevronRight,
   ChevronLeft,
   ChevronsRight,
   ChevronsLeft,
   AlertCircle,
   Trash2,
+  Tag,
+  ChevronDown,
+  FileSpreadsheet,
+  FileText,
+  X,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../api/client';
@@ -110,6 +115,9 @@ export const ExpensesPage: React.FC = () => {
   const [expenseDate, setExpenseDate] = useState<string>(getLocalIsoDate());
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [pendingDeleteExpense, setPendingDeleteExpense] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [pendingBulkDelete, setPendingBulkDelete] = useState(false);
 
   // Sync exchange rate on load
   useEffect(() => {
@@ -666,6 +674,240 @@ export const ExpensesPage: React.FC = () => {
     },
   });
 
+  // ---- Row selection + bulk actions -------------------------------------
+  const visibleIds = useMemo(() => filteredExpenses.map((item: any) => String(item.id)), [filteredExpenses]);
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedExpenses = useMemo(
+    () => filteredExpenses.filter((item: any) => selectedSet.has(String(item.id))),
+    [filteredExpenses, selectedSet],
+  );
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id: string) => selectedSet.has(id));
+  const someVisibleSelected = !allVisibleSelected && visibleIds.some((id: string) => selectedSet.has(id));
+
+  // Drop ids that scrolled out of the current filter so the counter never lies.
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const next = current.filter((id) => visibleIds.includes(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [visibleIds]);
+
+  const toggleRowSelection = (id: string) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
+    );
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds(allVisibleSelected ? [] : visibleIds);
+  };
+
+  const clearSelection = () => setSelectedIds([]);
+
+  const buildExportRows = () =>
+    selectedExpenses.map((item: any, idx: number) => {
+      const parts = splitBeneficiaryFromDescription(item.description);
+      const itemDate = new Date(item.date || item.createdAt || Date.now());
+      const itemCur = String(item.currency || 'IQD').toUpperCase().includes('USD') ? 'USD' : 'IQD';
+      return {
+        [isAr ? '#' : 'No.']: idx + 1,
+        [isAr ? 'رقم السند' : 'Voucher #']: item.voucherNumber || `PV-${String(item.id).slice(0, 6)}`,
+        [isAr ? 'التاريخ' : 'Date']: itemDate.toLocaleDateString('en-GB'),
+        [isAr ? 'بند المصروف' : 'Expense account']:
+          accountDisplayName(item.account) || (isAr ? 'مصروف عام' : 'General expense'),
+        [isAr ? 'البيان' : 'Description']:
+          `${parts.beneficiary ? `${parts.beneficiary} · ` : ''}${parts.description || ''}`.trim(),
+        [isAr ? 'صندوق الصرف' : 'Paid from']:
+          accountDisplayName(item.cashboxOrBankAccount) || (isAr ? 'غير محدد' : 'Unspecified'),
+        [isAr ? 'المبلغ' : 'Amount']: parseFloat(String(item.amount)) || 0,
+        [isAr ? 'العملة' : 'Currency']: itemCur,
+        [isAr ? 'الحالة' : 'Status']:
+          item.status === 'POSTED' ? (isAr ? 'مرحّل' : 'Posted') : String(item.status || '—'),
+      };
+    });
+
+  const selectionTotalsLabel = useMemo(() => {
+    const totals = selectedExpenses.reduce(
+      (acc: Record<string, number>, item: any) => {
+        const cur = String(item.currency || 'IQD').toUpperCase().includes('USD') ? 'USD' : 'IQD';
+        acc[cur] = (acc[cur] || 0) + (parseFloat(String(item.amount)) || 0);
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+    return Object.entries(totals)
+      .map(([cur, value]) => `${value.toLocaleString('en-US')} ${cur}`)
+      .join(' + ');
+  }, [selectedExpenses]);
+
+  // A standalone print sheet keeps the app chrome out of the paper.
+  const buildPrintHtml = () => {
+    const rows = buildExportRows();
+    if (rows.length === 0) return '';
+    const headers = Object.keys(rows[0]);
+    const title = isAr ? 'كشف سندات المصاريف' : 'Expense vouchers statement';
+    const head = headers.map((h) => `<th>${h}</th>`).join('');
+    const body = rows
+      .map(
+        (row) =>
+          `<tr>${headers
+            .map((h) => {
+              const value = (row as any)[h];
+              const isNum = typeof value === 'number';
+              return `<td class="${isNum ? 'num' : ''}">${
+                isNum ? value.toLocaleString('en-US') : String(value ?? '')
+              }</td>`;
+            })
+            .join('')}</tr>`,
+      )
+      .join('');
+    return `<!doctype html><html dir="${isAr ? 'rtl' : 'ltr'}" lang="${isAr ? 'ar' : 'en'}"><head>
+<meta charset="utf-8" /><title>${title}</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI",Tahoma,system-ui,sans-serif;margin:24px;color:#0f172a}
+  h1{font-size:17px;margin:0 0 4px}
+  .meta{font-size:11px;color:#64748b;margin-bottom:14px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th,td{border:1px solid #cbd5e1;padding:6px 8px;text-align:center}
+  th{background:#fff7ed;color:#9a3412;font-weight:700}
+  td.num{font-variant-numeric:tabular-nums;font-weight:700}
+  tfoot td{background:#f8fafc;font-weight:800}
+  @page{size:A4 landscape;margin:12mm}
+</style></head><body>
+<h1>${title}</h1>
+<div class="meta">${isAr ? 'عدد السندات' : 'Vouchers'}: ${rows.length} &nbsp;·&nbsp; ${
+      isAr ? 'الإجمالي' : 'Total'
+    }: ${selectionTotalsLabel} &nbsp;·&nbsp; ${new Date().toLocaleString('en-GB')}</div>
+<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>
+</body></html>`;
+  };
+
+  const handleBulkPrint = () => {
+    const html = buildPrintHtml();
+    if (!html) return;
+    const win = window.open('', '_blank', 'width=1100,height=760');
+    if (!win) {
+      showErrorNotification(
+        isAr ? 'تعذّرت الطباعة' : 'Print blocked',
+        isAr ? 'المتصفح منع فتح نافذة الطباعة، اسمح بالنوافذ المنبثقة.' : 'Allow pop-ups to print.',
+      );
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+    }, 250);
+  };
+
+  const handleBulkExportExcel = async () => {
+    const rows = buildExportRows();
+    if (rows.length === 0) return;
+    setBulkBusy(true);
+    try {
+      const XLSX = await import('xlsx');
+      const sheet = XLSX.utils.json_to_sheet(rows);
+      const book = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(book, sheet, isAr ? 'المصاريف' : 'Expenses');
+      XLSX.writeFile(book, `expenses-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      showSuccessNotification(
+        isAr ? 'تم التصدير' : 'Exported',
+        isAr ? `تم تصدير ${rows.length} سند إلى إكسل` : `${rows.length} vouchers exported to Excel`,
+      );
+    } catch (err: any) {
+      showErrorNotification(
+        isAr ? 'تعذّر التصدير' : 'Export failed',
+        err?.message || (isAr ? 'حدث خطأ أثناء إنشاء ملف إكسل' : 'Could not build the Excel file'),
+      );
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  // Arabic shaping breaks in jsPDF's core fonts, so the sheet is rasterised first.
+  const handleBulkExportPdf = async () => {
+    const html = buildPrintHtml();
+    if (!html) return;
+    setBulkBusy(true);
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:1120px;background:#ffffff;z-index:-1;';
+    host.setAttribute('dir', isAr ? 'rtl' : 'ltr');
+    host.innerHTML = html.slice(html.indexOf('<body>') + 6, html.indexOf('</body>'));
+    const style = document.createElement('style');
+    style.textContent = html.slice(html.indexOf('<style>') + 7, html.indexOf('</style>'));
+    host.prepend(style);
+    document.body.appendChild(host);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas-pro'),
+        import('jspdf'),
+      ]);
+      const canvas = await html2canvas(host, { scale: 2, backgroundColor: '#ffffff' });
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 24;
+      const imgWidth = pageWidth - margin * 2;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const image = canvas.toDataURL('image/png');
+      let remaining = imgHeight;
+      let offset = 0;
+      // Slice tall tables across pages instead of squashing them onto one.
+      while (remaining > 0) {
+        pdf.addImage(image, 'PNG', margin, margin - offset, imgWidth, imgHeight, undefined, 'FAST');
+        remaining -= pageHeight - margin * 2;
+        offset += pageHeight - margin * 2;
+        if (remaining > 0) pdf.addPage();
+      }
+      pdf.save(`expenses-${new Date().toISOString().slice(0, 10)}.pdf`);
+      showSuccessNotification(
+        isAr ? 'تم التصدير' : 'Exported',
+        isAr ? 'تم إنشاء ملف PDF للسندات المحددة' : 'PDF created for the selected vouchers',
+      );
+    } catch (err: any) {
+      showErrorNotification(
+        isAr ? 'تعذّر التصدير' : 'Export failed',
+        err?.message || (isAr ? 'حدث خطأ أثناء إنشاء ملف PDF' : 'Could not build the PDF file'),
+      );
+    } finally {
+      host.remove();
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedExpenses.length === 0) return;
+    setBulkBusy(true);
+    let done = 0;
+    const failed: string[] = [];
+    for (const item of selectedExpenses) {
+      try {
+        await apiRequest(`/api/payment-vouchers/${item.id}`, { method: 'DELETE' });
+        done += 1;
+      } catch {
+        failed.push(item.voucherNumber || String(item.id).slice(0, 6));
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ['expenses-vouchers-list'] });
+    setSelectedIds([]);
+    setBulkBusy(false);
+    setPendingBulkDelete(false);
+    if (done > 0) {
+      showSuccessNotification(
+        isAr ? 'تم الحذف' : 'Deleted',
+        isAr ? `تم حذف ${done} سند وعكس أثرها على الأرصدة` : `${done} vouchers deleted`,
+      );
+    }
+    if (failed.length > 0) {
+      showErrorNotification(
+        isAr ? 'تعذّر حذف بعض السندات' : 'Some deletions failed',
+        failed.join(', '),
+      );
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const errs: Record<string, string> = {};
@@ -899,21 +1141,108 @@ export const ExpensesPage: React.FC = () => {
               {filteredExpenses.length.toLocaleString('en-US')}
             </span>
           </div>
+
+          {selectedIds.length > 0 ? (
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-600">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-orange-50 text-[#C2410C] border border-orange-200 font-mono tabular-nums lining-nums font-black">
+                  {selectedIds.length.toLocaleString('en-US')}
+                </span>
+                {isAr ? 'محدد' : 'selected'}
+                {selectionTotalsLabel ? (
+                  <span className="text-slate-400 font-mono tabular-nums lining-nums">· {selectionTotalsLabel}</span>
+                ) : null}
+              </span>
+
+              <Menu shadow="md" width={200} position={isAr ? 'bottom-start' : 'bottom-end'} withinPortal>
+                <Menu.Target>
+                  <button
+                    type="button"
+                    disabled={bulkBusy}
+                    className="h-8 px-3 inline-flex items-center gap-1.5 rounded-lg bg-[#F45A0A] hover:bg-[#DC4F09] text-white text-xs font-extrabold shadow-xs cursor-pointer disabled:opacity-60"
+                  >
+                    {bulkBusy ? <RefreshCw size={13} className="animate-spin" /> : <Coins size={13} />}
+                    {isAr ? 'إجراءات' : 'Actions'}
+                    <ChevronDown size={13} />
+                  </button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>
+                    {isAr ? `${selectedIds.length} سند محدد` : `${selectedIds.length} selected`}
+                  </Menu.Label>
+                  <Menu.Item
+                    leftSection={<Printer size={14} />}
+                    onClick={handleBulkPrint}
+                    disabled={bulkBusy}
+                  >
+                    {isAr ? 'طباعة' : 'Print'}
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<FileSpreadsheet size={14} />}
+                    onClick={handleBulkExportExcel}
+                    disabled={bulkBusy}
+                  >
+                    {isAr ? 'استخراج إكسل' : 'Export Excel'}
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<FileText size={14} />}
+                    onClick={handleBulkExportPdf}
+                    disabled={bulkBusy}
+                  >
+                    {isAr ? 'استخراج PDF' : 'Export PDF'}
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Item
+                    color="red"
+                    leftSection={<Trash2 size={14} />}
+                    onClick={() => setPendingBulkDelete(true)}
+                    disabled={bulkBusy}
+                  >
+                    {isAr ? 'حذف' : 'Delete'}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+
+              <Tooltip label={isAr ? 'إلغاء التحديد' : 'Clear selection'}>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  disabled={bulkBusy}
+                  className="h-8 w-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 flex items-center justify-center cursor-pointer disabled:opacity-40"
+                  aria-label={isAr ? 'إلغاء التحديد' : 'Clear selection'}
+                >
+                  <X size={14} />
+                </button>
+              </Tooltip>
+            </div>
+          ) : null}
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-start border-collapse text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold text-[11.5px]">
               <tr>
+                <th className="p-3 text-center w-11">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someVisibleSelected;
+                    }}
+                    onChange={toggleSelectAllVisible}
+                    disabled={visibleIds.length === 0}
+                    aria-label={isAr ? 'تحديد كل الأسطر' : 'Select all rows'}
+                    className="h-3.5 w-3.5 align-middle accent-[#F45A0A] cursor-pointer disabled:cursor-not-allowed"
+                  />
+                </th>
                 <th className="p-3 text-center w-12 font-mono tabular-nums lining-nums">#</th>
-                <th className="p-3">{isAr ? 'رقم السند' : 'Voucher #'}</th>
+                <th className="p-3 text-center">{isAr ? 'رقم السند' : 'Voucher #'}</th>
                 <th className="p-3 text-center">{isAr ? 'التاريخ' : 'Date'}</th>
-                <th className="p-3">{isAr ? 'بند المصروف' : 'Expense account'}</th>
-                <th className="p-3">{isAr ? 'البيان' : 'Description'}</th>
-                <th className="p-3">{isAr ? 'صندوق الصرف' : 'Paid from'}</th>
+                <th className="p-3 text-center">{isAr ? 'بند المصروف' : 'Expense account'}</th>
+                <th className="p-3 text-center">{isAr ? 'البيان' : 'Description'}</th>
+                <th className="p-3 text-center">{isAr ? 'صندوق الصرف' : 'Paid from'}</th>
                 <th className="p-3 text-center">{isAr ? 'المبلغ' : 'Amount'}</th>
                 <th className="p-3 text-center">{isAr ? 'الحالة' : 'Status'}</th>
-                <th className="p-3 text-center w-24">{isAr ? 'إجراءات' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -948,10 +1277,31 @@ export const ExpensesPage: React.FC = () => {
                   const descParts = splitBeneficiaryFromDescription(item.description);
 
                   return (
-                    <tr key={item.id} className="hover:bg-orange-50/30 transition-colors">
+                    <tr
+                      key={item.id}
+                      className={`transition-colors ${
+                        selectedSet.has(String(item.id)) ? 'bg-orange-50/70' : 'hover:bg-orange-50/30'
+                      }`}
+                    >
+                      <td className="p-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedSet.has(String(item.id))}
+                          onChange={() => toggleRowSelection(String(item.id))}
+                          aria-label={isAr ? `تحديد السند ${item.voucherNumber || ''}` : `Select ${item.voucherNumber || 'voucher'}`}
+                          className="h-3.5 w-3.5 align-middle accent-[#F45A0A] cursor-pointer"
+                        />
+                      </td>
                       <td className="p-3 text-center text-slate-400 font-mono font-extrabold tabular-nums lining-nums">{(idx + 1).toLocaleString('en-US')}</td>
-                      <td className="p-3 font-mono font-extrabold tabular-nums lining-nums text-slate-900">
-                        {item.voucherNumber || `PV-${String(item.id).slice(0, 6)}`}
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => openExpenseRecord(item)}
+                          title={isAr ? 'فتح القيد' : 'Open record'}
+                          className="font-mono font-extrabold tabular-nums lining-nums text-slate-900 hover:text-[#F45A0A] hover:underline underline-offset-2 cursor-pointer"
+                        >
+                          {item.voucherNumber || `PV-${String(item.id).slice(0, 6)}`}
+                        </button>
                         {item.reference ? (
                           <span className="block text-[10px] text-slate-400 font-semibold">{item.reference}</span>
                         ) : null}
@@ -959,20 +1309,23 @@ export const ExpensesPage: React.FC = () => {
                       <td className="p-3 text-center font-mono font-extrabold tabular-nums lining-nums text-[11px] text-slate-600 whitespace-nowrap">
                         {itemDate.toLocaleDateString('en-GB')}
                       </td>
-                      <td className="p-3 font-bold text-slate-900">
-                        {accountDisplayName(item.account) || (isAr ? 'مصروف عام' : 'General expense')}
+                      <td className="p-3 text-center">
+                        <span className="inline-flex items-center justify-center gap-1.5 font-bold text-slate-900">
+                          <Tag size={13} className="text-[#F45A0A] shrink-0" />
+                          <span>{accountDisplayName(item.account) || (isAr ? 'مصروف عام' : 'General expense')}</span>
+                        </span>
                       </td>
-                      <td className="p-3 max-w-[280px]">
+                      <td className="p-3 text-center max-w-[280px]">
                         <p className="text-slate-700 font-medium truncate" title={descParts.description || item.description}>
                           {descParts.beneficiary ? `${descParts.beneficiary} · ` : ''}
                           {descParts.description || '—'}
                         </p>
                       </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                      <td className="p-3 text-center">
+                        <span className="inline-flex items-center justify-center gap-1.5 text-slate-700 font-medium">
                           <Wallet size={13} className="text-[#F45A0A] shrink-0" />
                           <span>{accountDisplayName(item.cashboxOrBankAccount) || (isAr ? 'صندوق غير محدد' : 'Unspecified cashbox')}</span>
-                        </div>
+                        </span>
                       </td>
                       <td className="p-3 text-center">
                         <span className="font-mono font-extrabold tabular-nums lining-nums text-sm text-slate-900 block">
@@ -990,40 +1343,6 @@ export const ExpensesPage: React.FC = () => {
                         }`}>
                           {item.status === 'POSTED' ? (isAr ? 'مرحّل' : 'Posted') : (item.status || '—')}
                         </span>
-                      </td>
-                      <td className="p-3">
-                        <div className="flex items-center justify-center gap-1">
-                          <Tooltip label={isAr ? 'فتح القيد' : 'Open record'}>
-                            <button
-                              type="button"
-                              onClick={() => openExpenseRecord(item)}
-                              className="h-8 w-8 rounded-lg border border-slate-200 bg-white hover:bg-orange-50 hover:border-orange-200 text-slate-600 hover:text-[#F45A0A] flex items-center justify-center cursor-pointer"
-                              aria-label={isAr ? `فتح القيد ${item.voucherNumber || ''}` : `Open ${item.voucherNumber || 'expense'}`}
-                            >
-                              <Eye size={14} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label={isAr ? 'طباعة سند الصرف' : 'Print voucher'}>
-                            <button
-                              type="button"
-                              onClick={() => window.print()}
-                              className="h-8 w-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 flex items-center justify-center cursor-pointer"
-                            >
-                              <Printer size={14} />
-                            </button>
-                          </Tooltip>
-                          <Tooltip label={isAr ? 'حذف السند' : 'Delete voucher'}>
-                            <button
-                              type="button"
-                              onClick={() => setPendingDeleteExpense(item)}
-                              disabled={deleteExpenseMutation.isPending}
-                              className="h-8 w-8 rounded-lg border border-slate-200 bg-white hover:bg-red-50 hover:border-red-200 text-slate-500 hover:text-red-600 flex items-center justify-center cursor-pointer disabled:opacity-40"
-                              aria-label={isAr ? `حذف السند ${item.voucherNumber || ''}` : `Delete ${item.voucherNumber || 'expense'}`}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </Tooltip>
-                        </div>
                       </td>
                     </tr>
                   );
@@ -1402,6 +1721,76 @@ export const ExpensesPage: React.FC = () => {
               {deleteExpenseMutation.isPending
                 ? (isAr ? 'جارٍ الحذف...' : 'Deleting...')
                 : (isAr ? 'تأكيد الحذف' : 'Delete')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        opened={pendingBulkDelete}
+        onClose={() => {
+          if (!bulkBusy) setPendingBulkDelete(false);
+        }}
+        title={
+          <div className="flex items-center gap-3 pe-8" dir={direction}>
+            <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600 shrink-0">
+              <Trash2 size={18} />
+            </div>
+            <h3 className="font-extrabold text-[14.5px] text-slate-900">
+              {isAr ? 'حذف السندات المحددة' : 'Delete selected vouchers'}
+            </h3>
+          </div>
+        }
+        size="460px"
+        radius="16px"
+        centered
+        dir={direction}
+        closeOnClickOutside={!bulkBusy}
+        closeOnEscape={!bulkBusy}
+      >
+        <div className="space-y-4" dir={direction}>
+          <p className="text-[13px] font-semibold text-slate-700 leading-relaxed">
+            {isAr
+              ? `سيتم حذف ${selectedExpenses.length} سند مع القيود المحاسبية المرتبطة بها وعكس أثرها على أرصدة الحسابات. لا يمكن التراجع عن هذا الإجراء.`
+              : `${selectedExpenses.length} vouchers and their linked journal entries will be deleted and balances reversed. This cannot be undone.`}
+          </p>
+
+          <div className="rounded-xl border border-slate-200 bg-[#FAFAFA] px-3 py-2.5 space-y-1 max-h-[190px] overflow-y-auto">
+            {selectedExpenses.map((item: any) => (
+              <div key={item.id} className="flex items-center justify-between gap-3">
+                <span className="text-[12px] font-bold text-slate-700 truncate max-w-[220px]">
+                  {accountDisplayName(item.account) || (isAr ? 'مصروف عام' : 'General expense')}
+                </span>
+                <span className="font-mono text-[12px] font-extrabold tabular-nums lining-nums text-slate-900" dir="ltr">
+                  {(Number(item.amount) || 0).toLocaleString('en-US')}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2">
+            <span className="text-[11.5px] font-bold text-[#9A3412]">{isAr ? 'الإجمالي' : 'Total'}</span>
+            <span className="font-mono text-[12px] font-extrabold tabular-nums lining-nums text-[#9A3412]" dir="ltr">
+              {selectionTotalsLabel || '—'}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() => setPendingBulkDelete(false)}
+              className="h-10 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-semibold text-xs cursor-pointer disabled:opacity-50"
+            >
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={handleBulkDelete}
+              className="h-10 px-5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer disabled:opacity-50"
+            >
+              {bulkBusy ? (isAr ? 'جارٍ الحذف...' : 'Deleting...') : (isAr ? 'تأكيد الحذف' : 'Delete')}
             </button>
           </div>
         </div>
