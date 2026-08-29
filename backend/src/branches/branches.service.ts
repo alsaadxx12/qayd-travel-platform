@@ -333,22 +333,32 @@ export class BranchesService {
   }
 
   async uploadBranchLogo(fileName: string, fileBase64: string): Promise<{ url: string }> {
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
-    
-    const missing: string[] = [];
-    if (!supabaseUrl) missing.push('SUPABASE_URL');
-    if (!supabaseKey) missing.push('SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY');
-    
-    if (missing.length > 0) {
-      console.error(`[uploadBranchLogo] Missing env vars: ${missing.join(', ')}. Available env keys: ${Object.keys(process.env).filter(k => k.includes('SUPA')).join(', ') || 'NONE'}`);
-      throw new BadRequestException(`تخزين الشعارات غير مُعد. المتغيرات المفقودة: ${missing.join(', ')}. أضفها في إعدادات Render Environment Variables.`);
+    const supabaseUrl = (
+      process.env.SUPABASE_URL || 'https://mgsgslrjbbjwkhhmdype.supabase.co'
+    ).replace(/\/$/, '');
+    const supabaseKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_ANON_KEY ||
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1nc2dzbHJqYmJqd2toaG1keXBlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NTc3NTUyNCwiZXhwIjoyMTAxMzUxNTI0fQ.4_ecB84KM3dMVWzSYF-XPN9LmFTA6tY0Ne4mAeAm8Go';
+
+    let mimeType = 'image/png';
+    const commaIdx = fileBase64.indexOf(',');
+    let cleanBase64 = fileBase64;
+    if (commaIdx !== -1) {
+      const header = fileBase64.substring(0, commaIdx);
+      cleanBase64 = fileBase64.substring(commaIdx + 1);
+      const mimeMatch = header.match(/^data:(image\/[a-zA-Z0-9+.-]+);/);
+      if (mimeMatch) {
+        mimeType = mimeMatch[1];
+      }
+    } else {
+      cleanBase64 = fileBase64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, '');
     }
 
-    const cleanBase64 = fileBase64.replace(/^data:image\/\w+;base64,/, '');
     const buffer = Buffer.from(cleanBase64, 'base64');
-
-    const uniqueFileName = `${Date.now()}_${(fileName || 'logo.png').replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+    const safeName = (fileName || `logo.${ext}`).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const uniqueFileName = `${Date.now()}_${safeName}`;
     const uploadUrl = `${supabaseUrl}/storage/v1/object/branch-images/${uniqueFileName}`;
 
     try {
@@ -356,7 +366,8 @@ export class BranchesService {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'image/png',
+          'apikey': supabaseKey,
+          'Content-Type': mimeType,
           'x-upsert': 'true',
         },
         body: buffer,
@@ -364,10 +375,13 @@ export class BranchesService {
 
       if (!res.ok) {
         const errText = await res.text();
-        console.warn('Supabase Storage upload response notice:', errText);
+        console.error('Supabase Storage upload error:', errText);
+        throw new BadRequestException(`فشل حفظ الشعار في Supabase Storage: ${errText}`);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error uploading to Supabase Storage branch-images:', e);
+      if (e instanceof BadRequestException) throw e;
+      throw new BadRequestException(`خطأ أثناء الاتصال بمزود التخزين: ${e?.message || e}`);
     }
 
     const publicUrl = `${supabaseUrl}/storage/v1/object/public/branch-images/${uniqueFileName}`;

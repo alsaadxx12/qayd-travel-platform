@@ -10,4 +10,5 @@ frontend_backup/
 .system_generated/
 *.log
 .wrangler/
-
+.cache/
+backend/.cache/
