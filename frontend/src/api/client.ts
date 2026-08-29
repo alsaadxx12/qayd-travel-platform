@@ -1,3 +1,5 @@
+import { perfMonitor } from '../utils/perfMonitor';
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL ||
@@ -29,10 +31,19 @@ const STABLE_PREFIXES = [
   '/roles',
   '/branches',
   '/permission-groups',
+  '/subscriptions/plans',
 ];
 
 /** Near-static data is worth holding for minutes, not seconds. */
 const STABLE_TTL = 5 * 60 * 1000;
+
+function currentRoute(): string {
+  try {
+    return window.location.pathname || '/';
+  } catch {
+    return '/';
+  }
+}
 
 function pathOfKey(key: string): string {
   // key is `${method}:${endpoint}:${branchId}` and endpoints never contain ':'
@@ -108,6 +119,15 @@ export async function apiRequest<T = any>(
     const cached = apiCache.get(cacheKey);
     const ttl = options.ttl ?? (isStablePath(cleanEndpoint) ? STABLE_TTL : DEFAULT_TTL);
     if (cached && Date.now() - cached.timestamp < ttl) {
+      perfMonitor.record({
+        method,
+        endpoint: cleanEndpoint,
+        route: currentRoute(),
+        ms: 0,
+        cached: true,
+        ok: true,
+        at: Date.now(),
+      });
       return cached.data;
     }
 
@@ -138,6 +158,7 @@ export async function apiRequest<T = any>(
       skipBranchContext: _skipBranchContext,
       ...requestOptions
     } = options;
+    const startedAt = performance.now();
     const timeoutController = requestOptions.signal ? null : new AbortController();
     const timeoutId = timeoutController
       ? window.setTimeout(() => timeoutController.abort(), timeoutMs)
@@ -171,8 +192,28 @@ export async function apiRequest<T = any>(
         apiCache.set(cacheKey, { data, timestamp: Date.now() });
       }
 
+      perfMonitor.record({
+        method,
+        endpoint: cleanEndpoint,
+        route: currentRoute(),
+        ms: Math.round(performance.now() - startedAt),
+        cached: false,
+        ok: true,
+        at: Date.now(),
+      });
+
       return data;
     } catch (error: any) {
+      perfMonitor.record({
+        method,
+        endpoint: cleanEndpoint,
+        route: currentRoute(),
+        ms: Math.round(performance.now() - startedAt),
+        cached: false,
+        ok: false,
+        error: String(error?.message || error?.name || 'error'),
+        at: Date.now(),
+      });
       if (error?.name === 'AbortError') {
         throw new Error('استغرق الخادم وقتاً طويلاً دون استجابة. تحقق من اتصال قاعدة البيانات.');
       }

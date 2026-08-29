@@ -4,6 +4,7 @@ import { Tooltip } from '@mantine/core';
 import { GlobalSearch } from './topbar/GlobalSearch';
 import { NotificationCenter } from './topbar/NotificationCenter';
 import { UserMenu } from './topbar/UserMenu';
+import { PerformanceInspector } from './topbar/PerformanceInspector';
 import { FinancialVoucherForm } from '../vouchers/FinancialVoucherForm';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -86,6 +87,9 @@ export const AccountingTopBar: React.FC<AccountingTopBarProps> = () => {
             <span dir="ltr">1 USD = {adoptedExchange.adoptedRate.toLocaleString()} IQD</span>
           </button>
         </Tooltip>
+
+        {/* Network profiler — badge shows how many calls crossed the slow threshold */}
+        <PerformanceInspector />
 
         {/* Notifications Center */}
         <NotificationCenter />

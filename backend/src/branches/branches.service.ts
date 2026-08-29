@@ -178,14 +178,22 @@ export class BranchesService {
     allowedBranchIds: string[] = [],
     enforceAllowedBranchIds = false,
   ) {
+    const query = () =>
+      this.prisma.branch.findMany({
+        where: {
+          companyId,
+          ...(enforceAllowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
+        },
+        orderBy: { isMain: 'desc' },
+      });
+
+    const branches = await query();
+    if (branches.length > 0) return branches;
+
+    // Empty result: either the company genuinely has none (seed it) or the filter
+    // excluded them all (seeding is a no-op and we return the same empty list).
     await this.ensureDefaultBranches(companyId);
-    return this.prisma.branch.findMany({
-      where: {
-        companyId,
-        ...(enforceAllowedBranchIds ? { id: { in: allowedBranchIds } } : {}),
-      },
-      orderBy: { isMain: 'desc' },
-    });
+    return query();
   }
 
   async findLoginOptions(
@@ -193,16 +201,22 @@ export class BranchesService {
     allowedBranchIds: string[] = [],
     enforceAllowedBranchIds = false,
   ) {
-    await this.ensureDefaultBranches(companyId);
-    const branches = await this.prisma.branch.findMany({
-      where: {
-        companyId,
-        ...(enforceAllowedBranchIds || allowedBranchIds.length > 0
-          ? { id: { in: allowedBranchIds } }
-          : {}),
-      },
-      orderBy: { isMain: 'desc' },
-    });
+    const query = () =>
+      this.prisma.branch.findMany({
+        where: {
+          companyId,
+          ...(enforceAllowedBranchIds || allowedBranchIds.length > 0
+            ? { id: { in: allowedBranchIds } }
+            : {}),
+        },
+        orderBy: { isMain: 'desc' },
+      });
+
+    let branches = await query();
+    if (branches.length === 0) {
+      await this.ensureDefaultBranches(companyId);
+      branches = await query();
+    }
 
     return branches.filter((branch) => {
       const normalizedStatus = (branch.status || '').trim().toLowerCase();
