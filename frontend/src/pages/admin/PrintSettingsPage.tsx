@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Paper, Button, TextInput, Select, ColorInput, Slider, Switch, Tabs } from '@mantine/core';
+import { Paper, Button, TextInput, Select, ColorInput, Slider, Switch, Tabs, Badge } from '@mantine/core';
 import {
   IconPrinter,
   IconDeviceFloppy,
@@ -13,6 +13,8 @@ import {
   IconCoins,
   IconFileText,
   IconFileTypePdf,
+  IconPhoto,
+  IconSparkles,
 } from '@tabler/icons-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
@@ -35,34 +37,46 @@ import {
 const MOCK_STATEMENT_ROWS: StatementMovementItem[] = [
   {
     rowNumber: 1,
-    date: new Date().toISOString().split('T')[0],
-    docRef: 'TK-10492',
-    pnr: 'BGW-IST-01',
-    route: 'BGW -> IST',
-    statement: 'إصدار تذكرة طيران بغداد - إسطنبول (الخطوط الجوية العراقية)',
-    debit: 450000,
+    date: '2026/08/01',
+    docRef: 'OB-2026',
+    pnr: '',
+    route: '',
+    statement: 'رصيد افتتاحي مرحل من الدورة المالية السابقة',
+    debit: 0,
     credit: 0,
-    runningBalance: 450000,
+    runningBalance: 0,
     currency: 'IQD',
   },
   {
     rowNumber: 2,
-    date: new Date().toISOString().split('T')[0],
-    docRef: 'RV-2026-004',
+    date: '2026/08/02',
+    docRef: 'INV-01005',
+    pnr: 'PRMCK',
+    route: 'BGW ➔ MHD',
+    statement: 'مبيعات تذاكر طيران خطوط كاسبيان | المسافرين (3): Mr SALAM ALSHAMOOSI',
+    debit: 1250000,
+    credit: 0,
+    runningBalance: 1250000,
+    currency: 'IQD',
+  },
+  {
+    rowNumber: 3,
+    date: '2026/08/04',
+    docRef: 'RCV-0042',
     pnr: '',
     route: '',
-    statement: 'تسديد دفعة نقدية من رصيد الحساب باليد',
+    statement: 'سند قبض نقدي دفعة أولى لحساب حجز التذاكر',
     debit: 0,
-    credit: 250000,
-    runningBalance: 200000,
+    credit: 500000,
+    runningBalance: 750000,
     currency: 'IQD',
   },
 ];
 
 const MOCK_STATEMENT_TOTALS = {
-  totalDebit: 450000,
-  totalCredit: 250000,
-  finalBalance: 200000,
+  totalDebit: 1250000,
+  totalCredit: 500000,
+  finalBalance: 750000,
   openingBalance: 0,
   previousBalance: 0,
 };
@@ -104,7 +118,7 @@ export const PrintSettingsPage: React.FC = () => {
   const isAr = language === 'ar';
 
   const [activeDocTab, setActiveDocTab] = useState<string | null>('statement');
-  const [printTab, setPrintTab] = useState<'colors' | 'fonts' | 'info' | 'toggles'>('colors');
+  const [printTab, setPrintTab] = useState<'colors' | 'info' | 'fonts' | 'toggles'>('colors');
 
   // Multi-doc configs state mapped by docType
   const [configs, setConfigs] = useState<Record<string, any>>({
@@ -119,7 +133,19 @@ export const PrintSettingsPage: React.FC = () => {
       email: 'finance@alrawdatan-travel.com',
       address: 'العراق — كربلاء المقدسة / بغداد',
       primaryColor: '#059669',
+      titleAccentColor: '#059669',
       headerBgColor: '#059669',
+      tableHeaderBgColor: '#059669',
+      tableHeaderTextColor: '#ffffff',
+      tableZebraBgColor: '#f8fafc',
+      tableBorderColor: '#e2e8f0',
+      tableTextColor: '#0f172a',
+      summaryDebitTextColor: '#059669',
+      summaryCreditTextColor: '#e11d48',
+      summaryBalanceBg: '#059669',
+      summaryBalanceTextColor: '#ffffff',
+      watermarkColor: '#059669',
+      footerTextColor: '#64748b',
       fontFamily: 'IBM Plex Sans Arabic',
       isTableBold: false,
       notesText: 'ملاحظة: هذا الكشف يعتبر مطبقاً وموافقاً عليه رسمياً ما لم يتم الإعتراض خلال 7 أيام من تاريخ صدوره.',
@@ -128,9 +154,11 @@ export const PrintSettingsPage: React.FC = () => {
       showOpeningBalance: true,
       showSignatures: true,
       showWatermark: true,
+      watermarkText: 'كشف حساب رسمي معتمد',
       showQrCode: true,
-      logoWidth: 70,
-      logoHeight: 70,
+      logoWidth: 80,
+      logoHeight: 50,
+      logoBorderRadius: 6,
       fontSizes: {
         companyTitle: 17,
         subtitle: 11,
@@ -140,13 +168,29 @@ export const PrintSettingsPage: React.FC = () => {
     },
     receipt_voucher: {
       ...DEFAULT_VOUCHER_CONFIG,
-      primaryColor: '#059669',
-      headerBgColor: '#059669',
+      primaryColor: '#0066FF',
+      headerBgColor: '#0066FF',
+      fieldBgColor: '#F0F7FF',
+      fieldBorderColor: '#BFDBFE',
+      amountTextColor: '#0f172a',
+      tafqeetTextColor: '#0066FF',
+      summaryBorderColor: '#0066FF',
+      summaryTotalColor: '#0066FF',
+      statusColor: '#059669',
+      watermarkColor: '#0066FF',
     },
     payment_voucher: {
       ...DEFAULT_PAYMENT_VOUCHER_CONFIG,
-      primaryColor: '#e11d48',
-      headerBgColor: '#e11d48',
+      primaryColor: '#0066FF',
+      headerBgColor: '#0066FF',
+      fieldBgColor: '#F0F7FF',
+      fieldBorderColor: '#BFDBFE',
+      amountTextColor: '#0f172a',
+      tafqeetTextColor: '#0066FF',
+      summaryBorderColor: '#0066FF',
+      summaryTotalColor: '#0066FF',
+      statusColor: '#059669',
+      watermarkColor: '#0066FF',
     },
     expense_report: {
       companyName: 'شركة الروضتين للسفر والسياحة',
@@ -158,8 +202,13 @@ export const PrintSettingsPage: React.FC = () => {
       phone: '+964 770 123 4567',
       email: 'finance@alrawdatan-travel.com',
       address: 'العراق — كربلاء المقدسة / بغداد',
-      primaryColor: '#d97706', // Amber / Orange for expenses
+      primaryColor: '#d97706',
+      titleAccentColor: '#d97706',
       headerBgColor: '#d97706',
+      tableHeaderBgColor: '#d97706',
+      tableHeaderTextColor: '#ffffff',
+      tableZebraBgColor: '#fffbeb',
+      tableBorderColor: '#fde68a',
       fontFamily: 'IBM Plex Sans Arabic',
       isTableBold: false,
       notesText: 'ملاحظة: هذا التقرير يوضح المصاريف المعتمدة والمقيدة في السجلات المالية الرسمية.',
@@ -167,9 +216,11 @@ export const PrintSettingsPage: React.FC = () => {
       showFinancialSummary: true,
       showSignatures: true,
       showWatermark: true,
+      watermarkText: 'تقرير مصاريف رسمي معتمد',
       showQrCode: true,
-      logoWidth: 70,
-      logoHeight: 70,
+      logoWidth: 80,
+      logoHeight: 50,
+      logoBorderRadius: 6,
       fontSizes: {
         companyTitle: 17,
         subtitle: 11,
@@ -185,6 +236,11 @@ export const PrintSettingsPage: React.FC = () => {
 
   const currentDocKey = activeDocTab || 'statement';
   const currentConfig = configs[currentDocKey] || configs.statement;
+
+  // Active logo lookup (from current template config or active branch logo)
+  const activeLogoUrl = useMemo(() => {
+    return currentConfig?.logoUrl || branches[0]?.logo || (branches[0] as any)?.logoUrl || '';
+  }, [currentConfig, branches]);
 
   // Load all 4 doc templates on mount
   useEffect(() => {
@@ -237,7 +293,12 @@ export const PrintSettingsPage: React.FC = () => {
         }
       } catch {}
 
-      await savePrintTemplate(currentDocKey, baseConfig);
+      const toSave = {
+        ...baseConfig,
+        logoUrl: activeLogoUrl || baseConfig.logoUrl || '',
+      };
+
+      await savePrintTemplate(currentDocKey, toSave);
 
       const titles: Record<string, string> = {
         statement: isAr ? 'كشف الحساب' : 'Account Statement',
@@ -249,7 +310,7 @@ export const PrintSettingsPage: React.FC = () => {
       showSuccessNotification(
         isAr ? 'تم حفظ إعدادات الطباعة' : 'Print Settings Saved',
         isAr
-          ? `تم حفظ ألوان وخطوط ونصوص قالب [${titles[currentDocKey] || currentDocKey}] بنجاح في قاعدة البيانات وتحديثها فورياً.`
+          ? `تم حفظ ألوان وخطوط وشعار ونصوص قالب [${titles[currentDocKey] || currentDocKey}] بنجاح في قاعدة البيانات وتحديثها فورياً.`
           : `Print template for [${titles[currentDocKey] || currentDocKey}] saved and applied successfully.`
       );
     } catch (err) {
@@ -319,11 +380,11 @@ export const PrintSettingsPage: React.FC = () => {
   const docTitles: Record<string, { title: string; desc: string }> = {
     statement: {
       title: isAr ? 'إعدادات وتصميم كشف الحساب' : 'Account Statement Settings',
-      desc: isAr ? 'تخصيص ألوان وتصميم وترويسة وتذييل كشوفات الحساب المالية' : 'Customize statement colors, headers, tables, and footers',
+      desc: isAr ? 'تخصيص ألوان وتصميم وترويسة وتذييل وجداول كشوفات الحساب' : 'Customize statement colors, headers, tables, and footers',
     },
     receipt_voucher: {
       title: isAr ? 'إعدادات وتصميم سند القبض (وصل الاستلام)' : 'Receipt Voucher Settings',
-      desc: isAr ? 'تخصيص ألوان وتصميم وسندات واستلام المبالغ النقدية والتحويلات' : 'Customize receipt vouchers, amounts, Tafqeet, and signatures',
+      desc: isAr ? 'تخصيص ألوان وتصميم وبطاقات سندات واستلام المبالغ النقدية والتحويلات' : 'Customize receipt vouchers, amounts, Tafqeet, and signatures',
     },
     payment_voucher: {
       title: isAr ? 'إعدادات وتصميم سند الدفع والصرف' : 'Payment Voucher Settings',
@@ -350,12 +411,12 @@ export const PrintSettingsPage: React.FC = () => {
             </div>
             <div>
               <h1 className="font-black text-sm text-slate-900">
-                {isAr ? 'إعدادات الطباعة' : 'Print Settings'}
+                {isAr ? 'إعدادات الطباعة والتصاميم الرسمية' : 'Print & Template Settings'}
               </h1>
               <p className="text-[11px] text-slate-500 font-bold mt-0.5">
                 {isAr
-                  ? 'تخصيص تصميم وقوالب طباعة المستندات: كشوفات الحساب، سندات القبض والدفع، وتقارير المصاريف'
-                  : 'Customize print design for statements, receipt vouchers, payment vouchers, and expense reports'}
+                  ? 'تخصيص كامل للألوان والشعار والخطوط والترويسة لكشوفات الحساب، سندات القبض والدفع، وتقارير المصاريف'
+                  : 'Full customization of colors, logo, fonts, and headers for statements, vouchers, and reports'}
               </p>
             </div>
           </div>
@@ -494,49 +555,372 @@ export const PrintSettingsPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Sub-Tab 1: Colors & Badges */}
+                {/* ══════════════════════════════════════════════════════
+                    Sub-Tab 1: Rich Color Controls (Expanded for each Doc)
+                   ══════════════════════════════════════════════════════ */}
                 {printTab === 'colors' && (
-                  <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-                    <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">
-                      <IconPalette size={14} className="text-[#F45A0A]" />
-                      <span>{isAr ? 'تخصيص الألوان والشارات' : 'Colors & Accents'}</span>
+                  <div className="space-y-3.5 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <IconPalette size={14} className="text-[#F45A0A]" />
+                        <span>{isAr ? 'تخصيص الألوان والتدرجات الكاملة' : 'Full Color Customization'}</span>
+                      </div>
+                      <Badge size="xs" color="orange" variant="light">
+                        {currentDocKey}
+                      </Badge>
                     </h4>
 
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'اللون الرئيسي وهوية المستند' : 'Primary Accent Color'}
-                      </label>
-                      <ColorInput
-                        value={currentConfig.primaryColor || '#059669'}
-                        onChange={(v) => updateCurrentConfig('primaryColor', v)}
-                        size="xs"
-                        format="hex"
-                        swatches={['#059669', '#0284c7', '#7c3aed', '#e11d48', '#d97706', '#0f172a', '#F45A0A']}
-                      />
-                    </div>
+                    {/* Statement Colors */}
+                    {currentDocKey === 'statement' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'اللون الرئيسي وهوية الكشف' : 'Primary Theme Color'}
+                          </label>
+                          <ColorInput
+                            value={currentConfig.primaryColor || '#059669'}
+                            onChange={(v) => {
+                              updateCurrentConfig('primaryColor', v);
+                              updateCurrentConfig('titleAccentColor', v);
+                            }}
+                            size="xs"
+                            format="hex"
+                            swatches={['#059669', '#0284c7', '#0066FF', '#7c3aed', '#e11d48', '#d97706', '#0f172a', '#F45A0A']}
+                          />
+                        </div>
 
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'لون شارة الترويسة والعنوان' : 'Header Badge Color'}
-                      </label>
-                      <ColorInput
-                        value={currentConfig.headerBgColor || currentConfig.primaryColor || '#059669'}
-                        onChange={(v) => updateCurrentConfig('headerBgColor', v)}
-                        size="xs"
-                        format="hex"
-                        swatches={['#059669', '#0284c7', '#7c3aed', '#e11d48', '#d97706', '#0f172a', '#F45A0A']}
-                      />
-                    </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خلفية ترويسة الجدول' : 'Table Header Bg'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.tableHeaderBgColor || currentConfig.primaryColor || '#059669'}
+                              onChange={(v) => updateCurrentConfig('tableHeaderBgColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خط ترويسة الجدول' : 'Table Header Text'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.tableHeaderTextColor || '#ffffff'}
+                              onChange={(v) => updateCurrentConfig('tableHeaderTextColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خلفية الأسطر الفردية (Zebra)' : 'Row Alternate Bg'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.tableZebraBgColor || '#f8fafc'}
+                              onChange={(v) => updateCurrentConfig('tableZebraBgColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'إطار وحدود الجدول' : 'Table Border Color'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.tableBorderColor || '#e2e8f0'}
+                              onChange={(v) => updateCurrentConfig('tableBorderColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'لون المدين (+)' : 'Debit Color (+)'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.summaryDebitTextColor || '#059669'}
+                              onChange={(v) => updateCurrentConfig('summaryDebitTextColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'لون الدائن (-)' : 'Credit Color (-)'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.summaryCreditTextColor || '#e11d48'}
+                              onChange={(v) => updateCurrentConfig('summaryCreditTextColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خلفية بطاقة الرصيد' : 'Balance Card Bg'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.summaryBalanceBg || currentConfig.primaryColor || '#059669'}
+                              onChange={(v) => updateCurrentConfig('summaryBalanceBg', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خط صافي الرصيد' : 'Balance Text Color'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.summaryBalanceTextColor || '#ffffff'}
+                              onChange={(v) => updateCurrentConfig('summaryBalanceTextColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Receipt Voucher & Payment Voucher Colors */}
+                    {(currentDocKey === 'receipt_voucher' || currentDocKey === 'payment_voucher') && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'لون الإطارات والخطوط' : 'Primary Borders'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.primaryColor || '#0066FF'}
+                              onChange={(v) => updateCurrentConfig('primaryColor', v)}
+                              size="xs"
+                              format="hex"
+                              swatches={['#0066FF', '#059669', '#e11d48', '#7c3aed', '#d97706', '#0f172a', '#F45A0A']}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'لون الشارة العلوية' : 'Pill Badges Bg'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.headerBgColor || currentConfig.primaryColor || '#0066FF'}
+                              onChange={(v) => updateCurrentConfig('headerBgColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خلفية صناديق البيانات' : 'Field Box Bg'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.fieldBgColor || '#F0F7FF'}
+                              onChange={(v) => updateCurrentConfig('fieldBgColor', v)}
+                              size="xs"
+                              format="hex"
+                              swatches={['#F0F7FF', '#f8fafc', '#ecfdf5', '#fff1f2', '#fffbeb', '#ffffff']}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'إطار صناديق البيانات' : 'Field Box Border'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.fieldBorderColor || '#BFDBFE'}
+                              onChange={(v) => updateCurrentConfig('fieldBorderColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خط المبلغ الرقمي' : 'Amount Number Color'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.amountTextColor || '#0f172a'}
+                              onChange={(v) => updateCurrentConfig('amountTextColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خط التفقيط (كتابة)' : 'Tafqeet Text Color'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.tafqeetTextColor || currentConfig.primaryColor || '#0066FF'}
+                              onChange={(v) => updateCurrentConfig('tafqeetTextColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'إجمالي ملخص السند' : 'Summary Total Color'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.summaryTotalColor || currentConfig.primaryColor || '#0066FF'}
+                              onChange={(v) => updateCurrentConfig('summaryTotalColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'لون شارة الحالة' : 'Status Badge Color'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.statusColor || '#059669'}
+                              onChange={(v) => updateCurrentConfig('statusColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expense Report Colors */}
+                    {currentDocKey === 'expense_report' && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'اللون الرئيسي للتقرير' : 'Report Primary Color'}
+                          </label>
+                          <ColorInput
+                            value={currentConfig.primaryColor || '#d97706'}
+                            onChange={(v) => updateCurrentConfig('primaryColor', v)}
+                            size="xs"
+                            format="hex"
+                            swatches={['#d97706', '#059669', '#0284c7', '#7c3aed', '#e11d48', '#0f172a', '#F45A0A']}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خلفية ترويسة الجدول' : 'Table Header Bg'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.tableHeaderBgColor || '#d97706'}
+                              onChange={(v) => updateCurrentConfig('tableHeaderBgColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'خط ترويسة الجدول' : 'Table Header Text'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.tableHeaderTextColor || '#ffffff'}
+                              onChange={(v) => updateCurrentConfig('tableHeaderTextColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Sub-Tab 2: Company Info & Texts */}
+                {/* ══════════════════════════════════════════════════════
+                    Sub-Tab 2: Company Info & Logo Controls
+                   ══════════════════════════════════════════════════════ */}
                 {printTab === 'info' && (
                   <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                     <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">
                       <IconBuilding size={14} className="text-[#F45A0A]" />
-                      <span>{isAr ? 'بيانات الترويسة والتذييل' : 'Company & Header Info'}</span>
+                      <span>{isAr ? 'بيانات الشركة والترويسة والشعار' : 'Company & Logo Settings'}</span>
                     </h4>
+
+                    {/* Logo Preview & Size Sliders */}
+                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                      <span className="font-extrabold text-slate-900 flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <IconPhoto size={15} className="text-[#F45A0A]" />
+                          <span>{isAr ? 'شعار الشركة (اللوجو)' : 'Company Logo'}</span>
+                        </span>
+                        {activeLogoUrl && (
+                          <Badge size="xs" color="emerald" variant="light">
+                            {isAr ? 'شعار معتمد ✓' : 'Active Logo ✓'}
+                          </Badge>
+                        )}
+                      </span>
+
+                      {/* Visual Logo Preview */}
+                      <div className="h-14 bg-white rounded-lg border border-dashed border-slate-300 flex items-center justify-center p-1.5 overflow-hidden">
+                        {activeLogoUrl ? (
+                          <img
+                            src={activeLogoUrl}
+                            alt="Logo"
+                            style={{
+                              maxHeight: `${currentConfig.logoHeight || 50}px`,
+                              maxWidth: `${currentConfig.logoWidth || 140}px`,
+                              borderRadius: `${currentConfig.logoBorderRadius || 6}px`,
+                              objectFit: 'contain',
+                            }}
+                          />
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-bold">
+                            {isAr ? 'لا يوجد شعار مرفوع — اضبط الشعار من إعدادات الفروع' : 'No logo uploaded'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Logo Width Slider */}
+                      <div>
+                        <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                          <span>{isAr ? 'عرض الشعار:' : 'Logo Width:'}</span>
+                          <span className="font-mono text-[#F45A0A]">{currentConfig.logoWidth || 140}px</span>
+                        </div>
+                        <Slider
+                          size="xs"
+                          color="orange"
+                          min={40}
+                          max={220}
+                          step={5}
+                          value={currentConfig.logoWidth || 140}
+                          onChange={(v) => updateCurrentConfig('logoWidth', v)}
+                        />
+                      </div>
+
+                      {/* Logo Height Slider */}
+                      <div>
+                        <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                          <span>{isAr ? 'ارتفاع الشعار:' : 'Logo Height:'}</span>
+                          <span className="font-mono text-[#F45A0A]">{currentConfig.logoHeight || 50}px</span>
+                        </div>
+                        <Slider
+                          size="xs"
+                          color="orange"
+                          min={20}
+                          max={120}
+                          step={5}
+                          value={currentConfig.logoHeight || 50}
+                          onChange={(v) => updateCurrentConfig('logoHeight', v)}
+                        />
+                      </div>
+                    </div>
 
                     <div>
                       <label className="text-[11px] font-bold text-slate-700 block mb-1">
@@ -546,7 +930,7 @@ export const PrintSettingsPage: React.FC = () => {
                         size="xs"
                         value={currentConfig.companyName || ''}
                         onChange={(e) => updateCurrentConfig('companyName', e.target.value)}
-                        placeholder="شركة الروضتين للسفر والسياحة"
+                        placeholder="رودا 10 للبرمجيات والحلول المحاسبية"
                       />
                     </div>
 
@@ -558,46 +942,21 @@ export const PrintSettingsPage: React.FC = () => {
                         size="xs"
                         value={currentConfig.companyNameEn || ''}
                         onChange={(e) => updateCurrentConfig('companyNameEn', e.target.value)}
-                        placeholder="Al-Rawdatan Travel & Tourism"
+                        placeholder="RODA 10 Software & Solutions"
                         dir="ltr"
                       />
                     </div>
 
                     <div>
                       <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'العنوان الفرعي / الوصف' : 'Subtitle'}
+                        {isAr ? 'العنوان' : 'Address'}
                       </label>
                       <TextInput
                         size="xs"
-                        value={currentConfig.subtitle || ''}
-                        onChange={(e) => updateCurrentConfig('subtitle', e.target.value)}
-                        placeholder="قسم المحاسبة والمالية"
+                        value={currentConfig.address || ''}
+                        onChange={(e) => updateCurrentConfig('address', e.target.value)}
+                        placeholder="العراق - بغداد - المنصور - شارع الصناعة"
                       />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'السجل التجاري' : 'Commercial Reg'}
-                        </label>
-                        <TextInput
-                          size="xs"
-                          value={currentConfig.commercialReg || ''}
-                          onChange={(e) => updateCurrentConfig('commercialReg', e.target.value)}
-                          placeholder="س.ت: 90182471"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'الرقم الضريبي' : 'Tax Number'}
-                        </label>
-                        <TextInput
-                          size="xs"
-                          value={currentConfig.taxNumber || ''}
-                          onChange={(e) => updateCurrentConfig('taxNumber', e.target.value)}
-                          placeholder="300012345600003"
-                        />
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -609,7 +968,7 @@ export const PrintSettingsPage: React.FC = () => {
                           size="xs"
                           value={currentConfig.phone || ''}
                           onChange={(e) => updateCurrentConfig('phone', e.target.value)}
-                          placeholder="+964 770 123 4567"
+                          placeholder="7714569870"
                           dir="ltr"
                         />
                       </div>
@@ -621,7 +980,7 @@ export const PrintSettingsPage: React.FC = () => {
                           size="xs"
                           value={currentConfig.email || ''}
                           onChange={(e) => updateCurrentConfig('email', e.target.value)}
-                          placeholder="finance@alrawdatan-travel.com"
+                          placeholder="info@roda10.com"
                           dir="ltr"
                         />
                       </div>
@@ -629,31 +988,22 @@ export const PrintSettingsPage: React.FC = () => {
 
                     <div>
                       <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'العنوان' : 'Address'}
+                        {isAr ? 'الموقع الإلكتروني' : 'Website'}
                       </label>
                       <TextInput
                         size="xs"
-                        value={currentConfig.address || ''}
-                        onChange={(e) => updateCurrentConfig('address', e.target.value)}
-                        placeholder="العراق — كربلاء المقدسة / بغداد"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'نص التذييل وحقوق الحفظ' : 'Footer Copyright Text'}
-                      </label>
-                      <TextInput
-                        size="xs"
-                        value={currentConfig.footerText || ''}
-                        onChange={(e) => updateCurrentConfig('footerText', e.target.value)}
-                        placeholder="شركة الروضتين للسياحة — جميع الحقوق محفوظة © 2026"
+                        value={currentConfig.website || ''}
+                        onChange={(e) => updateCurrentConfig('website', e.target.value)}
+                        placeholder="www.roda10.com"
+                        dir="ltr"
                       />
                     </div>
                   </div>
                 )}
 
-                {/* Sub-Tab 3: Fonts & Typography */}
+                {/* ══════════════════════════════════════════════════════
+                    Sub-Tab 3: Fonts & Typography
+                   ══════════════════════════════════════════════════════ */}
                 {printTab === 'fonts' && (
                   <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                     <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">
@@ -685,7 +1035,7 @@ export const PrintSettingsPage: React.FC = () => {
                           <span className="font-mono">{currentConfig.fontSizes?.companyTitle || 16}px</span>
                         </div>
                         <Slider
-                          min={13}
+                          min={12}
                           max={24}
                           step={1}
                           size="xs"
@@ -697,32 +1047,31 @@ export const PrintSettingsPage: React.FC = () => {
 
                       <div>
                         <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
-                          <span>{isAr ? 'حجم النص والبيانات:' : 'Body Font Size:'}</span>
-                          <span className="font-mono">{currentConfig.fontSizes?.tableBody || currentConfig.fontSizes?.body || 10}px</span>
+                          <span>{isAr ? 'حجم عنوان المستند:' : 'Doc Title Size:'}</span>
+                          <span className="font-mono">{currentConfig.fontSizes?.docTitle || 24}px</span>
                         </div>
                         <Slider
-                          min={8}
-                          max={14}
+                          min={16}
+                          max={32}
                           step={1}
                           size="xs"
                           color="orange"
-                          value={currentConfig.fontSizes?.tableBody || currentConfig.fontSizes?.body || 10}
-                          onChange={(v) => {
-                            updateCurrentConfig('fontSizes.tableBody', v);
-                            updateCurrentConfig('fontSizes.body', v);
-                          }}
+                          value={currentConfig.fontSizes?.docTitle || 24}
+                          onChange={(v) => updateCurrentConfig('fontSizes.docTitle', v)}
                         />
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* Sub-Tab 4: Toggles & Signatures */}
+                {/* ══════════════════════════════════════════════════════
+                    Sub-Tab 4: Toggles, Watermark & Signatures
+                   ══════════════════════════════════════════════════════ */}
                 {printTab === 'toggles' && (
                   <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                     <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">
                       <IconAdjustments size={14} className="text-[#F45A0A]" />
-                      <span>{isAr ? 'خيارات العرض والعلامة المائية' : 'Toggles & Signatures'}</span>
+                      <span>{isAr ? 'خيارات العرض والعلامة المائية والتواقيع' : 'Toggles & Signatures'}</span>
                     </h4>
 
                     <div className="space-y-2.5">
@@ -762,25 +1111,49 @@ export const PrintSettingsPage: React.FC = () => {
                     <div className="space-y-2 pt-2 border-t border-slate-100">
                       <div>
                         <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'مسمى توقيع المدير العام' : 'Manager Signature Title'}
+                          {isAr ? 'نص العلامة المائية' : 'Watermark Text'}
                         </label>
                         <TextInput
                           size="xs"
-                          value={currentConfig.managerSignTitle || ''}
-                          onChange={(e) => updateCurrentConfig('managerSignTitle', e.target.value)}
-                          placeholder="توقيع المدير العام / المعتمد"
+                          value={currentConfig.watermarkText || ''}
+                          onChange={(e) => updateCurrentConfig('watermarkText', e.target.value)}
+                          placeholder="نسخة رسمية"
                         />
                       </div>
 
                       <div>
                         <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'مسمى توقيع المحاسب / أمين الصندوق' : 'Accountant Signature Title'}
+                          {isAr ? 'العبارة الترحيبية والفاصل' : 'Thank You Text'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.thankYouText || ''}
+                          onChange={(e) => updateCurrentConfig('thankYouText', e.target.value)}
+                          placeholder="نشكر لكم ثقتكم ونتطلع إلى المزيد من التعاملات"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'مسمى توقيع المدير' : 'Manager Signature Title'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.managerSignTitle || ''}
+                          onChange={(e) => updateCurrentConfig('managerSignTitle', e.target.value)}
+                          placeholder="المدير"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'مسمى توقيع المحاسب' : 'Accountant Signature Title'}
                         </label>
                         <TextInput
                           size="xs"
                           value={currentConfig.accountantSignTitle || ''}
                           onChange={(e) => updateCurrentConfig('accountantSignTitle', e.target.value)}
-                          placeholder="توقيع المحاسب / الصندوق"
+                          placeholder="المحاسب"
                         />
                       </div>
 
@@ -792,19 +1165,7 @@ export const PrintSettingsPage: React.FC = () => {
                           size="xs"
                           value={currentConfig.receiverSignTitle || ''}
                           onChange={(e) => updateCurrentConfig('receiverSignTitle', e.target.value)}
-                          placeholder="توقيع المستلم / الدافع"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'نص الملاحظات والشروط' : 'Notes & Conditions Text'}
-                        </label>
-                        <TextInput
-                          size="xs"
-                          value={currentConfig.notesText || ''}
-                          onChange={(e) => updateCurrentConfig('notesText', e.target.value)}
-                          placeholder="ملاحظة: هذا المستند معتمد رسمياً..."
+                          placeholder="توقيع المستلم"
                         />
                       </div>
                     </div>
@@ -812,53 +1173,67 @@ export const PrintSettingsPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Live Interactive Preview (8 cols) */}
+              {/* ══════════════════════════════════════════════════════
+                  Live Interactive Preview (8 cols)
+                 ══════════════════════════════════════════════════════ */}
               <div className="lg:col-span-8 space-y-2">
                 <div className="flex items-center justify-between bg-slate-100/70 p-2.5 rounded-xl border border-slate-200">
                   <div className="flex items-center gap-2">
                     <IconEye size={16} className="text-slate-600" />
                     <span className="font-extrabold text-xs text-slate-800">
-                      {isAr ? 'المعاينة الحية الفورية للمستند' : 'Live Interactive Document Preview'}
+                      {isAr ? 'المعاينة الحية الفورية للمستند المعتمد' : 'Live Interactive Document Preview'}
                     </span>
                   </div>
-                  <span className="text-[11px] font-bold text-slate-500 font-mono">
-                    A4 Portrait Standard
-                  </span>
+                  <Badge color="orange" variant="light" size="sm" className="font-bold">
+                    {isAr ? 'التصميم الرسمي المعتمد ⚡' : 'Official Approved Design ⚡'}
+                  </Badge>
                 </div>
 
-                <div className="bg-slate-200/60 p-3 rounded-xl border border-slate-300/80 overflow-x-auto flex justify-center shadow-inner min-h-[500px]">
+                <div className="bg-slate-200/70 p-4 rounded-xl border border-slate-300 overflow-x-auto flex justify-center shadow-inner min-h-[600px]">
                   {currentDocKey === 'statement' ? (
                     <PrintableAccountStatementSheet
-                      accountName="شركة الأفق للسياحة والخدمات المحدودة"
-                      accountCode="110204"
-                      startDate="2026-02-01"
-                      endDate="2026-02-28"
+                      accountName="حساب العميل علي السعدي"
+                      accountCode="1413"
+                      startDate="2026/08/01"
+                      endDate="2026/08/31"
                       rows={MOCK_STATEMENT_ROWS}
                       totals={MOCK_STATEMENT_TOTALS}
-                      config={currentConfig}
+                      config={{
+                        ...currentConfig,
+                        logoUrl: activeLogoUrl || currentConfig?.logoUrl || '',
+                      }}
                       lang="ar"
                     />
                   ) : currentDocKey === 'receipt_voucher' ? (
                     <PrintableVoucherSheet
                       voucher={MOCK_RECEIPT_VOUCHER}
-                      config={currentConfig}
+                      config={{
+                        ...currentConfig,
+                        logoUrl: activeLogoUrl || currentConfig?.logoUrl || '',
+                      }}
                       lang="ar"
                     />
                   ) : currentDocKey === 'payment_voucher' ? (
                     <PrintableVoucherSheet
                       voucher={MOCK_PAYMENT_VOUCHER}
-                      config={currentConfig}
+                      config={{
+                        ...currentConfig,
+                        logoUrl: activeLogoUrl || currentConfig?.logoUrl || '',
+                      }}
                       lang="ar"
                     />
                   ) : (
                     <PrintableAccountStatementSheet
                       accountName="تقرير المصاريف العمومية والإدارية"
                       accountCode="510001"
-                      startDate="2026-02-01"
-                      endDate="2026-02-28"
+                      startDate="2026/08/01"
+                      endDate="2026/08/31"
                       rows={MOCK_STATEMENT_ROWS}
                       totals={MOCK_STATEMENT_TOTALS}
-                      config={currentConfig}
+                      config={{
+                        ...currentConfig,
+                        logoUrl: activeLogoUrl || currentConfig?.logoUrl || '',
+                      }}
                       lang="ar"
                     />
                   )}

@@ -19,7 +19,6 @@ import {
   IconFileText,
   IconMail,
   IconPhone,
-  IconBuilding,
 } from '@tabler/icons-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
@@ -61,10 +60,19 @@ export const DEFAULT_VOUCHER_CONFIG = {
   website: 'www.roda10.com',
   address: 'العراق - بغداد - المنصور - شارع الصناعة',
   logoUrl: '',
-  logoWidth: 130,
-  logoHeight: 45,
+  logoWidth: 140,
+  logoHeight: 50,
+  logoBorderRadius: 6,
   primaryColor: '#0066FF', // Vibrant Electric Blue matching reference
   headerBgColor: '#0066FF',
+  fieldBgColor: '#F0F7FF',
+  fieldBorderColor: '#BFDBFE',
+  amountTextColor: '#0f172a',
+  tafqeetTextColor: '#0066FF',
+  summaryBorderColor: '#0066FF',
+  summaryTotalColor: '#0066FF',
+  statusColor: '#059669',
+  watermarkColor: '#0066FF',
   fontFamily: 'IBM Plex Sans Arabic',
   isTableBold: false,
   showWatermark: true,
@@ -89,11 +97,14 @@ export const DEFAULT_VOUCHER_CONFIG = {
 
 export const DEFAULT_PAYMENT_VOUCHER_CONFIG = {
   ...DEFAULT_VOUCHER_CONFIG,
-  primaryColor: '#0066FF', // Can be customized to Rose #e11d48 or Blue #0066FF
+  primaryColor: '#0066FF',
   headerBgColor: '#0066FF',
+  tafqeetTextColor: '#0066FF',
+  summaryBorderColor: '#0066FF',
+  summaryTotalColor: '#0066FF',
 };
 
-// ── Printable Voucher Sheet Component (Matches exact user design) ──
+// ── Printable Voucher Sheet Component (Matches exact user design & rich colors) ──
 export interface PrintableVoucherSheetProps {
   voucher: VoucherPrintItem;
   config?: any;
@@ -111,6 +122,16 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   const cfg = { ...defaultConfig, ...userConfig };
 
   const primaryColor = cfg.primaryColor || '#0066FF';
+  const headerBgColor = cfg.headerBgColor || primaryColor;
+  const fieldBgColor = cfg.fieldBgColor || '#F0F7FF';
+  const fieldBorderColor = cfg.fieldBorderColor || '#BFDBFE';
+  const amountTextColor = cfg.amountTextColor || '#0f172a';
+  const tafqeetTextColor = cfg.tafqeetTextColor || primaryColor;
+  const summaryBorderColor = cfg.summaryBorderColor || primaryColor;
+  const summaryTotalColor = cfg.summaryTotalColor || primaryColor;
+  const statusColor = cfg.statusColor || '#059669';
+  const watermarkColor = cfg.watermarkColor || primaryColor;
+
   const currencyCode = voucher.currency === 'USD' || voucher.currency === '$' ? 'USD' : 'IQD';
   const currencyNameAr = currencyCode === 'USD' ? 'دولار أمريكي (USD)' : 'دينار عراقي (IQD)';
   const currencyName = isEn ? (currencyCode === 'USD' ? 'US Dollar (USD)' : 'Iraqi Dinar (IQD)') : currencyNameAr;
@@ -145,6 +166,8 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   const timeFormatted = voucher.time || '11:00 AM';
   const yearFormatted = dateFormatted.split('-')[0] || '2026';
 
+  const logoUrl = cfg.logoUrl || '';
+
   return (
     <div
       id="printable-voucher-sheet"
@@ -176,7 +199,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               transform: 'rotate(-28deg)',
               opacity: 0.045,
               whiteSpace: 'nowrap',
-              color: primaryColor,
+              color: watermarkColor,
               fontWeight: 900,
             }}
           >
@@ -191,20 +214,22 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               1. TOP HEADER SECTION (Exact matching user design)
              ═══════════════════════════════════════════════════════ */}
           <div className="flex items-start justify-between gap-4 pb-6 mb-6">
-            {/* Top Right (in RTL): Company Branding */}
+            {/* Top Right (in RTL): Company Branding & Logo */}
             <div className="space-y-1 max-w-[35%]">
-              {cfg.logoUrl ? (
+              {logoUrl ? (
                 <img
-                  src={cfg.logoUrl}
+                  src={logoUrl}
                   alt="Company Logo"
+                  className="mb-1"
                   style={{
-                    maxHeight: '48px',
-                    maxWidth: '180px',
+                    maxHeight: cfg.logoHeight ? `${cfg.logoHeight}px` : '50px',
+                    maxWidth: cfg.logoWidth ? `${cfg.logoWidth}px` : '180px',
                     objectFit: 'contain',
+                    borderRadius: `${cfg.logoBorderRadius || 6}px`,
                   }}
                 />
               ) : (
-                <div className="flex items-center gap-1.5 font-black text-xl tracking-tight">
+                <div className="flex items-center gap-1.5 font-black text-xl tracking-tight mb-1">
                   <span style={{ color: primaryColor }}>RODA</span>
                   <span style={{ color: '#FF7A00' }}>10</span>
                 </div>
@@ -230,7 +255,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
             <div className="flex flex-col items-center justify-center text-center pt-2">
               <div
                 className="w-12 h-12 rounded-2xl flex items-center justify-center mb-1.5 shadow-2xs"
-                style={{ backgroundColor: '#EEF6FF', border: `1.5px solid ${primaryColor}` }}
+                style={{ backgroundColor: fieldBgColor, border: `1.5px solid ${primaryColor}` }}
               >
                 <div className="relative">
                   <IconFileText size={24} style={{ color: primaryColor }} />
@@ -257,7 +282,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
             {/* Top Left (in RTL): Meta Box */}
             <div
               className="bg-white rounded-xl border p-3 min-w-[210px] space-y-1.5 shadow-2xs text-xs font-bold"
-              style={{ borderColor: '#BFDBFE' }}
+              style={{ borderColor: fieldBorderColor }}
             >
               <div className="flex items-center justify-between pb-1 border-b border-slate-100">
                 <span className="text-slate-600 font-bold">{isEn ? 'Voucher No :' : 'رقم السند :'}</span>
@@ -302,7 +327,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
             {/* Top Pill Badge (Floating on Card Header) */}
             <div
               className="absolute -top-3.5 right-6 px-5 py-1 rounded-full text-white font-black text-xs tracking-wide shadow-xs flex items-center gap-1.5"
-              style={{ backgroundColor: primaryColor }}
+              style={{ backgroundColor: headerBgColor }}
             >
               <span>{isEn ? cardTitleEn : cardTitleAr}</span>
             </div>
@@ -330,7 +355,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
 
               <div
                 className="flex-1 flex items-center rounded-xl overflow-hidden border"
-                style={{ backgroundColor: '#F0F7FF', borderColor: '#BFDBFE' }}
+                style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
               >
                 <div
                   className="px-4 py-2 text-xs font-black font-mono border-l flex items-center justify-center shrink-0"
@@ -342,7 +367,10 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 >
                   {currencyCode}
                 </div>
-                <div className="flex-1 px-4 py-2 text-end font-mono font-black text-base text-slate-900 tracking-wider">
+                <div
+                  className="flex-1 px-4 py-2 text-end font-mono font-black text-base tracking-wider"
+                  style={{ color: amountTextColor }}
+                >
                   {amountFormatted}
                 </div>
               </div>
@@ -359,9 +387,9 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 <div
                   className="flex-1 rounded-xl p-2.5 px-4 text-center font-bold text-xs border"
                   style={{
-                    backgroundColor: '#F0F7FF',
-                    borderColor: '#BFDBFE',
-                    color: primaryColor,
+                    backgroundColor: fieldBgColor,
+                    borderColor: fieldBorderColor,
+                    color: tafqeetTextColor,
                   }}
                 >
                   {tafqeetText || 'مائتان وخمسون ألف دينار عراقي لا غير'}
@@ -379,8 +407,8 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               <div
                 className="flex-1 rounded-xl p-2.5 px-4 text-center font-bold text-xs text-slate-800 border"
                 style={{
-                  backgroundColor: '#F0F7FF',
-                  borderColor: '#BFDBFE',
+                  backgroundColor: fieldBgColor,
+                  borderColor: fieldBorderColor,
                 }}
               >
                 {voucher.description || 'تسديد جزء من قيمة الفاتورة رقم INV-2025-0456'}
@@ -397,7 +425,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 </span>
                 <div
                   className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between"
-                  style={{ backgroundColor: '#F0F7FF', borderColor: '#BFDBFE' }}
+                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
                 >
                   <span>{paymentMethodVal}</span>
                   <span className="text-[10px] text-slate-400">▾</span>
@@ -412,7 +440,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 </span>
                 <div
                   className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between"
-                  style={{ backgroundColor: '#F0F7FF', borderColor: '#BFDBFE' }}
+                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
                 >
                   <span>{currencyName}</span>
                   <span className="text-[10px] text-slate-400">▾</span>
@@ -427,7 +455,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 </span>
                 <div
                   className="rounded-xl p-2 px-3 text-xs font-bold text-slate-800 border flex items-center justify-between truncate"
-                  style={{ backgroundColor: '#F0F7FF', borderColor: '#BFDBFE' }}
+                  style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
                 >
                   <span className="truncate">{voucher.cashboxName || 'مصرف الرافدين - 123456789'}</span>
                   <span className="text-[10px] text-slate-400">▾</span>
@@ -445,8 +473,8 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               <div
                 className="flex-1 rounded-xl p-3 px-4 font-bold text-xs text-slate-700 border min-h-[44px] leading-relaxed"
                 style={{
-                  backgroundColor: '#F0F7FF',
-                  borderColor: '#BFDBFE',
+                  backgroundColor: fieldBgColor,
+                  borderColor: fieldBorderColor,
                 }}
               >
                 {voucher.reference
@@ -461,12 +489,12 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
              ═══════════════════════════════════════════════════════ */}
           <div
             className="rounded-2xl border-2 bg-white relative p-4 mb-6 shadow-2xs"
-            style={{ borderColor: primaryColor }}
+            style={{ borderColor: summaryBorderColor }}
           >
             {/* Top Pill Badge */}
             <div
               className="absolute -top-3.5 right-6 px-4 py-1 rounded-full text-white font-black text-xs tracking-wide shadow-xs flex items-center gap-1"
-              style={{ backgroundColor: primaryColor }}
+              style={{ backgroundColor: headerBgColor }}
             >
               <span>{isEn ? 'Voucher Summary' : 'ملخص السند'}</span>
             </div>
@@ -478,7 +506,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                   <IconCoins size={13} style={{ color: primaryColor }} />
                   <span>{isEn ? 'Total Amount :' : 'إجمالي المبلغ :'}</span>
                 </span>
-                <div className="font-mono font-black text-sm tracking-tight" style={{ color: primaryColor }}>
+                <div className="font-mono font-black text-sm tracking-tight" style={{ color: summaryTotalColor }}>
                   {amountFormatted} {currencyCode}
                 </div>
               </div>
@@ -508,10 +536,10 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               {/* الحالة */}
               <div className="space-y-1 border-r border-slate-200">
                 <span className="font-black text-[11px] text-slate-600 flex items-center justify-center gap-1">
-                  <IconCheck size={13} className="text-emerald-600" />
+                  <IconCheck size={13} style={{ color: statusColor }} />
                   <span>{isEn ? 'Status :' : 'الحالة :'}</span>
                 </span>
-                <div className="font-black text-xs text-emerald-700">
+                <div className="font-black text-xs" style={{ color: statusColor }}>
                   {isEn ? 'POSTED' : 'مُسجَّل'}
                 </div>
               </div>
