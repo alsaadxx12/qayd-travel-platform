@@ -211,76 +211,64 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
         <div>
           {/* ═══════════════════════════════════════════════════════
               1. TOP HEADER SECTION
-                 - Option A: Full Header Banner Image across top
+                 - Option A: Full Header Banner Image + Single Horizontal Meta Bar (No standalone title)
                  - Option B: 3-Section Clean Header (Meta Right, Title Center, Logo Left)
              ═══════════════════════════════════════════════════════ */}
           {cfg.useFullHeaderImage && cfg.headerImageUrl ? (
-            <div className="space-y-3 pb-3 mb-5 border-b border-slate-100">
-              {/* Full Width Header Banner Image */}
+            <div className="space-y-3 pb-2 mb-4 border-b border-slate-100">
+              {/* Full Width Header Banner Image (Flush Top & Full Width) */}
               <div className="w-full flex items-center justify-center overflow-hidden rounded-xl bg-white shadow-2xs">
                 <img
                   src={cfg.headerImageUrl}
                   alt="Header Banner"
                   className="w-full object-contain"
                   style={{
-                    maxHeight: `${cfg.headerImageHeight || 85}px`,
+                    maxHeight: `${cfg.headerImageHeight || 110}px`,
                     borderRadius: `${cfg.headerImageBorderRadius || 8}px`,
                   }}
                 />
               </div>
 
-              {/* Sub-Header Row: Meta Box (Right) & Document Title (Center/Left) */}
-              <div className="flex items-center justify-between gap-4 pt-1">
-                {/* Meta Box on Right */}
-                <div
-                  className="bg-white rounded-xl border p-2 min-w-[200px] space-y-1 shadow-2xs text-xs font-bold shrink-0"
-                  style={{ borderColor: fieldBorderColor }}
-                >
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                    <span className="text-slate-600 font-bold">{isEn ? 'Voucher No :' : 'رقم السند :'}</span>
-                    <span className="font-mono font-black tracking-wider text-xs" dir="ltr" style={{ color: primaryColor }}>
-                      {voucher.voucherNumber || 'RCV-2025-000123'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600 flex items-center gap-1 font-bold">
-                      <IconCalendar size={12} className="text-slate-400" />
-                      <span>{isEn ? 'Date :' : 'التاريخ :'}</span>
-                    </span>
-                    <span className="font-mono font-bold text-slate-800" dir="ltr">{dateFormatted}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600 flex items-center gap-1 font-bold">
-                      <IconClock size={12} className="text-slate-400" />
-                      <span>{isEn ? 'Issue Time :' : 'وقت الإصدار :'}</span>
-                    </span>
-                    <span className="font-mono font-bold text-slate-800" dir="ltr">{timeFormatted}</span>
-                  </div>
+              {/* Single Horizontal Meta Bar across the width (رقم السند، التاريخ، وقت الإصدار، الصفحة) */}
+              <div
+                className="rounded-xl border p-2 px-4 flex items-center justify-between gap-3 shadow-2xs text-xs font-bold"
+                style={{
+                  backgroundColor: fieldBgColor,
+                  borderColor: fieldBorderColor,
+                }}
+              >
+                {/* رقم السند */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-600 font-bold">{isEn ? 'Voucher No :' : 'رقم السند :'}</span>
+                  <span
+                    className="font-mono font-black tracking-wider text-xs px-2.5 py-0.5 rounded-lg bg-white border"
+                    dir="ltr"
+                    style={{ color: primaryColor, borderColor: fieldBorderColor }}
+                  >
+                    {voucher.voucherNumber || 'RCV-2025-000123'}
+                  </span>
                 </div>
 
-                {/* Centered Document Title */}
-                <div className="flex-1 flex flex-col items-center justify-center text-center">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-8 h-8 rounded-xl flex items-center justify-center shadow-2xs shrink-0"
-                      style={{ backgroundColor: fieldBgColor, border: `1.5px solid ${primaryColor}` }}
-                    >
-                      <IconFileText size={18} style={{ color: primaryColor }} />
-                    </div>
-                    <h1
-                      className="font-black tracking-tight"
-                      style={{
-                        fontSize: `${cfg.fontSizes?.docTitle || 22}px`,
-                        color: '#0f172a',
-                      }}
-                    >
-                      {isEn ? docTitleEn : docTitleAr}
-                    </h1>
-                  </div>
-                  <div className="w-16 h-0.5 mt-1 rounded-full" style={{ backgroundColor: primaryColor }} />
+                {/* التاريخ */}
+                <div className="flex items-center gap-1.5 border-r border-slate-300 pr-3">
+                  <IconCalendar size={13} className="text-slate-400" />
+                  <span className="text-slate-600 font-bold">{isEn ? 'Date :' : 'التاريخ :'}</span>
+                  <span className="font-mono font-bold text-slate-800" dir="ltr">{dateFormatted}</span>
                 </div>
 
-                <div className="min-w-[200px]"></div>
+                {/* وقت الإصدار */}
+                <div className="flex items-center gap-1.5 border-r border-slate-300 pr-3">
+                  <IconClock size={13} className="text-slate-400" />
+                  <span className="text-slate-600 font-bold">{isEn ? 'Issue Time :' : 'وقت الإصدار :'}</span>
+                  <span className="font-mono font-bold text-slate-800" dir="ltr">{timeFormatted}</span>
+                </div>
+
+                {/* الصفحة */}
+                <div className="flex items-center gap-1.5 border-r border-slate-300 pr-3">
+                  <IconFileDescription size={13} className="text-slate-400" />
+                  <span className="text-slate-600 font-bold">{isEn ? 'Page :' : 'الصفحة :'}</span>
+                  <span className="font-mono font-bold text-slate-800" dir="ltr">1 / 1</span>
+                </div>
               </div>
             </div>
           ) : (

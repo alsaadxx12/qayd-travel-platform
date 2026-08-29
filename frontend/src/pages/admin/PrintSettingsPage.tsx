@@ -974,16 +974,16 @@ export const PrintSettingsPage: React.FC = () => {
                       {currentConfig.useFullHeaderImage && (
                         <div>
                           <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
-                            <span>{isAr ? 'ارتفاع الترويسة:' : 'Banner Height:'}</span>
-                            <span className="font-mono text-blue-600">{currentConfig.headerImageHeight || 85}px</span>
+                            <span>{isAr ? 'ارتفاع الترويسة الكاملة:' : 'Full Banner Height:'}</span>
+                            <span className="font-mono text-blue-600">{currentConfig.headerImageHeight || 115}px</span>
                           </div>
                           <Slider
                             size="xs"
                             color="blue"
                             min={40}
-                            max={160}
+                            max={240}
                             step={5}
-                            value={currentConfig.headerImageHeight || 85}
+                            value={currentConfig.headerImageHeight || 115}
                             onChange={(v) => updateCurrentConfig('headerImageHeight', v)}
                           />
                         </div>
