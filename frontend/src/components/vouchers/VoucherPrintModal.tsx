@@ -210,72 +210,12 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
       <div className="relative flex flex-col justify-between" style={{ zIndex: 1, minHeight: '269mm' }}>
         <div>
           {/* ═══════════════════════════════════════════════════════
-              1. TOP HEADER SECTION (Clean 3-Section Header)
+              1. TOP HEADER SECTION (Meta on Right, Title in Center, Logo on Left)
              ═══════════════════════════════════════════════════════ */}
-          <div className="flex items-start justify-between gap-4 pb-4 mb-5 border-b border-slate-100">
-            {/* Header Right (in RTL): Company Logo & Sub-info */}
-            <div className="space-y-1 max-w-[32%] text-start">
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt="Company Logo"
-                  className="mb-1"
-                  style={{
-                    maxHeight: cfg.logoHeight ? `${cfg.logoHeight}px` : '50px',
-                    maxWidth: cfg.logoWidth ? `${cfg.logoWidth}px` : '160px',
-                    objectFit: 'contain',
-                    borderRadius: `${cfg.logoBorderRadius || 6}px`,
-                  }}
-                />
-              ) : (
-                <div className="flex items-center gap-1 font-black text-2xl tracking-tight mb-1">
-                  <span style={{ color: '#FF7A00' }}>10</span>
-                  <span style={{ color: primaryColor }}>RODA</span>
-                </div>
-              )}
-
-              <p className="text-[10px] text-slate-500 font-bold leading-relaxed pt-0.5">
-                {cfg.address || 'العراق - بغداد - المنصور - شارع الصناعة'}
-              </p>
-              {cfg.phone && (
-                <p className="text-[10px] text-slate-500 font-bold" dir="ltr">
-                  {isEn ? `Tel: ${cfg.phone}` : `هاتف: ${cfg.phone}`}
-                </p>
-              )}
-            </div>
-
-            {/* Header Center (CENTERED): Clean Document Icon & Title Only */}
-            <div className="flex flex-col items-center justify-center text-center pt-1">
-              <div
-                className="w-11 h-11 rounded-2xl flex items-center justify-center mb-1 shadow-2xs"
-                style={{ backgroundColor: fieldBgColor, border: `1.5px solid ${primaryColor}` }}
-              >
-                <div className="relative">
-                  <IconFileText size={22} style={{ color: primaryColor }} />
-                  <div
-                    className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-white"
-                    style={{ backgroundColor: primaryColor }}
-                  >
-                    <span className="text-[8px] font-black leading-none">↓</span>
-                  </div>
-                </div>
-              </div>
-
-              <h1
-                className="font-black tracking-tight"
-                style={{
-                  fontSize: `${cfg.fontSizes?.docTitle || 24}px`,
-                  color: '#0f172a',
-                }}
-              >
-                {isEn ? docTitleEn : docTitleAr}
-              </h1>
-              <div className="w-12 h-0.5 mt-1 rounded-full" style={{ backgroundColor: primaryColor }} />
-            </div>
-
-            {/* Header Left (in RTL): Meta Box (Clean LTR/RTL Alignment) */}
+          <div className="flex items-center justify-between gap-4 pb-4 mb-5 border-b border-slate-100">
+            {/* Header Right (in RTL): Meta Box (رقم السند، التاريخ، وقت الإصدار، الصفحة) */}
             <div
-              className="bg-white rounded-xl border p-2.5 min-w-[195px] space-y-1 shadow-2xs text-xs font-bold shrink-0"
+              className="bg-white rounded-xl border p-2.5 min-w-[200px] space-y-1 shadow-2xs text-xs font-bold shrink-0"
               style={{ borderColor: fieldBorderColor }}
             >
               <div className="flex items-center justify-between pb-1 border-b border-slate-100">
@@ -308,6 +248,56 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 </span>
                 <span className="font-mono font-bold text-slate-800" dir="ltr">1 / 1</span>
               </div>
+            </div>
+
+            {/* Header Center (CENTERED): Clean Document Icon & Title Only */}
+            <div className="flex flex-col items-center justify-center text-center pt-1">
+              <div
+                className="w-11 h-11 rounded-2xl flex items-center justify-center mb-1 shadow-2xs"
+                style={{ backgroundColor: fieldBgColor, border: `1.5px solid ${primaryColor}` }}
+              >
+                <div className="relative">
+                  <IconFileText size={22} style={{ color: primaryColor }} />
+                  <div
+                    className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-white"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    <span className="text-[8px] font-black leading-none">↓</span>
+                  </div>
+                </div>
+              </div>
+
+              <h1
+                className="font-black tracking-tight"
+                style={{
+                  fontSize: `${cfg.fontSizes?.docTitle || 24}px`,
+                  color: '#0f172a',
+                }}
+              >
+                {isEn ? docTitleEn : docTitleAr}
+              </h1>
+              <div className="w-12 h-0.5 mt-1 rounded-full" style={{ backgroundColor: primaryColor }} />
+            </div>
+
+            {/* Header Left (in RTL): Company Logo ONLY (No address or phone) */}
+            <div className="min-w-[200px] flex items-center justify-end">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="Company Logo"
+                  style={{
+                    maxHeight: cfg.logoHeight ? `${cfg.logoHeight}px` : '55px',
+                    maxWidth: cfg.logoWidth ? `${cfg.logoWidth}px` : '180px',
+                    objectFit: 'contain',
+                    borderRadius: `${cfg.logoBorderRadius || 6}px`,
+                  }}
+                />
+              ) : (
+                <div className="flex items-center gap-1 font-black text-2xl tracking-tight">
+                  <span style={{ color: primaryColor }}>RODA</span>
+                  <span style={{ color: '#FF7A00' }}>10</span>
+                </div>
+              )}
             </div>
           </div>
 
