@@ -408,7 +408,7 @@ export const AddonsStorePage: React.FC = () => {
       </div>
 
       {/* ── Addons Grid ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-3">
         {addonsList.map((addon) => {
           const Icon = addon.icon;
           const isEnabled = enabledAddons[addon.id] ?? true;
@@ -418,17 +418,17 @@ export const AddonsStorePage: React.FC = () => {
           return (
             <div
               key={addon.id}
-              className={`bg-white border rounded-2xl p-4.5 flex flex-col justify-between space-y-4 transition-all duration-200 ${
+              className={`bg-white border rounded-xl p-3 flex flex-col justify-between space-y-2.5 transition-all duration-200 ${
                 isEnabled
                   ? 'border-slate-200/90 shadow-2xs hover:shadow-md hover:border-orange-300'
                   : 'border-slate-200/60 bg-slate-50/70 opacity-75'
               }`}
             >
               {/* 1. Top Section: Type Tag, Status Badge, Title & Icon Box */}
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   {/* Left: Tag Badge */}
-                  <span className={`text-[10.5px] font-black px-2.5 py-0.5 rounded-full ${
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
                     addon.tagType === 'usage'
                       ? 'bg-rose-50 text-rose-700 border border-rose-200/80'
                       : 'bg-amber-50 text-amber-800 border border-amber-200/80'
@@ -438,56 +438,56 @@ export const AddonsStorePage: React.FC = () => {
 
                   {/* Right: Status Badge + App Icon */}
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10.5px] font-black px-2 py-0.5 rounded-full flex items-center gap-1.5 ${
+                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
                       isEnabled
                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/80'
                         : 'bg-slate-100 text-slate-500 border border-slate-200'
                     }`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-emerald-600 animate-pulse' : 'bg-slate-400'}`}></span>
-                      <span>{isEnabled ? (isAr ? 'متصلة ونشطة' : 'Active & Connected') : (isAr ? 'معطلة' : 'Disabled')}</span>
+                      <span>{isEnabled ? (isAr ? 'متصلة ونشطة' : 'Active') : (isAr ? 'معطلة' : 'Disabled')}</span>
                     </span>
 
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${addon.iconBg}`}>
-                      <Icon size={22} className={addon.iconColor} />
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${addon.iconBg}`}>
+                      <Icon size={18} className={addon.iconColor} />
                     </div>
                   </div>
                 </div>
 
                 {/* Title & Subtitle */}
                 <div>
-                  <h3 className="font-black text-slate-900 text-sm leading-tight">
+                  <h3 className="font-black text-slate-900 text-[13px] leading-tight">
                     {isAr ? addon.nameAr : addon.nameEn}
                   </h3>
-                  <span className="text-[11px] text-slate-400 font-bold block mt-0.5 font-mono">
+                  <span className="text-[10px] text-slate-400 font-bold block font-mono">
                     {isAr ? addon.nameEn : addon.nameAr}
                   </span>
                 </div>
 
                 {/* Description Text */}
-                <p className="text-slate-600 text-xs leading-relaxed font-medium min-h-[36px]">
+                <p className="text-slate-600 text-[11px] leading-snug font-medium">
                   {addon.description}
                 </p>
               </div>
 
               {/* 2. Middle Section: Real Technical Metrics */}
-              <div className="bg-slate-50/90 border border-slate-200/80 rounded-xl p-3 grid grid-cols-3 text-center divide-x divide-slate-200/80">
+              <div className="bg-slate-50/90 border border-slate-200/80 rounded-lg p-2 grid grid-cols-3 text-center divide-x divide-slate-200/80">
                 <div className="px-1">
-                  <span className="text-[10px] text-slate-500 font-bold block">{addon.statLabel1}</span>
-                  <span className="font-mono font-black text-slate-900 text-xs block mt-0.5 tabular-nums">{addon.statVal1}</span>
+                  <span className="text-[9px] text-slate-500 font-bold block">{addon.statLabel1}</span>
+                  <span className="font-mono font-black text-slate-900 text-[11px] block tabular-nums">{addon.statVal1}</span>
                 </div>
                 <div className="px-1">
-                  <span className="text-[10px] text-slate-500 font-bold block">{addon.statLabel2}</span>
-                  <span className="font-mono font-black text-slate-900 text-xs block mt-0.5 tabular-nums">{addon.statVal2}</span>
+                  <span className="text-[9px] text-slate-500 font-bold block">{addon.statLabel2}</span>
+                  <span className="font-mono font-black text-slate-900 text-[11px] block tabular-nums">{addon.statVal2}</span>
                 </div>
                 <div className="px-1">
-                  <span className="text-[10px] text-slate-500 font-bold block">{addon.statLabel3}</span>
-                  <span className="font-mono font-black text-emerald-700 text-xs block mt-0.5 tabular-nums">{addon.statVal3}</span>
+                  <span className="text-[9px] text-slate-500 font-bold block">{addon.statLabel3}</span>
+                  <span className="font-mono font-black text-emerald-700 text-[11px] block tabular-nums">{addon.statVal3}</span>
                 </div>
               </div>
 
               {/* 3. Bottom Section: Active Switch, Manage Button */}
-              <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                <div className="flex items-center gap-2 bg-slate-100/80 px-2.5 py-1 rounded-xl border border-slate-200/80">
+              <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 bg-slate-100/80 px-2 py-0.5 rounded-lg border border-slate-200/80">
                   <Switch
                     size="xs"
                     color="emerald"
@@ -495,7 +495,7 @@ export const AddonsStorePage: React.FC = () => {
                     onChange={() => toggleAddon(addon.id, addon.nameEn)}
                     className="cursor-pointer"
                   />
-                  <span className="text-[11px] font-black text-slate-700">
+                  <span className="text-[10px] font-black text-slate-700">
                     {isEnabled ? (isAr ? 'مُفعّلة' : 'Enabled') : (isAr ? 'معطّلة' : 'Disabled')}
                   </span>
                 </div>
@@ -512,14 +512,14 @@ export const AddonsStorePage: React.FC = () => {
                         fetchAiBilling(true);
                       }
                     }}
-                    className="flex items-center gap-1.5 text-xs font-black text-orange-700 hover:text-white bg-orange-50 hover:bg-[#F45A0A] border border-orange-200/90 px-3.5 py-1.5 rounded-xl transition-all shadow-2xs cursor-pointer active:scale-95"
+                    className="flex items-center gap-1 text-[11px] font-black text-orange-700 hover:text-white bg-orange-50 hover:bg-[#F45A0A] border border-orange-200/90 px-2.5 py-1 rounded-lg transition-all shadow-2xs cursor-pointer active:scale-95"
                   >
-                    <IconPlugConnected size={15} />
+                    <IconPlugConnected size={13} />
                     <span>{addon.manageLabel}</span>
                   </button>
                 ) : (
-                  <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500">
-                    <IconCheck size={14} className="text-emerald-600" />
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                    <IconCheck size={13} className="text-emerald-600" />
                     <span>{isAr ? 'مدمجة بالنظام' : 'Native Core'}</span>
                   </div>
                 )}
