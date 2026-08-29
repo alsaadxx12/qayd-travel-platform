@@ -781,7 +781,7 @@ export const GlobalSearch: React.FC = () => {
                       onMouseEnter={() => setSelectedIndex(idx)}
                       className={`flex items-center justify-between px-3 py-2 rounded-xl transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-[#FFF3E8] border border-[#FFD8B2] text-slate-950 shadow-2xs ring-1 ring-[#F45A0A]/25'
+                          ? 'bg-[#FFF3E8] border border-[#FFDCC0] text-slate-950 shadow-2xs'
                           : 'hover:bg-slate-50 text-slate-700 border border-transparent'
                       }`}
                     >
@@ -815,11 +815,7 @@ export const GlobalSearch: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          {(item.subAr || item.subEn) && (
-                            <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                              {isAr ? item.subAr : item.subEn}
-                            </p>
-                          )}
+
                         </div>
                       </div>
 
