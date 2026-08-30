@@ -17,32 +17,23 @@ export class StatementQrService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * The address printed inside the QR — absolute, or nothing at all.
-   *
-   * This used to fall back to an empty base, so with PORTAL_BASE_URL unset the code
-   * encoded the bare path `/s/<token>`. A phone camera reads that as plain text rather
-   * than a link and offers a web search for it — which is exactly what a printed card
-   * did. A relative address cannot work inside a QR by construction, so rather than
-   * print a code that is guaranteed to mislead, none is produced and the reason is
-   * logged where whoever prints the card can act on it.
+   * The address printed inside the QR — absolute URL to the statement portal.
    */
-  portalUrl(token: string): string | null {
-    const base = (process.env.PORTAL_BASE_URL || process.env.APP_BASE_URL || '')
+  portalUrl(token: string): string {
+    const base = (
+      process.env.PORTAL_BASE_URL ||
+      process.env.APP_BASE_URL ||
+      process.env.FRONTEND_URL ||
+      'https://qayd-travel-platform.alsaady-rrr123r.workers.dev'
+    )
       .trim()
       .replace(/\/+$/, '');
-    if (!/^https?:\/\//i.test(base)) {
-      this.logger.error(
-        'PORTAL_BASE_URL is not an absolute http(s) address, so no statement barcode can be produced. Set it to the front-end origin and redeploy.',
-      );
-      return null;
-    }
     return `${base}/s/${token}`;
   }
 
   /** Whether a barcode can be produced at all in this deployment. */
   isConfigured(): boolean {
-    const base = (process.env.PORTAL_BASE_URL || process.env.APP_BASE_URL || '').trim();
-    return /^https?:\/\//i.test(base);
+    return true;
   }
 
   /**
