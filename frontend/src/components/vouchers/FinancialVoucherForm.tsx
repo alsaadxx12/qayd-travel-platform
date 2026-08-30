@@ -97,13 +97,17 @@ export const readVoucherSplits = (desc?: string | null): { cleanDescription: str
   };
 };
 
-export const writeVoucherSplits = (desc: string | null | undefined, splitAccounts: any[]): string => {
-  const { cleanDescription } = readVoucherSplits(desc);
-  const activeSplits = (splitAccounts || []).filter((s) => parseCleanNumber(s.amount) > 0);
-  if (activeSplits.length === 0) return cleanDescription;
-  const marker = `${VOUCHER_SPLIT_MARKER}${JSON.stringify(activeSplits)}]]`;
-  return cleanDescription ? `${cleanDescription}\n${marker}` : marker;
-};
+/**
+ * The split used to be smuggled into the description as a marker, because there was
+ * nowhere else to keep it. It now lives in the journal lines, which is where the
+ * accounting actually is — so nothing writes the marker any more. Writing it would
+ * only put raw JSON in front of the user in every account statement.
+ *
+ * `readVoucherSplits` stays, because vouchers saved before this change still carry
+ * the marker and must still open correctly.
+ */
+export const stripVoucherSplitMarker = (desc: string | null | undefined): string =>
+  readVoucherSplits(desc).cleanDescription;
 
 interface AccountOption {
   id: string;
@@ -1069,8 +1073,11 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       ? activeSplits.map((s) => `${s.accountName}: ${Number(s.amount).toLocaleString('en-US')} ${currency}`).join(' | ')
       : undefined;
 
-    const baseDescription = description || (isReceipt ? 'سند قبض مالي' : 'سند دفع مالي');
-    const finalDescription = writeVoucherSplits(baseDescription, activeSplits);
+    // Only the user's own note is sent. The distribution travels as `splitAccounts`
+    // and the backend writes it into the entry's lines and their descriptions.
+    const finalDescription = stripVoucherSplitMarker(
+      description || (isReceipt ? 'سند قبض مالي' : 'سند دفع مالي'),
+    );
 
     const payload = {
       voucherNumber,
@@ -1850,10 +1857,10 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     </button>
                   </div>
                   <Textarea
-                    placeholder="اكتب البيان والملاحظات العامة لسند القيد..."
-                    rows={2}
-                    minRows={2}
-                    size="xs"
+                    placeholder="اكتب البيان والملاحظات العامة والشاملة لسند القيد المحاسبي بالتفصيل..."
+                    rows={4}
+                    minRows={4}
+                    size="sm"
                     value={description}
                     onChange={(e) => {
                       setDescription(e.target.value);
@@ -1861,11 +1868,14 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     }}
                     styles={{
                       input: {
+                        minHeight: '95px',
                         backgroundColor: '#ffffff',
                         borderColor: '#cbd5e1',
                         fontSize: '13px',
+                        fontWeight: 600,
                         lineHeight: '1.6',
-                        borderRadius: '12px',
+                        borderRadius: '14px',
+                        padding: '10px 14px',
                       },
                     }}
                   />
@@ -2098,7 +2108,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     placeholder="اكتب البيان والتفاصيل كاملة..."
                     rows={3}
                     minRows={3}
-                    size="xs"
+                    size="sm"
                     required
                     value={description}
                     onChange={(e) => {
@@ -2107,11 +2117,14 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     }}
                     styles={{
                       input: {
+                        minHeight: '85px',
                         backgroundColor: '#ffffff',
                         borderColor: '#cbd5e1',
                         fontSize: '13px',
+                        fontWeight: 600,
                         lineHeight: '1.6',
-                        borderRadius: '12px',
+                        borderRadius: '14px',
+                        padding: '10px 14px',
                       },
                     }}
                   />
