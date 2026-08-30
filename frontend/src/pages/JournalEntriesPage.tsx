@@ -38,6 +38,7 @@ import {
   IconArrowDownLeft,
   IconArrowUpRight,
   IconTicket,
+  IconCoins,
 } from '@tabler/icons-react';
 
 /* ─────── Utility Functions ─────── */
@@ -161,15 +162,19 @@ export const JournalEntriesPage: React.FC = () => {
         const totalCredit = Number(entry.totalCredit || totalDebit);
 
         // Detect source type from reference or entry data
-        let sourceType: 'RECEIPT' | 'PAYMENT' | 'JOURNAL' | 'INVOICE' | 'REFUND' = 'JOURNAL';
+        let sourceType: 'RECEIPT' | 'PAYMENT' | 'EXPENSE' | 'JOURNAL' | 'INVOICE' | 'REFUND' = 'JOURNAL';
         const ref = String(entry.reference || entry.entryNumber || '');
+        const desc = String(entry.description || '');
+        const debitName = String(debitAccountName || '');
+        const isExp = desc.includes('مصروف') || desc.includes('مصاريف') || debitName.includes('مصاريف') || debitName.includes('مصروف');
+
         if (ref.includes('RV-') || ref.includes('قبض') || entry.sourceType === 'RECEIPT') sourceType = 'RECEIPT';
+        else if (isExp && (ref.includes('PV-') || ref.includes('دفع') || entry.sourceType === 'PAYMENT')) sourceType = 'EXPENSE';
         else if (ref.includes('PV-') || ref.includes('دفع') || entry.sourceType === 'PAYMENT') sourceType = 'PAYMENT';
         else if (ref.includes('TKT-') || ref.includes('VISA-') || ref.includes('تذكرة') || ref.includes('فيزا')) sourceType = 'INVOICE';
         else if (ref.includes('REF-') || ref.includes('استرجاع') || ref.includes('مرتجع')) sourceType = 'REFUND';
 
         // Detect currency
-        const desc = entry.description || '';
         let currency = 'IQD';
         if (desc.includes('$') || desc.includes('USD') || desc.includes('دولار') || entry.currency === 'USD') {
           currency = 'USD';
@@ -211,7 +216,7 @@ export const JournalEntriesPage: React.FC = () => {
     return entries.filter((e) => {
       // Tab filter
       if (activeTab === 'RECEIPT' && e.sourceType !== 'RECEIPT') return false;
-      if (activeTab === 'PAYMENT' && e.sourceType !== 'PAYMENT') return false;
+      if (activeTab === 'PAYMENT' && e.sourceType !== 'PAYMENT' && e.sourceType !== 'EXPENSE') return false;
       if (activeTab === 'JOURNAL' && e.sourceType !== 'JOURNAL') return false;
       if (activeTab === 'INVOICE' && e.sourceType !== 'INVOICE') return false;
       if (activeTab === 'REFUND' && e.sourceType !== 'REFUND') return false;
@@ -418,6 +423,13 @@ export const JournalEntriesPage: React.FC = () => {
             <span>سند صرف</span>
           </span>
         );
+      case 'EXPENSE':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] bg-orange-50 text-[#F45A0A] border border-orange-200 shrink-0">
+            <IconCoins size={11} />
+            <span>سند دفع مصروف</span>
+          </span>
+        );
       case 'INVOICE':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
@@ -562,7 +574,7 @@ export const JournalEntriesPage: React.FC = () => {
           {[
             { key: 'ALL', label: 'كافة القيود', count: entries.length },
             { key: 'RECEIPT', label: 'سندات القبض', count: entries.filter((e) => e.sourceType === 'RECEIPT').length },
-            { key: 'PAYMENT', label: 'سندات الصرف', count: entries.filter((e) => e.sourceType === 'PAYMENT').length },
+            { key: 'PAYMENT', label: 'سندات الصرف', count: entries.filter((e) => e.sourceType === 'PAYMENT' || e.sourceType === 'EXPENSE').length },
             { key: 'JOURNAL', label: 'قيود اليومية العامة', count: entries.filter((e) => e.sourceType === 'JOURNAL').length },
             { key: 'INVOICE', label: 'فواتير المبيعات', count: entries.filter((e) => e.sourceType === 'INVOICE').length },
             { key: 'REFUND', label: 'المرتجعات', count: entries.filter((e) => e.sourceType === 'REFUND').length },

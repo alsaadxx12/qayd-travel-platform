@@ -209,10 +209,25 @@ export const VouchersPage: React.FC = () => {
         const splits = (p.splitAccounts && Array.isArray(p.splitAccounts) && p.splitAccounts.length > 0) ? p.splitAccounts : parsedSplits;
         const accountName = p.supplier?.nameAr || p.account?.nameAr || accountsMap[p.accountId] || (isAr ? 'حساب مورد/طرف' : 'Supplier Account');
         const cashboxName = p.cashboxOrBankAccount?.nameAr || accountsMap[p.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox');
+        const isExpense = Boolean(
+          p.account?.type === 'EXPENSE' ||
+          String(p.account?.code || '').startsWith('3') ||
+          String(p.account?.code || '').startsWith('5') ||
+          accountName.includes('مصاريف') ||
+          accountName.includes('مصروف') ||
+          p.description?.includes('مصروف') ||
+          p.description?.includes('مصاريف') ||
+          p.customCategory === 'EXPENSE'
+        );
+        const typeLabel = isExpense
+          ? (isAr ? 'سند دفع مصروف' : 'Expense Payment')
+          : (isAr ? 'سند دفع' : 'Payment Voucher');
+
         return {
           ...p,
           type: 'PAYMENT',
-          typeLabel: isAr ? 'سند دفع' : 'Payment Voucher',
+          isExpense,
+          typeLabel,
           dateFormatted: formatDateEn(p.date || p.createdAt),
           accountName,
           cashboxName,
@@ -273,13 +288,25 @@ export const VouchersPage: React.FC = () => {
            * multi-line entry, so several accounts on one side become «مذكورين»,
            * which is what an accountant expects to read there.
            */
-          const readLine = (l: any, isDebit: boolean) => ({
-            name: l.account?.nameAr || accountsMap[l.accountId] || (isAr ? 'حساب' : 'Account'),
-            amount: Number(isDebit ? l.debit : l.credit) || 0,
-          });
+          /**
+           * A foreign-currency entry stores dinars in debit/credit and what the user
+           * typed in debitOriginal/creditOriginal. The row shows the typed figure
+           * beside its own currency — showing the dinar amount under a USD badge
+           * would read as a hundredfold error.
+           */
+          const currency = j.currency === 'USD' ? 'USD' : 'IQD';
+          const entryRate = Number(j.exchangeRate) || 1;
+          const isForeign = currency !== 'IQD' && entryRate !== 1;
+          const readLine = (l: any, isDebit: boolean) => {
+            const converted = Number(isDebit ? l.debit : l.credit) || 0;
+            const original = isDebit ? l.debitOriginal : l.creditOriginal;
+            return {
+              name: l.account?.nameAr || accountsMap[l.accountId] || (isAr ? 'حساب' : 'Account'),
+              amount: original !== null && original !== undefined ? Number(original) : converted,
+            };
+          };
           const debits = (j.lines || []).filter((l: any) => Number(l.debit) > 0).map((l: any) => readLine(l, true));
           const credits = (j.lines || []).filter((l: any) => Number(l.credit) > 0).map((l: any) => readLine(l, false));
-          const currency = j.currency || 'IQD';
 
           const sideShort = (items: any[], fallback: string) => {
             if (items.length === 0) return fallback;
@@ -303,7 +330,11 @@ export const VouchersPage: React.FC = () => {
 
           const entryLabel = `${from} ${sideShort(debits, noDebit)} ${to} ${sideShort(credits, noCredit)}`;
           const note = String(j.description || '').trim();
-          const entryDetail = `${from} ${sideFull(debits, noDebit)} ${to} ${sideFull(credits, noCredit)}`;
+          const posted = Number(j.totalDebit || 0);
+          const fx = isForeign
+            ? ` — ${isAr ? 'يُرحَّل بالدينار' : 'posted in IQD'} ${posted.toLocaleString('en-US')} (${isAr ? 'سعر الصرف' : 'rate'} ${entryRate.toLocaleString('en-US')})`
+            : '';
+          const entryDetail = `${from} ${sideFull(debits, noDebit)} ${to} ${sideFull(credits, noCredit)}${fx}`;
 
           return {
             ...j,
@@ -313,8 +344,13 @@ export const VouchersPage: React.FC = () => {
             dateFormatted: formatDateEn(j.date || j.createdAt),
             accountName: credits.length === 1 ? credits[0].name : sideShort(credits, noCredit),
             cashboxName: debits.length === 1 ? debits[0].name : sideShort(debits, noDebit),
-            amount: Number(j.totalDebit || j.amount || 0),
+            // In the entry's own currency, matching the badge beside it.
+            amount: isForeign
+              ? debits.reduce((sum: number, l: any) => sum + l.amount, 0)
+              : Number(j.totalDebit || j.amount || 0),
             currency,
+            exchangeRate: entryRate,
+            postedAmountIQD: Number(j.totalDebit || 0),
             debitLines: debits,
             creditLines: credits,
             entryLabel,
@@ -1201,25 +1237,23 @@ export const VouchersPage: React.FC = () => {
                     : (isAr ? 'الحساب المقابل / الدائن' : 'Counter / Credit Account')}
                 </th>
 
-                {/* 9. Custom Allocation Account (حساب التقسيم المخصص مثل فلاي - يظهر فقط في تبويب سندات القبض) */}
-                {activeTab === 'RECEIPT' && (
-                  customVoucherAccounts.length > 0 ? (
-                    customVoucherAccounts.map((ca: any) => (
-                      <th key={ca.id} className="py-2.5 px-3 text-center min-w-[120px]">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-[#F45A0A]"></span>
-                          <span className="font-extrabold text-slate-900">{ca.nameAr}</span>
-                        </div>
-                      </th>
-                    ))
-                  ) : (
-                    <th className="py-2.5 px-3 text-center min-w-[120px]">
+                {/* 9. Custom Allocation Account (حساب التقسيم المخصص مثل فلاي) */}
+                {customVoucherAccounts.length > 0 ? (
+                  customVoucherAccounts.map((ca: any) => (
+                    <th key={ca.id} className="py-2.5 px-3 text-center min-w-[120px]">
                       <div className="flex items-center justify-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-[#F45A0A]"></span>
-                        <span className="font-extrabold text-slate-900">{isAr ? 'حساب التقسيم' : 'Split Account'}</span>
+                        <span className="font-extrabold text-slate-900">{ca.nameAr}</span>
                       </div>
                     </th>
-                  )
+                  ))
+                ) : (
+                  <th className="py-2.5 px-3 text-center min-w-[120px]">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#F45A0A]"></span>
+                      <span className="font-extrabold text-slate-900">{isAr ? 'حساب التقسيم' : 'Split Account'}</span>
+                    </div>
+                  </th>
                 )}
 
                 {/* 10. Description */}
@@ -1250,7 +1284,7 @@ export const VouchersPage: React.FC = () => {
             <tbody className="[&_td]:border-b [&_td]:border-slate-200/90 [&_td]:border-e [&_td]:border-slate-200/80">
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === 'RECEIPT' ? 14 : 13} className="py-20 text-center text-slate-500 font-bold bg-white">
+                  <td colSpan={14} className="py-20 text-center text-slate-500 font-bold bg-white">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <RefreshCw size={26} className="animate-spin text-[#F45A0A]" />
                       <span className="text-sm font-bold text-slate-700">{isAr ? 'جارٍ تحميل السندات المالية...' : 'Loading Vouchers...'}</span>
@@ -1259,7 +1293,7 @@ export const VouchersPage: React.FC = () => {
                 </tr>
               ) : currentGridData.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === 'RECEIPT' ? 14 : 13} className="py-20 text-center text-slate-500 font-bold bg-white">
+                  <td colSpan={14} className="py-20 text-center text-slate-500 font-bold bg-white">
                     <div className="flex flex-col items-center justify-center gap-2.5">
                       <div className="w-14 h-14 rounded-2xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100 shadow-2xs">
                         <Receipt size={28} />
@@ -1401,55 +1435,53 @@ export const VouchersPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* 9. Custom Allocation Account (فلاي / حساب التقسيم - يظهر فقط في تبويب سندات القبض) */}
-                      {activeTab === 'RECEIPT' && (
-                        customVoucherAccounts.length > 0 ? (
-                          customVoucherAccounts.map((ca: any) => {
-                            let splitAmt: number | null = null;
-                            if (row.splitAccounts && Array.isArray(row.splitAccounts)) {
-                              const match = row.splitAccounts.find(
-                                (s: any) =>
-                                  s.accountId === ca.targetAccountId ||
-                                  s.accountName === ca.nameAr ||
-                                  (ca.nameAr && s.accountName?.includes(ca.nameAr)) ||
-                                  (ca.targetAccountName && s.accountName?.includes(ca.targetAccountName))
-                              );
-                              if (match && parseCleanNumber(match.amount) > 0) {
-                                splitAmt = parseCleanNumber(match.amount);
-                              }
-                            }
-
-                            if (splitAmt === null && (row.accountId === ca.targetAccountId || (ca.nameAr && row.accountName?.includes(ca.nameAr)))) {
-                              splitAmt = parseCleanNumber(row.amount);
-                            }
-
-                            if (splitAmt === null && row.description && ca.nameAr && row.description.includes(ca.nameAr)) {
-                              const regex = new RegExp(`${ca.nameAr}[:\\s]+([0-9,.]+)`, 'i');
-                              const m = row.description.match(regex);
-                              if (m && m[1]) {
-                                const parsed = parseCleanNumber(m[1]);
-                                if (parsed > 0) splitAmt = parsed;
-                              }
-                            }
-
-                            return (
-                              <td key={ca.id} className="py-2 px-3 text-center">
-                                {splitAmt !== null && splitAmt > 0 ? (
-                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-orange-50 border border-orange-200 shadow-2xs font-mono font-black text-xs tabular-nums lining-nums text-[#F45A0A]">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-[#F45A0A]"></span>
-                                    <span>{splitAmt.toLocaleString('en-US')}</span>
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-300 font-mono text-center block select-none">—</span>
-                                )}
-                              </td>
+                      {/* 9. Custom Allocation Account (فلاي / حساب التقسيم) */}
+                      {customVoucherAccounts.length > 0 ? (
+                        customVoucherAccounts.map((ca: any) => {
+                          let splitAmt: number | null = null;
+                          if (row.splitAccounts && Array.isArray(row.splitAccounts)) {
+                            const match = row.splitAccounts.find(
+                              (s: any) =>
+                                s.accountId === ca.targetAccountId ||
+                                s.accountName === ca.nameAr ||
+                                (ca.nameAr && s.accountName?.includes(ca.nameAr)) ||
+                                (ca.targetAccountName && s.accountName?.includes(ca.targetAccountName))
                             );
-                          })
-                        ) : (
-                          <td className="py-2 px-3 text-center">
-                            <span className="text-slate-300 font-mono text-center block select-none">—</span>
-                          </td>
-                        )
+                            if (match && parseCleanNumber(match.amount) > 0) {
+                              splitAmt = parseCleanNumber(match.amount);
+                            }
+                          }
+
+                          if (splitAmt === null && (row.accountId === ca.targetAccountId || (ca.nameAr && row.accountName?.includes(ca.nameAr)))) {
+                            splitAmt = parseCleanNumber(row.amount);
+                          }
+
+                          if (splitAmt === null && row.description && ca.nameAr && row.description.includes(ca.nameAr)) {
+                            const regex = new RegExp(`${ca.nameAr}[:\\s]+([0-9,.]+)`, 'i');
+                            const m = row.description.match(regex);
+                            if (m && m[1]) {
+                              const parsed = parseCleanNumber(m[1]);
+                              if (parsed > 0) splitAmt = parsed;
+                            }
+                          }
+
+                          return (
+                            <td key={ca.id} className="py-2 px-3 text-center">
+                              {splitAmt !== null && splitAmt > 0 ? (
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-orange-50 border border-orange-200 shadow-2xs font-mono font-black text-xs tabular-nums lining-nums text-[#F45A0A]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#F45A0A]"></span>
+                                  <span>{splitAmt.toLocaleString('en-US')}</span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-300 font-mono text-center block select-none">—</span>
+                              )}
+                            </td>
+                          );
+                        })
+                      ) : (
+                        <td className="py-2 px-3 text-center">
+                          <span className="text-slate-300 font-mono text-center block select-none">—</span>
+                        </td>
                       )}
 
                       {/* 10. Description */}
