@@ -1,0 +1,15 @@
+[variables]
+PUPPETEER_SKIP_DOWNLOAD = 'true'
+PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium'
+
+[phases.setup]
+aptPkgs = ['chromium', 'fonts-noto-color-emoji', 'fonts-noto-cjk']
+
+[phases.install]
+cmds = ['npm install --include=dev']
+
+[phases.build]
+cmds = ['npx prisma generate', 'npx nest build']
+
+[start]
+cmd = 'node dist/src/main'
