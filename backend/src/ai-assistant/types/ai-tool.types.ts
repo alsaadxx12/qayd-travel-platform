@@ -26,13 +26,7 @@ export type AiUiBlockType =
   | 'entity_card'
   | 'generated_image'
   | 'pdf_file'
-  /**
-   * Hands a statement to the browser to render and email.
-   *
-   * The union is closed, so a block type missing from it is a compile error rather
-   * than a silently dropped card — which is the right trade, but it means every new
-   * block must be declared here as well as handled in UiBlocks.tsx.
-   */
+  | 'sources'
   | 'statement_email_client'
   | 'email_confirm';
 
