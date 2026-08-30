@@ -1,8 +1,18 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-import { IsNotEmpty, IsString, IsNumber, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  SplitInput,
+  PostingLeg,
+  normalizeVoucherSplits,
+  balanceDeltasFromLines,
+  splitsFromJournalLines,
+  buildVoucherLines,
+  parseLegacySplitMarker,
+  VOUCHER_SPLIT_MARKER,
+} from '../vouchers/voucher-splits';
 
 export class CreateReceiptVoucherDto {
   @ApiPropertyOptional({ example: '2026-08-03', description: 'تاريخ السند' })
@@ -59,6 +69,15 @@ export class CreateReceiptVoucherDto {
   @IsOptional()
   status?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'توزيع المبلغ على حسابات متعددة. كل عنصر { accountId, amount }. الحساب المقابل يستوعب الباقي تلقائياً.',
+    type: [Object],
+  })
+  @IsArray()
+  @IsOptional()
+  splitAccounts?: SplitInput[];
+
   @ApiPropertyOptional({ description: 'رقم السند من الفرونتند' })
   @IsString()
   @IsOptional()
@@ -68,6 +87,57 @@ export class CreateReceiptVoucherDto {
 @Injectable()
 export class ReceiptVouchersService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * Applies a set of signed balance changes. A positive delta increments.
+   * Accounts that no longer exist are skipped rather than aborting the whole entry.
+   */
+  private async applyBalanceDeltas(tx: any, deltas: Map<string, number>) {
+    for (const [accountId, delta] of deltas) {
+      if (!delta) continue;
+      const exists = await tx.account.findUnique({ where: { id: accountId }, select: { id: true } });
+      if (!exists) continue;
+      await tx.account.update({
+        where: { id: accountId },
+        data:
+          delta > 0
+            ? { balance: { increment: new Prisma.Decimal(delta) } }
+            : { balance: { decrement: new Prisma.Decimal(-delta) } },
+      });
+    }
+  }
+
+  /** Exact inverse of whatever the stored lines did to balances. */
+  private reverseDeltas(lines: Array<{ accountId: string | null; debit: any; credit: any }>) {
+    const reversed = new Map<string, number>();
+    balanceDeltasFromLines(lines).forEach((delta, accountId) => reversed.set(accountId, -delta));
+    return reversed;
+  }
+
+  /** Balance effect of a fresh posting: cashbox debited, each leg credited. */
+  private postingDeltas(legs: PostingLeg[], cashboxAccountId: string, amount: number) {
+    const deltas = new Map<string, number>();
+    deltas.set(cashboxAccountId, (deltas.get(cashboxAccountId) ?? 0) + amount);
+    for (const leg of legs) {
+      deltas.set(leg.accountId, (deltas.get(leg.accountId) ?? 0) - leg.amount);
+    }
+    return deltas;
+  }
+
+  /** Every split target must be a real account of this company. */
+  private async validateSplitAccounts(companyId: string, legs: PostingLeg[]) {
+    const ids = Array.from(new Set(legs.map((l) => l.accountId)));
+    if (ids.length === 0) return;
+    const found = await this.prisma.account.findMany({
+      where: { id: { in: ids }, companyId },
+      select: { id: true },
+    });
+    const known = new Set(found.map((a) => a.id));
+    const missing = ids.filter((id) => !known.has(id));
+    if (missing.length > 0) {
+      throw new BadRequestException('أحد حسابات التقسيم لا ينتمي إلى الشركة الحالية');
+    }
+  }
 
   private async validateReferences(
     companyId: string,
@@ -89,14 +159,18 @@ export class ReceiptVouchersService {
   }
 
   /**
-   * List view only. It used to `include: { journalEntry: true }` with no `take`,
-   * so every receipt voucher ever written came back with its whole journal entry
-   * attached — the single biggest cost on the vouchers page. The list needs none
-   * of that; `findOne` still returns the full record with its entry and lines.
+   * List view. It once did `include: { journalEntry: true }` with no `take`, pulling
+   * every voucher ever written together with its whole entry object — the single
+   * biggest cost on the vouchers page.
+   *
+   * The entry's LINES are still needed, because the split columns are read from the
+   * ledger rather than from a marker in the description. Only three tiny numeric
+   * columns are selected, and the row count is capped, so this is a fraction of what
+   * the old include cost.
    */
   async findAll(companyId: string, requestedLimit?: number) {
     const take = Math.min(Math.max(Number(requestedLimit) || 150, 1), 300);
-    return this.prisma.receiptVoucher.findMany({
+    const rows = await this.prisma.receiptVoucher.findMany({
       where: { companyId },
       select: {
         id: true,
@@ -114,9 +188,44 @@ export class ReceiptVouchersService {
         cashboxOrBankAccount: { select: { id: true, code: true, nameAr: true } },
         customer: { select: { id: true, code: true, nameAr: true } },
         createdBy: { select: { id: true, name: true } },
+        journalEntry: {
+          select: {
+            lines: {
+              select: {
+                accountId: true,
+                debit: true,
+                credit: true,
+                account: { select: { nameAr: true } },
+              },
+            },
+          },
+        },
       },
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       take,
+    });
+
+    // Same derivation as findOne: the split is whatever the entry credited, minus
+    // the primary account's remainder leg. One source of truth for both views.
+    return rows.map((row: any) => {
+      const legs = splitsFromJournalLines(
+        row.journalEntry?.lines ?? [],
+        row.cashboxOrBankAccountId,
+        'RECEIPT',
+      ).filter((leg) => leg.accountId !== row.accountId);
+
+      const names = new Map(
+        (row.journalEntry?.lines ?? []).map((l: any) => [l.accountId, l.account?.nameAr || '']),
+      );
+      const { journalEntry: _entry, ...rest } = row;
+      return {
+        ...rest,
+        splitAccounts: legs.map((leg) => ({
+          accountId: leg.accountId,
+          accountName: names.get(leg.accountId) || '',
+          amount: leg.amount,
+        })),
+      };
     });
   }
 
@@ -138,7 +247,30 @@ export class ReceiptVouchersService {
       },
     });
     if (!voucher) throw new NotFoundException('سند القبض غير موجود');
-    return voucher;
+
+    // The split is not stored beside the voucher — it IS the entry's credit lines.
+    // Reading it back from there keeps one source of truth and cannot drift.
+    const legs = splitsFromJournalLines(
+      voucher.journalEntry?.lines ?? [],
+      voucher.cashboxOrBankAccountId,
+      'RECEIPT',
+    );
+    const byId = new Map(
+      (voucher.journalEntry?.lines ?? []).map((l: any) => [l.accountId, l.account?.nameAr || '']),
+    );
+    // The primary account's leg is the REMAINDER, which the editor derives itself.
+    // Returning it would have it loaded back as a custom split and counted twice,
+    // driving the remainder to zero — the same double-count this design avoids.
+    return {
+      ...voucher,
+      splitAccounts: legs
+        .filter((leg) => leg.accountId !== voucher.accountId)
+        .map((leg) => ({
+          accountId: leg.accountId,
+          accountName: byId.get(leg.accountId) || '',
+          amount: leg.amount,
+        })),
+    };
   }
 
   async create(companyId: string, userId: string, dto: CreateReceiptVoucherDto) {
@@ -147,6 +279,12 @@ export class ReceiptVouchersService {
       throw new BadRequestException('مبلغ سند القبض يجب أن يكون أكبر من الصفر');
     }
     await this.validateReferences(companyId, dto.accountId, dto.cashboxOrBankAccountId, dto.customerId);
+
+    // The split is a real distribution of the credit side. `normalizeVoucherSplits`
+    // guarantees the legs sum to the amount, with the primary account taking the
+    // remainder — so with no split this is the original single-line posting.
+    const legs = normalizeVoucherSplits(dto.splitAccounts, amount, dto.accountId);
+    await this.validateSplitAccounts(companyId, legs);
 
     const year = new Date().getFullYear();
     let voucherNumber: string;
@@ -172,20 +310,18 @@ export class ReceiptVouchersService {
           createdById: userId,
           postedById: userId,
           lines: {
-            create: [
-              {
-                accountId: dto.cashboxOrBankAccountId,
-                debit: new Prisma.Decimal(amount),
-                credit: new Prisma.Decimal(0),
-                description: `قبض مبلغ في الصندوق/البنك - سند ${voucherNumber}`,
-              },
-              {
-                accountId: dto.accountId,
-                debit: new Prisma.Decimal(0),
-                credit: new Prisma.Decimal(amount),
-                description: `سداد/قبض من حساب - سند ${voucherNumber}`,
-              },
-            ],
+            create: buildVoucherLines(
+              legs,
+              dto.cashboxOrBankAccountId,
+              amount,
+              'RECEIPT',
+              voucherNumber,
+            ).map((line) => ({
+              accountId: line.accountId,
+              debit: new Prisma.Decimal(line.debit),
+              credit: new Prisma.Decimal(line.credit),
+              description: line.description,
+            })),
           },
         },
       });
@@ -207,15 +343,12 @@ export class ReceiptVouchersService {
         },
       });
 
-      await tx.account.update({
-        where: { id: dto.cashboxOrBankAccountId },
-        data: { balance: { increment: new Prisma.Decimal(amount) } },
-      });
-
-      await tx.account.update({
-        where: { id: dto.accountId },
-        data: { balance: { decrement: new Prisma.Decimal(amount) } },
-      });
+      // One decrement per credited account, so a split moves each account's balance
+      // by its own share rather than dumping the whole amount on one of them.
+      await this.applyBalanceDeltas(
+        tx,
+        this.postingDeltas(legs, dto.cashboxOrBankAccountId, amount),
+      );
 
       await tx.auditLog.create({
         data: {
@@ -232,36 +365,144 @@ export class ReceiptVouchersService {
     });
   }
 
+  /**
+   * Vouchers created before the split became a real posting still carry it only as a
+   * `[[VOUCHER_SPLIT:...]]` marker in the description, while their journal entry has
+   * a single counter line for the full amount. Those splits therefore never show up
+   * in the split account's statement — the line simply is not there.
+   *
+   * This finds them and, only when `apply` is true, re-posts them: the old lines are
+   * reversed from themselves and the entry is rewritten with one line per account.
+   * It reports first by design — nothing touches the ledger on a dry run.
+   */
+  async backfillLegacySplits(companyId: string, apply = false) {
+    const candidates = await this.prisma.receiptVoucher.findMany({
+      where: { companyId, description: { contains: VOUCHER_SPLIT_MARKER } },
+      include: { journalEntry: { include: { lines: true } } },
+      orderBy: [{ date: 'desc' }],
+      take: 500,
+    });
+
+    const pending: any[] = [];
+    const skipped: any[] = [];
+
+    for (const voucher of candidates) {
+      const amount = Number(voucher.amount) || 0;
+      const { splits } = parseLegacySplitMarker(voucher.description);
+      if (splits.length === 0) continue;
+
+      // Already posted with a split? Then there is nothing to do.
+      const postedLegs = splitsFromJournalLines(
+        voucher.journalEntry?.lines ?? [],
+        voucher.cashboxOrBankAccountId,
+        'RECEIPT',
+      ).filter((leg) => leg.accountId !== voucher.accountId);
+      if (postedLegs.length > 0) continue;
+
+      let legs;
+      try {
+        legs = normalizeVoucherSplits(splits, amount, voucher.accountId);
+        await this.validateSplitAccounts(companyId, legs);
+      } catch (err: any) {
+        skipped.push({
+          voucherNumber: voucher.voucherNumber,
+          amount,
+          reason: err?.message || 'تعذّر تفسير التقسيم',
+        });
+        continue;
+      }
+
+      pending.push({
+        id: voucher.id,
+        voucherNumber: voucher.voucherNumber,
+        date: voucher.date,
+        amount,
+        currentLines: voucher.journalEntry?.lines?.length ?? 0,
+        newLines: legs.length + 1,
+        distribution: legs.map((leg) => ({ accountId: leg.accountId, amount: leg.amount })),
+      });
+    }
+
+    if (!apply) {
+      return {
+        applied: false,
+        note: 'تقرير فقط — لم يُعدَّل أي قيد. أعد الطلب مع apply=1 للتنفيذ.',
+        needsReposting: pending.length,
+        skipped,
+        vouchers: pending,
+      };
+    }
+
+    const reposted: string[] = [];
+    const failed: any[] = [];
+
+    for (const item of pending) {
+      try {
+        const voucher = candidates.find((v) => v.id === item.id)!;
+        const legs = normalizeVoucherSplits(
+          parseLegacySplitMarker(voucher.description).splits,
+          Number(voucher.amount) || 0,
+          voucher.accountId,
+        );
+        const amount = Number(voucher.amount) || 0;
+
+        await this.prisma.$transaction(async (tx) => {
+          await this.applyBalanceDeltas(tx, this.reverseDeltas(voucher.journalEntry?.lines ?? []));
+          await this.applyBalanceDeltas(
+            tx,
+            this.postingDeltas(legs, voucher.cashboxOrBankAccountId, amount),
+          );
+
+          if (voucher.journalEntryId) {
+            await tx.journalEntryLine.deleteMany({
+              where: { journalEntryId: voucher.journalEntryId },
+            });
+            await tx.journalEntry.update({
+              where: { id: voucher.journalEntryId },
+              data: {
+                totalDebit: new Prisma.Decimal(amount),
+                totalCredit: new Prisma.Decimal(amount),
+                lines: {
+                  create: buildVoucherLines(
+                    legs,
+                    voucher.cashboxOrBankAccountId,
+                    amount,
+                    'RECEIPT',
+                    voucher.voucherNumber,
+                  ).map((line) => ({
+                    accountId: line.accountId,
+                    debit: new Prisma.Decimal(line.debit),
+                    credit: new Prisma.Decimal(line.credit),
+                    description: line.description,
+                  })),
+                },
+              },
+            });
+          }
+        });
+
+        reposted.push(voucher.voucherNumber);
+      } catch (err: any) {
+        failed.push({ voucherNumber: item.voucherNumber, reason: err?.message || 'خطأ' });
+      }
+    }
+
+    return { applied: true, repostedCount: reposted.length, reposted, failed, skipped };
+  }
+
   async remove(id: string, companyId: string) {
     const voucher = await this.prisma.receiptVoucher.findFirst({
       where: { id, companyId },
+      include: { journalEntry: { include: { lines: true } } },
     });
 
     if (!voucher) throw new NotFoundException('سند القبض غير موجود');
 
     return this.prisma.$transaction(async (tx) => {
-      const amount = Number(voucher.amount) || 0;
-
-      // Revert account balances
-      if (voucher.cashboxOrBankAccountId) {
-        const accExists = await tx.account.findUnique({ where: { id: voucher.cashboxOrBankAccountId } });
-        if (accExists) {
-          await tx.account.update({
-            where: { id: voucher.cashboxOrBankAccountId },
-            data: { balance: { decrement: new Prisma.Decimal(amount) } },
-          });
-        }
-      }
-
-      if (voucher.accountId) {
-        const accExists = await tx.account.findUnique({ where: { id: voucher.accountId } });
-        if (accExists) {
-          await tx.account.update({
-            where: { id: voucher.accountId },
-            data: { balance: { increment: new Prisma.Decimal(amount) } },
-          });
-        }
-      }
+      // Undo exactly what was posted. Reversing from the voucher's own accountId
+      // would only ever touch one account, which silently corrupts the balances of
+      // a split entry that credited several.
+      await this.applyBalanceDeltas(tx, this.reverseDeltas(voucher.journalEntry?.lines ?? []));
 
       const jId = voucher.journalEntryId;
       const deleted = await tx.receiptVoucher.delete({ where: { id } });
@@ -294,49 +535,21 @@ export class ReceiptVouchersService {
       const newCustomerId = dto.customerId !== undefined ? (dto.customerId || null) : voucher.customerId;
       await this.validateReferences(companyId, newAccountId, newCashboxId, newCustomerId);
 
+    // Same guarantee as create: the legs always sum to the amount.
+    const legs = normalizeVoucherSplits(dto.splitAccounts, amount, newAccountId);
+    await this.validateSplitAccounts(companyId, legs);
+
     return this.prisma.$transaction(async (tx) => {
-      const oldAmount = Number(voucher.amount) || 0;
-      const oldCashboxId = voucher.cashboxOrBankAccountId;
-      const oldAccountId = voucher.accountId;
+      // 1. Undo the previous posting from its OWN lines. The old code reversed using
+      //    the voucher's scalar accountId, which describes a single account and
+      //    therefore cannot undo an entry that credited several — it would leave the
+      //    extra accounts permanently skewed.
+      await this.applyBalanceDeltas(tx, this.reverseDeltas(voucher.journalEntry?.lines ?? []));
 
-      // 1. Revert old balances
-      if (oldCashboxId) {
-        const accExists = await tx.account.findUnique({ where: { id: oldCashboxId } });
-        if (accExists) {
-          await tx.account.update({
-            where: { id: oldCashboxId },
-            data: { balance: { decrement: new Prisma.Decimal(oldAmount) } },
-          });
-        }
-      }
-      if (oldAccountId) {
-        const accExists = await tx.account.findUnique({ where: { id: oldAccountId } });
-        if (accExists) {
-          await tx.account.update({
-            where: { id: oldAccountId },
-            data: { balance: { increment: new Prisma.Decimal(oldAmount) } },
-          });
-        }
-      }
+      // 2. Apply the new posting.
+      await this.applyBalanceDeltas(tx, this.postingDeltas(legs, newCashboxId, amount));
 
-      // 2. Apply new balances
-      const newCashboxExists = await tx.account.findUnique({ where: { id: newCashboxId } });
-      if (newCashboxExists) {
-        await tx.account.update({
-          where: { id: newCashboxId },
-          data: { balance: { increment: new Prisma.Decimal(amount) } },
-        });
-      }
-
-      const newAccountExists = await tx.account.findUnique({ where: { id: newAccountId } });
-      if (newAccountExists) {
-        await tx.account.update({
-          where: { id: newAccountId },
-          data: { balance: { decrement: new Prisma.Decimal(amount) } },
-        });
-      }
-
-      // 3. Update Journal Entry and Lines
+      // 3. Rewrite the entry's lines to match.
       if (voucher.journalEntryId) {
         await tx.journalEntryLine.deleteMany({ where: { journalEntryId: voucher.journalEntryId } });
         await tx.journalEntry.update({
@@ -347,20 +560,18 @@ export class ReceiptVouchersService {
             totalDebit: new Prisma.Decimal(amount),
             totalCredit: new Prisma.Decimal(amount),
             lines: {
-              create: [
-                {
-                  accountId: newCashboxId,
-                  debit: new Prisma.Decimal(amount),
-                  credit: new Prisma.Decimal(0),
-                  description: `قبض مبلغ في الصندوق/البنك - سند ${voucher.voucherNumber}`,
-                },
-                {
-                  accountId: newAccountId,
-                  debit: new Prisma.Decimal(0),
-                  credit: new Prisma.Decimal(amount),
-                  description: `سداد/قبض من حساب - سند ${voucher.voucherNumber}`,
-                },
-              ],
+              create: buildVoucherLines(
+                legs,
+                newCashboxId,
+                amount,
+                'RECEIPT',
+                voucher.voucherNumber,
+              ).map((line) => ({
+                accountId: line.accountId,
+                debit: new Prisma.Decimal(line.debit),
+                credit: new Prisma.Decimal(line.credit),
+                description: line.description,
+              })),
             },
           },
         });

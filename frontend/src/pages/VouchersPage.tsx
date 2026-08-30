@@ -1235,7 +1235,7 @@ export const VouchersPage: React.FC = () => {
                       </td>
 
                       {/* 4. Voucher Number & Reference */}
-                      <td className="py-2 px-3">
+                      <td className="py-2 px-3 text-center">
                         <div className="flex flex-col">
                           <span className="font-mono font-black text-slate-900 text-[12px] tabular-nums lining-nums group-hover:text-[#F45A0A] transition-colors">
                             {row.voucherNumber}
@@ -1265,7 +1265,7 @@ export const VouchersPage: React.FC = () => {
                       </td>
 
                       {/* 7. Amount */}
-                      <td className="py-2 px-3 text-end font-mono font-black tabular-nums lining-nums">
+                      <td className="py-2 px-3 text-center font-mono font-black tabular-nums lining-nums">
                         <span
                           className={`text-[13px] tracking-tight ${
                             isReceipt
@@ -1282,7 +1282,7 @@ export const VouchersPage: React.FC = () => {
                       </td>
 
                       {/* 8. Beneficiary / Counter Account */}
-                      <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[200px]" title={row.accountName}>
+                      <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[200px] text-center" title={row.accountName}>
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="truncate">{row.accountName}</span>
                           {row.splitAccounts?.length > 0 && (
@@ -1343,14 +1343,14 @@ export const VouchersPage: React.FC = () => {
                       )}
 
                       {/* 10. Description */}
-                      <td className="py-2 px-3 text-slate-600 max-w-[240px] truncate" title={row.description}>
+                      <td className="py-2 px-3 text-slate-600 max-w-[240px] truncate text-center" title={row.description}>
                         <span className="truncate block font-medium text-[11.5px] text-slate-700">
                           {row.description || <span className="text-slate-300">—</span>}
                         </span>
                       </td>
 
                       {/* 11. Cashbox / Financial Account */}
-                      <td className="py-2 px-3 truncate max-w-[170px]" title={row.cashboxName}>
+                      <td className="py-2 px-3 truncate max-w-[170px] text-center" title={row.cashboxName}>
                         <div className="flex items-center gap-1.5 text-slate-700">
                           <Wallet size={13} className="text-[#F45A0A] shrink-0" />
                           <span className="font-semibold text-slate-800 text-xs truncate">{row.cashboxName}</span>
@@ -1366,7 +1366,7 @@ export const VouchersPage: React.FC = () => {
                       </td>
 
                       {/* 13. Created By */}
-                      <td className="py-2 px-3">
+                      <td className="py-2 px-3 text-center">
                         <div className="flex items-center gap-1.5 text-slate-600">
                           <User size={12} className="text-slate-400 shrink-0" />
                           <span className="text-[10.5px] font-medium truncate max-w-[95px]">{row.userName}</span>

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ReceiptVouchersService, CreateReceiptVoucherDto } from './receipt-vouchers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,6 +14,19 @@ export class ReceiptVouchersController {
   @ApiOperation({ summary: 'قائمة سندات القبض' })
   async findAll(@Req() req: any) {
     return this.receiptVouchersService.findAll(req.user.companyId);
+  }
+
+  // Declared before ':id' so the literal path is not captured as a voucher id.
+  @Get('split-backfill')
+  @ApiOperation({
+    summary:
+      'فحص السندات القديمة التي يحمل بيانها تقسيماً لم يُرحَّل إلى القيد. تقرير فقط ما لم يُمرَّر apply=1',
+  })
+  async backfillSplits(@Req() req: any, @Query('apply') apply?: string) {
+    return this.receiptVouchersService.backfillLegacySplits(
+      req.user.companyId,
+      apply === '1' || apply === 'true',
+    );
   }
 
   @Get(':id')
