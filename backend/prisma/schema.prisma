@@ -528,6 +528,12 @@ model JournalEntry {
   isSystemGenerated Boolean     @default(false) @map("is_system_generated")
   sourceType        String?     @map("source_type") // MANUAL, TICKET, VISA, RECEIPT, PAYMENT, CLOSING_ROLLOVER, OPENING_ROLLOVER
   sourceId          String?     @map("source_id")
+  // The currency the entry was WRITTEN in, and the rate that converted it into the
+  // ledger. totalDebit/totalCredit and every line stay in the ledger's own currency,
+  // because balances and every report read them directly; these two say what the
+  // user actually entered, so a dollar entry can be shown and audited as one.
+  currency          String      @default("IQD")
+  exchangeRate      Decimal     @default(1) @map("exchange_rate")
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
@@ -597,6 +603,10 @@ model JournalEntryLine {
   credit         Decimal  @default(0)
   description    String?
   costCenter     String?
+  // What the user typed, in the entry's currency. Null when the entry was written
+  // in the ledger's own currency and no conversion took place.
+  debitOriginal  Decimal? @map("debit_original")
+  creditOriginal Decimal? @map("credit_original")
   createdAt      DateTime @default(now())
 
   journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)

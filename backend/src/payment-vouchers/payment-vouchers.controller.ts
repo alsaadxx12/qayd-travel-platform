@@ -17,6 +17,31 @@ export class PaymentVouchersController {
     return this.paymentVouchersService.findAll(req.user.companyId, Number.isFinite(parsed) ? parsed : undefined);
   }
 
+  // Literal paths must be declared before ':id', or they are captured as an id.
+  @Get('split-backfill')
+  @ApiOperation({
+    summary:
+      'فحص سندات الدفع القديمة التي يحمل بيانها تقسيماً لم يُرحَّل إلى القيد. تقرير فقط ما لم يُمرَّر apply=1',
+  })
+  async backfillSplits(@Req() req: any, @Query('apply') apply?: string) {
+    return this.paymentVouchersService.backfillLegacySplits(
+      req.user.companyId,
+      apply === '1' || apply === 'true',
+    );
+  }
+
+  @Get('refresh-descriptions')
+  @ApiOperation({
+    summary:
+      'إعادة كتابة بيان سطور القيد للسندات القديمة بتفصيل كامل يظهر في كشف الحساب. لا يمسّ أي مبلغ أو رصيد. تقرير فقط ما لم يُمرَّر apply=1',
+  })
+  async refreshDescriptions(@Req() req: any, @Query('apply') apply?: string) {
+    return this.paymentVouchersService.refreshLineDescriptions(
+      req.user.companyId,
+      apply === '1' || apply === 'true',
+    );
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'تفاصيل سند دفع محدد مع القيد المحاسبي المرتبط' })
   async findOne(@Param('id') id: string, @Req() req: any) {

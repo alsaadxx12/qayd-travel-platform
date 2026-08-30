@@ -29,6 +29,19 @@ export class ReceiptVouchersController {
     );
   }
 
+  // Also literal, so it must stay above ':id'.
+  @Get('refresh-descriptions')
+  @ApiOperation({
+    summary:
+      'إعادة كتابة بيان سطور القيد للسندات القديمة بتفصيل كامل يظهر في كشف الحساب. لا يمسّ أي مبلغ أو رصيد. تقرير فقط ما لم يُمرَّر apply=1',
+  })
+  async refreshDescriptions(@Req() req: any, @Query('apply') apply?: string) {
+    return this.receiptVouchersService.refreshLineDescriptions(
+      req.user.companyId,
+      apply === '1' || apply === 'true',
+    );
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'تفاصيل سند قبض محدد مع القيد المرتبط' })
   async findOne(@Param('id') id: string, @Req() req: any) {

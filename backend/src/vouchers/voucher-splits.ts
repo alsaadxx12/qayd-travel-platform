@@ -140,35 +140,141 @@ export function splitsFromJournalLines(
   return out;
 }
 
-/** Builds the full line set for a posting, cashbox side included. */
+/** Everything a line needs to describe itself in an account statement. */
+export interface VoucherLineContext {
+  kind: 'RECEIPT' | 'PAYMENT';
+  voucherNumber: string;
+  totalAmount: number;
+  currency?: string | null;
+  cashboxAccountId: string;
+  primaryAccountId: string;
+  /** accountId -> display name, for naming each leg. */
+  accountNames?: Map<string, string>;
+  /** The counterparty as the user knows them: customer or supplier. */
+  partyName?: string | null;
+  /** The user's own note, already stripped of any legacy marker. */
+  note?: string | null;
+  /**
+   * A voucher can be written in a foreign currency while the ledger is posted in the
+   * base one. The line amounts are therefore the CONVERTED figures, and a statement
+   * that showed only those would contradict the voucher the user is holding — so the
+   * original amount and the rate that produced the posting are named as well.
+   */
+  originalAmount?: number | null;
+  originalCurrency?: string | null;
+  exchangeRate?: number | null;
+}
+
+const money = (value: number, currency?: string | null): string => {
+  const text = Number(value).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+  return currency ? `${text} ${currency}` : text;
+};
+
+/**
+ * Names the original currency amount when the posting was converted, so the reader
+ * can reconcile a dinar line against a dollar voucher.
+ */
+function fxSuffix(ctx: VoucherLineContext): string {
+  const rate = Number(ctx.exchangeRate) || 1;
+  const original = Number(ctx.originalAmount) || 0;
+  if (!ctx.originalCurrency || rate === 1 || original <= 0) return '';
+  if (ctx.originalCurrency === ctx.currency) return '';
+  return ` (أصل المبلغ ${money(original, ctx.originalCurrency)} × ${money(rate)})`;
+}
+
+/**
+ * Builds the full line set, cashbox side included.
+ *
+ * Line descriptions carry the whole story, because a journal line is the ONLY thing
+ * an account statement shows. A generic "سداد/قبض من حساب" told the reader nothing:
+ * not who paid, not which share of what total, not why this account was touched. Each
+ * line now names its account, its share, the voucher total, the counterparty and the
+ * user's own note — so a statement line stands on its own.
+ */
 export function buildVoucherLines(
   legs: PostingLeg[],
-  cashboxAccountId: string,
-  totalAmount: number,
-  kind: 'RECEIPT' | 'PAYMENT',
-  voucherNumber: string,
+  ctx: VoucherLineContext,
 ): Array<{ accountId: string; debit: number; credit: number; description: string }> {
-  const isReceipt = kind === 'RECEIPT';
+  const isReceipt = ctx.kind === 'RECEIPT';
+  const label = isReceipt ? 'سند قبض' : 'سند دفع';
+  const nameOf = (id: string) => ctx.accountNames?.get(id) || '';
+  const total = money(ctx.totalAmount, ctx.currency);
+  const isSplit = legs.length > 1;
+
+  const note = (ctx.note || '').trim();
+  const tail = note ? ` | ${note}` : '';
+
+  const party = (ctx.partyName || nameOf(ctx.primaryAccountId) || '').trim();
+  const cashboxName = nameOf(ctx.cashboxAccountId);
 
   const cashboxLine = {
-    accountId: cashboxAccountId,
-    debit: isReceipt ? totalAmount : 0,
-    credit: isReceipt ? 0 : totalAmount,
-    description: isReceipt
-      ? `قبض مبلغ في الصندوق/البنك - سند ${voucherNumber}`
-      : `صرف مبلغ من الصندوق/البنك - سند ${voucherNumber}`,
+    accountId: ctx.cashboxAccountId,
+    debit: isReceipt ? ctx.totalAmount : 0,
+    credit: isReceipt ? 0 : ctx.totalAmount,
+    description:
+      `${label} ${ctx.voucherNumber} — ` +
+      (isReceipt ? `قبض ${total}` : `صرف ${total}`) +
+      (cashboxName ? ` في «${cashboxName}»` : '') +
+      (party ? (isReceipt ? ` من ${party}` : ` إلى ${party}`) : '') +
+      fxSuffix(ctx) +
+      tail,
   };
 
-  const counterLines = legs.map((leg) => ({
-    accountId: leg.accountId,
-    debit: isReceipt ? 0 : leg.amount,
-    credit: isReceipt ? leg.amount : 0,
-    description: isReceipt
-      ? `سداد/قبض من حساب - سند ${voucherNumber}`
-      : `صرف/تسديد إلى حساب - سند ${voucherNumber}`,
-  }));
+  const counterLines = legs.map((leg) => {
+    const legName = nameOf(leg.accountId);
+    const who = legName ? `«${legName}»` : 'حساب';
+    const isRemainder = leg.accountId === ctx.primaryAccountId;
+
+    let body: string;
+    if (!isSplit) {
+      body = `${who} ${money(leg.amount, ctx.currency)}`;
+    } else if (isRemainder) {
+      body = `${who} ${money(leg.amount, ctx.currency)} من ${total} (المتبقي بعد التقسيم)`;
+    } else {
+      body = `حصة ${who} ${money(leg.amount, ctx.currency)} من ${total}`;
+    }
+
+    // On a split leg the payer is not obvious from the account itself, so name them.
+    const from =
+      isSplit && !isRemainder && party ? (isReceipt ? ` · قبض من ${party}` : ` · صرف إلى ${party}`) : '';
+
+    return {
+      accountId: leg.accountId,
+      debit: isReceipt ? 0 : leg.amount,
+      credit: isReceipt ? leg.amount : 0,
+      description: `${label} ${ctx.voucherNumber} — ${body}${from}${tail}`,
+    };
+  });
 
   return isReceipt ? [cashboxLine, ...counterLines] : [...counterLines, cashboxLine];
+}
+
+/**
+ * Entry-level description. The header of a journal entry should say, on its own, how
+ * the amount was distributed — otherwise the split is only visible by opening the lines.
+ */
+export function buildEntryDescription(
+  legs: PostingLeg[],
+  ctx: VoucherLineContext,
+): string {
+  const label = ctx.kind === 'RECEIPT' ? 'سند قبض' : 'سند دفع';
+  const nameOf = (id: string) => ctx.accountNames?.get(id) || '';
+  const note = (ctx.note || '').trim();
+  // The note is kept last, like on the lines, so the header reads as one sentence
+  // rather than being cut in half by the user's own text.
+  const tail = note ? ` | ${note}` : '';
+  const head =
+    `${label} ${ctx.voucherNumber} — ${money(ctx.totalAmount, ctx.currency)}${fxSuffix(ctx)}` +
+    (ctx.partyName ? `${ctx.kind === 'RECEIPT' ? ' من ' : ' إلى '}${ctx.partyName}` : '');
+  if (legs.length <= 1) return `${head}${tail}`;
+
+  const breakdown = legs
+    .map((leg) => `${nameOf(leg.accountId) || 'حساب'} ${money(leg.amount, ctx.currency)}`)
+    .join(' · ');
+  return `${head} — موزّع على: ${breakdown}${tail}`;
 }
 
 /**

@@ -703,19 +703,34 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     setVoucherNumber(voucher.voucherNumber || voucher.entryNumber || voucher.number || '');
     
     if (vType === 'JOURNAL' && voucher.lines && voucher.lines.length > 0) {
+      /**
+       * A converted entry stores dinars in `debit`/`credit` and the typed figure in
+       * `debitOriginal`/`creditOriginal`. The editor must show what was TYPED —
+       * loading the dinar amount into a dollar row would convert it a second time
+       * on the next save and multiply the entry by the rate.
+       */
+      const entryCurrency = voucher.currency === 'USD' ? 'USD' : 'IQD';
+      const entryRate = Number(voucher.exchangeRate) > 0 ? String(voucher.exchangeRate) : exchangeRate;
+      const asTyped = (converted: any, original: any) => {
+        const value = original !== null && original !== undefined ? Number(original) : Number(converted || 0);
+        return value > 0 ? String(value) : '';
+      };
+
       const loadedLines: JournalLineItem[] = voucher.lines.map((l: any, idx: number) => ({
         id: l.id || `line-${idx}-${Date.now()}`,
         accountId: l.accountId || '',
-        debit: Number(l.debit || 0) > 0 ? String(l.debit) : '',
-        credit: Number(l.credit || 0) > 0 ? String(l.credit) : '',
-        currency: l.currency || voucher.currency || 'IQD',
-        exchangeRate: l.exchangeRate ? String(l.exchangeRate) : '1500',
+        debit: asTyped(l.debit, l.debitOriginal),
+        credit: asTyped(l.credit, l.creditOriginal),
+        currency: entryCurrency,
+        exchangeRate: entryRate,
         description: l.description || '',
         costCenter: l.costCenter || '',
       }));
       setJournalLines(loadedLines);
+      setCurrency(entryCurrency);
+      setExchangeRate(entryRate);
       const firstDebit = voucher.lines.find((l: any) => Number(l.debit) > 0) || voucher.lines[0];
-      const amt = Number(firstDebit?.debit || voucher.totalDebit || voucher.amount || 0);
+      const amt = Number(firstDebit?.debitOriginal ?? firstDebit?.debit ?? voucher.totalDebit ?? voucher.amount ?? 0);
       setAmount(amt > 0 ? String(amt) : '');
     } else if (vType === 'JOURNAL') {
       setJournalLines([
@@ -955,6 +970,10 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
         entryNumber: voucherNumber,
         reference: voucherNumber,
         description: description || 'سند قيد محاسبي',
+        // The rate is the entry's own, not the system's: the backend converts the
+        // lines into the ledger's currency with exactly this number and stores both.
+        currency,
+        exchangeRate: currency === 'USD' ? Number(exchangeRate) || 0 : 1,
         postImmediately: true,
         lines: journalLines.map((line) => ({
           accountId: line.accountId,
@@ -1652,6 +1671,34 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                         USD ($)
                       </button>
                     </div>
+
+                    {/* The rate was a fixed badge read from the system, which made a
+                        foreign-currency entry impossible to record at the rate that
+                        actually applied to it. It is the entry's own field now. */}
+                    {currency === 'USD' && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-700">سعر الصرف:</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={exchangeRate}
+                          onChange={(e) => setExchangeRate(e.target.value)}
+                          placeholder="1550"
+                          aria-label="سعر صرف الدولار لهذا القيد"
+                          className="h-7.5 w-24 px-2 rounded-xl border border-slate-300 bg-white font-mono font-black text-xs text-center text-slate-900 tabular-nums lining-nums focus:outline-none focus:border-[#F45A0A] shadow-2xs"
+                        />
+                        {adoptedExchange?.adoptedRate && Number(exchangeRate) !== Number(adoptedExchange.adoptedRate) && (
+                          <button
+                            type="button"
+                            onClick={() => setExchangeRate(String(adoptedExchange.adoptedRate))}
+                            title={`استعادة السعر المعتمد في النظام: ${Number(adoptedExchange.adoptedRate).toLocaleString('en-US')}`}
+                            className="h-7.5 px-2 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 font-bold text-[10.5px] hover:bg-amber-100 transition-colors cursor-pointer"
+                          >
+                            المعتمد {Number(adoptedExchange.adoptedRate).toLocaleString('en-US')}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1775,8 +1822,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                                 {line.currency || currency}
                               </span>
                               {(line.currency || currency) === 'USD' && (
-                                <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.2 rounded shadow-2xs">
-                                  {exchangeRate || '1,547.5'}
+                                <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.2 rounded shadow-2xs tabular-nums lining-nums">
+                                  {Number(exchangeRate) > 0 ? Number(exchangeRate).toLocaleString('en-US') : '—'}
                                 </span>
                               )}
                             </div>
@@ -1834,6 +1881,15 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                                 ? '✓ طرفا القيد متوازنان ومكتملان 100%'
                                 : `الفارق: ${journalDifference.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${currency} (غير متوازن)`}
                             </span>
+
+                            {/* The ledger is kept in dinars, so a dollar entry is posted
+                                converted. Showing the converted figure here means the
+                                user approves the number that will actually be booked. */}
+                            {currency === 'USD' && Number(exchangeRate) > 0 && (
+                              <span className="px-3 py-1 rounded-lg text-xs font-black bg-white border border-slate-300 text-slate-800 font-mono tabular-nums lining-nums">
+                                يُرحَّل بالدينار: {(totalJournalDebit * Number(exchangeRate)).toLocaleString('en-US')}
+                              </span>
+                            )}
                           </div>
                         </td>
                       </tr>
