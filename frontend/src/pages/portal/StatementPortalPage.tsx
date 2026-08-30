@@ -230,21 +230,14 @@ export const StatementPortalPage: React.FC = () => {
           <p className="text-sm font-semibold text-slate-500">كشف حساب</p>
           <h1 className="mt-1 text-xl font-black text-slate-900">{intro.holderName}</h1>
 
-          {!intro.canVerify ? (
-            <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">
-              لا يوجد رقم هاتف مسجَّل على هذا الحساب، ولا يمكن فتح الكشف بدونه. يرجى مراجعة الوكالة
-              لتسجيل رقمك.
-            </p>
-          ) : (
+          {intro.phoneHint ? (
             <>
               <label htmlFor="last4" className="mt-6 block text-sm font-bold text-slate-800">
                 للتأكد من أنك صاحب الحساب، أدخل آخر أربعة أرقام من هاتفك
               </label>
-              {intro.phoneHint && (
-                <p className="mt-1 font-mono text-sm tracking-widest text-slate-500" dir="ltr">
-                  {intro.phoneHint}
-                </p>
-              )}
+              <p className="mt-1 font-mono text-sm tracking-widest text-slate-500" dir="ltr">
+                {intro.phoneHint}
+              </p>
 
               <input
                 id="last4"
@@ -264,16 +257,44 @@ export const StatementPortalPage: React.FC = () => {
                 className="mt-3 h-16 w-full rounded-2xl border-2 border-slate-300 bg-white text-center font-mono text-3xl font-black tracking-[0.5em] text-slate-900 focus:border-[#F45A0A] focus:outline-none disabled:opacity-60"
                 dir="ltr"
               />
-
-              {verifying && <p className="mt-3 text-sm font-bold text-slate-500">جارٍ التحقق…</p>}
-              {verifyError && (
-                <p id="last4-error" role="alert" className="mt-3 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-800">
-                  {verifyError}
-                </p>
-              )}
-              {loadingData && <p className="mt-3 text-sm font-bold text-slate-500">جارٍ تحميل الكشف…</p>}
             </>
+          ) : (
+            <div className="mt-6">
+              <button
+                type="button"
+                disabled={verifying}
+                onClick={async () => {
+                  setVerifying(true);
+                  setVerifyError('');
+                  try {
+                    const res = await fetch(`${API_BASE}/portal/statement/${encodeURIComponent(token)}/verify`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ last4: '' }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok) throw new Error(json?.message || 'تعذّر فتح الكشف.');
+                    setSession(json.session);
+                  } catch (err: any) {
+                    setVerifyError(err?.message || 'تعذّر فتح الكشف.');
+                  } finally {
+                    setVerifying(false);
+                  }
+                }}
+                className="h-13 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-sm shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                {verifying ? 'جارٍ فتح الكشف…' : 'عرض وتحميل كشف الحساب 📄'}
+              </button>
+            </div>
           )}
+
+          {verifying && <p className="mt-3 text-sm font-bold text-slate-500">جارٍ التحقق…</p>}
+          {verifyError && (
+            <p id="last4-error" role="alert" className="mt-3 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-800">
+              {verifyError}
+            </p>
+          )}
+          {loadingData && <p className="mt-3 text-sm font-bold text-slate-500">جارٍ تحميل الكشف…</p>}
         </div>
       </Shell>
     );

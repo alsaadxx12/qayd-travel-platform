@@ -178,19 +178,6 @@ export class StatementPortalService {
       throw new BadRequestException('لا يوجد حساب محاسبي مرتبط بهذا الطرف، فلا كشف يمكن عرضه');
     }
 
-    /**
-     * No phone, no barcode — and the fix belongs in the account, not here.
-     *
-     * A number typed into this screen would be a second copy that drifts the moment
-     * someone corrects the real one. The account already has a phone field; pointing
-     * there keeps one number, read live at every verification.
-     */
-    if (!this.digitsOf(party.phone).length) {
-      throw new BadRequestException(
-        'لا يوجد رقم هاتف لهذا الحساب. أضف رقم الهاتف من شجرة الحسابات (تعديل الحساب ← الهاتف) ثم أعد الإصدار.',
-      );
-    }
-
     const existing = await this.prisma.statementAccessToken
       .findFirst({
         where: { companyId, accountId: party.accountId, revokedAt: null },
@@ -438,13 +425,13 @@ export class StatementPortalService {
 
     const locked = row.lockedUntil && row.lockedUntil.getTime() > Date.now();
     const digits = this.verificationPhone(party);
+    const requiresPhone = digits.length >= 4;
     return {
       companyName: company?.name || '',
       holderName: party?.nameAr || row.label || '',
       phoneHint: this.phoneHint(digits),
-      // Fail closed: with no number to ask about there is no question, so there is no
-      // way in. The staff screen flags these so they can be fixed.
-      canVerify: digits.length >= 4,
+      requiresPhone,
+      canVerify: true,
       locked: Boolean(locked),
       lockedUntil: locked ? row.lockedUntil : null,
     };
@@ -454,10 +441,8 @@ export class StatementPortalService {
    * Checks the four digits and, on success, mints the session that may read the
    * statement.
    *
-   * Four digits is ten thousand guesses, which a script finishes in seconds — so the
-   * counter, not the digits, is what actually provides the security. Five wrong
-   * answers and the token stops answering for fifteen minutes, which turns those
-   * seconds into weeks.
+   * If the account has a phone on file, the last 4 digits are verified.
+   * If the account has no phone on file, the barcode holder can open directly.
    */
   async verify(token: string, last4: string) {
     const row = await this.liveToken(token);
@@ -471,31 +456,28 @@ export class StatementPortalService {
     const digits = this.verificationPhone(party);
     const supplied = this.digitsOf(last4);
 
-    if (digits.length < 4) {
-      throw new ForbiddenException(
-        'لا يوجد رقم هاتف مسجَّل لهذا الحساب، لذلك لا يمكن فتح الكشف. يرجى مراجعة الوكالة.',
-      );
-    }
-
-    if (supplied.length !== 4 || supplied !== digits.slice(-4)) {
-      const failed = row.failedAttempts + 1;
-      const reached = failed >= MAX_FAILED_ATTEMPTS;
-      await this.prisma.statementAccessToken.update({
-        where: { id: row.id },
-        data: {
-          failedAttempts: reached ? 0 : failed,
-          lockedUntil: reached ? new Date(Date.now() + LOCKOUT_MINUTES * 60000) : row.lockedUntil,
-        },
-      });
-      if (reached) {
-        this.logger.warn(`Statement portal lockout on token ${row.id} after ${failed} failures`);
+    // If account has phone, verify last 4 digits
+    if (digits.length >= 4) {
+      if (supplied.length !== 4 || supplied !== digits.slice(-4)) {
+        const failed = row.failedAttempts + 1;
+        const reached = failed >= MAX_FAILED_ATTEMPTS;
+        await this.prisma.statementAccessToken.update({
+          where: { id: row.id },
+          data: {
+            failedAttempts: reached ? 0 : failed,
+            lockedUntil: reached ? new Date(Date.now() + LOCKOUT_MINUTES * 60000) : row.lockedUntil,
+          },
+        });
+        if (reached) {
+          this.logger.warn(`Statement portal lockout on token ${row.id} after ${failed} failures`);
+          throw new ForbiddenException(
+            `أُوقفت المحاولات لمدة ${LOCKOUT_MINUTES} دقيقة بعد عدة إجابات خاطئة.`,
+          );
+        }
         throw new ForbiddenException(
-          `أُوقفت المحاولات لمدة ${LOCKOUT_MINUTES} دقيقة بعد عدة إجابات خاطئة.`,
+          `الأرقام غير صحيحة. المحاولات المتبقية: ${MAX_FAILED_ATTEMPTS - failed}`,
         );
       }
-      throw new ForbiddenException(
-        `الأرقام غير صحيحة. المحاولات المتبقية: ${MAX_FAILED_ATTEMPTS - failed}`,
-      );
     }
 
     await this.prisma.statementAccessToken.update({
