@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Res, Req, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Res, Req, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PdfService, PdfGenerateOptions } from './pdf.service';
 import type { StatementPdfData } from './template.service';
 import { StatementPdfService } from './statement-pdf.service';
@@ -59,12 +60,15 @@ export class PdfController {
   /**
    * What the PDF engine can actually do on THIS server.
    *
-   * A statement arriving as HTML instead of PDF is a fact about the machine, and
-   * until now the only way to learn why was to read the logs. This answers it
-   * directly: which browser path was configured, whether that path exists, and
-   * which binary was actually found.
+   * A statement failing to render is a fact about the machine, and the only way to
+   * learn why used to be reading the logs. This answers it directly: which browser
+   * path was configured, whether that path exists, and which binary was found.
+   *
+   * Guarded, because it reports filesystem paths from the server. Useful to an
+   * administrator, and nobody else's business.
    */
   @Get('health')
+  @UseGuards(JwtAuthGuard)
   async health() {
     return this.pdfService.browserDiagnostics();
   }
