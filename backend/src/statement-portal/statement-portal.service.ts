@@ -80,42 +80,105 @@ export class StatementPortalService {
   async issue(
     companyId: string,
     userId: string,
-    input: { customerId?: string; supplierId?: string; regenerate?: boolean; label?: string },
+    input: {
+      accountId?: string;
+      customerId?: string;
+      supplierId?: string;
+      regenerate?: boolean;
+      label?: string;
+      verifyPhone?: string;
+    },
   ) {
     const { customerId, supplierId } = input;
-    if (!customerId && !supplierId) {
-      throw new BadRequestException('حدّد العميل أو المورد الذي تريد إصدار الباركود له');
-    }
     if (customerId && supplierId) {
       throw new BadRequestException('الباركود يخصّ طرفاً واحداً: عميلاً أو مورداً، لا الاثنين');
     }
 
-    const party = customerId
-      ? await this.prisma.customer.findFirst({
-          where: { id: customerId, companyId },
-          select: { id: true, nameAr: true, phone: true, accountId: true },
-        })
-      : await this.prisma.supplier.findFirst({
-          where: { id: supplierId!, companyId },
-          select: { id: true, nameAr: true, phone: true, accountId: true },
-        });
+    /**
+     * A barcode belongs to an ACCOUNT — that is whose statement it opens. A customer or
+     * a supplier is just the most common way of naming one.
+     *
+     * Requiring a customer or supplier was too narrow: most rows in a chart of accounts
+     * are neither. Staff advances, partner accounts and internal ledgers all have
+     * statements worth sending, and issuing for them failed with «حدّد العميل أو المورد»
+     * even though the account was named perfectly well.
+     */
+    let party: { id?: string; nameAr: string; phone: string | null; accountId: string } | null = null;
 
-    if (!party) throw new NotFoundException('الطرف المحدد لا ينتمي إلى الشركة الحالية');
+    if (customerId) {
+      party = await this.prisma.customer.findFirst({
+        where: { id: customerId, companyId },
+        select: { id: true, nameAr: true, phone: true, accountId: true },
+      });
+      if (!party) throw new NotFoundException('العميل المحدد لا ينتمي إلى الشركة الحالية');
+    } else if (supplierId) {
+      party = await this.prisma.supplier.findFirst({
+        where: { id: supplierId, companyId },
+        select: { id: true, nameAr: true, phone: true, accountId: true },
+      });
+      if (!party) throw new NotFoundException('المورد المحدد لا ينتمي إلى الشركة الحالية');
+    } else if (input.accountId) {
+      const account = await this.prisma.account.findFirst({
+        where: { id: input.accountId, companyId },
+        select: { id: true, nameAr: true },
+      });
+      if (!account) throw new NotFoundException('الحساب المحدد لا ينتمي إلى الشركة الحالية');
+
+      // A customer or supplier may still stand behind the account. Finding it matters:
+      // their phone is read live at verification, so it keeps working after an edit,
+      // while a number typed here is only a copy.
+      const [linkedCustomer, linkedSupplier] = await Promise.all([
+        this.prisma.customer.findFirst({
+          where: { accountId: account.id, companyId },
+          select: { id: true, nameAr: true, phone: true, accountId: true },
+        }),
+        this.prisma.supplier.findFirst({
+          where: { accountId: account.id, companyId },
+          select: { id: true, nameAr: true, phone: true, accountId: true },
+        }),
+      ]);
+      party = linkedCustomer || linkedSupplier || {
+        nameAr: account.nameAr,
+        phone: null,
+        accountId: account.id,
+      };
+      if (linkedCustomer) input = { ...input, customerId: linkedCustomer.id };
+      else if (linkedSupplier) input = { ...input, supplierId: linkedSupplier.id };
+    } else {
+      throw new BadRequestException('حدّد الحساب أو العميل أو المورد الذي تريد إصدار الباركود له');
+    }
+
     if (!party.accountId) {
       throw new BadRequestException('لا يوجد حساب محاسبي مرتبط بهذا الطرف، فلا كشف يمكن عرضه');
     }
 
+    const verifyPhone = String(input.verifyPhone || '').trim() || null;
+    if (!party.phone && !verifyPhone) {
+      throw new BadRequestException(
+        'لا يوجد رقم هاتف لهذا الحساب. أدخل رقماً للتحقق، وإلا فلن يستطيع صاحب الحساب فتح كشفه.',
+      );
+    }
+
     const existing = await this.prisma.statementAccessToken.findFirst({
-      where: {
-        companyId,
-        ...(customerId ? { customerId } : { supplierId }),
-        revokedAt: null,
-      },
+      where: { companyId, accountId: party.accountId, revokedAt: null },
       orderBy: { createdAt: 'desc' },
     });
 
     if (existing && !input.regenerate) {
-      return await this.describeIssued(existing, party);
+      // A number supplied now is still worth keeping: it may be what makes a previously
+      // unusable barcode work.
+      const currentVerifyPhone = (existing as any).verifyPhone;
+      if (verifyPhone && currentVerifyPhone !== verifyPhone) {
+        const updated = await (this.prisma.statementAccessToken as any).update({
+          where: { id: existing.id },
+          data: { verifyPhone },
+        });
+        return await this.describeIssued(updated, { ...party, phone: party.phone || verifyPhone });
+      }
+      return await this.describeIssued(existing, {
+        ...party,
+        phone: party.phone || currentVerifyPhone,
+      });
     }
 
     if (existing && input.regenerate) {
@@ -125,14 +188,15 @@ export class StatementPortalService {
       });
     }
 
-    const created = await this.prisma.statementAccessToken.create({
+    const created = await (this.prisma.statementAccessToken as any).create({
       data: {
         token: randomBytes(32).toString('base64url'),
         companyId,
         accountId: party.accountId,
-        customerId: customerId || null,
-        supplierId: supplierId || null,
+        customerId: input.customerId || null,
+        supplierId: input.supplierId || null,
         label: input.label || party.nameAr,
+        verifyPhone,
         createdById: userId,
       },
     });
@@ -148,7 +212,7 @@ export class StatementPortalService {
       },
     });
 
-    return await this.describeIssued(created, party);
+    return await this.describeIssued(created, { ...party, phone: party.phone || verifyPhone });
   }
 
   private async describeIssued(
@@ -271,6 +335,21 @@ export class StatementPortalService {
     return `${'•'.repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
   }
 
+  /**
+   * The number the visitor must match.
+   *
+   * A linked customer or supplier's CURRENT phone always wins, so changing it in the
+   * system changes the answer the same second. The number stored on the token is only
+   * for accounts that have no party behind them, and is used only when there is nothing
+   * live to compare against.
+   */
+  private verificationPhone(
+    party: { phone: string | null } | null,
+    row: any,
+  ): string {
+    return this.digitsOf(party?.phone) || this.digitsOf(row?.verifyPhone);
+  }
+
   private async partyOf(row: { customerId: string | null; supplierId: string | null }) {
     if (row.customerId) {
       return this.prisma.customer.findUnique({
@@ -303,13 +382,14 @@ export class StatementPortalService {
     ]);
 
     const locked = row.lockedUntil && row.lockedUntil.getTime() > Date.now();
+    const digits = this.verificationPhone(party, row);
     return {
       companyName: company?.name || '',
       holderName: party?.nameAr || row.label || '',
-      phoneHint: this.phoneHint(party?.phone),
-      // Fail closed: with no phone on file there is no question to ask, so there is
-      // no way in. The staff screen flags these so they can be fixed.
-      canVerify: this.digitsOf(party?.phone).length >= 4,
+      phoneHint: this.phoneHint(digits),
+      // Fail closed: with no number to ask about there is no question, so there is no
+      // way in. The staff screen flags these so they can be fixed.
+      canVerify: digits.length >= 4,
       locked: Boolean(locked),
       lockedUntil: locked ? row.lockedUntil : null,
     };
@@ -333,7 +413,7 @@ export class StatementPortalService {
     }
 
     const party = await this.partyOf(row);
-    const digits = this.digitsOf(party?.phone);
+    const digits = this.verificationPhone(party, row);
     const supplied = this.digitsOf(last4);
 
     if (digits.length < 4) {

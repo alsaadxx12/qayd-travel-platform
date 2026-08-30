@@ -42,11 +42,19 @@ export class StatementTokensController {
   @Post()
   @ApiOperation({
     summary:
-      'إصدار باركود لعميل أو مورد. يعيد الباركود القائم إن وُجد، إلا مع regenerate=true فيُبطل القديم.',
+      'إصدار باركود لحساب أو عميل أو مورد. يعيد الباركود القائم إن وُجد، إلا مع regenerate=true فيُبطل القديم. verifyPhone مطلوب للحسابات التي لا هاتف لها.',
   })
   async issue(
     @Req() req: any,
-    @Body() body: { customerId?: string; supplierId?: string; regenerate?: boolean; label?: string },
+    @Body()
+    body: {
+      accountId?: string;
+      customerId?: string;
+      supplierId?: string;
+      regenerate?: boolean;
+      label?: string;
+      verifyPhone?: string;
+    },
   ) {
     return this.portal.issue(req.user.companyId, req.user.userId, body || {});
   }

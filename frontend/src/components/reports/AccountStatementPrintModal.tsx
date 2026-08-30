@@ -248,6 +248,43 @@ export interface StatementMovementItem {
   currency?: string;
 }
 
+/**
+ * The account's real statement barcode, fetched by account code.
+ *
+ * The footer used to draw an SVG that merely LOOKED like a QR — three finder
+ * squares and a few blocks, encoding nothing. It scanned to nothing, and it printed
+ * on every statement whether or not the account had a barcode issued. This fetches
+ * the real one and renders nothing when there is none, so no customer is handed a
+ * code that leads nowhere.
+ */
+export function useStatementQr(accountCode?: string, accountId?: string, enabled = true) {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled || (!accountCode && !accountId)) {
+      setQrDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    const params = new URLSearchParams();
+    if (accountId) params.set('accountId', accountId);
+    if (accountCode) params.set('accountCode', accountCode);
+    apiRequest(`/statement-tokens/qr?${params.toString()}`)
+      .then((res: any) => {
+        if (!cancelled) setQrDataUrl(res?.qrDataUrl || null);
+      })
+      .catch(() => {
+        // A statement must print with or without a barcode.
+        if (!cancelled) setQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountCode, accountId, enabled]);
+
+  return qrDataUrl;
+}
+
 export const PrintableAccountStatementSheet: React.FC<{
   accountName: string;
   accountCode?: string;
@@ -260,7 +297,9 @@ export const PrintableAccountStatementSheet: React.FC<{
   totals: { totalDebit: number; totalCredit: number; finalBalance: number; openingBalance?: number; previousBalance?: number };
   config?: any;
   lang?: LangKey;
-}> = ({ accountName, accountCode, accountPhone, accountEmail, accountAddress, startDate, endDate, rows, totals, config: propConfig, lang = 'ar' }) => {
+  /** The real barcode. Nothing is drawn when it is absent. */
+  qrDataUrl?: string | null;
+}> = ({ accountName, accountCode, accountPhone, accountEmail, accountAddress, startDate, endDate, rows, totals, config: propConfig, lang = 'ar', qrDataUrl }) => {
   const config = propConfig || DEFAULT_STATEMENT_CONFIG;
   const logoUrl = config.logoUrl || '';
 
@@ -524,21 +563,19 @@ export const PrintableAccountStatementSheet: React.FC<{
           </div>
         </div>
 
-        {/* QR Code graphic */}
-        {config.showQrCode !== false && (
-          <div className="w-11 h-11 border border-slate-300 p-0.5 bg-white flex items-center justify-center">
-            <svg viewBox="0 0 100 100" className="w-full h-full">
-              <rect width="100" height="100" fill="#ffffff" />
-              <rect x="5" y="5" width="30" height="30" fill="#1e293b" />
-              <rect x="10" y="10" width="20" height="20" fill="#ffffff" />
-              <rect x="15" y="15" width="10" height="10" fill="#1e293b" />
-              <rect x="65" y="5" width="30" height="30" fill="#1e293b" />
-              <rect x="70" y="10" width="20" height="20" fill="#ffffff" />
-              <rect x="75" y="15" width="10" height="10" fill="#1e293b" />
-              <rect x="5" y="65" width="30" height="30" fill="#1e293b" />
-              <rect x="10" y="70" width="20" height="20" fill="#ffffff" />
-              <rect x="15" y="75" width="10" height="10" fill="#1e293b" />
-            </svg>
+        {/* The account's real barcode — never a drawing that resembles one. */}
+        {config.showQrCode !== false && qrDataUrl && (
+          <div className="flex flex-col items-center gap-1">
+            <img
+              src={qrDataUrl}
+              alt=""
+              style={{ width: config.qrSize || 48, height: config.qrSize || 48 }}
+            />
+            {config.qrShowLabel !== false && (
+              <span className="text-[6.5px] font-bold text-slate-500 whitespace-nowrap">
+                {lang === 'en' ? 'Scan for statement' : 'امسح لعرض كشفك'}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -739,6 +776,8 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
 }) => {
   const { language } = useLanguageStore();
   const [config, setConfig] = useState<any>(DEFAULT_STATEMENT_CONFIG);
+  // The account's real barcode, resolved once per open.
+  const qrDataUrl = useStatementQr(accountCode, undefined, opened);
   const [loading, setLoading] = useState(false);
   const [printLang, setPrintLang] = useState<LangKey>((language as LangKey) || 'ar');
 
@@ -913,6 +952,7 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
               totals={totals}
               config={config}
               lang={printLang}
+              qrDataUrl={qrDataUrl}
             />
           </div>
         </div>
@@ -960,6 +1000,8 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
   const [lang, setLang] = useState<LangKey>((language as LangKey) || 'ar');
   const [downloading, setDownloading] = useState(false);
   const [config, setConfig] = useState<any>(DEFAULT_STATEMENT_CONFIG);
+  // The account's real barcode, resolved once per open.
+  const qrDataUrl = useStatementQr(accountCode, undefined, opened);
 
   useEffect(() => {
     if (language === 'en' || language === 'ar') {
@@ -1445,6 +1487,7 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
             totals={totals}
             config={config}
             lang={lang}
+            qrDataUrl={qrDataUrl}
           />
         </div>
       </div>

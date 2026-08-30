@@ -1212,6 +1212,9 @@ model StatementAccessToken {
   customerId     String?
   supplierId     String?
   label          String?
+  /// Verification number for an account with no customer or supplier behind it.
+  /// A linked party's CURRENT phone always wins over this, so a copy can never go stale.
+  verifyPhone    String?   @map("verify_phone")
   expiresAt      DateTime? @map("expires_at")
   revokedAt      DateTime? @map("revoked_at")
   /// Wrong-answer counter and lockout, so four digits cannot be brute forced.
