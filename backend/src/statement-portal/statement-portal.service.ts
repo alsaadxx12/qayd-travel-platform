@@ -56,6 +56,30 @@ export class StatementPortalService {
   ) {}
 
   /**
+   * Turns "the table is not there" into a sentence that names the fix.
+   *
+   * This feature adds a table of its own. Until the migration runs, every call that
+   * touches it fails deep inside Prisma and surfaces as a bare 500 — which looks like a
+   * bug in the feature rather than a step that has not been taken. Prisma's own codes
+   * say exactly which case it is, so they are translated instead of swallowed.
+   */
+  private translateSchemaError(err: any): never {
+    const code = err?.code;
+    const message = String(err?.message || '');
+    const missingTable =
+      code === 'P2021' || /statement_access_tokens.*does not exist|relation .* does not exist/i.test(message);
+    const missingColumn = code === 'P2022' || /column .* does not exist/i.test(message);
+
+    if (missingTable || missingColumn) {
+      this.logger.error(`Statement portal schema is not migrated: ${message}`);
+      throw new BadRequestException(
+        'جدول الباركود غير موجود في قاعدة البيانات بعد. نفّذ في مجلد backend الأمر: npx prisma db push (أو الصق ملف prisma/sql/2026-08-31-statement-portal.sql في Supabase) ثم أعد نشر الخادم.',
+      );
+    }
+    throw err;
+  }
+
+  /**
    * A secret of its own, derived from the app's but not equal to it. A portal session
    * therefore cannot be presented to the main API as a staff token, and a staff token
    * cannot be presented here — even though both are JWTs and both travel in the same
@@ -86,7 +110,6 @@ export class StatementPortalService {
       supplierId?: string;
       regenerate?: boolean;
       label?: string;
-      verifyPhone?: string;
     },
   ) {
     const { customerId, supplierId } = input;
@@ -155,32 +178,28 @@ export class StatementPortalService {
       throw new BadRequestException('لا يوجد حساب محاسبي مرتبط بهذا الطرف، فلا كشف يمكن عرضه');
     }
 
-    const verifyPhone = String(input.verifyPhone || '').trim() || null;
-    if (!party.phone && !verifyPhone) {
+    /**
+     * No phone, no barcode — and the fix belongs in the account, not here.
+     *
+     * A number typed into this screen would be a second copy that drifts the moment
+     * someone corrects the real one. The account already has a phone field; pointing
+     * there keeps one number, read live at every verification.
+     */
+    if (!this.digitsOf(party.phone).length) {
       throw new BadRequestException(
-        'لا يوجد رقم هاتف لهذا الحساب. أدخل رقماً للتحقق، وإلا فلن يستطيع صاحب الحساب فتح كشفه.',
+        'لا يوجد رقم هاتف لهذا الحساب. أضف رقم الهاتف من شجرة الحسابات (تعديل الحساب ← الهاتف) ثم أعد الإصدار.',
       );
     }
 
-    const existing = await this.prisma.statementAccessToken.findFirst({
-      where: { companyId, accountId: party.accountId, revokedAt: null },
-      orderBy: { createdAt: 'desc' },
-    });
+    const existing = await this.prisma.statementAccessToken
+      .findFirst({
+        where: { companyId, accountId: party.accountId, revokedAt: null },
+        orderBy: { createdAt: 'desc' },
+      })
+      .catch((err) => this.translateSchemaError(err));
 
     if (existing && !input.regenerate) {
-      // A number supplied now is still worth keeping: it may be what makes a previously
-      // unusable barcode work.
-      if (verifyPhone && existing.verifyPhone !== verifyPhone) {
-        const updated = await this.prisma.statementAccessToken.update({
-          where: { id: existing.id },
-          data: { verifyPhone },
-        });
-        return await this.describeIssued(updated, { ...party, phone: party.phone || verifyPhone });
-      }
-      return await this.describeIssued(existing, {
-        ...party,
-        phone: party.phone || existing.verifyPhone,
-      });
+      return await this.describeIssued(existing, party);
     }
 
     if (existing && input.regenerate) {
@@ -190,18 +209,19 @@ export class StatementPortalService {
       });
     }
 
-    const created = await this.prisma.statementAccessToken.create({
-      data: {
-        token: randomBytes(32).toString('base64url'),
-        companyId,
-        accountId: party.accountId,
-        customerId: input.customerId || null,
-        supplierId: input.supplierId || null,
-        label: input.label || party.nameAr,
-        verifyPhone,
-        createdById: userId,
-      },
-    });
+    const created = await this.prisma.statementAccessToken
+      .create({
+        data: {
+          token: randomBytes(32).toString('base64url'),
+          companyId,
+          accountId: party.accountId,
+          customerId: input.customerId || null,
+          supplierId: input.supplierId || null,
+          label: input.label || party.nameAr,
+          createdById: userId,
+        },
+      })
+      .catch((err) => this.translateSchemaError(err));
 
     await this.prisma.auditLog.create({
       data: {
@@ -214,7 +234,7 @@ export class StatementPortalService {
       },
     });
 
-    return await this.describeIssued(created, { ...party, phone: party.phone || verifyPhone });
+    return await this.describeIssued(created, party);
   }
 
   private async describeIssued(
@@ -239,11 +259,13 @@ export class StatementPortalService {
   }
 
   async list(companyId: string) {
-    const rows = await this.prisma.statementAccessToken.findMany({
-      where: { companyId, revokedAt: null },
-      orderBy: { createdAt: 'desc' },
-      take: 500,
-    });
+    const rows = await this.prisma.statementAccessToken
+      .findMany({
+        where: { companyId, revokedAt: null },
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+      })
+      .catch((err) => this.translateSchemaError(err));
 
     const customerIds = rows.map((r) => r.customerId).filter((id): id is string => Boolean(id));
     const supplierIds = rows.map((r) => r.supplierId).filter((id): id is string => Boolean(id));
@@ -288,10 +310,7 @@ export class StatementPortalService {
             phone: null,
           };
         return {
-          ...(await this.describeIssued(row, {
-            ...party,
-            phone: party.phone || row.verifyPhone,
-          })),
+          ...(await this.describeIssued(row, party)),
           customerId: row.customerId,
           supplierId: row.supplierId,
           lockedUntil: row.lockedUntil,
@@ -362,11 +381,8 @@ export class StatementPortalService {
    * for accounts that have no party behind them, and is used only when there is nothing
    * live to compare against.
    */
-  private verificationPhone(
-    party: { phone: string | null } | null,
-    row: { verifyPhone?: string | null },
-  ): string {
-    return this.digitsOf(party?.phone) || this.digitsOf(row?.verifyPhone);
+  private verificationPhone(party: { phone: string | null } | null): string {
+    return this.digitsOf(party?.phone);
   }
 
   /**
@@ -421,7 +437,7 @@ export class StatementPortalService {
     ]);
 
     const locked = row.lockedUntil && row.lockedUntil.getTime() > Date.now();
-    const digits = this.verificationPhone(party, row);
+    const digits = this.verificationPhone(party);
     return {
       companyName: company?.name || '',
       holderName: party?.nameAr || row.label || '',
@@ -452,7 +468,7 @@ export class StatementPortalService {
     }
 
     const party = await this.partyOf(row);
-    const digits = this.verificationPhone(party, row);
+    const digits = this.verificationPhone(party);
     const supplied = this.digitsOf(last4);
 
     if (digits.length < 4) {

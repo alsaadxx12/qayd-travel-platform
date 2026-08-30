@@ -40,8 +40,3 @@ CREATE INDEX IF NOT EXISTS "statement_access_tokens_customerId_idx"
   ON "statement_access_tokens" ("customerId");
 CREATE INDEX IF NOT EXISTS "statement_access_tokens_supplierId_idx"
   ON "statement_access_tokens" ("supplierId");
-
--- إضافة لاحقة: رقم تحقّق للحسابات التي لا يقف خلفها عميل أو مورد (حسابات السلف مثلاً).
--- هاتف الطرف المرتبط — إن وُجد — يبقى هو المرجع دائماً، وهذا العمود بديل عند غيابه فقط.
-ALTER TABLE "statement_access_tokens"
-  ADD COLUMN IF NOT EXISTS "verify_phone" TEXT;
