@@ -9,21 +9,29 @@ import App from './App';
 
 import 'dayjs/locale/ar';
 
-// Auto-reload on Vite Chunk Preload Errors after new deployments
+// Safely handle Vite Chunk Preload Errors after new deployments without entering infinite reload loop
 window.addEventListener('vite:preloadError', (event) => {
-  console.warn('Vite preload error detected, reloading page for new deployment...', event);
-  window.location.reload();
+  console.warn('Vite preload error detected:', event);
+  const now = Date.now();
+  const lastReload = Number(sessionStorage.getItem('last_chunk_reload_ts') || '0');
+  if (now - lastReload > 30000) {
+    sessionStorage.setItem('last_chunk_reload_ts', String(now));
+    window.location.reload();
+  }
 });
 
 window.addEventListener('error', (e) => {
   const msg = e.message || '';
   if (
     msg.includes('Failed to fetch dynamically imported module') ||
-    msg.includes('Expected a JavaScript-or-Wasm module script')
+    msg.includes('Expected a JavaScript-or-Wasm module script') ||
+    msg.includes('error loading dynamically imported module')
   ) {
-    if (!sessionStorage.getItem('chunk_reload_lock')) {
-      sessionStorage.setItem('chunk_reload_lock', '1');
-      console.warn('Dynamic import chunk error detected, reloading...', msg);
+    const now = Date.now();
+    const lastReload = Number(sessionStorage.getItem('last_chunk_reload_ts') || '0');
+    if (now - lastReload > 30000) {
+      sessionStorage.setItem('last_chunk_reload_ts', String(now));
+      console.warn('Dynamic import chunk error detected, reloading once...', msg);
       window.location.reload();
     }
   }
