@@ -1,15 +1,20 @@
+# ── Runtime variables ──
 [variables]
 PUPPETEER_SKIP_DOWNLOAD = 'true'
 PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium'
 
+# ── System packages: Chromium for PDF generation + Arabic fonts ──
 [phases.setup]
-aptPkgs = ['chromium', 'fonts-noto-color-emoji', 'fonts-noto-cjk']
+aptPkgs = ['chromium', 'fonts-noto-color-emoji', 'unzip']
 
+# ── Install: skip Puppeteer's own Chrome download ──
 [phases.install]
-cmds = ['npm install --include=dev']
+cmds = ['PUPPETEER_SKIP_DOWNLOAD=true npm ci --include=dev']
 
+# ── Build: generate Prisma client + compile NestJS ──
 [phases.build]
 cmds = ['npx prisma generate', 'npx nest build']
 
+# ── Start command ──
 [start]
 cmd = 'node dist/src/main'
