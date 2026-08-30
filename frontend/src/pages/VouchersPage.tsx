@@ -32,7 +32,11 @@ import {
   TrendingDown,
   Layers,
   X,
-  CheckSquare
+  CheckSquare,
+  MoreVertical,
+  CheckCircle2,
+  Calendar,
+  Building2
 } from 'lucide-react';
 
 type TabType = 'RECEIPT' | 'PAYMENT' | 'JOURNAL' | 'EXCHANGE';
@@ -1019,75 +1023,69 @@ export const VouchersPage: React.FC = () => {
           </div>
         )}
 
-        <div className="w-full overflow-auto h-[58vh] min-h-[360px] overscroll-contain">
+        <div className="w-full overflow-auto h-[58vh] min-h-[380px] overscroll-contain">
           <table className="w-full text-xs text-start border-collapse font-sans whitespace-nowrap min-w-full">
             <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-slate-50/95 [&_th]:backdrop-blur-sm [&_th]:shadow-[inset_0_-1px_0_#e2e8f0]">
-              <tr className="text-slate-600 font-bold h-[40px] text-[11px]">
-                <th className="py-2 px-2.5 text-center w-12">
-                  <button
-                    type="button"
-                    onClick={toggleSelectAll}
-                    className={`relative inline-flex h-[18px] w-[32px] items-center rounded-full transition-colors cursor-pointer ${
-                      currentGridData.length > 0 && selectedIds.size === currentGridData.length
-                        ? 'bg-[#F45A0A]'
-                        : 'bg-slate-300 hover:bg-slate-400'
-                    }`}
-                  >
-                    <span className={`inline-block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform ${
-                      currentGridData.length > 0 && selectedIds.size === currentGridData.length
-                        ? (isAr ? 'ltr:-translate-x-[2px] rtl:translate-x-[2px]' : 'translate-x-[16px]')
-                        : (isAr ? 'ltr:-translate-x-[16px] rtl:translate-x-[16px]' : 'translate-x-[2px]')
-                    }`} />
-                  </button>
+              <tr className="text-slate-600 font-bold h-[42px] text-[11px]">
+                {/* Selection Header */}
+                <th className="py-2.5 px-3 text-center w-10">
+                  <input
+                    type="checkbox"
+                    checked={currentGridData.length > 0 && selectedIds.size === currentGridData.length}
+                    onChange={toggleSelectAll}
+                    aria-label={isAr ? 'تحديد الكل' : 'Select All'}
+                    className="w-4 h-4 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer accent-[#F45A0A] transition-all"
+                  />
                 </th>
-                <th className="py-2 px-2 text-center w-8 font-mono text-slate-400">#</th>
-                <th className="py-2 px-2.5 text-center w-16">{isAr ? 'النوع' : 'Type'}</th>
-                <th className="py-2 px-2.5 text-start w-40">{isAr ? 'رقم السند' : 'Voucher No'}</th>
-                <th className="py-2 px-2.5 text-start min-w-[160px]">
+                <th className="py-2.5 px-2 text-center w-8 font-mono text-slate-400">#</th>
+                <th className="py-2.5 px-3 text-center w-24">{isAr ? 'نوع السند' : 'Type'}</th>
+                <th className="py-2.5 px-3 text-start w-40">{isAr ? 'رقم السند' : 'Voucher No'}</th>
+                <th className="py-2.5 px-3 text-center w-28 font-mono">{isAr ? 'التاريخ' : 'Date'}</th>
+                <th className="py-2.5 px-3 text-start min-w-[170px]">
                   {activeTab === 'RECEIPT'
-                    ? (isAr ? 'المستلم منه' : 'Received From')
+                    ? (isAr ? 'المستلم منه (الطرف الدائن)' : 'Received From (Credit)')
                     : activeTab === 'PAYMENT'
-                    ? (isAr ? 'المدفوع له' : 'Paid To')
-                    : (isAr ? 'الحساب الدائن' : 'Credit Account')}
+                    ? (isAr ? 'المدفوع له (الطرف المدين)' : 'Paid To (Debit)')
+                    : (isAr ? 'الحساب المقابل / الدائن' : 'Counter / Credit Account')}
                 </th>
-                <th className="py-2 px-2.5 text-start min-w-[130px]">
+                <th className="py-2.5 px-3 text-start min-w-[150px]">
                   {activeTab === 'RECEIPT'
-                    ? (isAr ? 'صندوق القبض' : 'Cashbox')
+                    ? (isAr ? 'صندوق القبض (المدين)' : 'Debit Cashbox')
                     : activeTab === 'PAYMENT'
-                    ? (isAr ? 'صندوق الصرف' : 'Cashbox')
-                    : (isAr ? 'الحساب المدين' : 'Debit Account')}
+                    ? (isAr ? 'صندوق الصرف (الدائن)' : 'Credit Cashbox')
+                    : (isAr ? 'الصندوق / الحساب المالي' : 'Financial Account')}
                 </th>
-                <th className="py-2 px-2.5 text-start min-w-[120px]">{isAr ? 'حساب التقسيم' : 'Split Account'}</th>
-                <th className="py-2 px-2.5 text-start min-w-[200px]">{isAr ? 'البيان' : 'Description'}</th>
-                <th className="py-2 px-2.5 text-end w-28 font-mono">{isAr ? 'المبلغ' : 'Amount'}</th>
-                <th className="py-2 px-2.5 text-center w-14">{isAr ? 'العملة' : 'Curr.'}</th>
-                <th className="py-2 px-2.5 text-center w-24 font-mono">{isAr ? 'التاريخ' : 'Date'}</th>
-                <th className="py-2 px-2.5 text-start w-28">{isAr ? 'المنشئ' : 'By'}</th>
+                <th className="py-2.5 px-3 text-start min-w-[220px]">{isAr ? 'البيان والشرح' : 'Description'}</th>
+                <th className="py-2.5 px-3 text-end w-32 font-mono">{isAr ? 'المبلغ' : 'Amount'}</th>
+                <th className="py-2.5 px-2.5 text-center w-16">{isAr ? 'العملة' : 'Curr.'}</th>
+                <th className="py-2.5 px-3 text-center w-20">{isAr ? 'الحالة' : 'Status'}</th>
+                <th className="py-2.5 px-3 text-start w-28">{isAr ? 'المنشئ' : 'Created By'}</th>
+                <th className="py-2.5 px-3 text-center w-28">{isAr ? 'الإجراءات' : 'Actions'}</th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100/60">
+            <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="py-16 text-center text-slate-500 font-bold">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <RefreshCw size={24} className="animate-spin text-[#F45A0A]" />
-                      <span>{isAr ? 'جارٍ تحميل السندات المالية...' : 'Loading Vouchers...'}</span>
+                  <td colSpan={13} className="py-20 text-center text-slate-500 font-bold">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <RefreshCw size={26} className="animate-spin text-[#F45A0A]" />
+                      <span className="text-sm font-bold text-slate-700">{isAr ? 'جارٍ تحميل السندات المالية...' : 'Loading Vouchers...'}</span>
                     </div>
                   </td>
                 </tr>
               ) : currentGridData.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-16 text-center text-slate-500 font-bold">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#F45A0A] flex items-center justify-center">
-                        <Receipt size={24} />
+                  <td colSpan={13} className="py-20 text-center text-slate-500 font-bold">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <div className="w-14 h-14 rounded-2xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100 shadow-2xs">
+                        <Receipt size={28} />
                       </div>
                       <span className="text-sm font-black text-slate-800">
-                        {isAr ? 'لا توجد سندات مطابقة' : 'No vouchers found'}
+                        {isAr ? 'لا توجد سندات مطابقة للبحث' : 'No vouchers found matching criteria'}
                       </span>
-                      <span className="text-xs text-slate-400 font-medium">
-                        {isAr ? 'أنشئ سنداً جديداً أو عدّل معايير البحث' : 'Create a new voucher or adjust filters'}
+                      <span className="text-xs text-slate-400 font-medium max-w-sm">
+                        {isAr ? 'أنشئ سنداً جديداً أو عدّل خيارات التاريخ والصناديق أعلاه' : 'Create a new voucher or adjust the filter parameters'}
                       </span>
                     </div>
                   </td>
@@ -1095,121 +1093,269 @@ export const VouchersPage: React.FC = () => {
               ) : (
                 currentGridData.map((row, idx) => {
                   const isRowSelected = selectedIds.has(row.id);
-                  const rowTypeColor = row.type === 'RECEIPT' ? 'border-s-emerald-400' : row.type === 'PAYMENT' ? 'border-s-rose-400' : 'border-s-orange-400';
+                  const isReceipt = row.type === 'RECEIPT';
+                  const isPayment = row.type === 'PAYMENT';
+                  const isJournal = row.type === 'JOURNAL';
+
                   return (
-                  <tr
-                    key={row.id}
-                    onClick={() => {
-                      setSelectedVoucher(row);
-                      setDrawerOpen(true);
-                    }}
-                    className={`h-[44px] transition-all cursor-pointer group border-s-[3px] ${
-                      isRowSelected
-                        ? `bg-orange-50/60 ${rowTypeColor}`
-                        : `${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} border-s-transparent hover:border-s-[#F45A0A]/40 hover:bg-slate-50`
-                    }`}
-                  >
-                    {/* Toggle Selection */}
-                    <td className="py-1.5 px-2.5 text-center" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => toggleSelect(row.id)}
-                        className={`relative inline-flex h-[18px] w-[32px] items-center rounded-full transition-colors cursor-pointer ${
-                          isRowSelected
-                            ? 'bg-[#F45A0A]'
-                            : 'bg-slate-300 group-hover:bg-slate-400'
-                        }`}
-                      >
-                        <span className={`inline-block h-[14px] w-[14px] rounded-full bg-white shadow-sm transition-transform ${
-                          isRowSelected
-                            ? (isAr ? 'ltr:-translate-x-[2px] rtl:translate-x-[2px]' : 'translate-x-[16px]')
-                            : (isAr ? 'ltr:-translate-x-[16px] rtl:translate-x-[16px]' : 'translate-x-[2px]')
-                        }`} />
-                      </button>
-                    </td>
+                    <tr
+                      key={row.id}
+                      onClick={() => {
+                        setSelectedVoucher(row);
+                        setDrawerOpen(true);
+                      }}
+                      className={`h-[48px] transition-colors cursor-pointer group border-s-[3px] ${
+                        isRowSelected
+                          ? 'bg-[#FFF8F4] border-s-[#F45A0A]'
+                          : `${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} border-s-transparent hover:border-s-[#F45A0A]/60 hover:bg-orange-50/20`
+                      }`}
+                    >
+                      {/* Checkbox Selection */}
+                      <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isRowSelected}
+                          onChange={() => toggleSelect(row.id)}
+                          aria-label={isAr ? `تحديد السند ${row.voucherNumber}` : `Select voucher ${row.voucherNumber}`}
+                          className="w-4 h-4 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer accent-[#F45A0A] transition-all"
+                        />
+                      </td>
 
-                    {/* # */}
-                    <td className="py-1.5 px-2 text-center font-mono text-slate-400 text-[10px] tabular-nums lining-nums">
-                      {idx + 1}
-                    </td>
+                      {/* # Sequence */}
+                      <td className="py-2 px-2 text-center font-mono text-slate-400 text-[11px] tabular-nums lining-nums">
+                        {idx + 1}
+                      </td>
 
-                    {/* Type Badge */}
-                    <td className="py-1.5 px-2.5 text-center">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-black ${
-                          row.type === 'RECEIPT'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : row.type === 'PAYMENT'
-                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                            : 'bg-orange-50 text-[#F45A0A] border border-orange-200'
-                        }`}
-                      >
-                        {row.type === 'RECEIPT' ? (isAr ? 'قبض' : 'REC') : row.type === 'PAYMENT' ? (isAr ? 'دفع' : 'PAY') : (isAr ? 'قيد' : 'JV')}
-                      </span>
-                    </td>
+                      {/* Type Badge */}
+                      <td className="py-2 px-3 text-center">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-black tracking-tight ${
+                            isReceipt
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+                              : isPayment
+                              ? 'bg-rose-50 text-rose-700 border border-rose-200/80'
+                              : isJournal
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200/80'
+                              : 'bg-sky-50 text-sky-700 border border-sky-200/80'
+                          }`}
+                        >
+                          {isReceipt && <ArrowDownLeft size={12} className="shrink-0 text-emerald-600" />}
+                          {isPayment && <ArrowUpRight size={12} className="shrink-0 text-rose-600" />}
+                          {isJournal && <FileText size={12} className="shrink-0 text-amber-600" />}
+                          {!isReceipt && !isPayment && !isJournal && <ArrowLeftRight size={12} className="shrink-0 text-sky-600" />}
+                          <span>{row.typeLabel || (isReceipt ? (isAr ? 'سند قبض' : 'Receipt') : isPayment ? (isAr ? 'سند دفع' : 'Payment') : (isAr ? 'سند قيد' : 'Journal'))}</span>
+                        </span>
+                      </td>
 
-                    {/* Voucher Number */}
-                    <td className="py-1.5 px-2.5">
-                      <span className="font-mono font-bold text-slate-950 text-[12px] tabular-nums lining-nums">{row.voucherNumber}</span>
-                    </td>
+                      {/* Voucher Number & Reference */}
+                      <td className="py-2 px-3">
+                        <div className="flex flex-col">
+                          <span className="font-mono font-black text-slate-900 text-[12px] tabular-nums lining-nums group-hover:text-[#F45A0A] transition-colors">
+                            {row.voucherNumber}
+                          </span>
+                          {row.reference && (
+                            <span className="text-[10px] text-slate-400 font-mono tabular-nums truncate max-w-[130px]">
+                              {isAr ? 'المرجع:' : 'Ref:'} {row.reference}
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    {/* Account Name */}
-                    <td className="py-1.5 px-2.5 font-bold text-slate-900 truncate max-w-[180px]" title={row.accountName}>
-                      {row.accountName}
-                    </td>
+                      {/* Date */}
+                      <td className="py-2 px-3 text-center font-mono text-slate-600 text-[11px] font-bold tabular-nums lining-nums">
+                        {row.dateFormatted}
+                      </td>
 
-                    {/* Cashbox Name */}
-                    <td className="py-1.5 px-2.5 truncate max-w-[150px]" title={row.cashboxName}>
-                      <span className="font-medium text-slate-700">{row.cashboxName}</span>
-                    </td>
+                      {/* Beneficiary / Counter Account */}
+                      <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[200px]" title={row.accountName}>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">{row.accountName}</span>
+                          {row.splitAccounts?.length > 0 && (
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-black bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
+                              {isAr ? 'مقسم' : 'Split'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    {/* Split Account */}
-                    <td className="py-1.5 px-2.5 text-slate-500 text-[11px] truncate max-w-[120px]">
-                      {row.splitAccounts?.length > 0
-                        ? row.splitAccounts.map((s: any) => s.accountName).join(', ')
-                        : <span className="text-slate-300">—</span>}
-                    </td>
+                      {/* Cashbox / Financial Account */}
+                      <td className="py-2 px-3 truncate max-w-[170px]" title={row.cashboxName}>
+                        <div className="flex items-center gap-1.5 text-slate-700">
+                          <Wallet size={13} className="text-[#F45A0A] shrink-0" />
+                          <span className="font-semibold text-slate-800 text-xs truncate">{row.cashboxName}</span>
+                        </div>
+                      </td>
 
-                    {/* Description */}
-                    <td className="py-1.5 px-2.5 text-slate-700 max-w-[220px] truncate" title={row.description}>
-                      <span className="truncate block font-medium text-[11px]">{row.description || '—'}</span>
-                    </td>
+                      {/* Description */}
+                      <td className="py-2 px-3 text-slate-600 max-w-[240px] truncate" title={row.description}>
+                        <span className="truncate block font-medium text-[11.5px] text-slate-700">
+                          {row.description || <span className="text-slate-300">—</span>}
+                        </span>
+                      </td>
 
-                    {/* Amount */}
-                    <td className="py-1.5 px-2.5 text-end font-mono font-black tabular-nums lining-nums">
-                      <span
-                        className={`text-[12.5px] ${
-                          row.type === 'RECEIPT'
-                            ? 'text-emerald-700'
-                            : row.type === 'PAYMENT'
-                            ? 'text-rose-700'
-                            : 'text-slate-950'
-                        }`}
-                      >
-                        {Number(row.amount).toLocaleString('en-US', { minimumFractionDigits: row.currency === 'USD' ? 2 : 0 })}
-                      </span>
-                    </td>
+                      {/* Amount */}
+                      <td className="py-2 px-3 text-end font-mono font-black tabular-nums lining-nums">
+                        <span
+                          className={`text-[13px] tracking-tight ${
+                            isReceipt
+                              ? 'text-emerald-700'
+                              : isPayment
+                              ? 'text-rose-700'
+                              : 'text-slate-950'
+                          }`}
+                        >
+                          {isReceipt && '+'}
+                          {isPayment && '-'}
+                          {Number(row.amount).toLocaleString('en-US', { minimumFractionDigits: row.currency === 'USD' ? 2 : 0 })}
+                        </span>
+                      </td>
 
-                    {/* Currency */}
-                    <td className="py-1.5 px-2.5 text-center">
-                      <span className="text-[10px] font-bold text-slate-600 font-mono tabular-nums">
-                        {row.currency === 'USD' ? 'USD' : 'IQD'}
-                      </span>
-                    </td>
+                      {/* Currency */}
+                      <td className="py-2 px-2.5 text-center">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-black ${
+                          row.currency === 'USD'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        }`}>
+                          {row.currency === 'USD' ? 'USD' : 'IQD'}
+                        </span>
+                      </td>
 
-                    {/* Date */}
-                    <td className="py-1.5 px-2.5 text-center font-mono text-slate-600 text-[11px] tabular-nums lining-nums">
-                      {row.dateFormatted}
-                    </td>
+                      {/* Status */}
+                      <td className="py-2 px-3 text-center">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
+                          <span>{isAr ? 'معتمد' : 'Posted'}</span>
+                        </span>
+                      </td>
 
-                    {/* User */}
-                    <td className="py-1.5 px-2.5">
-                      <div className="flex items-center gap-1 text-slate-500">
-                        <User size={11} className="text-slate-400 shrink-0" />
-                        <span className="text-[10px] font-medium truncate max-w-[90px]">{row.userName}</span>
-                      </div>
-                    </td>
-                  </tr>
+                      {/* User */}
+                      <td className="py-2 px-3">
+                        <div className="flex items-center gap-1.5 text-slate-600">
+                          <User size={12} className="text-slate-400 shrink-0" />
+                          <span className="text-[10.5px] font-medium truncate max-w-[95px]">{row.userName}</span>
+                        </div>
+                      </td>
+
+                      {/* Action Buttons */}
+                      <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          {/* Quick View Button */}
+                          <Tooltip label={isAr ? 'معاينة السند' : 'View'} position="top" withArrow>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedVoucher(row);
+                                setDrawerOpen(true);
+                              }}
+                              aria-label={isAr ? 'معاينة السند' : 'View voucher'}
+                              className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200/80 hover:bg-slate-100 text-slate-600 hover:text-[#F45A0A] flex items-center justify-center transition-colors cursor-pointer"
+                            >
+                              <Eye size={13} />
+                            </button>
+                          </Tooltip>
+
+                          {/* Quick Print Button */}
+                          <Tooltip label={isAr ? 'طباعة السند' : 'Print'} position="top" withArrow>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setVoucherToPrint({
+                                  voucherNumber: row.voucherNumber,
+                                  type: row.type,
+                                  date: row.date,
+                                  amount: row.amount,
+                                  currency: row.currency,
+                                  accountName: row.accountName,
+                                  accountCode: row.accountCode,
+                                  cashboxName: row.cashboxName,
+                                  reference: row.reference,
+                                  description: row.description,
+                                  user: row.userName,
+                                  splitAccounts: row.splitAccounts,
+                                  splitDescription: row.splitDescription,
+                                  customCategory: row.customCategory,
+                                });
+                                setPrintModalOpen(true);
+                              }}
+                              aria-label={isAr ? 'طباعة السند' : 'Print voucher'}
+                              className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200/80 hover:bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-colors cursor-pointer"
+                            >
+                              <Printer size={13} />
+                            </button>
+                          </Tooltip>
+
+                          {/* 3-Dots Dropdown Menu */}
+                          <Menu shadow="md" width={160} position="bottom-end" withArrow>
+                            <Menu.Target>
+                              <button
+                                type="button"
+                                aria-label={isAr ? 'خيارات إضافية' : 'More options'}
+                                className="w-7 h-7 rounded-lg bg-slate-50 border border-slate-200/80 hover:bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-colors cursor-pointer"
+                              >
+                                <MoreVertical size={13} />
+                              </button>
+                            </Menu.Target>
+                            <Menu.Dropdown className="p-1 font-sans text-xs">
+                              <Menu.Item
+                                leftSection={<Eye size={13} className="text-slate-500" />}
+                                onClick={() => {
+                                  setSelectedVoucher(row);
+                                  setDrawerOpen(true);
+                                }}
+                                className="font-bold text-slate-800 hover:bg-slate-50 py-1.5"
+                              >
+                                {isAr ? 'عرض التفاصيل' : 'View Details'}
+                              </Menu.Item>
+                              <Menu.Item
+                                leftSection={<Printer size={13} className="text-slate-500" />}
+                                onClick={() => {
+                                  setVoucherToPrint({
+                                    voucherNumber: row.voucherNumber,
+                                    type: row.type,
+                                    date: row.date,
+                                    amount: row.amount,
+                                    currency: row.currency,
+                                    accountName: row.accountName,
+                                    accountCode: row.accountCode,
+                                    cashboxName: row.cashboxName,
+                                    reference: row.reference,
+                                    description: row.description,
+                                    user: row.userName,
+                                    splitAccounts: row.splitAccounts,
+                                    splitDescription: row.splitDescription,
+                                    customCategory: row.customCategory,
+                                  });
+                                  setPrintModalOpen(true);
+                                }}
+                                className="font-bold text-slate-800 hover:bg-slate-50 py-1.5"
+                              >
+                                {isAr ? 'طباعة السند' : 'Print Voucher'}
+                              </Menu.Item>
+                              <Menu.Item
+                                leftSection={<Edit size={13} className="text-blue-600" />}
+                                onClick={() => handleOpenEditModal(row)}
+                                className="font-bold text-slate-800 hover:bg-blue-50 hover:text-blue-700 py-1.5"
+                              >
+                                {isAr ? 'تعديل السند' : 'Edit Voucher'}
+                              </Menu.Item>
+                              <Menu.Divider />
+                              <Menu.Item
+                                color="red"
+                                leftSection={<Trash2 size={13} />}
+                                onClick={() => {
+                                  setVoucherToDelete(row);
+                                  setDeleteConfirmOpen(true);
+                                }}
+                                className="font-bold py-1.5"
+                              >
+                                {isAr ? 'حذف السند' : 'Delete Voucher'}
+                              </Menu.Item>
+                            </Menu.Dropdown>
+                          </Menu>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })
               )}
