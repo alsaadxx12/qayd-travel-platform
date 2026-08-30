@@ -1,3 +1,5 @@
+providers = ['node']
+
 # ── Runtime variables ──
 [variables]
 # The address printed inside every statement barcode. It MUST be absolute — a relative
@@ -5,9 +7,9 @@
 # of opening the statement. Set it in the Railway variables to the front-end origin:
 # PORTAL_BASE_URL = 'https://<front-end-origin>'
 
-# ── System packages: Chromium for PDF generation + Arabic fonts via Nix ──
+# ── System packages: Node.js 20 + Chromium + Arabic fonts via Nix ──
 [phases.setup]
-nixPkgs = ['chromium', 'noto-fonts-color-emoji', 'fontconfig']
+nixPkgs = ['nodejs_20', 'chromium', 'noto-fonts-color-emoji', 'fontconfig']
 
 # ── Install: skip Puppeteer download since Nix provides Chromium ──
 [phases.install]
