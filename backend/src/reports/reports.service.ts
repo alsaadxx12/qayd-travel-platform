@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, AccountCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { parseLegacySplitMarker } from '../vouchers/voucher-splits';
 
 @Injectable()
 export class ReportsService {
@@ -620,14 +621,19 @@ export class ReportsService {
             id: true,
             entryNumber: true,
             date: true,
+            createdAt: true,
             reference: true,
             description: true,
             sourceType: true,
             sourceId: true,
+            receiptVouchers: { select: { voucherNumber: true, description: true } },
+            paymentVouchers: { select: { voucherNumber: true, description: true } },
           },
         },
       },
-      orderBy: { journalEntry: { date: 'asc' } },
+      // Ordered by when the movement was entered, not by the document date, so a
+      // newly recorded movement always lands at the end of the statement.
+      orderBy: [{ journalEntry: { createdAt: 'asc' } }, { createdAt: 'asc' }],
     });
 
     let runningBalance = openingBalance;
@@ -636,12 +642,26 @@ export class ReportsService {
       const credit = Number(l.credit);
       runningBalance += debit - credit;
 
+      const voucher =
+        l.journalEntry.receiptVouchers[0] || l.journalEntry.paymentVouchers[0] || null;
+      const voucherType = l.journalEntry.receiptVouchers.length
+        ? 'RECEIPT'
+        : l.journalEntry.paymentVouchers.length
+        ? 'PAYMENT'
+        : '';
+
       return {
         id: l.id,
         date: l.journalEntry.date,
+        entryDate: l.journalEntry.createdAt,
         entryNumber: l.journalEntry.entryNumber,
+        voucherNumber: voucher?.voucherNumber || null,
+        voucherType,
         reference: l.journalEntry.reference,
-        description: l.description || l.journalEntry.description,
+        description:
+          (voucher ? parseLegacySplitMarker(voucher.description).cleanDescription : '') ||
+          l.description ||
+          l.journalEntry.description,
         sourceType: l.journalEntry.sourceType,
         sourceId: l.journalEntry.sourceId,
         debit,

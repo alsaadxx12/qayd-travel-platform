@@ -141,7 +141,10 @@ export interface DebtsReportResponse {
 export interface AccountStatementLine {
   id: string;
   date: string;
+  entryDate?: string | null;
   entryNumber?: string | null;
+  voucherNumber?: string | null;
+  voucherType?: string | null;
   reference?: string | null;
   description?: string | null;
   debit: number;

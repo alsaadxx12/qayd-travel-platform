@@ -69,6 +69,20 @@ const oneMonthAgo = () => {
   return formatDate(d);
 };
 
+// Statement movements are ordered by when they were entered into the system, not by
+// the document date, so anything recorded now is always the last row of the ledger.
+const compareByEntryOrder = (a: any, b: any) => {
+  const timeOf = (m: any) => {
+    const entered = new Date(m?.entryDate || m?.date || 0).getTime();
+    return Number.isNaN(entered) ? 0 : entered;
+  };
+  const diff = timeOf(a) - timeOf(b);
+  if (diff !== 0) return diff;
+  const numA = String(a.voucherNumber || a.entryNumber || a.id || '');
+  const numB = String(b.voucherNumber || b.entryNumber || b.id || '');
+  return numA.localeCompare(numB, undefined, { numeric: true });
+};
+
 // Helper: Extract concise IATA airport codes
 const formatRouteCodesOnly = (rawRoute?: string): string => {
   if (!rawRoute) return '';
@@ -376,6 +390,7 @@ export const ReportsPage: React.FC = () => {
                 rawLines.push({
                   id: `${e.id}_${l.id}`,
                   date: e.date,
+                  entryDate: e.createdAt || e.date,
                   entryNumber: e.entryNumber,
                   docType: e.voucherNumber
                     ? e.voucherType === 'RECEIPT'
@@ -386,7 +401,8 @@ export const ReportsPage: React.FC = () => {
                     : (isAr ? 'قيد يومية' : 'Journal Entry'),
                   voucherNumber: e.voucherNumber || '-',
                   reference: e.reference || '-',
-                  description: l.description || e.description,
+                  description: e.voucherDescription || l.description || e.description,
+                  accountingDescription: l.description || e.description,
                   debit: Number(l.debit || 0),
                   credit: Number(l.credit || 0),
                   costCenter: e.costCenter || (isAr ? 'الفرع الرئيسي' : 'Main Branch'),
@@ -484,6 +500,7 @@ export const ReportsPage: React.FC = () => {
               rawLines.push({
                 id: `ticket_cust_${t.id}`,
                 date: t.issueDate || t.createdAt,
+                entryDate: t.createdAt || t.issueDate,
                 entryNumber: t.invoiceNumber || t.id,
                 docType: sellAmt < 0 ? (isAr ? 'استرجاع تذكرة' : 'Ticket Refund') : (isAr ? 'تذكرة طيران' : 'Flight Ticket'),
                 voucherNumber: t.invoiceNumber || '-',
@@ -509,6 +526,7 @@ export const ReportsPage: React.FC = () => {
                 rawLines.push({
                   id: `ticket_cust_cash_receipt_${t.id}`,
                   date: t.issueDate || t.createdAt,
+                  entryDate: t.createdAt || t.issueDate,
                   entryNumber: t.invoiceNumber || t.id,
                   docType: isAr ? 'سداد نقدي فوري' : 'Cash Settlement',
                   voucherNumber: t.invoiceNumber || '-',
@@ -537,6 +555,7 @@ export const ReportsPage: React.FC = () => {
               rawLines.push({
                 id: `ticket_cashbox_${t.id}`,
                 date: t.issueDate || t.createdAt,
+                entryDate: t.createdAt || t.issueDate,
                 entryNumber: t.invoiceNumber || t.id,
                 docType: isAr ? 'تذكرة طيران (نقدي)' : 'Flight Ticket (Cash)',
                 voucherNumber: t.invoiceNumber || '-',
@@ -568,6 +587,7 @@ export const ReportsPage: React.FC = () => {
               rawLines.push({
                 id: `ticket_supp_${t.id}`,
                 date: t.issueDate || t.createdAt,
+                entryDate: t.createdAt || t.issueDate,
                 entryNumber: t.invoiceNumber || t.id,
                 docType: buyAmt < 0 ? (isAr ? 'استرجاع من مورد' : 'Supplier Refund') : (isAr ? 'تذكرة طيران' : 'Flight Ticket'),
                 voucherNumber: t.invoiceNumber || '-',
@@ -592,14 +612,7 @@ export const ReportsPage: React.FC = () => {
           });
         }
 
-        rawLines.sort((a, b) => {
-          const timeA = new Date(a.date).getTime();
-          const timeB = new Date(b.date).getTime();
-          if (timeA !== timeB) return timeA - timeB;
-          const numA = String(a.voucherNumber || a.entryNumber || a.id || '');
-          const numB = String(b.voucherNumber || b.entryNumber || b.id || '');
-          return numA.localeCompare(numB, undefined, { numeric: true });
-        });
+        rawLines.sort(compareByEntryOrder);
 
         setStatementMovements(rawLines);
 
@@ -679,15 +692,7 @@ export const ReportsPage: React.FC = () => {
       return true;
     });
 
-    // Strict Chronological Sorting for ledger movements
-    const sortedFiltered = [...filtered].sort((a, b) => {
-      const timeA = new Date(a.date).getTime();
-      const timeB = new Date(b.date).getTime();
-      if (timeA !== timeB) return timeA - timeB;
-      const numA = String(a.voucherNumber || a.entryNumber || a.id || '');
-      const numB = String(b.voucherNumber || b.entryNumber || b.id || '');
-      return numA.localeCompare(numB, undefined, { numeric: true });
-    });
+    const sortedFiltered = [...filtered].sort(compareByEntryOrder);
 
     const rows: any[] = [];
     const isOpeningCredit = (selectedAcc as any)?.openingNature === 'CREDIT';
@@ -1022,7 +1027,10 @@ export const ReportsPage: React.FC = () => {
           }
 
           return (
-            <div className="whitespace-pre-line text-xs leading-relaxed py-1 font-bold text-slate-900">
+            <div
+              className="whitespace-pre-line text-xs leading-relaxed py-1 font-bold text-slate-900"
+              title={r.accountingDescription && r.accountingDescription !== r.description ? r.accountingDescription : undefined}
+            >
               {r.description}
             </div>
           );
@@ -1745,6 +1753,13 @@ export const ReportsPage: React.FC = () => {
               </div>
               <div className="text-xs text-slate-500 font-mono">
                 {new Date(selectedMovement.date).toLocaleDateString('en-GB')}
+                {selectedMovement.entryDate && (
+                  <span className="ms-2">
+                    {isAr ? 'إدخال:' : 'Entered:'}{' '}
+                    {new Date(selectedMovement.entryDate).toLocaleDateString('en-GB')}{' '}
+                    {new Date(selectedMovement.entryDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1753,6 +1768,12 @@ export const ReportsPage: React.FC = () => {
                 <span className="text-slate-500 font-medium">{isAr ? 'البيان وشرح الحركة:' : 'Description:'}</span>
                 <span className="font-bold text-slate-900">{selectedMovement.description || '—'}</span>
               </div>
+              {selectedMovement.accountingDescription && selectedMovement.accountingDescription !== selectedMovement.description && (
+                <div className="flex justify-between items-start gap-3 border-b border-slate-100 pb-2">
+                  <span className="text-slate-500 font-medium shrink-0">{isAr ? 'الشرح المحاسبي:' : 'Ledger note:'}</span>
+                  <span className="text-slate-700 text-end">{selectedMovement.accountingDescription}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                 <span className="text-slate-500 font-medium">{isAr ? 'المبلغ المدين:' : 'Debit Amount:'}</span>
                 <span className="font-mono font-bold text-rose-700" dir="ltr">{Number(selectedMovement.debit || 0).toLocaleString()} {selectedMovement.currency}</span>

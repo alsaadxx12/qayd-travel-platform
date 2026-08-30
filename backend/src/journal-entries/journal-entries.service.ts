@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { EntryStatus, Prisma } from '@prisma/client';
 import { parseListLimit } from '../common/list-query';
+import { parseLegacySplitMarker } from '../vouchers/voucher-splits';
 import { IsNotEmpty, IsString, IsArray, ValidateNested, IsNumber, IsOptional, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -174,7 +175,7 @@ export class JournalEntriesService {
 
   async findAll(companyId: string, status?: EntryStatus, search?: string, accountId?: string, limit?: string) {
     const take = parseListLimit(limit, 150, 300);
-    return this.prisma.journalEntry.findMany({
+    const entries = await this.prisma.journalEntry.findMany({
       where: {
         companyId,
         ...(status ? { status } : {}),
@@ -203,9 +204,31 @@ export class JournalEntriesService {
             account: { select: { id: true, nameAr: true, type: true } },
           },
         },
+        receiptVouchers: { select: { id: true, voucherNumber: true, description: true, date: true } },
+        paymentVouchers: { select: { id: true, voucherNumber: true, description: true, date: true } },
       },
       orderBy: { createdAt: 'desc' },
       take,
+    });
+
+    // A statement line must read like the voucher it came from, so the voucher's own
+    // البيان travels with the entry instead of only the generated ledger sentence.
+    return entries.map((entry) => {
+      const voucher = entry.receiptVouchers[0] || entry.paymentVouchers[0] || null;
+      const voucherType = entry.receiptVouchers.length
+        ? 'RECEIPT'
+        : entry.paymentVouchers.length
+        ? 'PAYMENT'
+        : '';
+
+      return {
+        ...entry,
+        voucherNumber: voucher?.voucherNumber || null,
+        voucherType,
+        voucherDescription: voucher
+          ? parseLegacySplitMarker(voucher.description).cleanDescription || null
+          : null,
+      };
     });
   }
 
