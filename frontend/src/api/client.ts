@@ -3,7 +3,7 @@ import { perfMonitor } from '../utils/perfMonitor';
 export const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.DEV ? '/api' : 'https://qayd-api-r04m.onrender.com/api');
+  (import.meta.env.DEV ? '/api' : 'https://qayd-travel-platform-production.up.railway.app/api');
 
 interface CacheEntry {
   data: any;

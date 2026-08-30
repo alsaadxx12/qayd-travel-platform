@@ -311,7 +311,7 @@ function apiBase(): string {
     if (env.VITE_API_BASE_URL) return env.VITE_API_BASE_URL;
     return env.DEV
       ? `${window.location.origin}/api (dev proxy)`
-      : 'https://qayd-api-r04m.onrender.com/api (default)';
+      : 'https://qayd-travel-platform-production.up.railway.app/api (default)';
   } catch {
     return 'unknown';
   }
