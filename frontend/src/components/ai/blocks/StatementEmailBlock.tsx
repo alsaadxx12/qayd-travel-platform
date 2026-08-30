@@ -46,13 +46,52 @@ export interface StatementEmailPayload {
 
 type Phase = 'preparing' | 'rendering' | 'sending' | 'sent' | 'failed';
 
+/**
+ * Statements already emailed, remembered for the life of the tab.
+ *
+ * A ref is not enough. A ref lives with one component instance, and this block sits in
+ * a chat message React may unmount and remount — scrolling, reopening the panel, a
+ * re-render with new keys — and each remount would auto-send the same statement to the
+ * same customer again. Reloading the page and replaying the conversation would do it
+ * once more, which is why the record goes to sessionStorage rather than memory alone.
+ *
+ * Sending mail is not an idempotent side effect; the guard has to outlive the component
+ * that performs it. It is deliberately per-tab: a deliberate resend is still one click
+ * on «إعادة المحاولة», which bypasses this entirely.
+ */
+const SENT_STORE_KEY = 'statement-email-sent';
+
+const sendKey = (p: StatementEmailPayload) =>
+  [p.recipientEmail, p.accountCode || p.accountName, p.startDate, p.endDate, p.rows.length].join('|');
+
+const readSent = (): Set<string> => {
+  try {
+    return new Set<string>(JSON.parse(sessionStorage.getItem(SENT_STORE_KEY) || '[]'));
+  } catch {
+    // Private windows and blocked site data both throw here; an unusable store just
+    // means the in-memory guard is the only one, which is still better than none.
+    return new Set<string>();
+  }
+};
+
+const alreadySent = readSent();
+
+const markSent = (key: string) => {
+  alreadySent.add(key);
+  try {
+    sessionStorage.setItem(SENT_STORE_KEY, JSON.stringify(Array.from(alreadySent)));
+  } catch {
+    /* memory-only is an acceptable degradation */
+  }
+};
+
 export const StatementEmailBlock: React.FC<{ payload: StatementEmailPayload }> = ({ payload }) => {
-  const [phase, setPhase] = useState<Phase>('preparing');
+  const key = sendKey(payload);
+  const [phase, setPhase] = useState<Phase>(alreadySent.has(key) ? 'sent' : 'preparing');
   const [error, setError] = useState('');
   const [config, setConfig] = useState<any>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
-  // A block re-renders whenever the conversation does; without this the same statement
-  // would be emailed again on every re-render.
+  /** Stops a second run within one mount; `alreadySent` stops it across mounts. */
   const startedRef = useRef(false);
 
   const qrDataUrl = useStatementQr(payload.accountCode, undefined, true);
@@ -129,24 +168,25 @@ export const StatementEmailBlock: React.FC<{ payload: StatementEmailPayload }> =
           pdfBase64,
         }),
       });
+      markSent(key);
       setPhase('sent');
     } catch (err: any) {
       setError(err?.message || 'تعذّر إرسال الكشف.');
       setPhase('failed');
     }
-  }, [payload]);
+  }, [payload, key]);
 
   useEffect(() => {
     // The sheet must be laid out and its fonts settled before it is photographed, or
     // the PDF comes out with unstyled or missing Arabic text.
-    if (config === null || startedRef.current) return;
+    if (config === null || startedRef.current || alreadySent.has(key)) return;
     startedRef.current = true;
     const timer = setTimeout(() => {
       void (document as any).fonts?.ready?.catch?.(() => {});
       void run();
     }, 350);
     return () => clearTimeout(timer);
-  }, [config, run]);
+  }, [config, run, key]);
 
   const label =
     phase === 'sent'

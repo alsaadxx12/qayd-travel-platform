@@ -1,62 +1,23 @@
 # ── Runtime variables ──
 [variables]
-# Puppeteer downloads its OWN Chrome, and that is deliberate.
-#
-# The apt route was tried first and fails on this image: `apt install chromium` gives
-# `/usr/bin/chromium-browser`, which on Ubuntu is not a browser at all but a stub script
-# that exits with «requires the chromium snap to be installed». Snaps cannot run inside
-# a container build, so that path is a dead end no matter how it is configured.
-#
-# `.puppeteerrc.cjs` points the cache at <project>/.cache/puppeteer, inside the app
-# directory, so the browser downloaded during install is still there at runtime.
-PUPPETEER_CACHE_DIR = '/app/.cache/puppeteer'
 # The address printed inside every statement barcode. It MUST be absolute — a relative
 # value makes a phone camera read the code as plain text and offer a web search instead
 # of opening the statement. Set it in the Railway variables to the front-end origin:
 # PORTAL_BASE_URL = 'https://<front-end-origin>'
 
-# ── System packages ──
-# Chrome is a downloaded binary, but it still needs its shared libraries present. These
-# are exactly the ones a headless Chrome links against; without them the launch fails
-# with a bare "Code: 127" that says nothing about which library is missing.
+# ── System packages: Chromium for PDF generation + Arabic fonts via Nix ──
 [phases.setup]
-aptPkgs = [
-  'fonts-liberation',
-  'fonts-noto-color-emoji',
-  'libasound2',
-  'libatk-bridge2.0-0',
-  'libatk1.0-0',
-  'libcups2',
-  'libdbus-1-3',
-  'libdrm2',
-  'libgbm1',
-  'libgtk-3-0',
-  'libnspr4',
-  'libnss3',
-  'libpango-1.0-0',
-  'libx11-6',
-  'libxcomposite1',
-  'libxdamage1',
-  'libxext6',
-  'libxfixes3',
-  'libxkbcommon0',
-  'libxrandr2',
-  'unzip',
-  'xdg-utils',
-]
+nixPkgs = ['chromium', 'noto-fonts-color-emoji', 'fontconfig']
 
-# ── Install: let Puppeteer fetch the browser it was built against ──
+# ── Install: skip Puppeteer download since Nix provides Chromium ──
 [phases.install]
-cmds = ['npm ci --include=dev']
+cmds = ['PUPPETEER_SKIP_DOWNLOAD=true npm ci --include=dev']
 
-# ── Build: Prisma client, Nest build, then prove a browser exists ──
-# The check runs the binary rather than only looking for the file — the whole reason
-# PDFs were failing is that a file existed and was not a browser.
+# ── Build: generate Prisma client + compile NestJS ──
 [phases.build]
 cmds = [
   "npx prisma generate",
   "npx nest build",
-  "node -e \"const p=require('puppeteer');const e=p.executablePath();const {execFileSync}=require('child_process');console.log('PDF engine: '+e);console.log(execFileSync(e,['--version']).toString().trim())\"",
 ]
 
 # ── Start command ──
