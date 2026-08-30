@@ -51,6 +51,7 @@ export const VouchersPage: React.FC = () => {
   const [paymentsList, setPaymentsList] = useState<any[]>([]);
   const [journalVouchersList, setJournalVouchersList] = useState<any[]>([]);
   const [accountsList, setAccountsList] = useState<any[]>([]);
+  const [customVoucherAccounts, setCustomVoucherAccounts] = useState<any[]>([]);
 
   // Filtering states
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,7 +113,7 @@ export const VouchersPage: React.FC = () => {
     if (!forceRefresh) setLoading(true);
     try {
       const noCacheOpt = forceRefresh ? { noCache: true } : {};
-      const [receipts, payments, accounts, allJVs] = await Promise.all([
+      const [receipts, payments, accounts, allJVs, customAccsRes] = await Promise.all([
         apiRequest('/api/receipt-vouchers', noCacheOpt).catch(() => []),
         apiRequest('/api/payment-vouchers', noCacheOpt).catch(() => []),
         // `lite=1` matters a lot: the full endpoint reads EVERY posted journal line in
@@ -120,7 +121,11 @@ export const VouchersPage: React.FC = () => {
         apiRequest('/api/accounts?lite=1', noCacheOpt)
           .catch(() => apiRequest('/api/accounts', noCacheOpt).catch(() => [])),
         apiRequest('/api/journal-entries', noCacheOpt).catch(() => []),
+        apiRequest('/api/print-templates/custom_voucher_accounts', noCacheOpt).catch(() => null),
       ]);
+
+      const activeCustomAccounts = (customAccsRes?.config?.accounts || []).filter((a: any) => a.isActive !== false);
+      setCustomVoucherAccounts(activeCustomAccounts);
 
       const accountsMap: Record<string, string> = {};
       (accounts || []).forEach((acc: any) => {
@@ -1024,23 +1029,45 @@ export const VouchersPage: React.FC = () => {
         )}
 
         <div className="w-full overflow-auto h-[58vh] min-h-[380px] overscroll-contain">
-          <table className="w-full text-xs text-start border-collapse font-sans whitespace-nowrap min-w-full">
-            <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-slate-50/95 [&_th]:backdrop-blur-sm [&_th]:shadow-[inset_0_-1px_0_#e2e8f0]">
-              <tr className="text-slate-600 font-bold h-[42px] text-[11px]">
-                {/* Selection Header */}
-                <th className="py-2.5 px-3 text-center w-10">
-                  <input
-                    type="checkbox"
-                    checked={currentGridData.length > 0 && selectedIds.size === currentGridData.length}
-                    onChange={toggleSelectAll}
-                    aria-label={isAr ? 'تحديد الكل' : 'Select All'}
-                    className="w-4 h-4 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer accent-[#F45A0A] transition-all"
-                  />
+          <table className="w-full text-xs text-start border-collapse font-sans whitespace-nowrap min-w-full border border-slate-200">
+            <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-[#F1F5F9] [&_th]:border-b-2 [&_th]:border-slate-300 [&_th]:border-e [&_th]:border-slate-200 [&_th]:text-slate-800 [&_th]:font-extrabold [&_th]:text-[11px] shadow-2xs">
+              <tr className="h-[44px]">
+                {/* 1. Toggle Selection Header */}
+                <th className="py-2.5 px-3 text-center w-12 bg-[#F1F5F9]">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    aria-label={isAr ? 'تحديد كافة السندات' : 'Select All'}
+                    className={`relative inline-flex h-[19px] w-[34px] shrink-0 items-center rounded-full transition-colors duration-200 cursor-pointer p-[2px] ${
+                      currentGridData.length > 0 && selectedIds.size === currentGridData.length
+                        ? 'bg-[#F45A0A]'
+                        : 'bg-slate-300 hover:bg-slate-400'
+                    }`}
+                  >
+                    <span
+                      className="inline-block h-[15px] w-[15px] rounded-full bg-white shadow-xs transition-transform duration-200 ease-in-out pointer-events-none"
+                      style={{
+                        transform: (currentGridData.length > 0 && selectedIds.size === currentGridData.length)
+                          ? (isAr ? 'translateX(-15px)' : 'translateX(15px)')
+                          : 'translateX(0px)',
+                      }}
+                    />
+                  </button>
                 </th>
-                <th className="py-2.5 px-2 text-center w-8 font-mono text-slate-400">#</th>
+
+                {/* 2. Sequence # */}
+                <th className="py-2.5 px-2 text-center w-9 font-mono text-slate-500">#</th>
+
+                {/* 3. Type */}
                 <th className="py-2.5 px-3 text-center w-24">{isAr ? 'نوع السند' : 'Type'}</th>
+
+                {/* 4. Voucher Number */}
                 <th className="py-2.5 px-3 text-start w-40">{isAr ? 'رقم السند' : 'Voucher No'}</th>
+
+                {/* 5. Date */}
                 <th className="py-2.5 px-3 text-center w-28 font-mono">{isAr ? 'التاريخ' : 'Date'}</th>
+
+                {/* 6. Beneficiary / Counter Account */}
                 <th className="py-2.5 px-3 text-start min-w-[170px]">
                   {activeTab === 'RECEIPT'
                     ? (isAr ? 'المستلم منه (الطرف الدائن)' : 'Received From (Credit)')
@@ -1048,6 +1075,8 @@ export const VouchersPage: React.FC = () => {
                     ? (isAr ? 'المدفوع له (الطرف المدين)' : 'Paid To (Debit)')
                     : (isAr ? 'الحساب المقابل / الدائن' : 'Counter / Credit Account')}
                 </th>
+
+                {/* 7. Cashbox / Financial Account */}
                 <th className="py-2.5 px-3 text-start min-w-[150px]">
                   {activeTab === 'RECEIPT'
                     ? (isAr ? 'صندوق القبض (المدين)' : 'Debit Cashbox')
@@ -1055,19 +1084,41 @@ export const VouchersPage: React.FC = () => {
                     ? (isAr ? 'صندوق الصرف (الدائن)' : 'Credit Cashbox')
                     : (isAr ? 'الصندوق / الحساب المالي' : 'Financial Account')}
                 </th>
+
+                {/* 8. Custom Allocation Account (حساب التقسيم المخصص مثل فلاي) */}
+                <th className="py-2.5 px-3 text-start min-w-[130px]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#F45A0A]"></span>
+                    <span className="font-extrabold text-slate-900">
+                      {customVoucherAccounts[0]?.nameAr || (isAr ? 'حساب التقسيم' : 'Split Account')}
+                    </span>
+                  </div>
+                </th>
+
+                {/* 9. Description */}
                 <th className="py-2.5 px-3 text-start min-w-[220px]">{isAr ? 'البيان والشرح' : 'Description'}</th>
+
+                {/* 10. Amount */}
                 <th className="py-2.5 px-3 text-end w-32 font-mono">{isAr ? 'المبلغ' : 'Amount'}</th>
+
+                {/* 11. Currency */}
                 <th className="py-2.5 px-2.5 text-center w-16">{isAr ? 'العملة' : 'Curr.'}</th>
+
+                {/* 12. Status */}
                 <th className="py-2.5 px-3 text-center w-20">{isAr ? 'الحالة' : 'Status'}</th>
+
+                {/* 13. Created By */}
                 <th className="py-2.5 px-3 text-start w-28">{isAr ? 'المنشئ' : 'Created By'}</th>
+
+                {/* 14. Actions */}
                 <th className="py-2.5 px-3 text-center w-28">{isAr ? 'الإجراءات' : 'Actions'}</th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="[&_td]:border-b [&_td]:border-slate-200/90 [&_td]:border-e [&_td]:border-slate-200/80">
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="py-20 text-center text-slate-500 font-bold">
+                  <td colSpan={14} className="py-20 text-center text-slate-500 font-bold bg-white">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <RefreshCw size={26} className="animate-spin text-[#F45A0A]" />
                       <span className="text-sm font-bold text-slate-700">{isAr ? 'جارٍ تحميل السندات المالية...' : 'Loading Vouchers...'}</span>
@@ -1076,7 +1127,7 @@ export const VouchersPage: React.FC = () => {
                 </tr>
               ) : currentGridData.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-20 text-center text-slate-500 font-bold">
+                  <td colSpan={14} className="py-20 text-center text-slate-500 font-bold bg-white">
                     <div className="flex flex-col items-center justify-center gap-2.5">
                       <div className="w-14 h-14 rounded-2xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100 shadow-2xs">
                         <Receipt size={28} />
@@ -1096,6 +1147,7 @@ export const VouchersPage: React.FC = () => {
                   const isReceipt = row.type === 'RECEIPT';
                   const isPayment = row.type === 'PAYMENT';
                   const isJournal = row.type === 'JOURNAL';
+                  const primaryCustomAcc = customVoucherAccounts[0];
 
                   return (
                     <tr
@@ -1104,29 +1156,41 @@ export const VouchersPage: React.FC = () => {
                         setSelectedVoucher(row);
                         setDrawerOpen(true);
                       }}
-                      className={`h-[48px] transition-colors cursor-pointer group border-s-[3px] ${
+                      className={`h-[48px] transition-colors cursor-pointer group ${
                         isRowSelected
-                          ? 'bg-[#FFF8F4] border-s-[#F45A0A]'
-                          : `${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} border-s-transparent hover:border-s-[#F45A0A]/60 hover:bg-orange-50/20`
+                          ? 'bg-[#FFF3E8] border-s-4 border-s-[#F45A0A]'
+                          : `${idx % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]'} hover:bg-orange-50/30`
                       }`}
                     >
-                      {/* Checkbox Selection */}
+                      {/* 1. Toggle Selection */}
                       <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isRowSelected}
-                          onChange={() => toggleSelect(row.id)}
+                        <button
+                          type="button"
+                          onClick={() => toggleSelect(row.id)}
                           aria-label={isAr ? `تحديد السند ${row.voucherNumber}` : `Select voucher ${row.voucherNumber}`}
-                          className="w-4 h-4 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer accent-[#F45A0A] transition-all"
-                        />
+                          className={`relative inline-flex h-[19px] w-[34px] shrink-0 items-center rounded-full transition-colors duration-200 cursor-pointer p-[2px] ${
+                            isRowSelected
+                              ? 'bg-[#F45A0A]'
+                              : 'bg-slate-300 hover:bg-slate-400'
+                          }`}
+                        >
+                          <span
+                            className="inline-block h-[15px] w-[15px] rounded-full bg-white shadow-xs transition-transform duration-200 ease-in-out pointer-events-none"
+                            style={{
+                              transform: isRowSelected
+                                ? (isAr ? 'translateX(-15px)' : 'translateX(15px)')
+                                : 'translateX(0px)',
+                            }}
+                          />
+                        </button>
                       </td>
 
-                      {/* # Sequence */}
-                      <td className="py-2 px-2 text-center font-mono text-slate-400 text-[11px] tabular-nums lining-nums">
+                      {/* 2. Sequence */}
+                      <td className="py-2 px-2 text-center font-mono text-slate-400 text-[11px] tabular-nums lining-nums font-bold">
                         {idx + 1}
                       </td>
 
-                      {/* Type Badge */}
+                      {/* 3. Type Badge */}
                       <td className="py-2 px-3 text-center">
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10.5px] font-black tracking-tight ${
@@ -1147,7 +1211,7 @@ export const VouchersPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Voucher Number & Reference */}
+                      {/* 4. Voucher Number & Reference */}
                       <td className="py-2 px-3">
                         <div className="flex flex-col">
                           <span className="font-mono font-black text-slate-900 text-[12px] tabular-nums lining-nums group-hover:text-[#F45A0A] transition-colors">
@@ -1161,12 +1225,12 @@ export const VouchersPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Date */}
+                      {/* 5. Date */}
                       <td className="py-2 px-3 text-center font-mono text-slate-600 text-[11px] font-bold tabular-nums lining-nums">
                         {row.dateFormatted}
                       </td>
 
-                      {/* Beneficiary / Counter Account */}
+                      {/* 6. Beneficiary / Counter Account */}
                       <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[200px]" title={row.accountName}>
                         <div className="flex items-center gap-1.5 min-w-0">
                           <span className="truncate">{row.accountName}</span>
@@ -1178,7 +1242,7 @@ export const VouchersPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Cashbox / Financial Account */}
+                      {/* 7. Cashbox / Financial Account */}
                       <td className="py-2 px-3 truncate max-w-[170px]" title={row.cashboxName}>
                         <div className="flex items-center gap-1.5 text-slate-700">
                           <Wallet size={13} className="text-[#F45A0A] shrink-0" />
@@ -1186,14 +1250,57 @@ export const VouchersPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Description */}
+                      {/* 8. Custom Allocation Account (فلاي / حساب التقسيم) */}
+                      <td className="py-2 px-3 text-start">
+                        {(() => {
+                          const matchedAcc = customVoucherAccounts.find(
+                            (ca: any) =>
+                              ca.targetAccountId === row.accountId ||
+                              row.splitAccounts?.some((s: any) => s.accountId === ca.targetAccountId || s.accountName === ca.nameAr) ||
+                              row.customCategory === ca.nameAr ||
+                              row.description?.includes(ca.nameAr)
+                          );
+                          const splitItem = row.splitAccounts?.find(
+                            (s: any) => primaryCustomAcc && (s.accountId === primaryCustomAcc.targetAccountId || s.accountName === primaryCustomAcc.nameAr)
+                          );
+
+                          if (splitItem && Number(splitItem.amount) > 0) {
+                            return (
+                              <div className="flex items-center gap-1 font-mono font-black text-slate-900 text-xs tabular-nums">
+                                <span className="px-1.5 py-0.5 rounded bg-orange-50 text-[#F45A0A] border border-orange-200 text-[10px] font-sans font-bold">
+                                  {primaryCustomAcc?.nameAr}
+                                </span>
+                                <span>{Number(splitItem.amount).toLocaleString('en-US')}</span>
+                              </div>
+                            );
+                          }
+                          if (matchedAcc) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-extrabold bg-orange-50 text-[#F45A0A] border border-orange-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#F45A0A]"></span>
+                                <span>{matchedAcc.nameAr}</span>
+                              </span>
+                            );
+                          }
+                          if (row.splitAccounts?.length > 0) {
+                            return (
+                              <span className="text-slate-700 text-xs font-semibold truncate max-w-[120px] block">
+                                {row.splitAccounts.map((s: any) => s.accountName).join(', ')}
+                              </span>
+                            );
+                          }
+                          return <span className="text-slate-300 font-mono text-center block">—</span>;
+                        })()}
+                      </td>
+
+                      {/* 9. Description */}
                       <td className="py-2 px-3 text-slate-600 max-w-[240px] truncate" title={row.description}>
                         <span className="truncate block font-medium text-[11.5px] text-slate-700">
                           {row.description || <span className="text-slate-300">—</span>}
                         </span>
                       </td>
 
-                      {/* Amount */}
+                      {/* 10. Amount */}
                       <td className="py-2 px-3 text-end font-mono font-black tabular-nums lining-nums">
                         <span
                           className={`text-[13px] tracking-tight ${
@@ -1210,7 +1317,7 @@ export const VouchersPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Currency */}
+                      {/* 11. Currency */}
                       <td className="py-2 px-2.5 text-center">
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-black ${
                           row.currency === 'USD'
@@ -1221,7 +1328,7 @@ export const VouchersPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Status */}
+                      {/* 12. Status */}
                       <td className="py-2 px-3 text-center">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                           <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
@@ -1229,7 +1336,7 @@ export const VouchersPage: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* User */}
+                      {/* 13. Created By */}
                       <td className="py-2 px-3">
                         <div className="flex items-center gap-1.5 text-slate-600">
                           <User size={12} className="text-slate-400 shrink-0" />
@@ -1237,7 +1344,7 @@ export const VouchersPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Action Buttons */}
+                      {/* 14. Action Buttons */}
                       <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
                           {/* Quick View Button */}
