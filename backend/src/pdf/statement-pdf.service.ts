@@ -22,10 +22,17 @@ export class StatementPdfService {
   ) {}
 
   /**
-   * Official statement PDF: saved `statement` print template + Handlebars layout.
-   * Same path as POST /pdf/statement used by تصدير كشف PDF.
+   * The statement as HTML, with the company's saved print template applied.
+   *
+   * `generate()` prints exactly this and nothing else, so exposing it separately
+   * costs nothing — and it is what lets a statement still be delivered when no
+   * browser is available to turn it into a PDF. The HTML is the document; the PDF
+   * is only one way of carrying it.
    */
-  async generate(companyId: string, body: StatementPdfData): Promise<GeneratedStatementPdf> {
+  async renderHtml(
+    companyId: string,
+    body: StatementPdfData,
+  ): Promise<{ html: string; baseName: string }> {
     const savedConfig = await this.loadSavedSettings(companyId);
     const settings = this.normalizeSettings({
       ...savedConfig,
@@ -50,19 +57,27 @@ export class StatementPdfService {
       }
     }
 
-    const merged: StatementPdfData = {
-      ...body,
-      settings,
-      qrDataUrl,
-    };
+    const merged: StatementPdfData = { ...body, settings, qrDataUrl };
 
-    const html = this.templateService.renderStatementHtml(merged);
-    const raw = await this.pdfService.generateFromHtml(html);
-    const buffer = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
     // The period stamp arrives as 01/01/2026; slashes are not legal in a file name.
     const stamp = (merged.startDate || new Date().toISOString().slice(0, 10)).replace(/[\\/:*?"<>|]+/g, '-');
     const safeAccount = (merged.accountName || 'account').replace(/[\\/:*?"<>|]+/g, '-').trim();
-    const downloadName = `كشف_حساب_${safeAccount}_${stamp}.pdf`;
+
+    return {
+      html: this.templateService.renderStatementHtml(merged),
+      baseName: `كشف_حساب_${safeAccount}_${stamp}`,
+    };
+  }
+
+  /**
+   * Official statement PDF: saved `statement` print template + Handlebars layout.
+   * Same path as POST /pdf/statement used by تصدير كشف PDF.
+   */
+  async generate(companyId: string, body: StatementPdfData): Promise<GeneratedStatementPdf> {
+    const { html, baseName } = await this.renderHtml(companyId, body);
+    const raw = await this.pdfService.generateFromHtml(html);
+    const buffer = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+    const downloadName = `${baseName}.pdf`;
 
     return {
       buffer,

@@ -1,6 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
-import * as fs from 'fs';
 
 export interface PdfGenerateOptions {
   html: string;
@@ -56,26 +55,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   private launching: Promise<puppeteer.Browser> | null = null;
   private readonly logger = new Logger(PdfService.name);
 
-  private getExecutablePath(): string | undefined {
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
-    if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
-    const commonPaths = [
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium',
-      '/snap/bin/chromium',
-    ];
-    for (const p of commonPaths) {
-      try {
-        if (fs.existsSync(p)) return p;
-      } catch {
-        /* ignore */
-      }
-    }
-    return undefined;
-  }
-
   private getPuppeteerArgs(): string[] {
     const args = [
       '--no-sandbox',
@@ -100,14 +79,14 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     return args;
   }
 
-  onModuleInit() {
-    void this.getBrowser()
-      .then(() => this.logger.log('Puppeteer browser launched successfully'))
-      .catch((error: any) =>
-        this.logger.error(
-          `Puppeteer warm-up failed — PDF export will retry on demand: ${error?.message || error}`,
-        ),
-      );
+  async onModuleInit() {
+    try {
+      await this.getBrowser();
+      this.logger.log('Puppeteer browser launched successfully');
+    } catch (error: any) {
+      // Boot must not fail because Chromium is missing — the first PDF request retries.
+      this.logger.error(`Failed to launch Puppeteer browser at boot: ${error?.message || error}`);
+    }
   }
 
   async onModuleDestroy() {
@@ -135,12 +114,20 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     if (this.browser && this.browser.connected) return this.browser;
     // Concurrent requests share one launch instead of spawning several Chromiums.
     if (!this.launching) {
-      const execPath = this.getExecutablePath();
+      /**
+       * A hosted runtime often has a Chrome of its own and no bundled Chromium — the
+       * npm postinstall that downloads one is commonly skipped in a build image. So
+       * an explicit binary is honoured when the environment names one, and puppeteer
+       * falls back to its own only when it does not. Set PUPPETEER_EXECUTABLE_PATH
+       * (or CHROME_PATH) on the server to point at an installed Chrome.
+       */
+      const executablePath =
+        process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH || undefined;
       this.launching = withDeadline(
         puppeteer.launch({
           headless: true,
           args: this.getPuppeteerArgs(),
-          ...(execPath ? { executablePath: execPath } : {}),
+          ...(executablePath ? { executablePath } : {}),
         }),
         LAUNCH_TIMEOUT_MS,
         'browser.launch',
@@ -151,17 +138,6 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
             if (this.browser === browser) this.browser = null;
           });
           return browser;
-        })
-        .catch((err: any) => {
-          const errMsg = err?.message || String(err);
-          if (errMsg.includes('Could not find Chrome') || errMsg.includes('browser')) {
-            this.logger.error(`Chromium binary not found on host: ${errMsg}`);
-            throw new HttpException(
-              'تعذر تشغيل محرك PDF: متصفح Chromium غير متوفر على الخادم. يرجى تثبيت المتصفح أو استخدام الطباعة المباشرة من المتصفح.',
-              HttpStatus.SERVICE_UNAVAILABLE,
-            );
-          }
-          throw err;
         })
         .finally(() => {
           this.launching = null;

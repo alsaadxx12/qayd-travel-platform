@@ -123,6 +123,30 @@ export class SendStatementEmailDto {
   @IsBoolean()
   allowWithoutAttachment?: boolean;
 
+  /**
+   * Send the statement in the body of the message, for when no PDF could be made.
+   *
+   * The print HTML is NOT reused for this. That layout is an A4 page built on a
+   * stylesheet, and mail clients strip or mangle stylesheets — the customer would
+   * receive a broken page. The body is rendered from `rows` below into a plain
+   * table with inline styles, which is what actually survives Gmail and Outlook,
+   * while the print-quality document travels as the attachment.
+   */
+  @IsOptional()
+  @IsBoolean()
+  inlineStatement?: boolean;
+
+  /** The full statement as an .html file, attached when a PDF could not be made. */
+  @IsOptional()
+  @IsString()
+  htmlAttachmentBase64?: string;
+
+  @IsOptional()
+  openingBalance?: number;
+
+  @IsOptional()
+  closingBalance?: number;
+
   @IsOptional()
   @IsArray()
   rows?: Array<{
@@ -138,6 +162,20 @@ export class SendStatementEmailDto {
  * Brevo puts this straight into the MIME part name, and non-ASCII names come back
  * as a mangled or dropped attachment in several mail clients.
  */
+/**
+ * A description comes from a journal line, which a user typed. Interpolating it into
+ * the message unescaped would let an apostrophe or an angle bracket break the layout —
+ * and would put user-controlled markup into someone else's inbox.
+ */
+function escapeHtml(value: string): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function toMailSafeFileName(raw: string, fallback: string): string {
   const base = (raw || '')
     .replace(/\.pdf$/i, '')
@@ -505,7 +543,12 @@ export class EmailService {
 
   async sendStatementEmail(dto: SendStatementEmailDto): Promise<{ success: boolean; messageId?: string }> {
     const pdfBuffer = decodePdfBase64(dto.pdfBase64);
-    if (!pdfBuffer && dto.allowWithoutAttachment !== true) {
+    // A missing PDF is only fatal when the message would carry nothing. With the
+    // statement rendered into the body, the customer receives the document itself —
+    // refusing to send then would withhold a complete statement over the format it
+    // happens to be in.
+    const carriesStatement = Boolean(pdfBuffer || (dto.inlineStatement && dto.rows?.length));
+    if (!carriesStatement && dto.allowWithoutAttachment !== true) {
       throw new Error(
         'لا يمكن إرسال كشف الحساب بدون ملف PDF صالح. أعد توليد الكشف ثم حاول الإرسال من جديد.',
       );
@@ -521,11 +564,54 @@ export class EmailService {
       dto.attachmentName || `Account_Statement_${dto.accountCode || ''}_${stamp}`,
       `Account_Statement_${stamp}`,
     );
+    const inlineRows = dto.inlineStatement ? (dto.rows || []) : [];
     const greetingName = dto.recipientName || dto.accountName || '';
     const subject = dto.subject || `كشف حساب — ${dto.accountName}`;
     const bodyLine = pdfBuffer
       ? 'مرفق ملف كشف الحساب الرسمي (PDF).'
-      : (dto.customMessage || 'تجدون تفاصيل الحساب في هذه الرسالة.');
+      : inlineRows.length
+        ? 'تجدون كشف الحساب كاملاً أدناه، ونسخة رسمية منه مرفقة بالرسالة.'
+        : (dto.customMessage || 'تجدون تفاصيل الحساب في هذه الرسالة.');
+
+    /**
+     * Every cell carries its own style: mail clients do not reliably honour a
+     * stylesheet, so anything that must render has to be inline.
+     */
+    const num = (value: number) =>
+      Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    const cell = 'padding:7px 9px;border-bottom:1px solid #e2e8f0;font-size:12px;';
+    const head = 'padding:8px 9px;background:#f1f5f9;font-size:12px;font-weight:700;text-align:center;';
+
+    const statementTableHtml = inlineRows.length
+      ? `<div style="max-width:860px;margin:16px auto 0;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;">${dto.accountName || ''}${dto.fromDate ? ` — ${dto.fromDate} إلى ${dto.toDate || ''}` : ''}</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;direction:rtl;">
+            <thead><tr>
+              <th style="${head}">التاريخ</th>
+              <th style="${head}">البيان</th>
+              <th style="${head}">مدين</th>
+              <th style="${head}">دائن</th>
+              <th style="${head}">الرصيد</th>
+            </tr></thead>
+            <tbody>
+              ${inlineRows
+                .map(
+                  (r) => `<tr>
+                    <td style="${cell}text-align:center;white-space:nowrap;">${escapeHtml(String(r.date || ''))}</td>
+                    <td style="${cell}text-align:right;">${escapeHtml(String(r.description || ''))}</td>
+                    <td style="${cell}text-align:center;">${Number(r.debit) ? num(r.debit) : ''}</td>
+                    <td style="${cell}text-align:center;">${Number(r.credit) ? num(r.credit) : ''}</td>
+                    <td style="${cell}text-align:center;font-weight:700;">${num(r.balance)}</td>
+                  </tr>`,
+                )
+                .join('')}
+            </tbody>
+          </table>
+          <div style="margin-top:12px;font-size:13px;font-weight:800;text-align:left;">
+            الرصيد النهائي: ${num(dto.closingBalance ?? inlineRows[inlineRows.length - 1]?.balance ?? 0)}
+          </div>
+        </div>`
+      : '';
 
     const htmlContent = `
     <!DOCTYPE html>
@@ -543,6 +629,7 @@ export class EmailService {
           ${bodyLine}
         </p>
       </div>
+      ${statementTableHtml}
     </body>
     </html>
     `;
@@ -554,6 +641,8 @@ export class EmailService {
       textContent: `مرحباً${greetingName ? ` ${greetingName}` : ''}،\n${bodyLine}\n`,
       attachment: pdfBuffer
         ? [{ name: attachmentName, content: pdfBuffer.toString('base64') }]
+        : dto.htmlAttachmentBase64
+        ? [{ name: `${attachmentName}.html`, content: dto.htmlAttachmentBase64 }]
         : undefined,
     });
 
