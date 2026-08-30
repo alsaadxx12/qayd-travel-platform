@@ -46,22 +46,42 @@ import { AccountingDatePicker } from '../common/date/AccountingDatePicker';
 import { SmartAccountWizardModal } from '../accounts/SmartAccountWizardModal';
 import { employeesApi } from '../../api/employees';
 
+export const parseCleanNumber = (val: any): number => {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const clean = String(val).replace(/,/g, '').trim();
+  const num = Number(clean);
+  return isNaN(num) ? 0 : num;
+};
+
 export const VOUCHER_SPLIT_MARKER = '[[VOUCHER_SPLIT:';
 
 export const readVoucherSplits = (desc?: string | null): { cleanDescription: string; splitAccounts: any[] } => {
   if (!desc) return { cleanDescription: '', splitAccounts: [] };
   const markerStart = desc.indexOf(VOUCHER_SPLIT_MARKER);
-  if (markerStart === -1) return { cleanDescription: desc, splitAccounts: [] };
+  if (markerStart === -1) {
+    const clean = desc.replace(/\[\[VOUCHER_SPLIT:[^\]]*(\]\])?/g, '').trim();
+    return { cleanDescription: clean, splitAccounts: [] };
+  }
   const payloadStart = markerStart + VOUCHER_SPLIT_MARKER.length;
   const payloadEnd = desc.indexOf(']]', payloadStart);
-  if (payloadEnd === -1) return { cleanDescription: desc, splitAccounts: [] };
+  if (payloadEnd === -1) {
+    const clean = desc.slice(0, markerStart).trim();
+    return { cleanDescription: clean, splitAccounts: [] };
+  }
 
   const cleanDescription = (desc.slice(0, markerStart) + desc.slice(payloadEnd + 2)).trim();
   try {
     const parsed = JSON.parse(desc.slice(payloadStart, payloadEnd));
+    const splits = Array.isArray(parsed)
+      ? parsed.map((item) => ({
+          ...item,
+          amount: parseCleanNumber(item.amount),
+        }))
+      : [];
     return {
       cleanDescription,
-      splitAccounts: Array.isArray(parsed) ? parsed : [],
+      splitAccounts: splits,
     };
   } catch {
     return { cleanDescription, splitAccounts: [] };
@@ -582,20 +602,20 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     }
   };
 
-  const numAmount = Number(amount) || 0;
+  const numAmount = parseCleanNumber(amount);
 
   // Split Allocations Helpers (حساب النظام يحتسب الرصيد المتبقي تلقائياً ويقل مع الحسابات المخصصة)
   const totalCustomSplitsAmount = useMemo(() => {
-    return splitAllocations.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    return splitAllocations.reduce((sum, item) => sum + parseCleanNumber(item.amount), 0);
   }, [splitAllocations]);
 
   const systemAccountAmount = Math.max(0, numAmount - totalCustomSplitsAmount);
   const isOverAllocated = totalCustomSplitsAmount > numAmount;
-  const hasCustomSplits = splitAllocations.some((s) => Number(s.amount) > 0);
+  const hasCustomSplits = splitAllocations.some((s) => parseCleanNumber(s.amount) > 0);
 
   const handleSplitAmountChange = (id: string, newAmt: string) => {
     setSplitAllocations((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, amount: newAmt } : item))
+      prev.map((item) => (item.id === id || item.accountName === id || item.accountId === id ? { ...item, amount: newAmt } : item))
     );
   };
 
@@ -610,11 +630,11 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
 
   const handleFillRemaining = (id: string) => {
     const othersTotal = splitAllocations
-      .filter((item) => item.id !== id)
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      .filter((item) => item.id !== id && item.accountName !== id && item.accountId !== id)
+      .reduce((sum, item) => sum + parseCleanNumber(item.amount), 0);
     const rem = Math.max(0, numAmount - othersTotal);
     setSplitAllocations((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, amount: String(rem) } : item))
+      prev.map((item) => (item.id === id || item.accountName === id || item.accountId === id ? { ...item, amount: String(rem) } : item))
     );
   };
 
@@ -1000,11 +1020,11 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     }
 
     const activeCustomSplits = splitAllocations
-      .filter((s) => Number(s.amount) > 0)
+      .filter((s) => parseCleanNumber(s.amount) > 0)
       .map((s) => ({
         accountId: s.accountId,
         accountName: s.accountName,
-        amount: Number(s.amount),
+        amount: parseCleanNumber(s.amount),
         currency,
         note: s.note || '',
       }));

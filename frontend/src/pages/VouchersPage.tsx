@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { apiRequest } from '../api/client';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
-import { FinancialVoucherForm, readVoucherSplits } from '../components/vouchers/FinancialVoucherForm';
+import { FinancialVoucherForm, readVoucherSplits, parseCleanNumber } from '../components/vouchers/FinancialVoucherForm';
 import { VoucherPrintModal, type VoucherPrintItem } from '../components/vouchers/VoucherPrintModal';
 import { useLanguageStore } from '../store/useLanguageStore';
 import { useAiPageContext } from '../hooks/useAiPageContext';
@@ -1047,6 +1047,7 @@ export const VouchersPage: React.FC = () => {
             <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-[#F1F5F9] [&_th]:border-b-2 [&_th]:border-slate-300 [&_th]:border-e [&_th]:border-slate-200 [&_th]:text-slate-800 [&_th]:font-extrabold [&_th]:text-[11px] shadow-2xs">
               <tr className="h-[44px]">
                 {/* 1. Toggle Selection Header */}
+                {/* 1. Toggle Selection */}
                 <th className="py-2.5 px-3 text-center w-12 bg-[#F1F5F9]">
                   <button
                     type="button"
@@ -1076,7 +1077,7 @@ export const VouchersPage: React.FC = () => {
                 <th className="py-2.5 px-3 text-center w-24">{isAr ? 'نوع السند' : 'Type'}</th>
 
                 {/* 4. Voucher Number */}
-                <th className="py-2.5 px-3 text-start w-40">{isAr ? 'رقم السند' : 'Voucher No'}</th>
+                <th className="py-2.5 px-3 text-center w-40">{isAr ? 'رقم السند' : 'Voucher No'}</th>
 
                 {/* 5. Date */}
                 <th className="py-2.5 px-3 text-center w-28 font-mono">{isAr ? 'التاريخ' : 'Date'}</th>
@@ -1085,10 +1086,10 @@ export const VouchersPage: React.FC = () => {
                 <th className="py-2.5 px-2.5 text-center w-16">{isAr ? 'العملة' : 'Curr.'}</th>
 
                 {/* 7. Amount */}
-                <th className="py-2.5 px-3 text-end w-32 font-mono">{isAr ? 'المبلغ' : 'Amount'}</th>
+                <th className="py-2.5 px-3 text-center w-32 font-mono">{isAr ? 'المبلغ' : 'Amount'}</th>
 
                 {/* 8. Beneficiary / Counter Account */}
-                <th className="py-2.5 px-3 text-start min-w-[170px]">
+                <th className="py-2.5 px-3 text-center min-w-[170px]">
                   {activeTab === 'RECEIPT'
                     ? (isAr ? 'المستلم منه (الطرف الدائن)' : 'Received From (Credit)')
                     : activeTab === 'PAYMENT'
@@ -1116,10 +1117,10 @@ export const VouchersPage: React.FC = () => {
                 )}
 
                 {/* 10. Description */}
-                <th className="py-2.5 px-3 text-start min-w-[220px]">{isAr ? 'البيان والشرح' : 'Description'}</th>
+                <th className="py-2.5 px-3 text-center min-w-[220px]">{isAr ? 'البيان والشرح' : 'Description'}</th>
 
                 {/* 11. Cashbox / Financial Account */}
-                <th className="py-2.5 px-3 text-start min-w-[150px]">
+                <th className="py-2.5 px-3 text-center min-w-[150px]">
                   {activeTab === 'RECEIPT'
                     ? (isAr ? 'صندوق القبض (المدين)' : 'Debit Cashbox')
                     : activeTab === 'PAYMENT'
@@ -1131,7 +1132,7 @@ export const VouchersPage: React.FC = () => {
                 <th className="py-2.5 px-3 text-center w-20">{isAr ? 'الحالة' : 'Status'}</th>
 
                 {/* 13. Created By */}
-                <th className="py-2.5 px-3 text-start w-28">{isAr ? 'المنشئ' : 'Created By'}</th>
+                <th className="py-2.5 px-3 text-center w-28">{isAr ? 'المنشئ' : 'Created By'}</th>
 
                 {/* 14. Actions */}
                 <th className="py-2.5 px-3 text-center w-28">{isAr ? 'الإجراءات' : 'Actions'}</th>
@@ -1304,20 +1305,20 @@ export const VouchersPage: React.FC = () => {
                                 (ca.nameAr && s.accountName?.includes(ca.nameAr)) ||
                                 (ca.targetAccountName && s.accountName?.includes(ca.targetAccountName))
                             );
-                            if (match && Number(match.amount) > 0) {
-                              splitAmt = Number(match.amount);
+                            if (match && parseCleanNumber(match.amount) > 0) {
+                              splitAmt = parseCleanNumber(match.amount);
                             }
                           }
 
                           if (splitAmt === null && (row.accountId === ca.targetAccountId || (ca.nameAr && row.accountName?.includes(ca.nameAr)))) {
-                            splitAmt = Number(row.amount || 0);
+                            splitAmt = parseCleanNumber(row.amount);
                           }
 
                           if (splitAmt === null && row.description && ca.nameAr && row.description.includes(ca.nameAr)) {
                             const regex = new RegExp(`${ca.nameAr}[:\\s]+([0-9,.]+)`, 'i');
                             const m = row.description.match(regex);
                             if (m && m[1]) {
-                              const parsed = Number(m[1].replace(/,/g, ''));
+                              const parsed = parseCleanNumber(m[1]);
                               if (parsed > 0) splitAmt = parsed;
                             }
                           }
