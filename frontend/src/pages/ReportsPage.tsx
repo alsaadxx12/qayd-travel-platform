@@ -48,6 +48,7 @@ import {
   IconAdjustmentsHorizontal,
   IconTicket,
   IconPlus,
+  IconEdit,
 } from '@tabler/icons-react';
 import * as XLSX from 'xlsx';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
@@ -58,6 +59,8 @@ import {
   printElementHD,
 } from '../components/reports/AccountStatementPrintModal';
 import { FinancialVoucherForm } from '../components/vouchers/FinancialVoucherForm';
+import { TicketInvoiceEditorWorkspace } from '../components/tickets/TicketInvoiceEditorWorkspace';
+import { ticketsApi } from '../api/tickets';
 import { fetchPrintTemplate } from '../api/printTemplates';
 import { useLanguageStore } from '../store/useLanguageStore';
 
@@ -186,6 +189,9 @@ export const ReportsPage: React.FC = () => {
   const [quickExportModalOpened, setQuickExportModalOpened] = useState(false);
   const [voucherModalOpened, setVoucherModalOpened] = useState(false);
   const [voucherModalType, setVoucherModalType] = useState<'RECEIPT' | 'PAYMENT' | 'EXCHANGE' | 'JOURNAL'>('RECEIPT');
+  const [editVoucherId, setEditVoucherId] = useState<string | undefined>(undefined);
+  const [ticketModalOpened, setTicketModalOpened] = useState(false);
+  const [editingTicketData, setEditingTicketData] = useState<any | null>(null);
   const [statementConfig, setStatementConfig] = useState<any>(null);
 
   useEffect(() => {
@@ -411,6 +417,9 @@ export const ReportsPage: React.FC = () => {
                   currency: isUSD ? 'USD' : 'IQD',
                   status: e.status,
                   voucherType: e.voucherType || '',
+                  journalEntryId: e.id,
+                  voucherId: e.voucherId || e.receiptVouchers?.[0]?.id || e.paymentVouchers?.[0]?.id || null,
+                  rawEntry: e,
                 });
               }
             });
@@ -481,10 +490,11 @@ export const ReportsPage: React.FC = () => {
                     cbClean.includes(targetAccName)));
             }
 
-            const passDetails =
-              t.passengers && t.passengers.length > 0
-                ? t.passengers.map((p: any) => `${p.name || p.passenger || 'مسافر'} (${p.ticketNumber || p.documentNumber || p.type || 'ADULT'})`).join(' • ')
-                : '';
+            const passDetails = (t.passengers || []).map((p: any) => ({
+              name: p.name || p.passenger || 'مسافر',
+              ticketNumber: p.ticketNumber || p.documentNumber || '',
+              ticketType: p.ticketType || p.type || 'ADULT',
+            }));
             const pList = (t.passengers || []).map((p: any) => p.name || p.passenger).filter(Boolean);
 
             const rawCurr = (t.currency || 'IQD').toString().toUpperCase();
@@ -852,6 +862,43 @@ export const ReportsPage: React.FC = () => {
     isAr,
   ]);
 
+  // The printed sheet reads its own field names, so every movement is translated into
+  // one: the details column must carry the source document and its own البيان.
+  const printRows = useMemo(() => {
+    return calculatedRows.map((r, idx) => {
+      const voucherNo = r.voucherNumber && r.voucherNumber !== '-' ? r.voucherNumber : '';
+      const docRef = voucherNo || r.entryNumber || '';
+      const reference = r.reference && r.reference !== '-' ? r.reference : '';
+      const vt = String(r.voucherType || '').toUpperCase();
+      const typeCode =
+        vt === 'TICKET' || vt === 'FLIGHT'
+          ? 'DT-ISSUE'
+          : vt === 'RECEIPT'
+          ? 'RV-RCPT'
+          : vt === 'PAYMENT'
+          ? 'PV-PAY'
+          : vt === 'OPENING'
+          ? 'OPEN-BAL'
+          : vt === 'PREVIOUS'
+          ? 'PREV-BAL'
+          : 'GL-ENTRY';
+
+      const docLabel = [r.docType, reference && reference !== docRef ? `Ref: ${reference}` : '']
+        .filter(Boolean)
+        .join(' · ');
+
+      return {
+        ...r,
+        rowNumber: idx + 1,
+        docRef,
+        docLabel,
+        typeCode,
+        statement: r.description || r.accountingDescription || '',
+        passengersDetail: Array.isArray(r.passengersDetail) ? r.passengersDetail : undefined,
+      };
+    });
+  }, [calculatedRows]);
+
   const handleExportExcel = useCallback(() => {
     if (!calculatedRows || calculatedRows.length === 0) return;
     const exportData = calculatedRows.map((r) => ({
@@ -1142,21 +1189,88 @@ export const ReportsPage: React.FC = () => {
     [currency, isAr]
   );
 
-  const actionMenuItems: AccountingActionMenuItem[] = [
-    {
-      label: isAr ? 'عرض تفاصيل المستند' : 'View Document Details',
-      icon: IconEye,
-      onClick: (row) => {
-        setSelectedMovement(row);
-        setDrawerOpen(true);
+  const handleOpenDocument = useCallback(async (row: any) => {
+    if (!row) return;
+
+    const dt = String(row.docType || '').toLowerCase();
+    const isTicket =
+      row.voucherType === 'TICKET' ||
+      dt.includes('تذكرة') ||
+      dt.includes('ticket') ||
+      dt.includes('تأشيرة') ||
+      dt.includes('visa');
+
+    if (isTicket) {
+      if (row.ticketRaw) {
+        setEditingTicketData(row.ticketRaw);
+        setTicketModalOpened(true);
+        return;
+      }
+      const ticketId = row.ticketId || (row.id ? String(row.id).replace('ticket_cust_', '').replace('ticket_supp_', '').replace('ticket_cashbox_', '').replace('ticket_cust_cash_receipt_', '') : null);
+      if (ticketId) {
+        try {
+          const fetched = await ticketsApi.getOne(ticketId);
+          if (fetched) {
+            setEditingTicketData(fetched);
+            setTicketModalOpened(true);
+            return;
+          }
+        } catch (e) {
+          console.warn('Could not fetch ticket details:', e);
+        }
+      }
+      if (row.ticketRaw || row.ticket) {
+        setEditingTicketData(row.ticketRaw || row.ticket);
+        setTicketModalOpened(true);
+        return;
+      }
+    }
+
+    // It's a financial voucher or journal entry
+    let vType: 'RECEIPT' | 'PAYMENT' | 'EXCHANGE' | 'JOURNAL' = 'JOURNAL';
+    const vNum = String(row.voucherNumber || row.entryNumber || '').toUpperCase();
+
+    if (row.voucherType === 'RECEIPT' || dt.includes('قبض') || dt.includes('receipt') || vNum.includes('RV')) {
+      vType = 'RECEIPT';
+    } else if (row.voucherType === 'PAYMENT' || dt.includes('دفع') || dt.includes('صرف') || dt.includes('payment') || vNum.includes('PV')) {
+      vType = 'PAYMENT';
+    } else if (row.voucherType === 'EXCHANGE' || dt.includes('صرافة') || dt.includes('exchange')) {
+      vType = 'EXCHANGE';
+    }
+
+    // Identify voucher ID or journal entry ID
+    const vId = row.voucherId || row.journalEntryId || (row.id ? String(row.id).split('_')[0] : undefined);
+
+    setVoucherModalType(vType);
+    setEditVoucherId(vId);
+    setVoucherModalOpened(true);
+  }, []);
+
+  const actionMenuItems: AccountingActionMenuItem[] = useMemo(
+    () => [
+      {
+        label: isAr ? 'معاينة / تعديل المستند' : 'Edit / View Document',
+        icon: IconEdit,
+        onClick: (row: any) => {
+          handleOpenDocument(row);
+        },
       },
-    },
-    {
-      label: isAr ? 'طباعة الحركة' : 'Print Transaction',
-      icon: IconPrinter,
-      onClick: () => window.print(),
-    },
-  ];
+      {
+        label: isAr ? 'عرض تفاصيل المستند' : 'View Document Details',
+        icon: IconEye,
+        onClick: (row: any) => {
+          setSelectedMovement(row);
+          setDrawerOpen(true);
+        },
+      },
+      {
+        label: isAr ? 'طباعة الحركة' : 'Print Transaction',
+        icon: IconPrinter,
+        onClick: () => window.print(),
+      },
+    ],
+    [handleOpenDocument, isAr]
+  );
 
   return (
     <div className="p-5 md:p-6 space-y-4 max-w-[1750px] mx-auto w-full select-none font-sans" dir={direction}>
@@ -1644,13 +1758,13 @@ export const ReportsPage: React.FC = () => {
             </div>
           ) : (
             <AccountingGrid
-
               gridKey="statement_accounting_grid"
               data={calculatedRows}
               columnDefs={columnDefs}
               loading={loading}
               onRefresh={() => handleFetchStatement(true)}
               actionMenuItems={actionMenuItems}
+              onRowDoubleClick={handleOpenDocument}
               hideHeaderCard={true}
               hideFooter={false}
               customFooterSummary={
@@ -1791,6 +1905,19 @@ export const ReportsPage: React.FC = () => {
                 <span className="font-bold text-slate-800">{selectedMovement.entryUser || selectedMovement.user || '—'}</span>
               </div>
             </div>
+
+            {/* Edit / View Document Action */}
+            <button
+              type="button"
+              onClick={() => {
+                setDrawerOpen(false);
+                handleOpenDocument(selectedMovement);
+              }}
+              className="w-full mt-3 py-2.5 px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-colors"
+            >
+              <IconEdit size={16} />
+              <span>{isAr ? 'فتح وتعديل المستند' : 'Open & Edit Document'}</span>
+            </button>
           </div>
         )}
       </Drawer>
@@ -1808,7 +1935,7 @@ export const ReportsPage: React.FC = () => {
             accountAddress={selectedAccount.address}
             startDate={startDate}
             endDate={endDate}
-            rows={calculatedRows}
+            rows={printRows}
             totals={{
               totalDebit,
               totalCredit,
@@ -1829,7 +1956,7 @@ export const ReportsPage: React.FC = () => {
             accountAddress={selectedAccount.address}
             startDate={startDate}
             endDate={endDate}
-            rows={calculatedRows}
+            rows={printRows}
             totals={{
               totalDebit,
               totalCredit,
@@ -1849,7 +1976,7 @@ export const ReportsPage: React.FC = () => {
               accountAddress={selectedAccount.address}
               startDate={startDate}
               endDate={endDate}
-              rows={calculatedRows}
+              rows={printRows}
               totals={{
                 totalDebit,
                 totalCredit,
@@ -1864,12 +1991,36 @@ export const ReportsPage: React.FC = () => {
         </>
       )}
 
-      {/* ── Financial Voucher Form Modal ── */}
+      {/* ── Financial Voucher Form Modal (Create / Edit) ── */}
       <FinancialVoucherForm
         opened={voucherModalOpened}
-        onClose={() => setVoucherModalOpened(false)}
-        onSuccess={() => handleFetchStatement(true)}
+        onClose={() => {
+          setVoucherModalOpened(false);
+          setEditVoucherId(undefined);
+        }}
+        onSuccess={() => {
+          setVoucherModalOpened(false);
+          setEditVoucherId(undefined);
+          handleFetchStatement(true);
+        }}
         initialType={voucherModalType}
+        initialVoucherType={voucherModalType}
+        initialVoucherId={editVoucherId}
+      />
+
+      {/* ── Ticket Invoice Editor Workspace Modal (Create / Edit) ── */}
+      <TicketInvoiceEditorWorkspace
+        opened={ticketModalOpened}
+        initialData={editingTicketData}
+        onClose={() => {
+          setTicketModalOpened(false);
+          setEditingTicketData(null);
+        }}
+        onSuccess={() => {
+          setTicketModalOpened(false);
+          setEditingTicketData(null);
+          handleFetchStatement(true);
+        }}
       />
     </div>
   );

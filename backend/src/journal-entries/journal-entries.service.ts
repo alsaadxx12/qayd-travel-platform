@@ -223,6 +223,7 @@ export class JournalEntriesService {
 
       return {
         ...entry,
+        voucherId: voucher?.id || null,
         voucherNumber: voucher?.voucherNumber || null,
         voucherType,
         voucherDescription: voucher

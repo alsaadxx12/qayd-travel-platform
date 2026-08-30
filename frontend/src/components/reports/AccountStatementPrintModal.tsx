@@ -238,6 +238,10 @@ export interface StatementMovementItem {
   route?: string;
   passengersDetail?: PassengerDetailItem[];
   statement: string;
+  /** Source document of the movement, e.g. «سند قبض RV-2026-0007». */
+  docLabel?: string;
+  /** Short code shown in the Type column when the caller knows the document kind. */
+  typeCode?: string;
   debit: number;
   credit: number;
   runningBalance: number;
@@ -403,13 +407,13 @@ export const PrintableAccountStatementSheet: React.FC<{
               className="font-extrabold border-b border-slate-300"
               style={{ backgroundColor: tableHeaderBgColor, color: tableHeaderTextColor, fontSize: `${Math.max(10, tableFontSize + 0.5)}px` }}
             >
-              <th className="p-2 text-center border-r border-slate-300 w-[4%]">No.</th>
-              <th className="p-2 border-r border-slate-300 w-[13%]">Date</th>
-              <th className="p-2 border-r border-slate-300 w-[41%]">Details</th>
-              <th className="p-2 text-center border-r border-slate-300 w-[9%]">Type</th>
-              <th className="p-2 text-right border-r border-slate-300 w-[11%]">Debit</th>
-              <th className="p-2 text-right border-r border-slate-300 w-[11%]">Credit</th>
-              <th className="p-2 text-right w-[11%]">Balance</th>
+              <th className="p-2 text-center border-r border-slate-300 w-[4%] whitespace-nowrap">No.</th>
+              <th className="p-2 border-r border-slate-300 w-[12%] whitespace-nowrap">Date</th>
+              <th className="p-2 border-r border-slate-300 w-[39%]">Details</th>
+              <th className="p-2 text-center border-r border-slate-300 w-[12%] whitespace-nowrap">Type</th>
+              <th className="p-2 text-right border-r border-slate-300 w-[11%] whitespace-nowrap">Debit</th>
+              <th className="p-2 text-right border-r border-slate-300 w-[11%] whitespace-nowrap">Credit</th>
+              <th className="p-2 text-right w-[11%] whitespace-nowrap">Balance</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200" style={{ fontWeight: isTableBold ? 800 : 600 }}>
@@ -437,14 +441,19 @@ export const PrintableAccountStatementSheet: React.FC<{
 
                 const cleanRowDate = row.date ? (row.date.includes('T') ? row.date.split('T')[0] : row.date) : '';
 
+                const typeLabel =
+                  row.typeCode ||
+                  (hasPnr ? 'DT-ISSUE' : row.docRef?.startsWith('RV') ? 'RV-PAY' : 'GL-ENTRY');
+
                 return (
                   <tr key={idx} style={{ backgroundColor: idx % 2 === 1 ? tableRowStripedColor : '#ffffff' }}>
-                    <td className="p-2 text-center font-mono border-r border-slate-200">{row.rowNumber}</td>
-                    <td className="p-2 font-mono leading-tight border-r border-slate-200">
+                    <td className="p-2 text-center font-mono border-r border-slate-200 whitespace-nowrap">{row.rowNumber}</td>
+                    <td className="p-2 font-mono leading-tight border-r border-slate-200 whitespace-nowrap">
                       <div className="font-bold text-slate-900">{cleanRowDate}</div>
                       <div className="text-slate-600 text-[9px] font-bold mt-0.5">{row.docRef}</div>
                     </td>
-                    <td className="p-2 text-slate-900 leading-snug border-r border-slate-200">
+                    {/* The only column allowed to wrap: it carries the source document text. */}
+                    <td className="p-2 text-slate-900 leading-snug border-r border-slate-200 break-words">
                       {(hasRoute || hasPnr) ? (
                         <div>
                           <div className="font-bold text-slate-900">
@@ -455,10 +464,18 @@ export const PrintableAccountStatementSheet: React.FC<{
                               {paxSummaryStr}
                             </div>
                           )}
+                          {row.statement && (
+                            <div className="text-[9.5px] text-slate-700 font-bold mt-0.5">{row.statement}</div>
+                          )}
                         </div>
                       ) : (
                         <div>
-                          <div className="font-bold text-slate-900">{row.statement}</div>
+                          {row.docLabel && (
+                            <div className="font-bold text-slate-900">{row.docLabel}</div>
+                          )}
+                          <div className={row.docLabel ? 'text-slate-700 font-bold mt-0.5' : 'font-bold text-slate-900'}>
+                            {row.statement || (row.docLabel ? '' : '—')}
+                          </div>
                           {paxSummaryStr && (
                             <div className="text-[9.5px] text-slate-700 font-bold mt-0.5">
                               {paxSummaryStr}
@@ -467,13 +484,13 @@ export const PrintableAccountStatementSheet: React.FC<{
                         </div>
                       )}
                     </td>
-                    <td className="p-2 text-center font-black text-slate-800 border-r border-slate-200">
-                      {hasPnr ? 'DT-ISSUE' : (row.docRef?.startsWith('RV') ? 'RV-PAY' : 'GL-ENTRY')}
+                    <td className="p-2 text-center font-black text-slate-800 border-r border-slate-200 whitespace-nowrap">
+                      {typeLabel}
                     </td>
-                    <td className="p-2 text-right font-mono font-bold border-r border-slate-200 text-slate-900">
+                    <td className="p-2 text-right font-mono font-bold border-r border-slate-200 text-slate-900 whitespace-nowrap">
                       {row.debit > 0 ? `${fmtNum(row.debit)} IQD` : ''}
                     </td>
-                    <td className="p-2 text-right font-mono font-bold border-r border-slate-200 text-slate-900">
+                    <td className="p-2 text-right font-mono font-bold border-r border-slate-200 text-slate-900 whitespace-nowrap">
                       {row.credit > 0 ? `${fmtNum(row.credit)} IQD` : ''}
                     </td>
                     <td className="p-2 text-right font-mono font-black text-slate-900 whitespace-nowrap">
