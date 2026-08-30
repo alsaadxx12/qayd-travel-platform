@@ -181,6 +181,7 @@ export const VouchersPage: React.FC = () => {
         const splits = (r.splitAccounts && Array.isArray(r.splitAccounts) && r.splitAccounts.length > 0) ? r.splitAccounts : parsedSplits;
         const accountName = r.account?.nameAr || accountsMap[r.accountId] || (isAr ? 'حساب عميل/طرف' : 'Client Account');
         const cashboxName = r.cashboxOrBankAccount?.nameAr || accountsMap[r.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox');
+        const currency = (r.currency === 'USD' || (r.description && (r.description.includes('$') || r.description.includes('USD') || r.description.includes('دولار')))) ? 'USD' : (r.currency || 'IQD');
         return {
           ...r,
           type: 'RECEIPT',
@@ -189,13 +190,13 @@ export const VouchersPage: React.FC = () => {
           accountName,
           cashboxName,
           amount: Number(r.amount || 0),
-          currency: r.currency || 'IQD',
+          currency,
           userName: r.createdBy?.name || r.createdBy?.fullName || (isAr ? 'مدير النظام' : 'Administrator'),
           slipsCount: r.slipsCount || 0,
           description: cleanDescription || r.description,
           detail: buildDetail(
             'RECEIPT',
-            { amount: Number(r.amount || 0), currency: r.currency || 'IQD', accountName, cashboxName },
+            { amount: Number(r.amount || 0), currency, accountName, cashboxName },
             splits,
             cleanDescription || '',
           ),
@@ -209,6 +210,7 @@ export const VouchersPage: React.FC = () => {
         const splits = (p.splitAccounts && Array.isArray(p.splitAccounts) && p.splitAccounts.length > 0) ? p.splitAccounts : parsedSplits;
         const accountName = p.supplier?.nameAr || p.account?.nameAr || accountsMap[p.accountId] || (isAr ? 'حساب مورد/طرف' : 'Supplier Account');
         const cashboxName = p.cashboxOrBankAccount?.nameAr || accountsMap[p.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox');
+        const currency = (p.currency === 'USD' || (p.description && (p.description.includes('$') || p.description.includes('USD') || p.description.includes('دولار')))) ? 'USD' : (p.currency || 'IQD');
         const isExpense = Boolean(
           p.account?.type === 'EXPENSE' ||
           String(p.account?.code || '').startsWith('3') ||
@@ -232,13 +234,13 @@ export const VouchersPage: React.FC = () => {
           accountName,
           cashboxName,
           amount: Number(p.amount || 0),
-          currency: p.currency || 'IQD',
+          currency,
           userName: p.createdBy?.name || p.createdBy?.fullName || (isAr ? 'مدير النظام' : 'Administrator'),
           slipsCount: p.slipsCount || 0,
           description: cleanDescription || p.description,
           detail: buildDetail(
             'PAYMENT',
-            { amount: Number(p.amount || 0), currency: p.currency || 'IQD', accountName, cashboxName },
+            { amount: Number(p.amount || 0), currency, accountName, cashboxName },
             splits,
             cleanDescription || '',
           ),

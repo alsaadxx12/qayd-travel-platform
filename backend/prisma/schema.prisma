@@ -624,6 +624,8 @@ model ReceiptVoucher {
   voucherNumber          String
   date                   DateTime    @default(now())
   amount                 Decimal
+  currency               String      @default("IQD")
+  exchangeRate           Decimal     @default(1) @map("exchange_rate")
   accountId              String // Account credited
   cashboxOrBankAccountId String // Account debited
   customerId             String?

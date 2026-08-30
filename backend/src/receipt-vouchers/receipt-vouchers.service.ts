@@ -56,6 +56,11 @@ export class CreateReceiptVoucherDto {
   @IsOptional()
   currency?: string;
 
+  @ApiPropertyOptional({ example: 1550, description: 'سعر الصرف' })
+  @IsNumber()
+  @IsOptional()
+  exchangeRate?: number;
+
   @ApiPropertyOptional({ description: 'طريقة التسديد' })
   @IsString()
   @IsOptional()
@@ -336,11 +341,15 @@ export class ReceiptVouchersService {
     }
     const jvNumber = `JV-${voucherNumber}`;
 
+    const currency = dto.currency === 'USD' ? 'USD' : 'IQD';
+    const exchangeRate = Number(dto.exchangeRate) || 1;
+
     const ctx: VoucherLineContext = {
       kind: 'RECEIPT',
       voucherNumber,
       totalAmount: amount,
-      currency: 'IQD',
+      currency,
+      exchangeRate,
       cashboxAccountId: dto.cashboxOrBankAccountId,
       primaryAccountId: dto.accountId,
       accountNames,
@@ -358,6 +367,8 @@ export class ReceiptVouchersService {
           status: 'POSTED',
           totalDebit: new Prisma.Decimal(amount),
           totalCredit: new Prisma.Decimal(amount),
+          currency,
+          exchangeRate: new Prisma.Decimal(exchangeRate),
           companyId,
           createdById: userId,
           postedById: userId,
@@ -377,6 +388,8 @@ export class ReceiptVouchersService {
           voucherNumber,
           date: dto.date ? new Date(dto.date) : new Date(),
           amount: new Prisma.Decimal(amount),
+          currency,
+          exchangeRate: new Prisma.Decimal(exchangeRate),
           accountId: dto.accountId,
           cashboxOrBankAccountId: dto.cashboxOrBankAccountId,
           customerId: dto.customerId || null,
@@ -760,6 +773,9 @@ export class ReceiptVouchersService {
       const note = this.cleanDescription(dto.description ?? voucher.description);
 
     // Same guarantee as create: the legs always sum to the amount.
+    const currency = dto.currency !== undefined ? (dto.currency === 'USD' ? 'USD' : 'IQD') : (voucher.currency || 'IQD');
+    const exchangeRate = dto.exchangeRate !== undefined ? Number(dto.exchangeRate) : Number(voucher.exchangeRate || 1);
+
     const legs = normalizeVoucherSplits(dto.splitAccounts, amount, newAccountId);
     const accountNames = await this.validateSplitAccounts(companyId, legs, [
       newCashboxId,
@@ -769,7 +785,8 @@ export class ReceiptVouchersService {
       kind: 'RECEIPT',
       voucherNumber: voucher.voucherNumber,
       totalAmount: amount,
-      currency: 'IQD',
+      currency,
+      exchangeRate,
       cashboxAccountId: newCashboxId,
       primaryAccountId: newAccountId,
       accountNames,
@@ -797,6 +814,8 @@ export class ReceiptVouchersService {
             description: buildEntryDescription(legs, ctx),
             totalDebit: new Prisma.Decimal(amount),
             totalCredit: new Prisma.Decimal(amount),
+            currency,
+            exchangeRate: new Prisma.Decimal(exchangeRate),
             lines: {
               create: buildVoucherLines(legs, ctx).map((line) => ({
                 accountId: line.accountId,
@@ -814,6 +833,8 @@ export class ReceiptVouchersService {
         where: { id },
         data: {
           amount: new Prisma.Decimal(amount),
+          currency,
+          exchangeRate: new Prisma.Decimal(exchangeRate),
           date: dto.date ? new Date(dto.date) : voucher.date,
           accountId: newAccountId,
           cashboxOrBankAccountId: newCashboxId,
