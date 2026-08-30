@@ -2,6 +2,7 @@ import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Req } fro
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StatementPortalService } from './statement-portal.service';
+import { StatementQrService } from './statement-qr.service';
 
 /** The staff side: issuing, listing and revoking customer barcodes. Guarded normally. */
 @ApiTags('باركود كشف الحساب (Statement QR)')
@@ -9,7 +10,10 @@ import { StatementPortalService } from './statement-portal.service';
 @UseGuards(JwtAuthGuard)
 @Controller('statement-tokens')
 export class StatementTokensController {
-  constructor(private readonly portal: StatementPortalService) {}
+  constructor(
+    private readonly portal: StatementPortalService,
+    private readonly qr: StatementQrService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'الباركودات الفعّالة في الشركة مع عدد مرات الاطلاع' })
@@ -31,18 +35,18 @@ export class StatementTokensController {
     @Query('accountId') accountId?: string,
     @Query('accountCode') accountCode?: string,
   ) {
-    const qrDataUrl = await this.portal.qrForAccount(req.user.companyId, accountId, accountCode);
+    const qrDataUrl = await this.qr.forAccount(req.user.companyId, accountId, accountCode);
     return { qrDataUrl };
   }
 
   @Post()
   @ApiOperation({
     summary:
-      'إصدار باركود لحساب أو عميل أو مورد. يعيد الباركود القائم إن وُجد، إلا مع regenerate=true فيُبطل القديم.',
+      'إصدار باركود لعميل أو مورد. يعيد الباركود القائم إن وُجد، إلا مع regenerate=true فيُبطل القديم.',
   })
   async issue(
     @Req() req: any,
-    @Body() body: { accountId?: string; customerId?: string; supplierId?: string; regenerate?: boolean; label?: string },
+    @Body() body: { customerId?: string; supplierId?: string; regenerate?: boolean; label?: string },
   ) {
     return this.portal.issue(req.user.companyId, req.user.userId, body || {});
   }

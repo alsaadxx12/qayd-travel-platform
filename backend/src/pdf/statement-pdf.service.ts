@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PdfService } from './pdf.service';
 import { TemplateService, StatementPdfData, TemplateSettings } from './template.service';
 import { PrintTemplatesService } from '../print-templates/print-templates.service';
-import { StatementPortalService } from '../statement-portal/statement-portal.service';
+import { StatementQrService } from '../statement-portal/statement-qr.service';
 
 export interface GeneratedStatementPdf {
   buffer: Buffer;
@@ -18,7 +18,7 @@ export class StatementPdfService {
     private readonly pdfService: PdfService,
     private readonly templateService: TemplateService,
     private readonly printTemplatesService: PrintTemplatesService,
-    private readonly statementPortal: StatementPortalService,
+    private readonly statementQr: StatementQrService,
   ) {}
 
   /**
@@ -47,7 +47,7 @@ export class StatementPdfService {
     let qrDataUrl: string | null = null;
     if (settings.showQrCode !== false) {
       try {
-        qrDataUrl = await this.statementPortal.qrForAccount(
+        qrDataUrl = await this.statementQr.forAccount(
           companyId,
           (body as any).accountId,
           body.accountCode,

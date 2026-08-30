@@ -4,10 +4,10 @@ import { PdfController } from './pdf.controller';
 import { TemplateService } from './template.service';
 import { StatementPdfService } from './statement-pdf.service';
 import { PrintTemplatesModule } from '../print-templates/print-templates.module';
-import { StatementPortalModule } from '../statement-portal/statement-portal.module';
+import { StatementQrModule } from '../statement-portal/statement-qr.module';
 
 @Module({
-  imports: [PrintTemplatesModule, StatementPortalModule],
+  imports: [PrintTemplatesModule, StatementQrModule],
   controllers: [PdfController],
   providers: [PdfService, TemplateService, StatementPdfService],
   exports: [PdfService, TemplateService, StatementPdfService],

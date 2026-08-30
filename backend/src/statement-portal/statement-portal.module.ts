@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ReportsModule } from '../reports/reports.module';
+import { PdfModule } from '../pdf/pdf.module';
+import { StatementQrModule } from './statement-qr.module';
 import { StatementPortalService } from './statement-portal.service';
 import { StatementPortalController } from './statement-portal.controller';
 import { StatementTokensController } from './statement-tokens.controller';
@@ -11,7 +13,7 @@ import { StatementTokensController } from './statement-tokens.controller';
  * session can never be mistaken for a staff token.
  */
 @Module({
-  imports: [ReportsModule, JwtModule.register({})],
+  imports: [ReportsModule, PdfModule, StatementQrModule, JwtModule.register({})],
   controllers: [StatementPortalController, StatementTokensController],
   providers: [StatementPortalService],
   exports: [StatementPortalService],

@@ -7,9 +7,10 @@ import {
 } from '@nestjs/common';
 import { randomBytes, createHash } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
-import * as QRCode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReportsService } from '../reports/reports.service';
+import { StatementPdfService } from '../pdf/statement-pdf.service';
+import { StatementQrService } from './statement-qr.service';
 
 /**
  * The customer-facing statement portal.
@@ -50,6 +51,8 @@ export class StatementPortalService {
     private prisma: PrismaService,
     private reports: ReportsService,
     private jwt: JwtService,
+    private statementPdf: StatementPdfService,
+    private qr: StatementQrService,
   ) {}
 
   /**
@@ -63,42 +66,12 @@ export class StatementPortalService {
     return createHash('sha256').update(`${base}::statement-portal`).digest('hex');
   }
 
-  /** The address printed inside the QR. */
-  private portalUrl(token: string): string {
-    const base = (process.env.PORTAL_BASE_URL || process.env.APP_BASE_URL || '').replace(/\/+$/, '');
-    return `${base}/s/${token}`;
-  }
-
-  /**
-   * The QR is drawn here rather than in the browser, for one reason: the statement PDF
-   * is rendered server-side from a Handlebars template, and a picture that only exists
-   * in the browser cannot be put into it. Drawing it in one place means the code on a
-   * printed PDF and the code on a screen come from the same lines.
-   *
-   * Error-correction level M survives a stamp, a fold or a coffee ring across roughly
-   * 15% of the square, which is what a receipt actually goes through.
-   */
-  private async qrDataUrl(token: string): Promise<string | null> {
-    try {
-      return await QRCode.toDataURL(this.portalUrl(token), {
-        errorCorrectionLevel: 'M',
-        margin: 1,
-        width: 320,
-        color: { dark: '#0f172a', light: '#ffffff' },
-      });
-    } catch (err: any) {
-      // A missing picture must never take down the page that was going to show it.
-      this.logger.warn(`QR generation failed: ${err?.message || err}`);
-      return null;
-    }
-  }
-
   // ────────────────────────────────────────────────────────────────────────────
   // Staff side: issuing and revoking
   // ────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Issues — or returns — the key for one account, customer or supplier.
+   * Issues — or returns — the key for one customer or supplier.
    *
    * Re-issuing by default would invalidate every statement and receipt already in the
    * customer's hands, so an existing live key is returned as-is. `regenerate` is the
@@ -107,54 +80,35 @@ export class StatementPortalService {
   async issue(
     companyId: string,
     userId: string,
-    input: { accountId?: string; customerId?: string; supplierId?: string; regenerate?: boolean; label?: string },
+    input: { customerId?: string; supplierId?: string; regenerate?: boolean; label?: string },
   ) {
-    const { customerId, supplierId, accountId } = input;
-    if (!customerId && !supplierId && !accountId) {
-      throw new BadRequestException('حدّد الحساب أو العميل أو المورد الذي تريد إصدار الباركود له');
+    const { customerId, supplierId } = input;
+    if (!customerId && !supplierId) {
+      throw new BadRequestException('حدّد العميل أو المورد الذي تريد إصدار الباركود له');
+    }
+    if (customerId && supplierId) {
+      throw new BadRequestException('الباركود يخصّ طرفاً واحداً: عميلاً أو مورداً، لا الاثنين');
     }
 
-    let resolvedAccountId = '';
-    let partyNameAr = input.label || '';
-    let partyPhone: string | null = null;
+    const party = customerId
+      ? await this.prisma.customer.findFirst({
+          where: { id: customerId, companyId },
+          select: { id: true, nameAr: true, phone: true, accountId: true },
+        })
+      : await this.prisma.supplier.findFirst({
+          where: { id: supplierId!, companyId },
+          select: { id: true, nameAr: true, phone: true, accountId: true },
+        });
 
-    if (customerId) {
-      const c = await this.prisma.customer.findFirst({
-        where: { id: customerId, companyId },
-        select: { id: true, nameAr: true, phone: true, accountId: true },
-      });
-      if (!c) throw new NotFoundException('العميل المحدد لا ينتمي إلى الشركة الحالية');
-      if (!c.accountId) throw new BadRequestException('لا يوجد حساب محاسبي مرتبط بهذا العميل');
-      resolvedAccountId = c.accountId;
-      partyNameAr = c.nameAr;
-      partyPhone = c.phone || null;
-    } else if (supplierId) {
-      const s = await this.prisma.supplier.findFirst({
-        where: { id: supplierId, companyId },
-        select: { id: true, nameAr: true, phone: true, accountId: true },
-      });
-      if (!s) throw new NotFoundException('المورد المحدد لا ينتمي إلى الشركة الحالية');
-      if (!s.accountId) throw new BadRequestException('لا يوجد حساب محاسبي مرتبط بهذا المورد');
-      resolvedAccountId = s.accountId;
-      partyNameAr = s.nameAr;
-      partyPhone = s.phone || null;
-    } else if (accountId) {
-      const a = await this.prisma.account.findFirst({
-        where: { id: accountId, companyId },
-        select: { id: true, nameAr: true, code: true, phone: true },
-      });
-      if (!a) throw new NotFoundException('الحساب المحدد غير موجود');
-      resolvedAccountId = a.id;
-      partyNameAr = a.nameAr;
-      partyPhone = a.phone || null;
+    if (!party) throw new NotFoundException('الطرف المحدد لا ينتمي إلى الشركة الحالية');
+    if (!party.accountId) {
+      throw new BadRequestException('لا يوجد حساب محاسبي مرتبط بهذا الطرف، فلا كشف يمكن عرضه');
     }
-
-    const party = { nameAr: partyNameAr, phone: partyPhone, accountId: resolvedAccountId };
 
     const existing = await this.prisma.statementAccessToken.findFirst({
       where: {
         companyId,
-        ...(customerId ? { customerId } : supplierId ? { supplierId } : { accountId: resolvedAccountId }),
+        ...(customerId ? { customerId } : { supplierId }),
         revokedAt: null,
       },
       orderBy: { createdAt: 'desc' },
@@ -175,10 +129,10 @@ export class StatementPortalService {
       data: {
         token: randomBytes(32).toString('base64url'),
         companyId,
-        accountId: resolvedAccountId,
+        accountId: party.accountId,
         customerId: customerId || null,
         supplierId: supplierId || null,
-        label: input.label || partyNameAr,
+        label: input.label || party.nameAr,
         createdById: userId,
       },
     });
@@ -188,7 +142,7 @@ export class StatementPortalService {
         action: input.regenerate ? 'REGENERATE_STATEMENT_QR' : 'ISSUE_STATEMENT_QR',
         entity: 'StatementAccessToken',
         entityId: created.id,
-        details: JSON.stringify({ customerId, supplierId, accountId: resolvedAccountId }),
+        details: JSON.stringify({ customerId, supplierId, accountId: party.accountId }),
         userId,
         companyId,
       },
@@ -204,8 +158,10 @@ export class StatementPortalService {
     return {
       id: row.id,
       token: row.token,
-      url: this.portalUrl(row.token),
-      qrDataUrl: await this.qrDataUrl(row.token),
+      url: this.qr.portalUrl(row.token),
+      // Lets the staff screen explain an absent barcode instead of showing a blank box.
+      portalConfigured: this.qr.isConfigured(),
+      qrDataUrl: await this.qr.dataUrl(row.token),
       holderName: party.nameAr,
       // The staff screen must be able to say WHY a customer cannot get in.
       canVerify: Boolean(this.digitsOf(party.phone).length >= 4),
@@ -225,9 +181,8 @@ export class StatementPortalService {
 
     const customerIds = rows.map((r) => r.customerId).filter((id): id is string => Boolean(id));
     const supplierIds = rows.map((r) => r.supplierId).filter((id): id is string => Boolean(id));
-    const accountIds = rows.map((r) => r.accountId).filter((id): id is string => Boolean(id));
 
-    const [customers, suppliers, accounts] = await Promise.all([
+    const [customers, suppliers] = await Promise.all([
       customerIds.length
         ? this.prisma.customer.findMany({
             where: { id: { in: customerIds } },
@@ -240,29 +195,20 @@ export class StatementPortalService {
             select: { id: true, nameAr: true, phone: true },
           })
         : Promise.resolve([]),
-      accountIds.length
-        ? this.prisma.account.findMany({
-            where: { id: { in: accountIds } },
-            select: { id: true, nameAr: true, phone: true },
-          })
-        : Promise.resolve([]),
     ]);
 
     const byId = new Map<string, { nameAr: string; phone: string | null }>();
     for (const c of customers) byId.set(c.id, c);
     for (const s of suppliers) byId.set(s.id, s);
-    for (const a of accounts) byId.set(a.id, a);
 
     return Promise.all(
       rows.map(async (row) => {
-        const party = byId.get(row.customerId || row.supplierId || '') ||
-          byId.get(row.accountId) || {
-            nameAr: row.label || '',
-            phone: null,
-          };
+        const party = byId.get(row.customerId || row.supplierId || '') || {
+          nameAr: row.label || '',
+          phone: null,
+        };
         return {
           ...(await this.describeIssued(row, party)),
-          accountId: row.accountId,
           customerId: row.customerId,
           supplierId: row.supplierId,
           lockedUntil: row.lockedUntil,
@@ -291,43 +237,6 @@ export class StatementPortalService {
     });
 
     return { revoked: true };
-  }
-
-  /**
-   * The barcode for an account's own statement, for printing onto documents.
-   *
-   * Returns null when no barcode has been issued for that account, rather than issuing
-   * one: a printed code is a credential, and printing a statement must never be the act
-   * that quietly creates access to it. Issuing stays an explicit decision on the staff
-   * screen.
-   *
-   * The account can be named by id or by code, because the PDF endpoint is called with
-   * whichever the calling screen happens to hold.
-   */
-  async qrForAccount(
-    companyId: string,
-    accountId?: string | null,
-    accountCode?: string | null,
-  ): Promise<string | null> {
-    let resolvedId = accountId || null;
-    if (!resolvedId && accountCode) {
-      const account = await this.prisma.account.findFirst({
-        where: { companyId, code: String(accountCode) },
-        select: { id: true },
-      });
-      resolvedId = account?.id || null;
-    }
-    if (!resolvedId) return null;
-
-    const row = await this.prisma.statementAccessToken.findFirst({
-      where: { companyId, accountId: resolvedId, revokedAt: null },
-      orderBy: { createdAt: 'desc' },
-      select: { token: true, expiresAt: true },
-    });
-    if (!row) return null;
-    if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
-
-    return this.qrDataUrl(row.token);
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -362,7 +271,7 @@ export class StatementPortalService {
     return `${'•'.repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
   }
 
-  private async partyOf(row: { customerId: string | null; supplierId: string | null; accountId?: string | null }) {
+  private async partyOf(row: { customerId: string | null; supplierId: string | null }) {
     if (row.customerId) {
       return this.prisma.customer.findUnique({
         where: { id: row.customerId },
@@ -372,12 +281,6 @@ export class StatementPortalService {
     if (row.supplierId) {
       return this.prisma.supplier.findUnique({
         where: { id: row.supplierId },
-        select: { nameAr: true, phone: true },
-      });
-    }
-    if (row.accountId) {
-      return this.prisma.account.findUnique({
-        where: { id: row.accountId },
         select: { nameAr: true, phone: true },
       });
     }
@@ -482,6 +385,65 @@ export class StatementPortalService {
     });
 
     return { session, expiresInMinutes: PORTAL_SESSION_MINUTES };
+  }
+
+  /**
+   * The statement as a file the customer's phone can save.
+   *
+   * A PDF needs a headless browser, which a hosted server may simply not have. Rather
+   * than fail the visit over that, the HTML the PDF would have been printed from is
+   * returned instead — it is the same document, and a phone opens it perfectly well.
+   * The caller sets the file name and content type from `kind`.
+   */
+  async statementFile(
+    session: string,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<{ kind: 'pdf' | 'html'; buffer: Buffer; filename: string; reason?: string }> {
+    const data = await this.statement(session, startDate, endDate);
+
+    const rows = (data.lines || []).map((line: any, index: number) => ({
+      rowNumber: index + 1,
+      date: String(line.date || '').slice(0, 10),
+      docRef: line.entryNumber || '',
+      statement: line.description || '',
+      debit: Number(line.debit) || 0,
+      credit: Number(line.credit) || 0,
+      balance: Number(line.runningBalance) || 0,
+    }));
+
+    const body: any = {
+      accountName: data.holderName || data.account?.nameAr || '',
+      accountCode: data.account?.code || '',
+      accountId: (data.account as any)?.id,
+      startDate: String(data.startDate || '').slice(0, 10),
+      endDate: String(data.endDate || '').slice(0, 10),
+      rows,
+      totals: {
+        totalDebit: rows.reduce((sum, r) => sum + (Number(r.debit) || 0), 0),
+        totalCredit: rows.reduce((sum, r) => sum + (Number(r.credit) || 0), 0),
+        finalBalance: Number(data.closingBalance) || 0,
+        openingBalance: Number(data.openingBalance) || 0,
+        previousBalance: Number(data.openingBalance) || 0,
+      },
+      lang: 'ar' as const,
+    };
+
+    const payload = this.readSession(session);
+    try {
+      const generated = await this.statementPdf.generate(payload.companyId, body);
+      return { kind: 'pdf', buffer: generated.buffer, filename: generated.downloadName };
+    } catch (err: any) {
+      const reason = err?.message || 'PDF unavailable';
+      this.logger.warn(`Portal PDF unavailable, serving HTML instead: ${reason}`);
+      const rendered = await this.statementPdf.renderHtml(payload.companyId, body);
+      return {
+        kind: 'html',
+        buffer: Buffer.from(rendered.html, 'utf-8'),
+        filename: `${rendered.baseName}.html`,
+        reason,
+      };
+    }
   }
 
   /** Verifies a portal session and refuses anything that is not one. */

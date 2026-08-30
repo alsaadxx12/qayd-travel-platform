@@ -23,7 +23,7 @@ import { useParams } from 'react-router-dom';
 const API_BASE =
   import.meta.env.VITE_API_URL ||
   import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.DEV ? '/api' : 'https://qayd-travel-platform-production.up.railway.app/api');
+  (import.meta.env.DEV ? '/api' : 'https://qayd-api-r04m.onrender.com/api');
 
 interface PortalIntro {
   companyName: string;
@@ -77,6 +77,7 @@ export const StatementPortalPage: React.FC = () => {
   const [session, setSession] = useState<string>('');
   const [data, setData] = useState<StatementData | null>(null);
   const [loadingData, setLoadingData] = useState(false);
+  const [downloaded, setDownloaded] = useState<'pdf' | 'html' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -129,11 +130,50 @@ export const StatementPortalPage: React.FC = () => {
     if (digits.length === 4 && !session) void submitDigits();
   }, [digits, session, submitDigits]);
 
+  /**
+   * The four digits are the last step the customer should have to take: as soon as
+   * they are right, the statement downloads itself. The on-screen statement is not
+   * the destination — it is what remains on the page afterwards, so a phone that
+   * blocks the download still shows everything.
+   *
+   * The file is fetched rather than linked because the session travels in a header,
+   * which a plain <a href> cannot carry.
+   */
+  const downloadStatement = useCallback(async () => {
+    if (!session) return;
+    const res = await fetch(
+      `${API_BASE}/portal/statement/${encodeURIComponent(token)}/download`,
+      { headers: { 'x-portal-session': session } },
+    );
+    if (!res.ok) throw new Error('تعذّر تحضير ملف الكشف.');
+
+    const kind = (res.headers.get('X-Statement-Kind') as 'pdf' | 'html') || 'pdf';
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `statement.${kind}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // Revoked on a delay: revoking immediately can cancel the save on some mobile
+    // browsers, which start reading the blob after the click returns.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    setDownloaded(kind);
+  }, [session, token]);
+
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
     setLoadingData(true);
     (async () => {
+      // The download is attempted first and its failure is not fatal — the page
+      // below is a complete statement in its own right.
+      try {
+        await downloadStatement();
+      } catch {
+        /* fall through to the on-screen statement */
+      }
       try {
         const res = await fetch(`${API_BASE}/portal/statement/${encodeURIComponent(token)}/data`, {
           headers: { 'x-portal-session': session },
@@ -153,7 +193,7 @@ export const StatementPortalPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [session, token]);
+  }, [session, token, downloadStatement]);
 
   const balance = data?.closingBalance ?? 0;
   const balanceLabel = useMemo(() => {
@@ -259,6 +299,23 @@ export const StatementPortalPage: React.FC = () => {
           الحساب {data.account?.code} — {data.account?.nameAr}
         </p>
       </div>
+
+      <button
+        type="button"
+        onClick={() => { void downloadStatement().catch(() => {}); }}
+        className="mt-4 h-12 w-full rounded-2xl bg-[#F45A0A] text-sm font-black text-white"
+      >
+        {downloaded === 'html'
+          ? 'تنزيل الكشف مرة أخرى'
+          : downloaded === 'pdf'
+            ? 'تنزيل ملف PDF مرة أخرى'
+            : 'تنزيل الكشف'}
+      </button>
+      {downloaded === 'html' && (
+        <p className="mt-2 text-center text-[11px] text-slate-500">
+          نُزّل الكشف كملف صفحة، لأن تحويله إلى PDF غير متاح حالياً على الخادم.
+        </p>
+      )}
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <Stat label="إجمالي المدين" value={money(data.totalDebit)} />

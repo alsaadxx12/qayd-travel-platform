@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, Headers, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Headers, HttpCode, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StatementPortalService } from './statement-portal.service';
 
@@ -31,6 +31,35 @@ export class StatementPortalController {
   @ApiOperation({ summary: 'التحقق بآخر أربعة أرقام من الهاتف، ويعيد جلسة قصيرة لقراءة الكشف' })
   async verify(@Param('token') token: string, @Body() body: { last4?: string }) {
     return this.portal.verify(token, String(body?.last4 || ''));
+  }
+
+  /**
+   * The statement as a file, so a scan ends in a download rather than in reading a
+   * page. Falls back to the HTML document when the server has no browser to print a
+   * PDF with — the customer still gets the whole statement, in a file their phone can
+   * open, and the response says which kind it is.
+   */
+  @Get(':token/download')
+  async download(
+    @Headers('x-portal-session') session: string,
+    @Res() res: any,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const file = await this.portal.statementFile(String(session || ''), startDate, endDate);
+    const encoded = encodeURIComponent(file.filename);
+
+    res.setHeader('Content-Type', file.kind === 'pdf' ? 'application/pdf' : 'text/html; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="statement.${file.kind}"; filename*=UTF-8''${encoded}`,
+    );
+    res.setHeader('Content-Length', String(file.buffer.length));
+    // Read by the page so it can tell the visitor what it just handed them.
+    res.setHeader('X-Statement-Kind', file.kind);
+    res.setHeader('Access-Control-Expose-Headers', 'X-Statement-Kind');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).send(file.buffer);
   }
 
   @Get(':token/data')
