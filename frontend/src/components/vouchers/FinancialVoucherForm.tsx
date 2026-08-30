@@ -58,40 +58,50 @@ export const VOUCHER_SPLIT_MARKER = '[[VOUCHER_SPLIT:';
 
 export const readVoucherSplits = (desc?: string | null): { cleanDescription: string; splitAccounts: any[] } => {
   if (!desc) return { cleanDescription: '', splitAccounts: [] };
-  const markerStart = desc.indexOf(VOUCHER_SPLIT_MARKER);
-  if (markerStart === -1) {
-    const clean = desc.replace(/\[\[VOUCHER_SPLIT:[^\]]*(\]\])?/g, '').trim();
-    return { cleanDescription: clean, splitAccounts: [] };
-  }
-  const payloadStart = markerStart + VOUCHER_SPLIT_MARKER.length;
-  const payloadEnd = desc.indexOf(']]', payloadStart);
-  if (payloadEnd === -1) {
-    const clean = desc.slice(0, markerStart).trim();
-    return { cleanDescription: clean, splitAccounts: [] };
-  }
+  
+  let splitAccounts: any[] = [];
 
-  const cleanDescription = (desc.slice(0, markerStart) + desc.slice(payloadEnd + 2)).trim();
-  try {
-    const parsed = JSON.parse(desc.slice(payloadStart, payloadEnd));
-    const splits = Array.isArray(parsed)
-      ? parsed.map((item) => ({
+  // 1. Try to find and parse complete JSON marker
+  const markerMatch = desc.match(/\[\[VOUCHER_SPLIT:\s*(\[.*?\])\s*\]\]/s);
+  if (markerMatch && markerMatch[1]) {
+    try {
+      const parsed = JSON.parse(markerMatch[1]);
+      if (Array.isArray(parsed)) {
+        splitAccounts = parsed.map((item) => ({
           ...item,
           amount: parseCleanNumber(item.amount),
-        }))
-      : [];
-    return {
-      cleanDescription,
-      splitAccounts: splits,
-    };
-  } catch {
-    return { cleanDescription, splitAccounts: [] };
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to parse voucher split JSON:', e);
+    }
   }
+
+  // 2. Strip all split markers, brackets, and any trailing fragment lines
+  let cleanDescription = desc
+    .replace(/\[\[VOUCHER_SPLIT:.*?(\]\]|$)/gs, '')
+    .replace(/\[\[.*?\]\]/gs, '')
+    .trim();
+
+  // Strip any stray lone bracket lines or artifacts
+  cleanDescription = cleanDescription
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line !== '' && line !== '[' && line !== ']' && line !== '[[' && line !== ']]')
+    .join('\n')
+    .trim();
+
+  return {
+    cleanDescription,
+    splitAccounts,
+  };
 };
 
 export const writeVoucherSplits = (desc: string | null | undefined, splitAccounts: any[]): string => {
   const { cleanDescription } = readVoucherSplits(desc);
-  if (!splitAccounts || splitAccounts.length === 0) return cleanDescription;
-  const marker = `${VOUCHER_SPLIT_MARKER}${JSON.stringify(splitAccounts)}]]`;
+  const activeSplits = (splitAccounts || []).filter((s) => parseCleanNumber(s.amount) > 0);
+  if (activeSplits.length === 0) return cleanDescription;
+  const marker = `${VOUCHER_SPLIT_MARKER}${JSON.stringify(activeSplits)}]]`;
   return cleanDescription ? `${cleanDescription}\n${marker}` : marker;
 };
 
@@ -722,9 +732,22 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
 
     // Restore or initialize split allocations
     const { cleanDescription, splitAccounts: parsedSplits } = readVoucherSplits(voucher.description);
-    const splitSource = (voucher.splitAccounts && Array.isArray(voucher.splitAccounts) && voucher.splitAccounts.length > 0)
+    // `voucher.splitAccounts` now comes back derived from the posted journal lines,
+    // so it is authoritative. The description marker is the fallback for vouchers
+    // written before the split was booked into the ledger.
+    const rawSplitSource = (voucher.splitAccounts && Array.isArray(voucher.splitAccounts) && voucher.splitAccounts.length > 0)
       ? voucher.splitAccounts
       : parsedSplits;
+
+    // Vouchers saved before the fix carry the derived system row inside the payload.
+    // Drop it on read so it is recomputed rather than double-counted; its signature
+    // is the note and the name prefix this component itself wrote.
+    const splitSource = (rawSplitSource || []).filter(
+      (s: any) =>
+        s &&
+        s.note !== 'رصيد حساب النظام الأساسي' &&
+        !String(s.accountName || '').startsWith('النظام ('),
+    );
 
     if (splitSource && Array.isArray(splitSource) && splitSource.length > 0) {
       setEnableSplitAllocation(true);
@@ -1029,22 +1052,18 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
         note: s.note || '',
       }));
 
-    const activeSplits = hasCustomSplits
-      ? [
-          ...(systemAccountAmount > 0
-            ? [
-                {
-                  accountId: oppositeAccountId || '',
-                  accountName: `النظام (${oppositeAcc?.nameAr || 'الرصيد الأساسي'})`,
-                  amount: systemAccountAmount,
-                  currency,
-                  note: 'رصيد حساب النظام الأساسي',
-                },
-              ]
-            : []),
-          ...activeCustomSplits,
-        ]
-      : [];
+    /**
+     * Only the CUSTOM splits are persisted. The system account's share is derived
+     * (`amount - sum(custom)`) and must never be written down.
+     *
+     * It used to be written into the same array, and on reopening the voucher the
+     * whole array was loaded back into `splitAllocations` — so the system row was
+     * counted as if it were a custom split. That pushed `totalCustomSplitsAmount`
+     * up to the full amount, drove `systemAccountAmount` to zero, and made every
+     * subsequent save store a different set than the one before. That feedback loop
+     * is why editing a split appeared not to save.
+     */
+    const activeSplits = hasCustomSplits ? [...activeCustomSplits] : [];
 
     const splitDesc = activeSplits.length > 0
       ? activeSplits.map((s) => `${s.accountName}: ${Number(s.amount).toLocaleString('en-US')} ${currency}`).join(' | ')
@@ -1064,6 +1083,16 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       paymentMethodId: selectedPaymentMethodId,
       slipsCount: slipFiles.length,
       status: 'POSTED',
+      // Structured, because the backend now books one journal line per account.
+      // Only accountId and amount matter to the ledger; the remainder is derived
+      // there from the voucher amount, exactly as it is derived here.
+      splitAccounts: activeSplits
+        .filter((s) => s.accountId && Number(s.amount) > 0)
+        .map((s) => ({
+          accountId: s.accountId,
+          accountName: s.accountName,
+          amount: Number(s.amount),
+        })),
     };
 
     // Capture current values before resetting the form

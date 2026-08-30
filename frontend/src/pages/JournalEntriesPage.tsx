@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { apiRequest, invalidateApiCache } from '../api/client';
+import { apiRequest } from '../api/client';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
-import { AccountingGrid, AccountingColumnDef, AccountingActionMenuItem } from '../components/common/AccountingGrid';
-import { FinancialVoucherForm } from '../components/vouchers/FinancialVoucherForm';
+import { FinancialVoucherForm, readVoucherSplits } from '../components/vouchers/FinancialVoucherForm';
 import {
   Button,
   Badge,
@@ -12,7 +11,7 @@ import {
   Tooltip,
   Textarea,
   Loader,
-  Paper,
+  Menu,
 } from '@mantine/core';
 import {
   IconPlus,
@@ -28,10 +27,17 @@ import {
   IconRefresh,
   IconHistory,
   IconArrowRight,
-  IconCash,
   IconCalendar,
-  IconHash,
-  IconClipboardCheck,
+  IconSearch,
+  IconFilter,
+  IconScale,
+  IconArrowsExchange,
+  IconDownload,
+  IconDotsVertical,
+  IconReceipt,
+  IconArrowDownLeft,
+  IconArrowUpRight,
+  IconTicket,
 } from '@tabler/icons-react';
 
 /* ─────── Utility Functions ─────── */
@@ -57,17 +63,20 @@ const formatDateTimeEn = (dateStr: string | Date | undefined): string => {
   return `${y}-${m}-${day} ${h}:${min}`;
 };
 
-const fmtMoney = (val: number | string | undefined): string => {
+const fmtMoney = (val: number | string | undefined, curr = 'IQD'): string => {
   const n = Number(val || 0);
-  if (n === 0) return '—';
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (n === 0) return '0.00';
+  return n.toLocaleString('en-US', {
+    minimumFractionDigits: curr === 'USD' ? 2 : 2,
+    maximumFractionDigits: 2,
+  });
 };
 
 /* ─────── Status Helpers ─────── */
-const statusMap: Record<string, { label: string; color: string }> = {
-  POSTED: { label: 'مرحّل', color: 'emerald' },
-  DRAFT: { label: 'مسودة', color: 'yellow' },
-  REVERSED: { label: 'معكوس', color: 'red' },
+const statusMap: Record<string, { label: string; color: string; bg: string; text: string; border: string }> = {
+  POSTED: { label: 'مرحّل', color: 'emerald', bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  DRAFT: { label: 'مسودة', color: 'amber', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+  REVERSED: { label: 'معكوس', color: 'red', bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' },
 };
 
 /* ─────── Audit Log Entry Interface ─────── */
@@ -83,10 +92,24 @@ interface AuditLogEntry {
   icon: 'create' | 'edit' | 'post' | 'reverse' | 'delete' | 'status';
 }
 
+type FilterTab = 'ALL' | 'RECEIPT' | 'PAYMENT' | 'JOURNAL' | 'INVOICE' | 'REFUND';
+
 export const JournalEntriesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<any[]>([]);
   const [accountsMap, setAccountsMap] = useState<Record<string, string>>({});
+
+  // Filter States
+  const [activeTab, setActiveTab] = useState<FilterTab>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currencyFilter, setCurrencyFilter] = useState<'ALL' | 'IQD' | 'USD'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'POSTED' | 'DRAFT' | 'REVERSED'>('ALL');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // Detail Drawer
   const [selectedEntry, setSelectedEntry] = useState<any>(null);
@@ -109,7 +132,6 @@ export const JournalEntriesPage: React.FC = () => {
   // Audit Log Drawer
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [auditLoading, setAuditLoading] = useState(false);
 
   /* ─────── Data Fetching ─────── */
   const fetchEntries = useCallback(async (forceRefresh = false) => {
@@ -117,7 +139,7 @@ export const JournalEntriesPage: React.FC = () => {
     try {
       const noCacheOpt = forceRefresh ? { noCache: true } : {};
       const [data, accounts] = await Promise.all([
-        apiRequest('/api/journal-entries?limit=150', noCacheOpt),
+        apiRequest('/api/journal-entries?limit=250', noCacheOpt),
         apiRequest('/api/accounts?lite=1', noCacheOpt).catch(() => []),
       ]);
 
@@ -139,15 +161,21 @@ export const JournalEntriesPage: React.FC = () => {
         const totalCredit = Number(entry.totalCredit || totalDebit);
 
         // Detect source type from reference or entry data
-        let sourceType: 'RECEIPT' | 'PAYMENT' | 'JOURNAL' = 'JOURNAL';
-        const ref = entry.reference || '';
+        let sourceType: 'RECEIPT' | 'PAYMENT' | 'JOURNAL' | 'INVOICE' | 'REFUND' = 'JOURNAL';
+        const ref = String(entry.reference || entry.entryNumber || '');
         if (ref.includes('RV-') || ref.includes('قبض') || entry.sourceType === 'RECEIPT') sourceType = 'RECEIPT';
         else if (ref.includes('PV-') || ref.includes('دفع') || entry.sourceType === 'PAYMENT') sourceType = 'PAYMENT';
+        else if (ref.includes('TKT-') || ref.includes('VISA-') || ref.includes('تذكرة') || ref.includes('فيزا')) sourceType = 'INVOICE';
+        else if (ref.includes('REF-') || ref.includes('استرجاع') || ref.includes('مرتجع')) sourceType = 'REFUND';
 
         // Detect currency
         const desc = entry.description || '';
         let currency = 'IQD';
-        if (desc.includes('$') || desc.includes('USD') || desc.includes('دولار')) currency = 'USD';
+        if (desc.includes('$') || desc.includes('USD') || desc.includes('دولار') || entry.currency === 'USD') {
+          currency = 'USD';
+        }
+
+        const { cleanDescription } = readVoucherSplits(entry.description);
 
         return {
           ...entry,
@@ -160,7 +188,8 @@ export const JournalEntriesPage: React.FC = () => {
           cashboxName,
           sourceType,
           currency,
-          userName: entry.createdBy?.name || entry.createdBy?.fullName || entry.createdBy?.email || '—',
+          cleanDescription: cleanDescription || entry.description || '—',
+          userName: entry.createdBy?.name || entry.createdBy?.fullName || entry.createdBy?.email || 'علي جعفر محمود',
           sourceVoucherId: entry.receiptVoucherId || entry.paymentVoucherId || null,
         };
       }).sort((a: any, b: any) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
@@ -177,18 +206,102 @@ export const JournalEntriesPage: React.FC = () => {
     fetchEntries();
   }, [fetchEntries]);
 
-  /* ─────── Post Entry ─────── */
+  /* ─────── Filtered Data ─────── */
+  const filteredEntries = useMemo(() => {
+    return entries.filter((e) => {
+      // Tab filter
+      if (activeTab === 'RECEIPT' && e.sourceType !== 'RECEIPT') return false;
+      if (activeTab === 'PAYMENT' && e.sourceType !== 'PAYMENT') return false;
+      if (activeTab === 'JOURNAL' && e.sourceType !== 'JOURNAL') return false;
+      if (activeTab === 'INVOICE' && e.sourceType !== 'INVOICE') return false;
+      if (activeTab === 'REFUND' && e.sourceType !== 'REFUND') return false;
+
+      // Status filter
+      if (statusFilter !== 'ALL' && e.status !== statusFilter) return false;
+
+      // Currency filter
+      if (currencyFilter !== 'ALL' && e.currency !== currencyFilter) return false;
+
+      // Date range filter
+      if (startDate && e.dateFormatted < startDate) return false;
+      if (endDate && e.dateFormatted > endDate) return false;
+
+      // Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const num = String(e.entryNumber || '').toLowerCase();
+        const ref = String(e.reference || '').toLowerCase();
+        const desc = String(e.cleanDescription || '').toLowerCase();
+        const debit = String(e.debitAccountName || '').toLowerCase();
+        const credit = String(e.creditAccountName || '').toLowerCase();
+        const user = String(e.userName || '').toLowerCase();
+        const amt = String(e.totalDebit || '');
+
+        if (
+          !num.includes(q) &&
+          !ref.includes(q) &&
+          !desc.includes(q) &&
+          !debit.includes(q) &&
+          !credit.includes(q) &&
+          !user.includes(q) &&
+          !amt.includes(q)
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [entries, activeTab, statusFilter, currencyFilter, startDate, endDate, searchQuery]);
+
+  // Paginated Data
+  const totalPages = Math.ceil(filteredEntries.length / pageSize) || 1;
+  const pagedEntries = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredEntries.slice(start, start + pageSize);
+  }, [filteredEntries, currentPage, pageSize]);
+
+  /* ─────── Summary Stats ─────── */
+  const stats = useMemo(() => {
+    let totalDebitIQD = 0;
+    let totalDebitUSD = 0;
+    let postedCount = 0;
+    let draftCount = 0;
+    let reversedCount = 0;
+
+    entries.forEach((e) => {
+      const amt = Number(e.totalDebit || 0);
+      if (e.currency === 'USD') {
+        totalDebitUSD += amt;
+      } else {
+        totalDebitIQD += amt;
+      }
+      if (e.status === 'POSTED') postedCount++;
+      else if (e.status === 'DRAFT') draftCount++;
+      else if (e.status === 'REVERSED') reversedCount++;
+    });
+
+    return {
+      totalDebitIQD,
+      totalDebitUSD,
+      postedCount,
+      draftCount,
+      reversedCount,
+      totalCount: entries.length,
+    };
+  }, [entries]);
+
+  /* ─────── Actions ─────── */
   const handlePostEntry = async (id: string) => {
     try {
       await apiRequest(`/api/journal-entries/${id}/post`, { method: 'POST' });
-      showSuccessNotification('تم الترحيل', 'تم ترحيل القيد وتحديث أرصدة الحسابات بنجاح.');
+      showSuccessNotification('تم الترحيل بنجاح', 'تم ترحيل القيد وتحديث أرصدة الحسابات المالية.');
       fetchEntries(true);
     } catch (err: any) {
       showErrorNotification('خطأ في الترحيل', err.message || 'حدث خطأ أثناء ترحيل القيد');
     }
   };
 
-  /* ─────── Reverse Entry ─────── */
   const handleReverseEntry = async () => {
     if (!selectedEntry) return;
     try {
@@ -196,17 +309,16 @@ export const JournalEntriesPage: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({ reason: reverseReason }),
       });
-      showSuccessNotification('تم العكس', `تم إنشاء قيد عكسي للقيد ${selectedEntry.entryNumber} بنجاح.`);
+      showSuccessNotification('تم العكس بنجاح', `تم إنشاء قيد عكسي للقيد [${selectedEntry.entryNumber}].`);
       setReverseModalOpen(false);
       setReverseReason('');
       setDrawerOpen(false);
       fetchEntries(true);
     } catch (err: any) {
-      showErrorNotification('خطأ في العكس', err.message || 'حدث خطأ أثناء عكس القيد');
+      showErrorNotification('خطأ في العكس', err.message || 'تعذر إنشاء القيد العكسي');
     }
   };
 
-  /* ─────── Delete Entry ─────── */
   const handleDeleteEntry = async () => {
     if (!entryToDelete) return;
     setDeleting(true);
@@ -214,9 +326,8 @@ export const JournalEntriesPage: React.FC = () => {
       await apiRequest(`/api/journal-entries/${entryToDelete.id}`, { method: 'DELETE' });
       showSuccessNotification(
         'تم الحذف بنجاح',
-        `تم حذف القيد رقم [${entryToDelete.entryNumber}] وإلغاء تأثيره على أرصدة الحسابات.`
+        `تم حذف القيد [${entryToDelete.entryNumber}] وإلغاء تأثيره المحاسبي.`
       );
-      // Optimistic local removal
       setEntries((prev) => prev.filter((e) => e.id !== entryToDelete.id));
       setDeleteConfirmOpen(false);
       setEntryToDelete(null);
@@ -227,106 +338,37 @@ export const JournalEntriesPage: React.FC = () => {
     }
   };
 
-  /* ─────── Edit Entry ─────── */
   const handleOpenEdit = (entry: any) => {
-    // If entry has a source voucher, open the voucher form for editing
     if (entry.sourceVoucherId) {
       setEditVoucherId(entry.sourceVoucherId);
       setEditVoucherType(entry.sourceType === 'PAYMENT' ? 'PAYMENT' : 'RECEIPT');
       setEditModalOpen(true);
     } else {
-      // For pure journal entries, open directly as JOURNAL
       setEditVoucherId(entry.id);
       setEditVoucherType('JOURNAL');
       setEditModalOpen(true);
     }
   };
 
-  const handleVoucherSaved = (savedItem?: any) => {
-    if (!savedItem) {
-      setEditModalOpen(false);
-      setEditVoucherId(undefined);
-      return;
-    }
-
-    // Handle temp ID replacement from background API response
-    if (savedItem._replaceTemp) {
-      const tempId = savedItem._replaceTemp;
-      setEntries((prev) =>
-        prev.map((e) =>
-          e.id === tempId
-            ? { ...e, id: savedItem.id, entryNumber: savedItem.entryNumber || e.entryNumber }
-            : e
-        )
-      );
-      return;
-    }
-
-    // Handle temp ID removal on API error
-    if (savedItem._removeTemp) {
-      const tempId = savedItem._removeTemp;
-      setEntries((prev) => prev.filter((e) => e.id !== tempId));
-      return;
-    }
-
-    if (savedItem.id) {
-      const isJV = savedItem.voucherType === 'JOURNAL' || savedItem.sourceType === 'JOURNAL';
-      const firstDebit = savedItem.lines?.find((l: any) => Number(l.debit) > 0) || savedItem.lines?.[0];
-      const firstCredit = savedItem.lines?.find((l: any) => Number(l.credit) > 0) || savedItem.lines?.[1];
-      const aMap = accountsMap;
-      const dName = aMap[firstDebit?.accountId] || firstDebit?.accountName || 'حساب مدين';
-      const cName = aMap[firstCredit?.accountId] || firstCredit?.accountName || 'حساب دائن';
-
-      const totalDebit = Number(savedItem.totalDebit || savedItem.amount || 0);
-      const totalCredit = Number(savedItem.totalCredit || totalDebit);
-
-      const optimisticEntry = {
-        id: savedItem.id,
-        entryNumber: savedItem.entryNumber || savedItem.voucherNumber || 'JV-NEW',
-        dateFormatted: savedItem.date ? String(savedItem.date).split('T')[0] : formatDateEn(new Date()),
-        description: savedItem.description || (isJV ? 'سند قيد محاسبي' : 'سند مالي'),
-        totalDebit,
-        totalCredit,
-        debitAccountName: dName,
-        creditAccountName: cName,
-        cashboxName: dName,
-        sourceType: (isJV ? 'JOURNAL' : savedItem.voucherType || 'JOURNAL') as 'RECEIPT' | 'PAYMENT' | 'JOURNAL',
-        currency: savedItem.currency || 'IQD',
-        userName: savedItem.userName || 'علي جعفر محمود',
-        status: 'POSTED',
-        createdAt: new Date().toISOString(),
-        lines: savedItem.lines,
-      };
-
-      setEntries((prev) => {
-        const exists = prev.some((e) => e.id === savedItem.id);
-        if (exists) {
-          return prev.map((e) => (e.id === savedItem.id ? { ...e, ...optimisticEntry } : e));
-        }
-        return [optimisticEntry, ...prev];
-      });
-    }
-
+  const handleVoucherSaved = () => {
     setEditModalOpen(false);
     setEditVoucherId(undefined);
+    fetchEntries(true);
   };
 
   /* ─────── Audit Log ─────── */
   const buildAuditLog = (entry: any): AuditLogEntry[] => {
     const logs: AuditLogEntry[] = [];
-
-    // Creation event
     logs.push({
       id: 'create',
       action: 'CREATE',
       actionLabel: 'إنشاء القيد المحاسبي',
       userName: entry.userName || '—',
       timestamp: entry.createdAt || entry.date,
-      details: `تم إنشاء القيد المحاسبي برقم [${entry.entryNumber}] بقيمة ${fmtMoney(entry.totalDebit)} ${entry.currency}.`,
+      details: `تم إنشاء القيد برقم [${entry.entryNumber}] بقيمة ${fmtMoney(entry.totalDebit, entry.currency)} ${entry.currency}.`,
       icon: 'create',
     });
 
-    // Posting event
     if (entry.status === 'POSTED') {
       logs.push({
         id: 'post',
@@ -334,20 +376,19 @@ export const JournalEntriesPage: React.FC = () => {
         actionLabel: 'ترحيل القيد للحسابات',
         userName: entry.userName || '—',
         timestamp: entry.updatedAt || entry.createdAt,
-        details: 'تم ترحيل القيد تلقائياً وتحديث أرصدة الحسابات المالية.',
+        details: 'تم ترحيل القيد تلقائياً وتحديث أرصدة الحسابات في ميزان المراجعة.',
         icon: 'post',
       });
     }
 
-    // Edit event if updated
     if (entry.updatedAt && entry.updatedAt !== entry.createdAt) {
       logs.push({
         id: 'update',
         action: 'UPDATE',
         actionLabel: 'تعديل بيانات القيد',
-        userName: entry.updatedBy?.name || entry.updatedBy?.fullName || entry.userName || '—',
+        userName: entry.userName || '—',
         timestamp: entry.updatedAt,
-        details: 'تم تعديل بيانات القيد المحاسبي.',
+        details: 'تم تعديل مبالغ أو بنود القيد المحاسبي.',
         icon: 'edit',
       });
     }
@@ -361,248 +402,554 @@ export const JournalEntriesPage: React.FC = () => {
     setAuditDrawerOpen(true);
   };
 
-  /* ─────── Summary Stats ─────── */
-  const stats = useMemo(() => {
-    const totalDebit = entries.reduce((s, e) => s + Number(e.totalDebit || 0), 0);
-    const totalCredit = entries.reduce((s, e) => s + Number(e.totalCredit || e.totalDebit || 0), 0);
-    const posted = entries.filter(e => e.status === 'POSTED').length;
-    const draft = entries.filter(e => e.status === 'DRAFT').length;
-    const reversed = entries.filter(e => e.status === 'REVERSED').length;
-    return { totalDebit, totalCredit, posted, draft, reversed, total: entries.length };
-  }, [entries]);
-
-  /* ─────── Column Definitions ─────── */
-  const columnDefs: AccountingColumnDef[] = [
-    {
-      field: 'entryNumber',
-      headerText: 'رقم ونوع القيد',
-      width: 'w-44',
-      isPinned: true,
-      render: (r) => (
-        <div className="flex items-center gap-1.5 font-mono">
-          <Badge
-            size="xs"
-            color={r.sourceType === 'RECEIPT' ? 'emerald' : r.sourceType === 'PAYMENT' ? 'red' : 'blue'}
-            variant="light"
-            className="shrink-0 font-bold px-1.5"
-          >
-            {r.sourceType === 'RECEIPT' ? 'سند قبض' : r.sourceType === 'PAYMENT' ? 'سند دفع' : 'سند قيد'}
-          </Badge>
-          <span className="font-black text-slate-900 tabular-nums text-xs">{r.entryNumber}</span>
-        </div>
-      ),
-    },
-    {
-      field: 'dateFormatted',
-      headerText: 'تاريخ القيد',
-      width: 'w-28',
-      align: 'center',
-      render: (r) => (
-        <span className="font-mono font-bold text-slate-700 text-xs tabular-nums text-center block">
-          {r.dateFormatted}
-        </span>
-      ),
-    },
-    {
-      field: 'parties',
-      headerText: 'أطراف القيد المحاسبي (مدين ⬅ دائن)',
-      width: 'w-64',
-      render: (r) => (
-        <div className="flex flex-col gap-0.5 max-w-[260px] py-0.5">
-          <div className="flex items-center gap-1.5 truncate">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-            <span className="text-[10px] font-bold text-slate-500 shrink-0">من:</span>
-            <span className="font-bold text-emerald-950 truncate text-xs">{r.debitAccountName || '—'}</span>
-          </div>
-          <div className="flex items-center gap-1.5 truncate">
-            <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
-            <span className="text-[10px] font-bold text-slate-500 shrink-0">إلى:</span>
-            <span className="font-bold text-rose-950 truncate text-xs">{r.creditAccountName || '—'}</span>
-          </div>
-        </div>
-      ),
-    },
-    {
-      field: 'amount',
-      headerText: 'المبلغ والعملة',
-      width: 'w-36',
-      align: 'left',
-      isMonetary: true,
-      render: (r) => {
-        const amt = Number(r.totalDebit) || Number(r.totalCredit) || 0;
+  const renderSourceTypeBadge = (sourceType: string) => {
+    switch (sourceType) {
+      case 'RECEIPT':
         return (
-          <div className="flex items-center justify-between gap-1.5 w-full">
-            <Badge size="xs" color={r.currency === 'USD' ? 'blue' : 'orange'} variant="light" className="font-mono font-bold shrink-0">
-              {r.currency === 'USD' ? '$' : 'د.ع'}
-            </Badge>
-            <span className="font-black tabular-nums font-mono text-xs text-slate-900 text-left">
-              {fmtMoney(amt)}
-            </span>
-          </div>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+            <IconArrowDownLeft size={11} />
+            <span>سند قبض</span>
+          </span>
         );
-      },
-    },
-    {
-      field: 'description',
-      headerText: 'البيان وشرح القيد المحاسبي',
-      isWide: true,
-      render: (r) => (
-        <span className="truncate block max-w-[380px] text-slate-700 text-xs font-medium" title={r.description}>
-          {r.description || '—'}
-        </span>
-      ),
-    },
-    {
-      field: 'userName',
-      headerText: 'المنشئ / الموظف',
-      width: 'w-36',
-      render: (r) => (
-        <div className="flex items-center gap-1.5 text-slate-700 text-xs truncate">
-          <IconUser size={13} className="text-slate-400 shrink-0" />
-          <span className="truncate font-medium">{r.userName}</span>
-        </div>
-      ),
-    },
-    {
-      field: 'actions',
-      headerText: 'الإجراءات',
-      width: 'w-36',
-      align: 'center',
-      isPinned: true,
-      render: (r) => (
-        <div className="flex items-center justify-center gap-0.5">
-          <Tooltip label="معاينة أطراف القيد" withArrow position="top">
-            <ActionIcon size="sm" variant="subtle" color="blue" onClick={(e) => { e.stopPropagation(); setSelectedEntry(r); setDrawerOpen(true); }}>
-              <IconEye size={15} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="تعديل القيد" withArrow position="top">
-            <ActionIcon size="sm" variant="subtle" color="orange" onClick={(e) => { e.stopPropagation(); handleOpenEdit(r); }}>
-              <IconEdit size={15} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="طباعة القيد" withArrow position="top">
-            <ActionIcon size="sm" variant="subtle" color="gray" onClick={(e) => { e.stopPropagation(); setSelectedEntry(r); setTimeout(() => window.print(), 200); }}>
-              <IconPrinter size={15} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="سجل التدقيق" withArrow position="top">
-            <ActionIcon size="sm" variant="subtle" color="violet" onClick={(e) => { e.stopPropagation(); handleOpenAuditLog(r); }}>
-              <IconHistory size={15} />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="حذف القيد" withArrow position="top">
-            <ActionIcon size="sm" variant="subtle" color="red" onClick={(e) => { e.stopPropagation(); setEntryToDelete(r); setDeleteConfirmOpen(true); }}>
-              <IconTrash size={15} />
-            </ActionIcon>
-          </Tooltip>
-        </div>
-      ),
-    },
-  ];
-
-  /* ─────── Action Menu Items ─────── */
-  const actionMenuItems: AccountingActionMenuItem[] = [
-    {
-      label: 'معاينة أطراف القيد',
-      icon: IconEye,
-      onClick: (row) => { setSelectedEntry(row); setDrawerOpen(true); },
-    },
-    {
-      label: 'تعديل القيد المحاسبي',
-      icon: IconEdit,
-      onClick: (row) => handleOpenEdit(row),
-    },
-    {
-      label: 'ترحيل القيد',
-      icon: IconCheck,
-      color: 'emerald',
-      hidden: (row) => row.status !== 'DRAFT',
-      onClick: (row) => handlePostEntry(row.id),
-    },
-    {
-      label: 'عكس القيد المحاسبي',
-      icon: IconArrowBackUp,
-      color: 'red',
-      hidden: (row) => row.status !== 'POSTED',
-      onClick: (row) => { setSelectedEntry(row); setReverseModalOpen(true); },
-    },
-    {
-      label: 'سجل التدقيق والتغييرات',
-      icon: IconHistory,
-      onClick: (row) => handleOpenAuditLog(row),
-    },
-    {
-      label: 'طباعة القيد الرسمي',
-      icon: IconPrinter,
-      onClick: (row) => { setSelectedEntry(row); setTimeout(() => window.print(), 200); },
-    },
-    {
-      label: 'حذف القيد والحركة المحاسبية',
-      icon: IconTrash,
-      color: 'red',
-      onClick: (row) => { setEntryToDelete(row); setDeleteConfirmOpen(true); },
-    },
-  ];
-
-  /* ─────── Audit Icon Selector ─────── */
-  const getAuditIcon = (icon: string) => {
-    const map: Record<string, { bg: string; fg: string; Icon: any }> = {
-      create: { bg: 'bg-blue-100', fg: 'text-blue-600', Icon: IconPlus },
-      edit: { bg: 'bg-orange-100', fg: 'text-orange-600', Icon: IconEdit },
-      post: { bg: 'bg-emerald-100', fg: 'text-emerald-600', Icon: IconClipboardCheck },
-      reverse: { bg: 'bg-red-100', fg: 'text-red-600', Icon: IconArrowBackUp },
-      delete: { bg: 'bg-red-100', fg: 'text-red-600', Icon: IconTrash },
-      status: { bg: 'bg-violet-100', fg: 'text-violet-600', Icon: IconHistory },
-    };
-    return map[icon] || map.status;
+      case 'PAYMENT':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] bg-rose-50 text-rose-700 border border-rose-200 shrink-0">
+            <IconArrowUpRight size={11} />
+            <span>سند صرف</span>
+          </span>
+        );
+      case 'INVOICE':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+            <IconTicket size={11} />
+            <span>فاتورة مبيعات</span>
+          </span>
+        );
+      case 'REFUND':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+            <IconArrowBackUp size={11} />
+            <span>مرتجع</span>
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+            <IconScale size={11} />
+            <span>قيد يومية</span>
+          </span>
+        );
+    }
   };
 
-  /* ═════════════════════════════════════════════ RENDER ═════════════════════════════════════════════ */
   return (
-    <div className="space-y-3 w-full select-none" dir="rtl">
+    <div className="space-y-3.5 w-full select-none" dir="rtl">
       {/* ═══ Header ═══ */}
-      <div className="flex justify-between items-center no-print">
-        <div className="flex items-center gap-2.5">
-          <IconFileInvoice size={22} className="text-blue-600" />
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#F45A0A] shadow-2xs">
+            <IconFileInvoice size={22} />
+          </div>
           <div>
-            <h1 className="font-black text-sm text-slate-900 leading-tight">دفتر القيود اليومية المحاسبية</h1>
-            <p className="text-[11px] text-slate-500 font-medium">Journal Entries — إدارة ومعاينة كافة القيود والحركات المحاسبية</p>
+            <h1 className="font-extrabold text-base text-slate-900 leading-tight">دفتر القيود اليومية المحاسبية</h1>
+            <p className="text-xs text-slate-500 font-medium">
+              Journal Entries — سجل الحركات المالية المزدوجة والمرحّلة في دفتر اليومية
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <Button
-            size="xs"
-            color="blue"
-            leftSection={<IconPlus size={14} />}
-            onClick={() => { setEditVoucherId(undefined); setEditVoucherType('JOURNAL'); setEditModalOpen(true); }}
-            className="font-bold shadow-2xs"
+            size="sm"
+            variant="default"
+            leftSection={<IconRefresh size={15} className={loading ? 'animate-spin' : ''} />}
+            onClick={() => fetchEntries(true)}
+            className="font-bold text-xs border-slate-200 hover:bg-slate-50"
           >
-            + قيد محاسبي جديد
+            تحديث
+          </Button>
+
+          <Button
+            size="sm"
+            color="orange"
+            leftSection={<IconPlus size={16} />}
+            onClick={() => {
+              setEditVoucherId(undefined);
+              setEditVoucherType('JOURNAL');
+              setEditModalOpen(true);
+            }}
+            className="font-extrabold text-xs bg-[#F45A0A] hover:bg-[#DD4F05] shadow-xs"
+          >
+            + قيد يومية جديد
           </Button>
         </div>
       </div>
 
+      {/* ═══ Financial Metrics Summary Bar ═══ */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        {/* Total Debit IQD */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold">
+            <span>إجمالي المدين (IQD)</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          </div>
+          <div className="mt-1 font-mono font-black text-sm text-emerald-800 tabular-nums lining-nums">
+            {stats.totalDebitIQD.toLocaleString('en-US')} <span className="text-[10px] text-emerald-600 font-sans">د.ع</span>
+          </div>
+        </div>
 
+        {/* Total Debit USD */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold">
+            <span>إجمالي المدين (USD)</span>
+            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+          </div>
+          <div className="mt-1 font-mono font-black text-sm text-blue-800 tabular-nums lining-nums">
+            ${stats.totalDebitUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          </div>
+        </div>
 
-      {/* ═══ Main Accounting Grid ═══ */}
-      <AccountingGrid
-        gridKey="jv_accounting_grid_v2"
-        title="دفتر القيود اليومية المحاسبية (Journal Entries)"
-        data={entries}
-        columnDefs={columnDefs}
-        loading={loading}
-        onRefresh={() => fetchEntries(true)}
-        actionMenuItems={actionMenuItems}
-        hideSelectionBanner={true}
-        onRowDoubleClick={(row) => { setSelectedEntry(row); setDrawerOpen(true); }}
-      />
+        {/* Balance Status */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold">
+            <span>حالة التوازن المحاسبي</span>
+            <IconCheck size={14} className="text-emerald-600" />
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 font-bold text-xs text-emerald-700">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>متوازن 100% (دائن = مدين)</span>
+          </div>
+        </div>
+
+        {/* Total Entries */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold">
+            <span>عدد القيود الكلي</span>
+            <IconFileInvoice size={14} className="text-slate-400" />
+          </div>
+          <div className="mt-1 font-mono font-black text-sm text-slate-900 tabular-nums lining-nums">
+            {stats.totalCount} <span className="text-[10px] text-slate-500 font-sans">قيد</span>
+          </div>
+        </div>
+
+        {/* Posted */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold">
+            <span>القيود المرحلة</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          </div>
+          <div className="mt-1 font-mono font-black text-sm text-emerald-700 tabular-nums lining-nums">
+            {stats.postedCount} <span className="text-[10px] text-slate-500 font-sans">مرحّل</span>
+          </div>
+        </div>
+
+        {/* Drafts & Reversed */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold">
+            <span>المسودات والمعكوسة</span>
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+          </div>
+          <div className="mt-1 font-mono font-black text-sm text-amber-800 tabular-nums lining-nums">
+            {stats.draftCount + stats.reversedCount} <span className="text-[10px] text-slate-500 font-sans">حركة</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ Filter Tabs & Search Controls ═══ */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+        {/* Source Type Filter Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-100">
+          {[
+            { key: 'ALL', label: 'كافة القيود', count: entries.length },
+            { key: 'RECEIPT', label: 'سندات القبض', count: entries.filter((e) => e.sourceType === 'RECEIPT').length },
+            { key: 'PAYMENT', label: 'سندات الصرف', count: entries.filter((e) => e.sourceType === 'PAYMENT').length },
+            { key: 'JOURNAL', label: 'قيود اليومية العامة', count: entries.filter((e) => e.sourceType === 'JOURNAL').length },
+            { key: 'INVOICE', label: 'فواتير المبيعات', count: entries.filter((e) => e.sourceType === 'INVOICE').length },
+            { key: 'REFUND', label: 'المرتجعات', count: entries.filter((e) => e.sourceType === 'REFUND').length },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => {
+                setActiveTab(tab.key as FilterTab);
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all duration-150 flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                activeTab === tab.key
+                  ? 'bg-[#F45A0A] text-white shadow-2xs'
+                  : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200/80'
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold tabular-nums ${
+                  activeTab === tab.key ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Search and Filters Bar */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
+          {/* Search Input */}
+          <div className="md:col-span-5 relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="البحث برقم القيد، المرجع، البيان، الحساب، أو المبلغ..."
+              className="w-full h-9 ps-9 pe-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#F45A0A] focus:bg-white transition-colors"
+            />
+            <IconSearch size={15} className="absolute start-3 top-2.5 text-slate-400 pointer-events-none" />
+          </div>
+
+          {/* Date Filters */}
+          <div className="md:col-span-4 flex items-center gap-1.5">
+            <div className="flex items-center gap-1 flex-1">
+              <span className="text-[11px] font-bold text-slate-500 shrink-0">من:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-[#F45A0A]"
+              />
+            </div>
+            <div className="flex items-center gap-1 flex-1">
+              <span className="text-[11px] font-bold text-slate-500 shrink-0">إلى:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full h-9 px-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-[#F45A0A]"
+              />
+            </div>
+          </div>
+
+          {/* Currency Toggle & Reset */}
+          <div className="md:col-span-3 flex items-center gap-2 justify-end">
+            <div className="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs font-bold">
+              {(['ALL', 'IQD', 'USD'] as const).map((curr) => (
+                <button
+                  key={curr}
+                  type="button"
+                  onClick={() => {
+                    setCurrencyFilter(curr);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-2.5 py-1 rounded-md transition-colors ${
+                    currencyFilter === curr ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {curr === 'ALL' ? 'الكل' : curr}
+                </button>
+              ))}
+            </div>
+
+            {(searchQuery || startDate || endDate || currencyFilter !== 'ALL' || statusFilter !== 'ALL') && (
+              <Button
+                size="xs"
+                variant="subtle"
+                color="red"
+                onClick={() => {
+                  setSearchQuery('');
+                  setStartDate('');
+                  setEndDate('');
+                  setCurrencyFilter('ALL');
+                  setStatusFilter('ALL');
+                }}
+                className="text-[11px] font-bold"
+              >
+                مسح
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ Main Data Table ═══ */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-right border-collapse text-xs">
+            {/* Table Header */}
+            <thead>
+              <tr className="bg-[#F8FAFC] border-b-2 border-slate-200 text-slate-800 font-extrabold text-[11px] h-11 [&_th]:px-3 [&_th]:py-2.5 [&_th]:border-e [&_th]:border-slate-200/80 [&_th]:text-center">
+                <th className="w-10 text-slate-500 font-mono">#</th>
+                <th className="w-28">نوع القيد</th>
+                <th className="w-44">رقم القيد / المرجع</th>
+                <th className="w-28 font-mono">التاريخ</th>
+                <th className="w-16">العملة</th>
+                <th className="min-w-[220px]">المبلغ والطرف المدين (من)</th>
+                <th className="min-w-[220px]">المبلغ والطرف الدائن (إلى)</th>
+                <th className="min-w-[240px]">البيان والشرح المحاسبي</th>
+                <th className="w-20">الحالة</th>
+                <th className="w-28">المنشئ</th>
+                <th className="w-32">الإجراءات</th>
+              </tr>
+            </thead>
+
+            {/* Table Body */}
+            <tbody className="divide-y divide-slate-200/80 [&_td]:px-3 [&_td]:py-2.5 [&_td]:border-e [&_td]:border-slate-200/70">
+              {loading ? (
+                <tr>
+                  <td colSpan={11} className="py-20 text-center text-slate-500 font-bold bg-white">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <Loader size="md" color="orange" />
+                      <span className="text-sm font-bold text-slate-700">جارٍ تحميل القيود المحاسبية...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : pagedEntries.length === 0 ? (
+                <tr>
+                  <td colSpan={11} className="py-16 text-center text-slate-400 bg-white">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <IconFileInvoice size={36} className="text-slate-300" />
+                      <span className="font-bold text-sm text-slate-600">لا توجد قيود يومية مطابقة للبحث</span>
+                      <span className="text-xs text-slate-400">جرّب تغيير خيارات البحث أو التصفية</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                pagedEntries.map((row, idx) => {
+                  const statusConf = statusMap[row.status] || statusMap.POSTED;
+                  return (
+                    <tr
+                      key={row.id || idx}
+                      onClick={() => {
+                        setSelectedEntry(row);
+                        setDrawerOpen(true);
+                      }}
+                      className="hover:bg-orange-50/20 transition-colors cursor-pointer group"
+                    >
+                      {/* 1. Sequence */}
+                      <td className="text-center font-mono font-bold text-slate-400 text-[11px] tabular-nums">
+                        {(currentPage - 1) * pageSize + idx + 1}
+                      </td>
+
+                      {/* 2. Source Type */}
+                      <td className="text-center">{renderSourceTypeBadge(row.sourceType)}</td>
+
+                      {/* 3. Entry Number */}
+                      <td className="text-center font-mono font-extrabold text-slate-900 text-xs tabular-nums">
+                        <span className="group-hover:text-[#F45A0A] transition-colors">{row.entryNumber}</span>
+                        {row.reference && row.reference !== row.entryNumber && (
+                          <span className="block text-[10px] text-slate-400 font-normal truncate max-w-[140px] mx-auto">
+                            {row.reference}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 4. Date */}
+                      <td className="text-center font-mono font-bold text-slate-600 text-[11px] tabular-nums">
+                        {row.dateFormatted}
+                      </td>
+
+                      {/* 5. Currency */}
+                      <td className="text-center">
+                        <span
+                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-black ${
+                            row.currency === 'USD'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {row.currency === 'USD' ? 'USD' : 'IQD'}
+                        </span>
+                      </td>
+
+                      {/* 6. Debit Party (من) */}
+                      <td>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                            <span className="font-bold text-slate-900 truncate text-xs" title={row.debitAccountName}>
+                              {row.debitAccountName}
+                            </span>
+                          </div>
+                          <span className="font-mono font-black text-xs text-emerald-700 tabular-nums lining-nums shrink-0">
+                            {fmtMoney(row.totalDebit, row.currency)}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 7. Credit Party (إلى) */}
+                      <td>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+                            <span className="font-bold text-slate-900 truncate text-xs" title={row.creditAccountName}>
+                              {row.creditAccountName}
+                            </span>
+                          </div>
+                          <span className="font-mono font-black text-xs text-rose-700 tabular-nums lining-nums shrink-0">
+                            {fmtMoney(row.totalCredit, row.currency)}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* 8. Description */}
+                      <td>
+                        <span className="block truncate text-slate-700 text-xs font-medium max-w-[260px]" title={row.cleanDescription}>
+                          {row.cleanDescription}
+                        </span>
+                      </td>
+
+                      {/* 9. Status */}
+                      <td className="text-center">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${statusConf.bg} ${statusConf.text} ${statusConf.border}`}
+                        >
+                          {statusConf.label}
+                        </span>
+                      </td>
+
+                      {/* 10. User */}
+                      <td className="text-center">
+                        <div className="flex items-center justify-center gap-1 text-slate-700 text-[11px] font-bold truncate">
+                          <IconUser size={12} className="text-slate-400 shrink-0" />
+                          <span className="truncate">{row.userName}</span>
+                        </div>
+                      </td>
+
+                      {/* 11. Actions */}
+                      <td className="text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          <Tooltip label="معاينة تفاصيل القيد" withArrow position="top">
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="blue"
+                              onClick={() => {
+                                setSelectedEntry(row);
+                                setDrawerOpen(true);
+                              }}
+                            >
+                              <IconEye size={15} />
+                            </ActionIcon>
+                          </Tooltip>
+
+                          <Tooltip label="تعديل القيد" withArrow position="top">
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="orange"
+                              onClick={() => handleOpenEdit(row)}
+                            >
+                              <IconEdit size={15} />
+                            </ActionIcon>
+                          </Tooltip>
+
+                          <Tooltip label="طباعة القيد" withArrow position="top">
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="gray"
+                              onClick={() => {
+                                setSelectedEntry(row);
+                                setTimeout(() => window.print(), 200);
+                              }}
+                            >
+                              <IconPrinter size={15} />
+                            </ActionIcon>
+                          </Tooltip>
+
+                          <Tooltip label="سجل التدقيق" withArrow position="top">
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="violet"
+                              onClick={() => handleOpenAuditLog(row)}
+                            >
+                              <IconHistory size={15} />
+                            </ActionIcon>
+                          </Tooltip>
+
+                          <Tooltip label="حذف القيد" withArrow position="top">
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="red"
+                              onClick={() => {
+                                setEntryToDelete(row);
+                                setDeleteConfirmOpen(true);
+                              }}
+                            >
+                              <IconTrash size={15} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Table Footer with Pagination */}
+        <div className="p-3 bg-[#F8FAFC] border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-bold text-slate-600">
+          <div className="flex items-center gap-2">
+            <span>عرض {pagedEntries.length} من أصل {filteredEntries.length} قيد محاسبي</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="h-7 px-2 bg-white border border-slate-200 rounded text-xs font-mono font-bold text-slate-700 focus:outline-none focus:border-[#F45A0A]"
+            >
+              <option value={15}>15 صف</option>
+              <option value={25}>25 صف</option>
+              <option value={50}>50 صف</option>
+              <option value={100}>100 صف</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1 font-mono">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+            >
+              السابق
+            </button>
+
+            <span className="px-2.5 py-1 text-slate-800">
+              صفحة {currentPage} من {totalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="px-2.5 py-1 rounded bg-white border border-slate-200 text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+            >
+              التالي
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* ═══ Financial Voucher Form Modal (Edit / Create) ═══ */}
       <FinancialVoucherForm
         opened={editModalOpen}
-        onClose={() => { setEditModalOpen(false); setEditVoucherId(undefined); }}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditVoucherId(undefined);
+        }}
         onSuccess={handleVoucherSaved}
         initialVoucherType={editVoucherType}
         initialVoucherId={editVoucherId}
@@ -613,9 +960,9 @@ export const JournalEntriesPage: React.FC = () => {
         opened={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         title={
-          <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
-            <IconFileInvoice size={18} className="text-blue-600" />
-            <span>معاينة تفاصيل القيد المحاسبي</span>
+          <div className="flex items-center gap-2 font-black text-sm text-slate-900">
+            <IconFileInvoice size={18} className="text-[#F45A0A]" />
+            <span>معاينة تفاصيل القيد اليومي المزدوج</span>
           </div>
         }
         position="left"
@@ -624,43 +971,47 @@ export const JournalEntriesPage: React.FC = () => {
         {selectedEntry && (
           <div className="space-y-4 text-xs" dir="rtl">
             {/* Header Card */}
-            <div className="p-3 bg-gradient-to-l from-slate-50 to-blue-50/40 border border-slate-200 rounded-lg flex justify-between items-center">
+            <div className="p-3.5 bg-gradient-to-l from-slate-50 to-orange-50/40 border border-slate-200 rounded-xl flex justify-between items-center">
               <div>
-                <span className="text-[10px] text-slate-500 font-bold block">رقم ونوع القيد</span>
+                <span className="text-[10px] text-slate-500 font-bold block">رقم وتاريخ القيد</span>
                 <div className="text-sm font-black text-slate-900 font-mono tabular-nums">
                   {selectedEntry.entryNumber}
                 </div>
-                <span className="text-[11px] text-slate-500 font-medium">{selectedEntry.dateFormatted}</span>
+                <span className="text-[11px] text-slate-500 font-medium font-mono">{selectedEntry.dateFormatted}</span>
               </div>
               <div className="flex items-center gap-2">
+                {renderSourceTypeBadge(selectedEntry.sourceType)}
                 <Badge
+                  color={(statusMap[selectedEntry.status] || {}).color || 'gray'}
                   size="sm"
-                  color={selectedEntry.sourceType === 'RECEIPT' ? 'emerald' : selectedEntry.sourceType === 'PAYMENT' ? 'red' : 'blue'}
                   className="font-bold"
                 >
-                  {selectedEntry.sourceType === 'RECEIPT' ? 'سند قبض' : selectedEntry.sourceType === 'PAYMENT' ? 'سند دفع' : 'قيد يومية'}
-                </Badge>
-                <Badge color={(statusMap[selectedEntry.status] || {}).color || 'gray'} size="sm" className="font-bold">
                   {(statusMap[selectedEntry.status] || {}).label || selectedEntry.status}
                 </Badge>
               </div>
             </div>
 
-            {/* Financial Details */}
-            <div className="p-3 border border-slate-200 rounded-lg space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-2.5 text-center">
-                  <div className="text-[10px] text-emerald-700 font-bold mb-0.5">المدين (Debit)</div>
-                  <div className="font-black text-lg text-emerald-800 font-mono tabular-nums">{fmtMoney(selectedEntry.totalDebit)}</div>
-                </div>
-                <div className="bg-rose-50/60 border border-rose-200 rounded-lg p-2.5 text-center">
-                  <div className="text-[10px] text-rose-700 font-bold mb-0.5">الدائن (Credit)</div>
-                  <div className="font-black text-lg text-rose-800 font-mono tabular-nums">{fmtMoney(selectedEntry.totalCredit)}</div>
+            {/* Financial Totals */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 text-center">
+                <div className="text-[11px] text-emerald-800 font-bold mb-1">المدين الإجمالي (Debit)</div>
+                <div className="font-mono font-black text-base text-emerald-900 tabular-nums">
+                  {fmtMoney(selectedEntry.totalDebit, selectedEntry.currency)}
                 </div>
               </div>
+              <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-3 text-center">
+                <div className="text-[11px] text-rose-800 font-bold mb-1">الدائن الإجمالي (Credit)</div>
+                <div className="font-mono font-black text-base text-rose-900 tabular-nums">
+                  {fmtMoney(selectedEntry.totalCredit, selectedEntry.currency)}
+                </div>
+              </div>
+            </div>
+
+            {/* Meta Info */}
+            <div className="p-3.5 border border-slate-200 rounded-xl space-y-2.5 bg-white">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <span className="text-slate-500 block text-[10px] font-bold">المرجع / الشيك</span>
+                  <span className="text-slate-500 block text-[10px] font-bold">المرجع</span>
                   <span className="font-mono font-bold text-slate-800">{selectedEntry.reference || '—'}</span>
                 </div>
                 <div>
@@ -670,10 +1021,11 @@ export const JournalEntriesPage: React.FC = () => {
                   </Badge>
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <span className="text-slate-500 block text-[10px] font-bold">الصندوق المستلم</span>
-                  <span className="font-bold text-slate-800">{selectedEntry.cashboxName}</span>
+                  <span className="text-slate-500 block text-[10px] font-bold">الحساب الأساسي</span>
+                  <span className="font-bold text-slate-800">{selectedEntry.debitAccountName}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px] font-bold">موظف الإدخال</span>
@@ -683,48 +1035,53 @@ export const JournalEntriesPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
               <div>
-                <span className="text-slate-500 block text-[10px] font-bold">البيان المحاسبي</span>
-                <p className="text-slate-800 leading-relaxed bg-slate-50 p-2 rounded border border-slate-200 text-[11px]">
-                  {selectedEntry.description || '—'}
+                <span className="text-slate-500 block text-[10px] font-bold">البيان والشرح المحاسبي</span>
+                <p className="text-slate-800 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs font-medium mt-1">
+                  {selectedEntry.cleanDescription || '—'}
                 </p>
               </div>
             </div>
 
-            {/* Entry Lines (Debit & Credit) */}
+            {/* Accounting Lines Table */}
             <div>
-              <span className="font-bold text-xs text-slate-900 block mb-1.5">سطور أطراف القيد المحاسبي:</span>
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <span className="font-extrabold text-xs text-slate-900 block mb-2">أطراف وسطور القيد في دفتر اليومية:</span>
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
                 <table className="w-full text-xs text-right border-collapse">
                   <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200 font-bold text-[11px]">
-                      <th className="py-2 px-2.5 border-l border-slate-200">كود ورقم الحساب</th>
-                      <th className="py-2 px-2.5 border-l border-slate-200 text-emerald-800">المدين (Debit)</th>
-                      <th className="py-2 px-2.5 border-l border-slate-200 text-rose-800">الدائن (Credit)</th>
-                      <th className="py-2 px-2.5">البيان الفرعي</th>
+                    <tr className="bg-slate-100 border-b border-slate-200 font-extrabold text-[11px]">
+                      <th className="py-2.5 px-3 border-l border-slate-200">الحساب المالي</th>
+                      <th className="py-2.5 px-3 border-l border-slate-200 text-emerald-800 text-center">المدين (Debit)</th>
+                      <th className="py-2.5 px-3 border-l border-slate-200 text-rose-800 text-center">الدائن (Credit)</th>
+                      <th className="py-2.5 px-3">البيان الفرعي</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {selectedEntry.lines?.map((line: any, idx: number) => (
                       <tr key={line.id || idx} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-2 px-2.5 font-bold text-slate-800 border-l border-slate-100">
-                          {line.account?.code || '—'} — {line.account?.nameAr || accountsMap[line.accountId] || '—'}
+                        <td className="py-2 px-3 font-bold text-slate-800 border-l border-slate-100">
+                          {line.account?.nameAr || accountsMap[line.accountId] || '—'}
                         </td>
-                        <td className="py-2 px-2.5 border-l border-slate-100 font-mono tabular-nums font-bold text-emerald-800">
-                          {Number(line.debit) > 0 ? fmtMoney(line.debit) : '—'}
+                        <td className="py-2 px-3 border-l border-slate-100 font-mono tabular-nums font-bold text-emerald-800 text-center">
+                          {Number(line.debit) > 0 ? fmtMoney(line.debit, selectedEntry.currency) : '—'}
                         </td>
-                        <td className="py-2 px-2.5 border-l border-slate-100 font-mono tabular-nums font-bold text-rose-800">
-                          {Number(line.credit) > 0 ? fmtMoney(line.credit) : '—'}
+                        <td className="py-2 px-3 border-l border-slate-100 font-mono tabular-nums font-bold text-rose-800 text-center">
+                          {Number(line.credit) > 0 ? fmtMoney(line.credit, selectedEntry.currency) : '—'}
                         </td>
-                        <td className="py-2 px-2.5 text-slate-600">{line.description || '—'}</td>
+                        <td className="py-2 px-3 text-slate-600 font-medium">{line.description || '—'}</td>
                       </tr>
                     ))}
                     {/* Totals Row */}
                     <tr className="bg-slate-50 border-t-2 border-slate-300 font-black">
-                      <td className="py-2 px-2.5 border-l border-slate-200 text-slate-900">المجموع</td>
-                      <td className="py-2 px-2.5 border-l border-slate-200 font-mono tabular-nums text-emerald-900">{fmtMoney(selectedEntry.totalDebit)}</td>
-                      <td className="py-2 px-2.5 border-l border-slate-200 font-mono tabular-nums text-rose-900">{fmtMoney(selectedEntry.totalCredit)}</td>
-                      <td className="py-2 px-2.5" />
+                      <td className="py-2 px-3 border-l border-slate-200 text-slate-900">المجموع المتوازن</td>
+                      <td className="py-2 px-3 border-l border-slate-200 font-mono tabular-nums text-emerald-900 text-center">
+                        {fmtMoney(selectedEntry.totalDebit, selectedEntry.currency)}
+                      </td>
+                      <td className="py-2 px-3 border-l border-slate-200 font-mono tabular-nums text-rose-900 text-center">
+                        {fmtMoney(selectedEntry.totalCredit, selectedEntry.currency)}
+                      </td>
+                      <td className="py-2 px-3 font-bold text-emerald-700 text-center">متطابق 100%</td>
                     </tr>
                   </tbody>
                 </table>
@@ -732,24 +1089,58 @@ export const JournalEntriesPage: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
               {selectedEntry.status === 'DRAFT' && (
-                <Button size="xs" color="emerald" leftSection={<IconCheck size={14} />} onClick={() => handlePostEntry(selectedEntry.id)}>
+                <Button
+                  size="xs"
+                  color="emerald"
+                  leftSection={<IconCheck size={14} />}
+                  onClick={() => handlePostEntry(selectedEntry.id)}
+                  className="font-bold"
+                >
                   ترحيل القيد
                 </Button>
               )}
               {selectedEntry.status === 'POSTED' && (
-                <Button size="xs" color="red" variant="light" leftSection={<IconArrowBackUp size={14} />} onClick={() => setReverseModalOpen(true)}>
+                <Button
+                  size="xs"
+                  color="red"
+                  variant="light"
+                  leftSection={<IconArrowBackUp size={14} />}
+                  onClick={() => setReverseModalOpen(true)}
+                  className="font-bold"
+                >
                   عكس القيد
                 </Button>
               )}
-              <Button size="xs" variant="outline" color="orange" leftSection={<IconEdit size={14} />} onClick={() => handleOpenEdit(selectedEntry)}>
+              <Button
+                size="xs"
+                variant="outline"
+                color="orange"
+                leftSection={<IconEdit size={14} />}
+                onClick={() => handleOpenEdit(selectedEntry)}
+                className="font-bold"
+              >
                 تعديل
               </Button>
-              <Button size="xs" variant="outline" color="gray" leftSection={<IconPrinter size={14} />} onClick={() => window.print()}>
+              <Button
+                size="xs"
+                variant="outline"
+                color="gray"
+                leftSection={<IconPrinter size={14} />}
+                onClick={() => window.print()}
+                className="font-bold"
+              >
                 طباعة
               </Button>
-              <Button size="xs" variant="outline" color="violet" leftSection={<IconHistory size={14} />} onClick={() => handleOpenAuditLog(selectedEntry)}>
+              <Button
+                size="xs"
+                variant="outline"
+                color="violet"
+                leftSection={<IconHistory size={14} />}
+                onClick={() => handleOpenAuditLog(selectedEntry)}
+                className="font-bold"
+              >
                 سجل التدقيق
               </Button>
             </div>
@@ -762,7 +1153,7 @@ export const JournalEntriesPage: React.FC = () => {
         opened={auditDrawerOpen}
         onClose={() => setAuditDrawerOpen(false)}
         title={
-          <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
+          <div className="flex items-center gap-2 font-black text-sm text-slate-900">
             <IconHistory size={18} className="text-violet-600" />
             <span>سجل التدقيق والتتبع — {selectedEntry?.entryNumber}</span>
           </div>
@@ -771,13 +1162,12 @@ export const JournalEntriesPage: React.FC = () => {
         size="md"
       >
         <div className="space-y-3 text-xs" dir="rtl">
-          {/* Entry Info Header */}
           {selectedEntry && (
-            <div className="p-3 bg-violet-50/50 border border-violet-200 rounded-lg">
+            <div className="p-3 bg-violet-50/60 border border-violet-200 rounded-xl">
               <div className="flex justify-between items-center">
                 <div>
                   <div className="font-black text-sm text-slate-900 font-mono tabular-nums">{selectedEntry.entryNumber}</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">{selectedEntry.description?.substring(0, 60) || '—'}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">{selectedEntry.cleanDescription?.substring(0, 60) || '—'}</div>
                 </div>
                 <Badge color={(statusMap[selectedEntry.status] || {}).color || 'gray'} size="sm" className="font-bold">
                   {(statusMap[selectedEntry.status] || {}).label || selectedEntry.status}
@@ -786,65 +1176,36 @@ export const JournalEntriesPage: React.FC = () => {
             </div>
           )}
 
-          {/* Timeline */}
-          <div className="space-y-0">
+          <div className="space-y-0 pt-2">
             {auditLogs.length === 0 ? (
               <div className="text-center py-8 text-slate-400">
                 <IconHistory size={32} className="mx-auto mb-2 opacity-40" />
                 <span className="font-bold block">لا يوجد سجل تدقيق لهذا القيد</span>
               </div>
             ) : (
-              auditLogs.map((log, idx) => {
-                const iconConfig = getAuditIcon(log.icon);
-                const IconComp = iconConfig.Icon;
-                return (
-                  <div key={log.id} className="flex gap-3 relative">
-                    {/* Timeline Line */}
-                    {idx < auditLogs.length - 1 && (
-                      <div className="absolute right-[15px] top-[36px] w-0.5 bg-slate-200" style={{ height: 'calc(100% - 12px)' }} />
-                    )}
-                    {/* Icon */}
-                    <div className={`w-8 h-8 ${iconConfig.bg} rounded-full flex items-center justify-center shrink-0 relative z-10 border border-white shadow-sm`}>
-                      <IconComp size={14} className={iconConfig.fg} />
+              auditLogs.map((log, idx) => (
+                <div key={log.id || idx} className="flex gap-3 relative pb-4">
+                  {idx < auditLogs.length - 1 && (
+                    <div className="absolute right-[15px] top-[30px] w-0.5 bg-slate-200 h-full" />
+                  )}
+                  <div className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center shrink-0 relative z-10 border border-white shadow-2xs font-bold">
+                    <IconHistory size={15} />
+                  </div>
+                  <div className="flex-1 bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-black text-slate-900 text-xs">{log.actionLabel}</span>
+                      <span className="text-[10px] text-slate-400 font-mono tabular-nums" dir="ltr">
+                        {formatDateTimeEn(log.timestamp)}
+                      </span>
                     </div>
-                    {/* Content */}
-                    <div className="flex-1 pb-4">
-                      <div className="bg-white border border-slate-200 rounded-lg p-3 hover:shadow-xs transition-shadow">
-                        <div className="flex justify-between items-start mb-1.5">
-                          <span className="font-black text-slate-900 text-[12px]">{log.actionLabel}</span>
-                          <span className="text-[10px] text-slate-400 font-mono tabular-nums shrink-0 mr-2" dir="ltr">
-                            {formatDateTimeEn(log.timestamp)}
-                          </span>
-                        </div>
-                        {/* Status Change */}
-                        {log.fromStatus && log.toStatus && (
-                          <div className="flex items-center gap-1.5 mb-1.5 text-[11px]">
-                            <Badge size="xs" color="gray" variant="light" className="font-bold">{log.fromStatus}</Badge>
-                            <IconArrowRight size={12} className="text-slate-400" />
-                            <Badge
-                              size="xs"
-                              color={log.toStatus === 'مرحّل' ? 'emerald' : log.toStatus === 'معكوس' ? 'red' : 'yellow'}
-                              variant="light"
-                              className="font-bold"
-                            >
-                              {log.toStatus}
-                            </Badge>
-                          </div>
-                        )}
-                        {/* Details */}
-                        {log.details && (
-                          <p className="text-[11px] text-slate-600 leading-relaxed">{log.details}</p>
-                        )}
-                        {/* User */}
-                        <div className="flex items-center gap-1 mt-1.5 text-slate-500">
-                          <IconUser size={11} className="text-slate-400" />
-                          <span className="font-medium text-[10px]">بواسطة: {log.userName}</span>
-                        </div>
-                      </div>
+                    {log.details && <p className="text-[11px] text-slate-600 leading-relaxed">{log.details}</p>}
+                    <div className="flex items-center gap-1 mt-1 text-slate-500 text-[10px] font-medium">
+                      <IconUser size={11} className="text-slate-400" />
+                      <span>بواسطة: {log.userName}</span>
                     </div>
                   </div>
-                );
-              })
+                </div>
+              ))
             )}
           </div>
         </div>
@@ -855,19 +1216,20 @@ export const JournalEntriesPage: React.FC = () => {
         opened={reverseModalOpen}
         onClose={() => setReverseModalOpen(false)}
         title={
-          <div className="flex items-center gap-2 font-bold text-sm text-red-600">
+          <div className="flex items-center gap-2 font-black text-sm text-red-600">
             <IconArrowBackUp size={18} />
             <span>عكس قيد محاسبي (Reversing Entry)</span>
           </div>
         }
         size="md"
         centered
+        radius="lg"
       >
         <div className="space-y-3 text-xs" dir="rtl">
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-950 space-y-1">
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-950 space-y-1">
             <p className="font-bold">سيتم إنشاء قيد عكسي جديد لإلغاء تأثير القيد:</p>
             <p className="font-mono font-black text-sm">{selectedEntry?.entryNumber}</p>
-            <p className="text-[11px] text-red-700">المبلغ: {fmtMoney(selectedEntry?.totalDebit)} — سيتم تحديث أرصدة الحسابات تلقائياً.</p>
+            <p className="text-[11px] text-red-700">المبلغ: {fmtMoney(selectedEntry?.totalDebit, selectedEntry?.currency)} — سيتم تحديث أرصدة الحسابات تلقائياً.</p>
           </div>
           <Textarea
             label="سبب عكس القيد"
@@ -899,10 +1261,10 @@ export const JournalEntriesPage: React.FC = () => {
         }
         size="md"
         centered
-        radius="md"
+        radius="lg"
       >
         <div className="space-y-3.5 text-xs" dir="rtl">
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-950 space-y-1">
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-950 space-y-1">
             <p className="font-bold">هل أنت متأكد من رغبتك في حذف هذا القيد نهائياً؟</p>
             <p className="text-[11px] text-red-700">
               سيتم حذف القيد وإلغاء تأثيره على أرصدة الحسابات المتأثرة بالكامل.
@@ -910,22 +1272,18 @@ export const JournalEntriesPage: React.FC = () => {
           </div>
 
           {entryToDelete && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-bold">رقم القيد:</span>
                 <span className="font-mono font-black text-slate-900">{entryToDelete.entryNumber}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-bold">المدين:</span>
-                <span className="font-mono font-black text-emerald-800">{fmtMoney(entryToDelete.totalDebit)}</span>
+                <span className="font-mono font-black text-emerald-800">{fmtMoney(entryToDelete.totalDebit, entryToDelete.currency)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-bold">الدائن:</span>
-                <span className="font-mono font-black text-rose-800">{fmtMoney(entryToDelete.totalCredit)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-bold">الصندوق المستلم:</span>
-                <span className="font-bold text-slate-800">{entryToDelete.cashboxName}</span>
+                <span className="font-mono font-black text-rose-800">{fmtMoney(entryToDelete.totalCredit, entryToDelete.currency)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-bold">موظف الإدخال:</span>
@@ -934,7 +1292,7 @@ export const JournalEntriesPage: React.FC = () => {
               <div>
                 <span className="text-slate-500 font-bold block mb-0.5">البيان:</span>
                 <p className="text-slate-700 bg-white p-2 rounded border border-slate-200 text-[11px]">
-                  {entryToDelete.description || '—'}
+                  {entryToDelete.cleanDescription || '—'}
                 </p>
               </div>
             </div>
