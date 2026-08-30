@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { IsString, IsOptional, IsArray, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsNotEmpty, IsBoolean } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface BrevoAccountInfo {
@@ -102,7 +102,21 @@ export class SendStatementEmailDto {
 
   @IsOptional()
   @IsString()
+  accountCode?: string;
+
+  @IsOptional()
+  @IsString()
   pdfBase64?: string;
+
+  /** Mail-safe (ASCII) file name for the attached statement. */
+  @IsOptional()
+  @IsString()
+  attachmentName?: string;
+
+  /** Off by default: the message carries the attached statement, not a balance recap. */
+  @IsOptional()
+  @IsBoolean()
+  includeSummary?: boolean;
 
   @IsOptional()
   @IsArray()
@@ -113,6 +127,22 @@ export class SendStatementEmailDto {
     credit: number;
     balance: number;
   }>;
+}
+
+/**
+ * Brevo puts this straight into the MIME part name, and non-ASCII names come back
+ * as a mangled or dropped attachment in several mail clients.
+ */
+export function toMailSafeFileName(raw: string, fallback: string): string {
+  const base = (raw || '')
+    .replace(/\.pdf$/i, '')
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[._]+|[._]+$/g, '')
+    .slice(0, 80);
+  return `${base || fallback}.pdf`;
 }
 
 /**
@@ -454,6 +484,37 @@ export class EmailService {
     const balanceNum = typeof dto.currentBalance === 'number' ? dto.currentBalance : Number(dto.currentBalance) || 0;
     const balanceFormatted = balanceNum.toLocaleString('en-US', { minimumFractionDigits: 2 });
     const dateRangeStr = dto.fromDate && dto.toDate ? `${dto.fromDate} إلى ${dto.toDate}` : 'كافة الحركات المسجلة';
+    const hasPdf = !!(dto.pdfBase64 && dto.pdfBase64.trim());
+    const showSummary = dto.includeSummary === true;
+
+    const summaryHtml = showSummary
+      ? `
+          <!-- Account & Balance Summary Cards -->
+          <div style="display: table; width: 100%; margin: 20px 0; border-collapse: separate; border-spacing: 10px 0;">
+            <div style="display: table-cell; width: 50%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center;">
+              <span style="font-size: 11px; color: #64748b; font-weight: bold; display: block;">الحساب المالي:</span>
+              <strong style="font-size: 13.5px; color: #0f172a; display: block; margin-top: 4px;">${dto.accountName}</strong>
+            </div>
+            <div style="display: table-cell; width: 50%; background-color: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 14px; text-align: center;">
+              <span style="font-size: 11px; color: #c2410c; font-weight: bold; display: block;">الرصيد الصافي المطلوب:</span>
+              <strong style="font-size: 16px; color: #9a3412; font-family: monospace; display: block; margin-top: 4px;">${balanceFormatted} ${cur}</strong>
+            </div>
+          </div>
+
+          <div style="font-size: 12px; color: #64748b; margin-bottom: 18px;">
+            <span>📅 <strong>فترة الكشف:</strong> ${dateRangeStr}</span>
+          </div>
+      `
+      : '';
+
+    const attachmentNoticeHtml = hasPdf
+      ? `
+          <!-- Attachment Notice Box -->
+          <div style="background-color: #eff6ff; border: 1px dashed #93c5fd; border-radius: 10px; padding: 14px 18px; font-size: 13px; color: #1e40af; margin: 18px 0; text-align: center;">
+            📎 <strong>ملف كشف الحساب الرسمي (PDF)</strong> مرفق بالكامل مع هذه الرسالة للتدقيق والمطابقة.
+          </div>
+      `
+      : '';
 
     const htmlContent = `
     <!DOCTYPE html>
@@ -481,30 +542,12 @@ export class EmailService {
           <div style="background-color: #f8fafc; border-right: 4px solid #ea580c; border: 1px solid #e2e8f0; padding: 18px 20px; border-radius: 10px; font-size: 14px; line-height: 1.7; color: #1e293b; margin: 16px 0;">
             ${dto.customMessage ? `<p style="margin: 0 0 10px 0; color: #334155;">${dto.customMessage}</p>` : ''}
             <p style="margin: 0; font-weight: 600; color: #0f172a;">
-              تجدون برفقه كشف الحساب المالي المعتمد (ملف PDF المرفق). لطفاً تسديد ما بذمتكم من متعلقات مالية.
+              ${hasPdf
+                ? 'تجدون برفقه كشف الحساب المالي المعتمد (ملف PDF المرفق). لطفاً تسديد ما بذمتكم من متعلقات مالية.'
+                : 'تجدون في هذه الرسالة إشعاراً بكشف حسابكم المالي المعتمد. لطفاً تسديد ما بذمتكم من متعلقات مالية.'}
             </p>
           </div>
-
-          <!-- Account & Balance Summary Cards -->
-          <div style="display: table; width: 100%; margin: 20px 0; border-collapse: separate; border-spacing: 10px 0;">
-            <div style="display: table-cell; width: 50%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center;">
-              <span style="font-size: 11px; color: #64748b; font-weight: bold; display: block;">الحساب المالي:</span>
-              <strong style="font-size: 13.5px; color: #0f172a; display: block; margin-top: 4px;">${dto.accountName}</strong>
-            </div>
-            <div style="display: table-cell; width: 50%; background-color: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 14px; text-align: center;">
-              <span style="font-size: 11px; color: #c2410c; font-weight: bold; display: block;">الرصيد الصافي المطلوب:</span>
-              <strong style="font-size: 16px; color: #9a3412; font-family: monospace; display: block; margin-top: 4px;">${balanceFormatted} ${cur}</strong>
-            </div>
-          </div>
-
-          <div style="font-size: 12px; color: #64748b; margin-bottom: 18px;">
-            <span>📅 <strong>فترة الكشف:</strong> ${dateRangeStr}</span>
-          </div>
-
-          <!-- Attachment Notice Box -->
-          <div style="background-color: #eff6ff; border: 1px dashed #93c5fd; border-radius: 10px; padding: 14px 18px; font-size: 13px; color: #1e40af; margin: 18px 0; text-align: center;">
-            📎 <strong>ملف كشف الحساب الرسمي (PDF)</strong> مرفق بالكامل مع هذه الرسالة للتدقيق والمطابقة.
-          </div>
+${summaryHtml}${attachmentNoticeHtml}
 
           <!-- Signature Section as requested -->
           <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 13.5px; line-height: 1.6;">
@@ -523,19 +566,31 @@ export class EmailService {
     `;
 
     const attachments: Array<{ name: string; content: string }> = [];
-    if (dto.pdfBase64) {
-      const cleanContent = dto.pdfBase64.replace(/^data:[^;]+;base64,/, '');
+    if (hasPdf) {
+      const cleanContent = (dto.pdfBase64 as string).replace(/^data:[^;]+;base64,/, '').replace(/\s+/g, '');
+      const stamp = (dto.toDate || new Date().toISOString().slice(0, 10)).replace(/[^0-9A-Za-z]+/g, '-');
       attachments.push({
-        name: `كشف_حساب_${dto.accountName.replace(/\s+/g, '_')}.pdf`,
+        name: toMailSafeFileName(
+          dto.attachmentName || `Account_Statement_${dto.accountCode || ''}_${stamp}`,
+          `Account_Statement_${stamp}`,
+        ),
         content: cleanContent,
       });
     }
 
-    return this.sendEmail({
+    const result = await this.sendEmail({
       to: [{ email: dto.recipientEmail, name: dto.recipientName || dto.accountName }],
       subject,
       htmlContent,
       attachment: attachments.length > 0 ? attachments : undefined,
     });
+
+    this.logger.log(
+      `Statement email sent to ${dto.recipientEmail} — attachment: ${
+        attachments.length ? `${attachments[0].name} (${Math.round(attachments[0].content.length / 1024)} KB base64)` : 'NONE'
+      }`,
+    );
+
+    return result;
   }
 }

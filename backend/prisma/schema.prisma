@@ -624,8 +624,6 @@ model ReceiptVoucher {
   voucherNumber          String
   date                   DateTime    @default(now())
   amount                 Decimal
-  currency               String      @default("IQD")
-  exchangeRate           Decimal     @default(1) @map("exchange_rate")
   accountId              String // Account credited
   cashboxOrBankAccountId String // Account debited
   customerId             String?
@@ -1195,4 +1193,39 @@ model AiLearnedFact {
 
   @@index([companyId, isActive, updatedAt])
   @@map("ai_learned_facts")
+}
+
+/// A scannable, revocable key to ONE account's statement.
+///
+/// The QR printed on a statement or a receipt carries nothing but `token`. Everything
+/// else — which company, which account, whether it still works — is resolved here, so
+/// a printed page never carries an id that could be guessed or edited into someone
+/// else's statement. `phoneLast4` is not stored: it is compared live against the
+/// customer's current phone, so changing the phone changes the answer immediately.
+model StatementAccessToken {
+  id             String    @id @default(uuid())
+  /// The opaque secret in the URL. 32 random bytes, base64url.
+  token          String    @unique
+  companyId      String
+  /// The ledger account whose statement this key opens.
+  accountId      String
+  customerId     String?
+  supplierId     String?
+  label          String?
+  expiresAt      DateTime? @map("expires_at")
+  revokedAt      DateTime? @map("revoked_at")
+  /// Wrong-answer counter and lockout, so four digits cannot be brute forced.
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  lockedUntil    DateTime? @map("locked_until")
+  viewCount      Int       @default(0) @map("view_count")
+  lastViewedAt   DateTime? @map("last_viewed_at")
+  createdById    String?   @map("created_by_id")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([accountId])
+  @@index([customerId])
+  @@index([supplierId])
+  @@map("statement_access_tokens")
 }

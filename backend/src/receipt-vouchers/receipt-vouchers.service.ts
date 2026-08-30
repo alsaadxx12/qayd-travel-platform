@@ -203,7 +203,7 @@ export class ReceiptVouchersService {
    */
   async findAll(companyId: string, requestedLimit?: number) {
     const take = Math.min(Math.max(Number(requestedLimit) || 150, 1), 300);
-    const rows = await this.prisma.receiptVoucher.findMany({
+    const rows = await (this.prisma.receiptVoucher as any).findMany({
       where: { companyId },
       select: {
         id: true,
@@ -399,7 +399,7 @@ export class ReceiptVouchersService {
           journalEntryId: journalEntry.id,
           companyId,
           createdById: userId,
-        },
+        } as any,
       });
 
       // One decrement per credited account, so a split moves each account's balance
@@ -773,8 +773,8 @@ export class ReceiptVouchersService {
       const note = this.cleanDescription(dto.description ?? voucher.description);
 
     // Same guarantee as create: the legs always sum to the amount.
-    const currency = dto.currency !== undefined ? (dto.currency === 'USD' ? 'USD' : 'IQD') : (voucher.currency || 'IQD');
-    const exchangeRate = dto.exchangeRate !== undefined ? Number(dto.exchangeRate) : Number(voucher.exchangeRate || 1);
+    const currency = dto.currency !== undefined ? (dto.currency === 'USD' ? 'USD' : 'IQD') : ((voucher as any).currency || 'IQD');
+    const exchangeRate = dto.exchangeRate !== undefined ? Number(dto.exchangeRate) : Number((voucher as any).exchangeRate || 1);
 
     const legs = normalizeVoucherSplits(dto.splitAccounts, amount, newAccountId);
     const accountNames = await this.validateSplitAccounts(companyId, legs, [
@@ -841,7 +841,7 @@ export class ReceiptVouchersService {
           customerId: newCustomerId,
           reference: dto.reference !== undefined ? dto.reference : voucher.reference,
           description: note,
-        },
+        } as any,
       });
 
       return updatedVoucher;

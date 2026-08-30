@@ -242,11 +242,15 @@ export class StatementTools implements AiToolProvider {
       };
     }
 
-    // Attempt PDF generation, but don't block the entire email send if Puppeteer is unavailable on the host.
-    let generated: Awaited<ReturnType<StatementPdfService['generate']>> | null = null;
-    let artifactId: string | null = null;
+    // The statement itself is the message: without the PDF there is nothing worth
+    // sending, so a failed render aborts the email instead of mailing a bare recap.
+    let generated: Awaited<ReturnType<StatementPdfService['generate']>>;
+    let artifactId: string;
     try {
       generated = await this.statementPdf.generate(ctx.companyId, built.pdf);
+      if (!generated?.buffer?.length || generated.buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
+        throw new Error('الملف الناتج ليس ملف PDF صالحاً');
+      }
       artifactId = this.artifacts.put({
         buffer: generated.buffer,
         companyId: ctx.companyId,
@@ -254,7 +258,19 @@ export class StatementTools implements AiToolProvider {
         filename: generated.downloadName,
       });
     } catch (err: any) {
-      this.logger.warn(`PDF generation bypassed during email send: ${err?.message || err}`);
+      this.logger.error(
+        `Statement PDF failed, email aborted for ${built.account.nameAr}: ${err?.message || err}`,
+        err?.stack,
+      );
+      const reason = err?.message || 'سبب غير معروف';
+      const message = `لم أرسل البريد لأن ملف كشف الحساب لم يُنتج (${reason}). الإرسال بدون المرفق غير مسموح، أعد المحاولة أو صدّر الكشف من واجهة كشف الحساب.`;
+      return {
+        ok: false,
+        data: { sent: false, pdfFailed: true, recipientEmail, message },
+        ui: [this.kpiBlock(built)],
+        suggestions: ['أعد إرسال الكشف', 'كشف PDF'],
+        note: message,
+      };
     }
 
     try {
@@ -262,17 +278,17 @@ export class StatementTools implements AiToolProvider {
         recipientEmail,
         recipientName,
         accountName: built.account.nameAr,
+        accountCode: built.account.code || undefined,
         currency: 'IQD',
         currentBalance: round2(built.closingBalance),
         fromDate: built.period.startDate,
         toDate: built.period.endDate,
-        pdfBase64: generated ? generated.buffer.toString('base64') : undefined,
+        pdfBase64: generated.buffer.toString('base64'),
         customMessage: typeof args.customMessage === 'string' ? args.customMessage : undefined,
       });
 
-      const uiBlocks: AiUiBlock[] = [];
-      if (generated && artifactId) {
-        uiBlocks.push({
+      const uiBlocks: AiUiBlock[] = [
+        {
           type: 'pdf_file',
           payload: {
             artifactId,
@@ -283,10 +299,8 @@ export class StatementTools implements AiToolProvider {
             closingBalance: round2(built.closingBalance),
             emailedTo: recipientEmail,
           },
-        });
-      } else {
-        uiBlocks.push(this.kpiBlock(built));
-      }
+        },
+      ];
 
       return {
         ok: true,
@@ -302,9 +316,9 @@ export class StatementTools implements AiToolProvider {
       };
     } catch (err: any) {
       const message = err?.message || 'تعذر إرسال كشف الحساب';
-      const uiBlocks: AiUiBlock[] = [];
-      if (generated && artifactId) {
-        uiBlocks.push({
+      this.logger.error(`Statement email send failed for ${recipientEmail}: ${message}`, err?.stack);
+      const uiBlocks: AiUiBlock[] = [
+        {
           type: 'pdf_file',
           payload: {
             artifactId,
@@ -314,10 +328,8 @@ export class StatementTools implements AiToolProvider {
             sizeBytes: generated.buffer.length,
             closingBalance: round2(built.closingBalance),
           },
-        });
-      } else {
-        uiBlocks.push(this.kpiBlock(built));
-      }
+        },
+      ];
 
       return {
         ok: false,

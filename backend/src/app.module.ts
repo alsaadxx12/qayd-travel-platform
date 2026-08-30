@@ -28,6 +28,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { AIAssistantModule } from './ai-assistant/ai-assistant.module';
+import { StatementPortalModule } from './statement-portal/statement-portal.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { AIAssistantModule } from './ai-assistant/ai-assistant.module';
     SystemModule,
     EmailModule,
     FiscalYearsModule,
+    StatementPortalModule,
   ],
 })
 export class AppModule {}

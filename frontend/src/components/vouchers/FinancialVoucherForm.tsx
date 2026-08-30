@@ -560,6 +560,24 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     );
   }, [journalLines, totalJournalDebit, totalJournalCredit, journalDifference]);
 
+  /**
+   * The footer used to print `الفارق: 0.00 (غير متوازن)` — a sentence that
+   * contradicts itself — because `isJournalBalanced` also requires an account on
+   * every line, and a missing account was reported as a balance problem. The two
+   * conditions are separated here so the badge names the thing the user must
+   * actually fix.
+   */
+  const journalBlocker = useMemo(() => {
+    if (isJournalBalanced) return null;
+    if (journalDifference >= 0.01) {
+      return `الفارق: ${journalDifference.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${currency} (غير متوازن)`;
+    }
+    if (journalLines.some((l) => !l.accountId)) return 'اختر الحساب المحاسبي لكل سطر';
+    if (totalJournalDebit <= 0 || totalJournalCredit <= 0) return 'أدخل مبلغاً مديناً ومبلغاً دائناً';
+    if (journalLines.some((l) => !Number(l.debit) && !Number(l.credit))) return 'كل سطر يحتاج مبلغاً في المدين أو الدائن';
+    return 'القيد غير مكتمل';
+  }, [isJournalBalanced, journalDifference, journalLines, totalJournalDebit, totalJournalCredit, currency]);
+
   // Multi-Line Journal Line Management Handlers
   const handleAddJournalLine = () => {
     const newId = Math.random().toString(36).substring(2, 9);
@@ -1877,9 +1895,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                                   : 'bg-rose-600 text-white'
                               }`}
                             >
-                              {isJournalBalanced
-                                ? '✓ طرفا القيد متوازنان ومكتملان 100%'
-                                : `الفارق: ${journalDifference.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${currency} (غير متوازن)`}
+                              {isJournalBalanced ? '✓ طرفا القيد متوازنان ومكتملان 100%' : journalBlocker}
                             </span>
 
                             {/* The ledger is kept in dinars, so a dollar entry is posted
@@ -1913,10 +1929,10 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     </button>
                   </div>
                   <Textarea
-                    placeholder="اكتب البيان والملاحظات العامة والشاملة لسند القيد المحاسبي بالتفصيل..."
-                    rows={4}
-                    minRows={4}
-                    size="sm"
+                    placeholder="اكتب البيان والملاحظات العامة لسند القيد..."
+                    rows={2}
+                    minRows={2}
+                    size="xs"
                     value={description}
                     onChange={(e) => {
                       setDescription(e.target.value);
@@ -1924,14 +1940,11 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     }}
                     styles={{
                       input: {
-                        minHeight: '95px',
                         backgroundColor: '#ffffff',
                         borderColor: '#cbd5e1',
                         fontSize: '13px',
-                        fontWeight: 600,
                         lineHeight: '1.6',
-                        borderRadius: '14px',
-                        padding: '10px 14px',
+                        borderRadius: '12px',
                       },
                     }}
                   />
@@ -2164,7 +2177,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     placeholder="اكتب البيان والتفاصيل كاملة..."
                     rows={3}
                     minRows={3}
-                    size="sm"
+                    size="xs"
                     required
                     value={description}
                     onChange={(e) => {
@@ -2173,14 +2186,11 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     }}
                     styles={{
                       input: {
-                        minHeight: '85px',
                         backgroundColor: '#ffffff',
                         borderColor: '#cbd5e1',
                         fontSize: '13px',
-                        fontWeight: 600,
                         lineHeight: '1.6',
-                        borderRadius: '14px',
-                        padding: '10px 14px',
+                        borderRadius: '12px',
                       },
                     }}
                   />
