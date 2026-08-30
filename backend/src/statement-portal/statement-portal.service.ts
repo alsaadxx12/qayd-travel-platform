@@ -362,7 +362,7 @@ export class StatementPortalService {
     return `${'•'.repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
   }
 
-  private async partyOf(row: { customerId: string | null; supplierId: string | null }) {
+  private async partyOf(row: { customerId: string | null; supplierId: string | null; accountId?: string | null }) {
     if (row.customerId) {
       return this.prisma.customer.findUnique({
         where: { id: row.customerId },
@@ -372,6 +372,12 @@ export class StatementPortalService {
     if (row.supplierId) {
       return this.prisma.supplier.findUnique({
         where: { id: row.supplierId },
+        select: { nameAr: true, phone: true },
+      });
+    }
+    if (row.accountId) {
+      return this.prisma.account.findUnique({
+        where: { id: row.accountId },
         select: { nameAr: true, phone: true },
       });
     }

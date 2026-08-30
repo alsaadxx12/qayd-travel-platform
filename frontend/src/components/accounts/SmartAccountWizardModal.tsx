@@ -27,6 +27,7 @@ import {
   IconDeviceDesktopAnalytics,
   IconCashBanknote,
   IconCoins,
+  IconAlertTriangle,
   IconAlertCircle,
   IconLoader2,
 } from '@tabler/icons-react';
@@ -117,6 +118,8 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
 
   // Group Category Tab
   const [activeGroup, setActiveGroup] = useState<'FINANCIAL' | 'CUSTOMERS' | 'SUPPLIERS' | 'EXPENSES' | 'REVENUES'>('FINANCIAL');
+  /** Editing a live account: its number and name are the user's, not the wizard's. */
+  const isEditing = mode === 'EDIT';
 
   // Step 1: Type Selection
   const [accountType, setAccountType] = useState<string>('INTERNAL_MASTER');
@@ -181,6 +184,57 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
   const [openingAmountUSD, setOpeningAmountUSD] = useState<string>('0');
   const [openingDate, setOpeningDate] = useState<string>(getTodayInputDate);
   const [openingNotes, setOpeningNotes] = useState<string>('');
+
+  /**
+   * Which classification tab an existing account belongs to, and a type inside it.
+   *
+   * The tab used to be decided by matching the account code against a table of
+   * `132…` / `232…` prefixes — a numbering this system no longer issues. Customers are
+   * created under `1614` and suppliers under `2614`, so a real code like `16141111`
+   * matched NOTHING: the if/else chain fell through without ever calling setActiveGroup,
+   * and the tab kept its initial value, FINANCIAL.
+   *
+   * That is why every customer opened for editing looked like a financial account — and
+   * it was not merely cosmetic. `handleSave` always sends `classificationRules.type` and
+   * `.category`, which for the untouched default (INTERNAL_MASTER) are ASSET/BANK. So
+   * opening a customer and pressing save silently rewrote it as a bank account.
+   *
+   * The account's own `category` and `accountRole` are the authority here, because they
+   * are what was actually saved. The code is consulted only when those are missing, and
+   * it now understands both numbering schemes.
+   */
+  const resolveEditClassification = (
+    acc: any,
+  ): { group: typeof activeGroup; type: string } | null => {
+    const code = String(acc?.code || '');
+    const category = String(acc?.category || '').toUpperCase();
+    const role = String(acc?.accountRole || '').toUpperCase();
+    const type = String(acc?.type || '').toUpperCase();
+
+    const isCustomer =
+      category === 'CUSTOMER' || role === 'CUSTOMER' || code.startsWith('1614') || code.startsWith('132');
+    const isSupplier =
+      category === 'SUPPLIER' || role === 'SUPPLIER' || code.startsWith('2614') || code.startsWith('232');
+
+    if (isCustomer && !isSupplier) {
+      // Staff advances sit under their own parent, so they must not be handed a type
+      // that would pull them back to the general customer parent.
+      return {
+        group: 'CUSTOMERS',
+        type: code.startsWith('1614200') ? 'STAFF_ADVANCE' : 'INDIVIDUAL_CLIENT',
+      };
+    }
+    if (isSupplier) return { group: 'SUPPLIERS', type: 'TICKET_SUPPLIER' };
+    if (type === 'EXPENSE' || code.startsWith('3')) return { group: 'EXPENSES', type: 'EXPENSE' };
+    if (type === 'REVENUE' || code.startsWith('4')) return { group: 'REVENUES', type: 'REVENUE' };
+    if (category === 'CASH' || code.startsWith('181') || code.startsWith('1341')) {
+      return { group: 'FINANCIAL', type: 'CASHBOX' };
+    }
+    if (category === 'BANK' || code.startsWith('182') || code.startsWith('1342')) {
+      return { group: 'FINANCIAL', type: 'BANK' };
+    }
+    return null;
+  };
 
   // Populate data when in EDIT mode or reset when CREATE
   useEffect(() => {
@@ -257,6 +311,15 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
 
       const code = initialData.code || '';
 
+      // The record's own classification wins. The prefix chain below is kept only
+      // for the financial sub-types (external master, cashbox, bank) that it still
+      // describes correctly, and it can no longer leave the tab unset.
+      const resolved = resolveEditClassification(initialData);
+      if (resolved) {
+        setActiveGroup(resolved.group);
+        setAccountType(resolved.type);
+      }
+
       if (code.startsWith('13432') || code.startsWith('232146') || code.startsWith('232154')) {
         setActiveGroup('FINANCIAL');
         setAccountType('EXTERNAL_MASTER');
@@ -311,6 +374,18 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
       } else if (code.startsWith('4')) {
         setActiveGroup('REVENUES');
         setAccountType('REVENUE');
+      } else if (!resolved) {
+        // Nothing recognised the account. Leaving the tab at its initial FINANCIAL
+        // value is what caused the silent reclassification, so fall back to the
+        // family the parent code implies instead of to a default.
+        const parentCode = String(
+          flatAccounts.find((a) => a.id === initialData.parentId)?.code || '',
+        );
+        const byParent = resolveEditClassification({ code: parentCode });
+        if (byParent) {
+          setActiveGroup(byParent.group);
+          setAccountType(byParent.type);
+        }
       }
     } else {
       const initialType = defaultAccountType || 'INTERNAL_MASTER';
@@ -562,9 +637,28 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
   const finalCode = accountCode.trim() || classificationRules.suggestedCode;
   const isCashCustomer = activeGroup === 'CUSTOMERS' && accountType === 'CASH_CUSTOMER';
 
+  /**
+   * True when the chosen classification belongs to a different branch of the tree
+   * than the parent the account actually sits under. Only meaningful while editing:
+   * a new account is re-parented automatically.
+   */
+  const classificationParentMismatch = useMemo(() => {
+    if (!isEditing || !finalParentCode || !classificationRules.parentCode) return false;
+    const wanted = String(classificationRules.parentCode);
+    return !finalParentCode.startsWith(wanted) && !wanted.startsWith(finalParentCode);
+  }, [isEditing, finalParentCode, classificationRules.parentCode]);
+
   const selectCustomerType = (type: 'CASH_CUSTOMER' | 'INDIVIDUAL_CLIENT' | 'CORPORATE_CLIENT') => {
     const wasCashCustomer = accountType === 'CASH_CUSTOMER';
     setAccountType(type);
+    if (isEditing) {
+      // An existing account keeps its number and its name. Clearing the manual flags
+      // here would let the auto-code effect renumber a live account, and the
+      // cash-customer branch below would overwrite the name the user is editing —
+      // which is exactly why the name and the code vanished when the classification
+      // was changed.
+      return;
+    }
     setParentManual(false);
     setCodeManual(false);
     if (type === 'CASH_CUSTOMER') {
@@ -589,8 +683,11 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
 
   const selectGroup = (id: typeof activeGroup) => {
     setActiveGroup(id);
-    setParentManual(false);
-    setCodeManual(false);
+    if (!isEditing) {
+      // Only a NEW account may be renumbered and re-parented by its classification.
+      setParentManual(false);
+      setCodeManual(false);
+    }
     if (id === 'FINANCIAL') {
       setAccountType('CASHBOX');
       setAccountRole('GENERAL');
@@ -956,6 +1053,21 @@ export const SmartAccountWizardModal: React.FC<SmartAccountWizardModalProps> = (
                     {classificationRules.nature === 'DEBIT' ? (isAr ? 'طبيعة: مدين' : 'Nature: Debit') : (isAr ? 'طبيعة: دائن' : 'Nature: Credit')}
                   </span>
                 </div>
+
+                {/* Re-classifying keeps the account's own number and parent, so the two
+                    can end up disagreeing — a supplier still sitting under the customers
+                    parent. Nothing is moved silently; the disagreement is stated and the
+                    user picks the right parent themselves. */}
+                {isEditing && classificationParentMismatch && (
+                  <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5">
+                    <IconAlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-[11.5px] font-semibold leading-relaxed text-amber-900">
+                      {isAr
+                        ? `التصنيف الجديد لا يطابق حساب الأب الحالي. رقم الحساب واسمه بقيا كما هما — اختر حساب الأب المناسب (${classificationRules.parentCode}) قبل الحفظ، أو أعد التصنيف السابق.`
+                        : `The new classification does not match the current parent. The code and name are unchanged — pick a parent under ${classificationRules.parentCode} before saving, or restore the previous classification.`}
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   <SearchableCombobox
