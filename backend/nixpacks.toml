@@ -2,24 +2,50 @@ providers = ['node']
 
 # ── Runtime variables ──
 [variables]
+# Chromium comes from Nix (below), so Puppeteer must not try to download its own.
+#
+# That download is what broke the build: the postinstall ran `puppeteer browsers
+# install chrome`, the archive came down, and extraction failed with «no zip archiver
+# is available» — a missing `unzip` in the image, which npm reported as a hard error and
+# Railway reported as a failed deploy. Nix already provides a real Chromium; there is
+# nothing to download.
+PUPPETEER_SKIP_DOWNLOAD = 'true'
+# No PUPPETEER_EXECUTABLE_PATH on purpose. Nix installs into an unpredictable store
+# path, so a hard-coded one would be wrong; the service walks PATH and validates that
+# what it finds is a real browser rather than a stub.
+#
 # The address printed inside every statement barcode. It MUST be absolute — a relative
 # value makes a phone camera read the code as plain text and offer a web search instead
 # of opening the statement. Set it in the Railway variables to the front-end origin:
 # PORTAL_BASE_URL = 'https://<front-end-origin>'
 
-# ── System packages: Node.js 20 + Chromium + Arabic fonts via Nix ──
+# ── System packages ──
+# nodejs_22 because puppeteer 25 and openai 7 both declare `node >= 22`; the image was
+# on 20, which npm warned about on every install (EBADENGINE) — a warning today and a
+# runtime failure the moment either package uses something 22-only.
+#
+# `unzip` is kept even though nothing should need it now: it is the missing piece the
+# build actually died on, and it costs nothing to have.
 [phases.setup]
-nixPkgs = ['nodejs_20', 'chromium', 'noto-fonts-color-emoji', 'fontconfig']
+nixPkgs = ['nodejs_22', 'chromium', 'unzip', 'noto-fonts-color-emoji', 'fontconfig']
 
-# ── Install: skip Puppeteer download since Nix provides Chromium ──
+# ── Install ──
 [phases.install]
-cmds = ['PUPPETEER_SKIP_DOWNLOAD=true npm ci --include=dev']
+cmds = ['npm ci --include=dev']
 
-# ── Build: generate Prisma client + compile NestJS ──
+# ── Build: Prisma client, Nest build, then report which browser the image has ──
+# The check is a report, not a gate. A statement is emailed by the BROWSER now, so a
+# server without Chromium can still run the whole application; failing the deploy over
+# it would trade a working system for a missing convenience.
 [phases.build]
+# The last line is written as a TOML literal string (single quotes, no escapes) on
+# purpose: a quoting mistake here would fail the build for a reason that has nothing to
+# do with the application, which is exactly the kind of failure this file has already
+# caused once.
 cmds = [
-  "npx prisma generate",
-  "npx nest build",
+  'npx prisma generate',
+  'npx nest build',
+  'sh -c "command -v chromium || echo PDF-ENGINE-MISSING (server-side PDF off, app unaffected)"',
 ]
 
 # ── Start command ──
