@@ -146,21 +146,59 @@ export const VouchersPage: React.FC = () => {
         return `${y}-${m}-${day}`;
       };
 
+      /**
+       * The بيان column showed the note alone — usually empty, or a placeholder like
+       * 'سند قبض مالي', which tells the reader nothing about what the voucher did.
+       * The full sentence is composed here from the row itself: the party, the amount,
+       * the box it moved through, and how it was distributed. The user's own note is
+       * kept at the end and never replaced by it.
+       */
+      const buildDetail = (
+        kind: 'RECEIPT' | 'PAYMENT',
+        row: { amount: number; currency: string; accountName: string; cashboxName: string },
+        splits: any[],
+        note: string,
+      ) => {
+        const label = kind === 'RECEIPT' ? (isAr ? 'قبض' : 'Received') : (isAr ? 'صرف' : 'Paid');
+        const direction = kind === 'RECEIPT' ? (isAr ? 'من' : 'from') : (isAr ? 'إلى' : 'to');
+        const parts = [
+          `${label} ${row.amount.toLocaleString('en-US')} ${row.currency}`,
+          `${direction} ${row.accountName}`,
+          `${isAr ? 'عبر' : 'via'} ${row.cashboxName}`,
+        ];
+        if (splits.length > 0) {
+          const breakdown = splits
+            .map((sp: any) => `${sp.accountName}: ${parseCleanNumber(sp.amount).toLocaleString('en-US')}`)
+            .join(' · ');
+          parts.push(`${isAr ? 'موزّع على' : 'split across'} ${breakdown}`);
+        }
+        const sentence = parts.join(' — ');
+        return note ? `${sentence} | ${note}` : sentence;
+      };
+
       const formattedReceipts = (receipts || []).map((r: any) => {
         const { cleanDescription, splitAccounts: parsedSplits } = readVoucherSplits(r.description);
         const splits = (r.splitAccounts && Array.isArray(r.splitAccounts) && r.splitAccounts.length > 0) ? r.splitAccounts : parsedSplits;
+        const accountName = r.account?.nameAr || accountsMap[r.accountId] || (isAr ? 'حساب عميل/طرف' : 'Client Account');
+        const cashboxName = r.cashboxOrBankAccount?.nameAr || accountsMap[r.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox');
         return {
           ...r,
           type: 'RECEIPT',
           typeLabel: isAr ? 'سند قبض' : 'Receipt Voucher',
           dateFormatted: formatDateEn(r.date || r.createdAt),
-          accountName: r.account?.nameAr || accountsMap[r.accountId] || (isAr ? 'حساب عميل/طرف' : 'Client Account'),
-          cashboxName: r.cashboxOrBankAccount?.nameAr || accountsMap[r.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox'),
+          accountName,
+          cashboxName,
           amount: Number(r.amount || 0),
           currency: r.currency || 'IQD',
           userName: r.createdBy?.name || r.createdBy?.fullName || (isAr ? 'مدير النظام' : 'Administrator'),
           slipsCount: r.slipsCount || 0,
           description: cleanDescription || r.description,
+          detail: buildDetail(
+            'RECEIPT',
+            { amount: Number(r.amount || 0), currency: r.currency || 'IQD', accountName, cashboxName },
+            splits,
+            cleanDescription || '',
+          ),
           splitAccounts: splits.length > 0 ? splits : undefined,
           splitDescription: splits.length > 0 ? splits.map((s: any) => `${s.accountName}: ${Number(s.amount).toLocaleString('en-US')}`).join(' | ') : undefined,
         };
@@ -169,27 +207,50 @@ export const VouchersPage: React.FC = () => {
       const formattedPayments = (payments || []).map((p: any) => {
         const { cleanDescription, splitAccounts: parsedSplits } = readVoucherSplits(p.description);
         const splits = (p.splitAccounts && Array.isArray(p.splitAccounts) && p.splitAccounts.length > 0) ? p.splitAccounts : parsedSplits;
+        const accountName = p.supplier?.nameAr || p.account?.nameAr || accountsMap[p.accountId] || (isAr ? 'حساب مورد/طرف' : 'Supplier Account');
+        const cashboxName = p.cashboxOrBankAccount?.nameAr || accountsMap[p.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox');
         return {
           ...p,
           type: 'PAYMENT',
           typeLabel: isAr ? 'سند دفع' : 'Payment Voucher',
           dateFormatted: formatDateEn(p.date || p.createdAt),
-          accountName: p.supplier?.nameAr || p.account?.nameAr || accountsMap[p.accountId] || (isAr ? 'حساب مورد/طرف' : 'Supplier Account'),
-          cashboxName: p.cashboxOrBankAccount?.nameAr || accountsMap[p.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox'),
+          accountName,
+          cashboxName,
           amount: Number(p.amount || 0),
           currency: p.currency || 'IQD',
           userName: p.createdBy?.name || p.createdBy?.fullName || (isAr ? 'مدير النظام' : 'Administrator'),
           slipsCount: p.slipsCount || 0,
           description: cleanDescription || p.description,
+          detail: buildDetail(
+            'PAYMENT',
+            { amount: Number(p.amount || 0), currency: p.currency || 'IQD', accountName, cashboxName },
+            splits,
+            cleanDescription || '',
+          ),
           splitAccounts: splits.length > 0 ? splits : undefined,
           splitDescription: splits.length > 0 ? splits.map((s: any) => `${s.accountName}: ${Number(s.amount).toLocaleString('en-US')}`).join(' | ') : undefined,
         };
       }).sort((a: any, b: any) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
 
+      /**
+       * Every receipt and payment voucher posts its own journal entry, numbered
+       * `JV-<voucher number>`. Those are not journal vouchers — they are the
+       * accounting side of a voucher that already has its own row in the قبض/دفع
+       * tabs, and letting them through showed the same voucher twice under the
+       * wrong type badge. They are matched exactly against the vouchers just
+       * loaded, with a pattern as a fallback for vouchers outside this window.
+       */
+      const voucherEntryNumbers = new Set<string>(
+        [...formattedReceipts, ...formattedPayments].map((v: any) => `JV-${v.voucherNumber}`),
+      );
+      const isVoucherEntry = (entryNumber: string) =>
+        voucherEntryNumbers.has(entryNumber) || /JV-.*-(RV|PV)-/.test(entryNumber);
+
       // Filter only user-created manual Journal Vouchers (سندات القيد) and exclude automated invoice entries
       const formattedManualJVs = (allJVs || [])
         .filter((j: any) => {
           const ref = String(j.reference || j.entryNumber || '');
+          if (isVoucherEntry(String(j.entryNumber || ''))) return false;
           return (
             ref.includes('JV-') ||
             ref.includes('BR-') ||
@@ -205,18 +266,59 @@ export const VouchersPage: React.FC = () => {
           );
         })
         .map((j: any) => {
-          const firstDebitLine = j.lines?.find((l: any) => Number(l.debit) > 0);
-          const firstCreditLine = j.lines?.find((l: any) => Number(l.credit) > 0);
+          /**
+           * A journal voucher moves value between two accounts and nothing else, so
+           * it is written the way an entry is actually written: من ح/ المدين إلى ح/
+           * الدائن. Showing only the first line of each side hid the rest of a
+           * multi-line entry, so several accounts on one side become «مذكورين»,
+           * which is what an accountant expects to read there.
+           */
+          const readLine = (l: any, isDebit: boolean) => ({
+            name: l.account?.nameAr || accountsMap[l.accountId] || (isAr ? 'حساب' : 'Account'),
+            amount: Number(isDebit ? l.debit : l.credit) || 0,
+          });
+          const debits = (j.lines || []).filter((l: any) => Number(l.debit) > 0).map((l: any) => readLine(l, true));
+          const credits = (j.lines || []).filter((l: any) => Number(l.credit) > 0).map((l: any) => readLine(l, false));
+          const currency = j.currency || 'IQD';
+
+          const sideShort = (items: any[], fallback: string) => {
+            if (items.length === 0) return fallback;
+            if (items.length === 1) return `${isAr ? 'ح/' : 'A/C'} ${items[0].name}`;
+            return isAr ? `مذكورين (${items.length})` : `sundry (${items.length})`;
+          };
+          const sideFull = (items: any[], fallback: string) => {
+            if (items.length === 0) return fallback;
+            if (items.length === 1) {
+              return `${isAr ? 'ح/' : 'A/C'} ${items[0].name} ${items[0].amount.toLocaleString('en-US')} ${currency}`;
+            }
+            const parts = items
+              .map((i: any) => `${i.name} ${i.amount.toLocaleString('en-US')}`)
+              .join(' · ');
+            return `${isAr ? 'مذكورين' : 'sundry'}: ${parts}`;
+          };
+          const noDebit = isAr ? 'حساب مدين' : 'Debit Account';
+          const noCredit = isAr ? 'حساب دائن' : 'Credit Account';
+          const from = isAr ? 'من' : 'From';
+          const to = isAr ? 'إلى' : 'to';
+
+          const entryLabel = `${from} ${sideShort(debits, noDebit)} ${to} ${sideShort(credits, noCredit)}`;
+          const note = String(j.description || '').trim();
+          const entryDetail = `${from} ${sideFull(debits, noDebit)} ${to} ${sideFull(credits, noCredit)}`;
+
           return {
             ...j,
             voucherNumber: j.entryNumber || j.reference || j.id,
             type: 'JOURNAL',
             typeLabel: isAr ? 'سند قيد' : 'Journal Voucher',
             dateFormatted: formatDateEn(j.date || j.createdAt),
-            accountName: firstCreditLine?.account?.nameAr || accountsMap[firstCreditLine?.accountId] || (isAr ? 'حساب دائن' : 'Credit Account'),
-            cashboxName: firstDebitLine?.account?.nameAr || accountsMap[firstDebitLine?.accountId] || (isAr ? 'حساب مدين' : 'Debit Account'),
+            accountName: credits.length === 1 ? credits[0].name : sideShort(credits, noCredit),
+            cashboxName: debits.length === 1 ? debits[0].name : sideShort(debits, noDebit),
             amount: Number(j.totalDebit || j.amount || 0),
-            currency: j.currency || 'IQD',
+            currency,
+            debitLines: debits,
+            creditLines: credits,
+            entryLabel,
+            detail: note ? `${entryDetail} | ${note}` : entryDetail,
             userName: j.createdBy?.name || j.createdBy?.fullName || (isAr ? 'مدير النظام' : 'Administrator'),
             slipsCount: 0,
           };
@@ -462,7 +564,7 @@ export const VouchersPage: React.FC = () => {
         [isAr ? 'الصندوق / البنك' : 'Cashbox / Bank']: v.cashboxName,
         [isAr ? 'المبلغ' : 'Amount']: Number(v.amount || 0),
         [isAr ? 'العملة' : 'Currency']: v.currency,
-        [isAr ? 'البيان' : 'Description']: v.description || '',
+        [isAr ? 'البيان' : 'Description']: v.detail || v.description || '',
         [isAr ? 'المستخدم' : 'Created By']: v.userName || '',
       }));
 
@@ -1094,26 +1196,30 @@ export const VouchersPage: React.FC = () => {
                     ? (isAr ? 'المستلم منه (الطرف الدائن)' : 'Received From (Credit)')
                     : activeTab === 'PAYMENT'
                     ? (isAr ? 'المدفوع له (الطرف المدين)' : 'Paid To (Debit)')
+                    : activeTab === 'JOURNAL'
+                    ? (isAr ? 'إلى ح/ (الطرف الدائن)' : 'To A/C (Credit)')
                     : (isAr ? 'الحساب المقابل / الدائن' : 'Counter / Credit Account')}
                 </th>
 
-                {/* 9. Custom Allocation Account (حساب التقسيم المخصص مثل فلاي) */}
-                {customVoucherAccounts.length > 0 ? (
-                  customVoucherAccounts.map((ca: any) => (
-                    <th key={ca.id} className="py-2.5 px-3 text-center min-w-[120px]">
+                {/* 9. Custom Allocation Account (حساب التقسيم المخصص مثل فلاي - يظهر فقط في تبويب سندات القبض) */}
+                {activeTab === 'RECEIPT' && (
+                  customVoucherAccounts.length > 0 ? (
+                    customVoucherAccounts.map((ca: any) => (
+                      <th key={ca.id} className="py-2.5 px-3 text-center min-w-[120px]">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#F45A0A]"></span>
+                          <span className="font-extrabold text-slate-900">{ca.nameAr}</span>
+                        </div>
+                      </th>
+                    ))
+                  ) : (
+                    <th className="py-2.5 px-3 text-center min-w-[120px]">
                       <div className="flex items-center justify-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-[#F45A0A]"></span>
-                        <span className="font-extrabold text-slate-900">{ca.nameAr}</span>
+                        <span className="font-extrabold text-slate-900">{isAr ? 'حساب التقسيم' : 'Split Account'}</span>
                       </div>
                     </th>
-                  ))
-                ) : (
-                  <th className="py-2.5 px-3 text-center min-w-[120px]">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#F45A0A]"></span>
-                      <span className="font-extrabold text-slate-900">{isAr ? 'حساب التقسيم' : 'Split Account'}</span>
-                    </div>
-                  </th>
+                  )
                 )}
 
                 {/* 10. Description */}
@@ -1125,6 +1231,8 @@ export const VouchersPage: React.FC = () => {
                     ? (isAr ? 'صندوق القبض (المدين)' : 'Debit Cashbox')
                     : activeTab === 'PAYMENT'
                     ? (isAr ? 'صندوق الصرف (الدائن)' : 'Credit Cashbox')
+                    : activeTab === 'JOURNAL'
+                    ? (isAr ? 'من ح/ (الطرف المدين)' : 'From A/C (Debit)')
                     : (isAr ? 'الصندوق / الحساب المالي' : 'Financial Account')}
                 </th>
 
@@ -1142,7 +1250,7 @@ export const VouchersPage: React.FC = () => {
             <tbody className="[&_td]:border-b [&_td]:border-slate-200/90 [&_td]:border-e [&_td]:border-slate-200/80">
               {loading ? (
                 <tr>
-                  <td colSpan={14} className="py-20 text-center text-slate-500 font-bold bg-white">
+                  <td colSpan={activeTab === 'RECEIPT' ? 14 : 13} className="py-20 text-center text-slate-500 font-bold bg-white">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <RefreshCw size={26} className="animate-spin text-[#F45A0A]" />
                       <span className="text-sm font-bold text-slate-700">{isAr ? 'جارٍ تحميل السندات المالية...' : 'Loading Vouchers...'}</span>
@@ -1151,7 +1259,7 @@ export const VouchersPage: React.FC = () => {
                 </tr>
               ) : currentGridData.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-20 text-center text-slate-500 font-bold bg-white">
+                  <td colSpan={activeTab === 'RECEIPT' ? 14 : 13} className="py-20 text-center text-slate-500 font-bold bg-white">
                     <div className="flex flex-col items-center justify-center gap-2.5">
                       <div className="w-14 h-14 rounded-2xl bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100 shadow-2xs">
                         <Receipt size={28} />
@@ -1293,59 +1401,67 @@ export const VouchersPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* 9. Custom Allocation Account (فلاي / حساب التقسيم) */}
-                      {customVoucherAccounts.length > 0 ? (
-                        customVoucherAccounts.map((ca: any) => {
-                          let splitAmt: number | null = null;
-                          if (row.splitAccounts && Array.isArray(row.splitAccounts)) {
-                            const match = row.splitAccounts.find(
-                              (s: any) =>
-                                s.accountId === ca.targetAccountId ||
-                                s.accountName === ca.nameAr ||
-                                (ca.nameAr && s.accountName?.includes(ca.nameAr)) ||
-                                (ca.targetAccountName && s.accountName?.includes(ca.targetAccountName))
+                      {/* 9. Custom Allocation Account (فلاي / حساب التقسيم - يظهر فقط في تبويب سندات القبض) */}
+                      {activeTab === 'RECEIPT' && (
+                        customVoucherAccounts.length > 0 ? (
+                          customVoucherAccounts.map((ca: any) => {
+                            let splitAmt: number | null = null;
+                            if (row.splitAccounts && Array.isArray(row.splitAccounts)) {
+                              const match = row.splitAccounts.find(
+                                (s: any) =>
+                                  s.accountId === ca.targetAccountId ||
+                                  s.accountName === ca.nameAr ||
+                                  (ca.nameAr && s.accountName?.includes(ca.nameAr)) ||
+                                  (ca.targetAccountName && s.accountName?.includes(ca.targetAccountName))
+                              );
+                              if (match && parseCleanNumber(match.amount) > 0) {
+                                splitAmt = parseCleanNumber(match.amount);
+                              }
+                            }
+
+                            if (splitAmt === null && (row.accountId === ca.targetAccountId || (ca.nameAr && row.accountName?.includes(ca.nameAr)))) {
+                              splitAmt = parseCleanNumber(row.amount);
+                            }
+
+                            if (splitAmt === null && row.description && ca.nameAr && row.description.includes(ca.nameAr)) {
+                              const regex = new RegExp(`${ca.nameAr}[:\\s]+([0-9,.]+)`, 'i');
+                              const m = row.description.match(regex);
+                              if (m && m[1]) {
+                                const parsed = parseCleanNumber(m[1]);
+                                if (parsed > 0) splitAmt = parsed;
+                              }
+                            }
+
+                            return (
+                              <td key={ca.id} className="py-2 px-3 text-center">
+                                {splitAmt !== null && splitAmt > 0 ? (
+                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-orange-50 border border-orange-200 shadow-2xs font-mono font-black text-xs tabular-nums lining-nums text-[#F45A0A]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#F45A0A]"></span>
+                                    <span>{splitAmt.toLocaleString('en-US')}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-300 font-mono text-center block select-none">—</span>
+                                )}
+                              </td>
                             );
-                            if (match && parseCleanNumber(match.amount) > 0) {
-                              splitAmt = parseCleanNumber(match.amount);
-                            }
-                          }
-
-                          if (splitAmt === null && (row.accountId === ca.targetAccountId || (ca.nameAr && row.accountName?.includes(ca.nameAr)))) {
-                            splitAmt = parseCleanNumber(row.amount);
-                          }
-
-                          if (splitAmt === null && row.description && ca.nameAr && row.description.includes(ca.nameAr)) {
-                            const regex = new RegExp(`${ca.nameAr}[:\\s]+([0-9,.]+)`, 'i');
-                            const m = row.description.match(regex);
-                            if (m && m[1]) {
-                              const parsed = parseCleanNumber(m[1]);
-                              if (parsed > 0) splitAmt = parsed;
-                            }
-                          }
-
-                          return (
-                            <td key={ca.id} className="py-2 px-3 text-center">
-                              {splitAmt !== null && splitAmt > 0 ? (
-                                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-orange-50 border border-orange-200 shadow-2xs font-mono font-black text-xs tabular-nums lining-nums text-[#F45A0A]">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#F45A0A]"></span>
-                                  <span>{splitAmt.toLocaleString('en-US')}</span>
-                                </div>
-                              ) : (
-                                <span className="text-slate-300 font-mono text-center block select-none">—</span>
-                              )}
-                            </td>
-                          );
-                        })
-                      ) : (
-                        <td className="py-2 px-3 text-center">
-                          <span className="text-slate-300 font-mono text-center block select-none">—</span>
-                        </td>
+                          })
+                        ) : (
+                          <td className="py-2 px-3 text-center">
+                            <span className="text-slate-300 font-mono text-center block select-none">—</span>
+                          </td>
+                        )
                       )}
 
                       {/* 10. Description */}
-                      <td className="py-2 px-3 text-slate-600 max-w-[240px] truncate text-center" title={row.description}>
+                      {/* The full sentence is always on hover; the cell itself falls back
+                          to it when the voucher carries no note of its own. */}
+                      <td className="py-2 px-3 text-slate-600 max-w-[240px] truncate text-center" title={row.detail || row.description}>
+                        {/* A journal voucher's بيان is the entry itself — «من ح/ … إلى ح/ …» —
+                            not the stored note, which is usually a placeholder. */}
                         <span className="truncate block font-medium text-[11.5px] text-slate-700">
-                          {row.description || <span className="text-slate-300">—</span>}
+                          {isJournal
+                            ? row.entryLabel || row.description || <span className="text-slate-300">—</span>
+                            : row.description || row.detail || <span className="text-slate-300">—</span>}
                         </span>
                       </td>
 
@@ -1593,24 +1709,53 @@ export const VouchersPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-100">
-                <span className="text-slate-500 block text-[10px] font-bold">
-                  {selectedVoucher.type === 'JOURNAL' ? (isAr ? 'حساب الطرف المدين' : 'Debit Account') : (isAr ? 'الصندوق / الحساب المالي' : 'Cashbox / Bank Account')}
-                </span>
-                <span className="font-bold text-slate-900">{selectedVoucher.cashboxName}</span>
-              </div>
+              {/* A journal voucher is laid out the way an entry is written — the debit
+                  side first, the credit side indented beneath it — rather than as two
+                  unrelated fields, and every line of a multi-line entry is shown. */}
+              {selectedVoucher.type === 'JOURNAL' ? (
+                <div className="pt-2 border-t border-slate-100">
+                  <span className="text-slate-500 block text-[10px] font-bold mb-1.5">{isAr ? 'القيد المحاسبي' : 'Journal Entry'}</span>
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 space-y-1">
+                    {(selectedVoucher.debitLines || [{ name: selectedVoucher.cashboxName, amount: Number(selectedVoucher.amount || 0) }]).map((line: any, i: number) => (
+                      <div key={`d-${i}`} className="flex items-center justify-between gap-3">
+                        <span className="font-bold text-slate-900 text-xs">
+                          <span className="text-slate-400 font-black">{isAr ? 'من ح/' : 'From A/C'}</span> {line.name}
+                        </span>
+                        <span className="font-mono font-black text-slate-900 text-xs tabular-nums lining-nums">
+                          {Number(line.amount || 0).toLocaleString('en-US')}
+                        </span>
+                      </div>
+                    ))}
+                    {(selectedVoucher.creditLines || [{ name: selectedVoucher.accountName, amount: Number(selectedVoucher.amount || 0) }]).map((line: any, i: number) => (
+                      <div key={`c-${i}`} className="flex items-center justify-between gap-3 ps-5">
+                        <span className="font-bold text-slate-900 text-xs">
+                          <span className="text-slate-400 font-black">{isAr ? 'إلى ح/' : 'To A/C'}</span> {line.name}
+                        </span>
+                        <span className="font-mono font-black text-slate-900 text-xs tabular-nums lining-nums">
+                          {Number(line.amount || 0).toLocaleString('en-US')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-slate-500 block text-[10px] font-bold">{isAr ? 'الصندوق / الحساب المالي' : 'Cashbox / Bank Account'}</span>
+                    <span className="font-bold text-slate-900">{selectedVoucher.cashboxName}</span>
+                  </div>
 
-              <div className="pt-2 border-t border-slate-100">
-                <span className="text-slate-500 block text-[10px] font-bold">
-                  {selectedVoucher.type === 'JOURNAL' ? (isAr ? 'حساب الطرف الدائن' : 'Credit Account') : (isAr ? 'الحساب المقابل (الطرف الثاني)' : 'Counter Party Account')}
-                </span>
-                <span className="font-bold text-slate-900">{selectedVoucher.accountName || '—'}</span>
-              </div>
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-slate-500 block text-[10px] font-bold">{isAr ? 'الحساب المقابل (الطرف الثاني)' : 'Counter Party Account'}</span>
+                    <span className="font-bold text-slate-900">{selectedVoucher.accountName || '—'}</span>
+                  </div>
+                </>
+              )}
 
               <div className="pt-2 border-t border-slate-100">
                 <span className="text-slate-500 block text-[10px] font-bold mb-1">{isAr ? 'البيان والشرح المحاسبي' : 'Description'}</span>
                 <p className="text-slate-800 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs font-medium">
-                  {selectedVoucher.description || (isAr ? 'لا يوجد شرح إضافي' : 'No description')}
+                  {selectedVoucher.description || selectedVoucher.detail || (isAr ? 'لا يوجد شرح إضافي' : 'No description')}
                 </p>
               </div>
             </div>
