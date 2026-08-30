@@ -207,7 +207,10 @@ export const AccountingDateRangePicker: React.FC<AccountingDateRangePickerProps>
       end = todayStr;
     } else if (presetKey === 'THIS_YEAR') {
       start = `${now.getFullYear()}-01-01`;
-      end = todayStr;
+      end = `${now.getFullYear()}-12-31`;
+    } else if (presetKey === 'ALL_TIME') {
+      start = '2000-01-01';
+      end = `${now.getFullYear() + 5}-12-31`;
     }
 
     setSelStart(start);
@@ -352,6 +355,7 @@ export const AccountingDateRangePicker: React.FC<AccountingDateRangePickerProps>
               { id: 'LAST_MONTH', label: isAr ? 'الشهر السابق' : 'Last Month' },
               { id: 'LAST_30_DAYS', label: isAr ? 'آخر 30 يوم' : 'Last 30 Days' },
               { id: 'THIS_YEAR', label: isAr ? 'هذا العام' : 'This Year' },
+              { id: 'ALL_TIME', label: isAr ? 'كل الفترات' : 'All Time' },
             ].map((p) => (
               <button
                 key={p.id}

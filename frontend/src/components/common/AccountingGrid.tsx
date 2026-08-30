@@ -299,6 +299,11 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
     return list;
   }, [columnDefs, columnOrder, hiddenCols]);
 
+  // The built-in period defaults to the last month, so it must only clip rows while its
+  // own inputs are on screen; otherwise pages that own their date range (account
+  // statement) would silently lose everything outside that hidden window.
+  const internalDateFilterActive = !hideHeaderCard && !hideDateFilter;
+
   // Filter Data
   const filteredData = useMemo(() => {
     if (!data) return [];
@@ -319,11 +324,11 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
           if (row.status && row.status !== statusFilter) return false;
         }
       }
-      if (startDate) {
+      if (internalDateFilterActive && startDate) {
         const rowDate = new Date(row.date || row.createdAt).getTime();
         if (rowDate < new Date(startDate).getTime()) return false;
       }
-      if (endDate) {
+      if (internalDateFilterActive && endDate) {
         const rowDate = new Date(row.date || row.createdAt).getTime();
         if (rowDate > new Date(endDate).getTime() + 86400000) return false;
       }
@@ -346,7 +351,7 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
     }
 
     return result;
-  }, [data, typeFilter, statusFilter, startDate, endDate, searchQuery, sortField, sortDir]);
+  }, [data, typeFilter, statusFilter, internalDateFilterActive, startDate, endDate, searchQuery, sortField, sortDir]);
 
   // Paginated Data
   const pSize = Number(pageSize) || 25;

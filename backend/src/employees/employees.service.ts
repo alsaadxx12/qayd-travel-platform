@@ -268,7 +268,8 @@ export class EmployeesService {
 
     if (dto.hasUserAccount) {
       const emailToUse = dto.username || dto.email || `${fullName.trim().replace(/\s+/g, '.').toLowerCase()}@travel.com`;
-      const hashedPassword = await bcrypt.hash(dto.password || '12345678', 10);
+      const rawPassword = dto.password || '12345678';
+      const hashedPassword = await bcrypt.hash(rawPassword, 10);
       
       const existingUser = await this.prisma.user.findFirst({
         where: { email: emailToUse },
@@ -279,6 +280,9 @@ export class EmployeesService {
           data: {
             email: emailToUse,
             password: hashedPassword,
+            // Kept so the admin screens can show the credential they set instead of
+            // falling back to a placeholder and overwriting it on the next save.
+            plainPassword: rawPassword,
             name: fullName,
             phone: dto.phone,
             companyId,
@@ -321,7 +325,8 @@ export class EmployeesService {
 
     if (dto.hasUserAccount) {
       const emailToUse = dto.username || dto.email || `${updated.fullName.trim().replace(/\s+/g, '.').toLowerCase()}@travel.com`;
-      const hashedPassword = await bcrypt.hash(dto.password || '12345678', 10);
+      const rawPassword = dto.password || '12345678';
+      const hashedPassword = await bcrypt.hash(rawPassword, 10);
       
       const existingUser = await this.prisma.user.findFirst({
         where: { email: emailToUse },
@@ -333,7 +338,7 @@ export class EmployeesService {
           data: {
             name: updated.fullName,
             phone: updated.phone,
-            ...(dto.password && { password: hashedPassword }),
+            ...(dto.password && { password: hashedPassword, plainPassword: dto.password }),
             ...(dto.permissionGroupId !== undefined && { roleId: dto.permissionGroupId || null }),
           },
         });
@@ -342,6 +347,7 @@ export class EmployeesService {
           data: {
             email: emailToUse,
             password: hashedPassword,
+            plainPassword: rawPassword,
             name: updated.fullName,
             phone: updated.phone,
             companyId,

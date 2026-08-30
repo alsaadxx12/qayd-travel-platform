@@ -158,6 +158,7 @@ export const BranchesStructurePage: React.FC = () => {
   const [empCreateUser, setEmpCreateUser] = useState(false);
   const [empUsername, setEmpUsername] = useState('');
   const [empPassword, setEmpPassword] = useState('');
+  const [empHasExistingLogin, setEmpHasExistingLogin] = useState(false);
   const [empRole, setEmpRole] = useState('');
   const [empPermissionGroupId, setEmpPermissionGroupId] = useState<string | null>(null);
 
@@ -386,6 +387,7 @@ export const BranchesStructurePage: React.FC = () => {
       setEmpCreateUser(false);
       setEmpUsername('');
       setEmpPassword('');
+      setEmpHasExistingLogin(false);
       setEmpRole('');
       setEmpPermissionGroupId(null);
     } else if (activeTab === 'users') {
@@ -539,7 +541,8 @@ export const BranchesStructurePage: React.FC = () => {
         status: empStatus,
         hasUserAccount: empCreateUser,
         username: empCreateUser ? empUsername || empEmail : undefined,
-        password: empCreateUser ? empPassword : undefined,
+        // An empty box means "keep the current password", so it must not be sent.
+        password: empCreateUser && empPassword.trim() ? empPassword.trim() : undefined,
         role: empRole,
         permissionGroupId: empPermissionGroupId || undefined,
       };
@@ -1450,13 +1453,16 @@ export const BranchesStructurePage: React.FC = () => {
 
                               const existingUser = users.find((u) => u.fullName === e.fullName || (e.email && u.email === e.email));
                               setEmpCreateUser(Boolean(e.hasUserAccount || existingUser));
+                              setEmpHasExistingLogin(Boolean(existingUser));
                               if (existingUser) {
                                 setEmpUsername(existingUser.email);
-                                setEmpPassword(existingUser.password || '12345678');
+                                // Never seed a placeholder here: the field is sent back on
+                                // save, so a fake value would silently reset the login.
+                                setEmpPassword(existingUser.password || '');
                                 setEmpRole(existingUser.role || '');
                               } else {
                                 setEmpUsername(e.email || '');
-                                setEmpPassword('12345678');
+                                setEmpPassword('');
                                 setEmpRole('');
                               }
                               setModalOpen(true);
@@ -2131,7 +2137,7 @@ export const BranchesStructurePage: React.FC = () => {
                         if (!empUsername) {
                           setEmpUsername(empEmail || `${empFullName.trim().replace(/\s+/g, '.').toLowerCase()}@alfursan.iq`);
                         }
-                        if (!empPassword) {
+                        if (!empPassword && !empHasExistingLogin) {
                           setEmpPassword('12345678');
                         }
                       }
@@ -2154,8 +2160,19 @@ export const BranchesStructurePage: React.FC = () => {
                       />
                       <PasswordInput
                         size="xs"
-                        label={isAr ? 'كلمة المرور للنظام *' : 'Password *'}
-                        placeholder="••••••••"
+                        label={
+                          empHasExistingLogin
+                            ? (isAr ? 'كلمة المرور للنظام' : 'Password')
+                            : (isAr ? 'كلمة المرور للنظام *' : 'Password *')
+                        }
+                        description={
+                          empHasExistingLogin
+                            ? (isAr
+                              ? 'اتركها فارغة للإبقاء على كلمة المرور الحالية، أو اكتب كلمة جديدة لتغييرها.'
+                              : 'Leave blank to keep the current password, or type a new one to change it.')
+                            : undefined
+                        }
+                        placeholder={empHasExistingLogin ? (isAr ? 'بدون تغيير' : 'Unchanged') : '••••••••'}
                         value={empPassword}
                         onChange={(e) => setEmpPassword(e.target.value)}
                         leftSection={<IconLock size={14} />}

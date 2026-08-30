@@ -66,11 +66,10 @@ import { useLanguageStore } from '../store/useLanguageStore';
 
 // Helper: format date as YYYY-MM-DD
 const formatDate = (d: Date) => d.toISOString().split('T')[0];
-const oneMonthAgo = () => {
-  const d = new Date();
-  d.setMonth(d.getMonth() - 1);
-  return formatDate(d);
-};
+// The statement opens on the running fiscal year; anything older is summarised into a
+// carried-forward line, so the closing balance still matches the account.
+const fiscalYearStart = () => `${new Date().getFullYear()}-01-01`;
+const fiscalYearEnd = () => `${new Date().getFullYear()}-12-31`;
 
 // Statement movements are ordered by when they were entered into the system, not by
 // the document date, so anything recorded now is always the last row of the ledger.
@@ -84,6 +83,19 @@ const compareByEntryOrder = (a: any, b: any) => {
   const numA = String(a.voucherNumber || a.entryNumber || a.id || '');
   const numB = String(b.voucherNumber || b.entryNumber || b.id || '');
   return numA.localeCompare(numB, undefined, { numeric: true });
+};
+
+// The stored timestamps are UTC midnight, so reading the calendar day off the raw
+// string keeps a document dated 01/08 from sliding into 31/07 on the local clock.
+const toDayKey = (value?: any): string => {
+  if (!value) return '';
+  if (typeof value === 'string') {
+    const direct = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (direct) return `${direct[1]}-${direct[2]}-${direct[3]}`;
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return formatDate(new Date(d.getTime() - d.getTimezoneOffset() * 60000));
 };
 
 // Helper: Extract concise IATA airport codes
@@ -154,8 +166,8 @@ export const ReportsPage: React.FC = () => {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [accountSearch, setAccountSearch] = useState('');
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
-  const [startDate, setStartDate] = useState(oneMonthAgo());
-  const [endDate, setEndDate] = useState(formatDate(new Date()));
+  const [startDate, setStartDate] = useState(fiscalYearStart());
+  const [endDate, setEndDate] = useState(fiscalYearEnd());
   const [currency, setCurrency] = useState<string>('ALL');
 
   // Auto-Select Account from URL Params
@@ -301,6 +313,10 @@ export const ReportsPage: React.FC = () => {
     if (vt === 'REFUND') return 'refunds';
     if (vt === 'REISSUE') return 'changes';
     if (vt === 'HOTEL') return 'hotels';
+    if (vt === 'EXCHANGE' || vt === 'FX') return 'exchange';
+    if (vt === 'EXPENSE') return 'expense';
+    if (vt === 'RECEIPT') return 'receipt';
+    if (vt === 'PAYMENT') return 'payment';
 
     const dt = (m.docType || '').toLowerCase();
     if (dt.includes('تذكر') || dt.includes('طيران') || dt.includes('ticket')) return 'tickets';
@@ -314,14 +330,86 @@ export const ReportsPage: React.FC = () => {
     if (dt.includes('صرافة') || dt.includes('exchange')) return 'exchange';
     if (dt.includes('مصاريف') || dt.includes('expense')) return 'expense';
 
-    const desc = (m.description || '').toLowerCase();
+    const desc = `${m.description || ''} ${m.accountingDescription || ''}`.toLowerCase();
     if (desc.includes('تذكر') || desc.includes('طيران') || desc.includes('ticket')) return 'tickets';
     if (desc.includes('فيزا') || desc.includes('visa')) return 'visa';
     if (desc.includes('كروب') || desc.includes('group')) return 'groups';
     if (desc.includes('استرجاع') || desc.includes('refund')) return 'refunds';
     if (desc.includes('تغيير') || desc.includes('change')) return 'changes';
     if (desc.includes('فندق') || desc.includes('hotel')) return 'hotels';
+    if (desc.includes('صراف') || desc.includes('تحويل عملة') || desc.includes('exchange') || desc.includes(' fx ')) return 'exchange';
+    if (desc.includes('مصروف') || desc.includes('مصاريف') || desc.includes('expense')) return 'expense';
     return 'journal';
+  }, []);
+
+  // Selected period boundaries, compared on calendar days so the picker's optional
+  // time part never trims a whole document out of the range.
+  const rangeStartDay = useMemo(() => toDayKey(startDate), [startDate]);
+  const rangeEndDay = useMemo(() => toDayKey(endDate), [endDate]);
+
+  const movementDayKey = useCallback((m: any) => toDayKey(m?.date || m?.entryDate), []);
+
+  const isWithinRange = useCallback(
+    (m: any) => {
+      const day = movementDayKey(m);
+      if (!day) return true;
+      if (rangeStartDay && day < rangeStartDay) return false;
+      if (rangeEndDay && day > rangeEndDay) return false;
+      return true;
+    },
+    [movementDayKey, rangeStartDay, rangeEndDay]
+  );
+
+  const isBeforeRange = useCallback(
+    (m: any) => {
+      const day = movementDayKey(m);
+      return !!(day && rangeStartDay && day < rangeStartDay);
+    },
+    [movementDayKey, rangeStartDay]
+  );
+
+  const matchesTextSearch = useCallback(
+    (m: any) => {
+      const q = innerSearch.trim().toLowerCase();
+      if (!q) return true;
+      const passengers = [
+        ...(Array.isArray(m.passengersList) ? m.passengersList : []),
+        ...(Array.isArray(m.passengersDetail)
+          ? m.passengersDetail.map((p: any) => `${p?.name || ''} ${p?.ticketNumber || ''}`)
+          : []),
+      ];
+      return [
+        m.description,
+        m.accountingDescription,
+        m.docType,
+        m.entryNumber,
+        m.voucherNumber,
+        m.reference,
+        m.pnr,
+        m.airline,
+        m.route,
+        m.entryUser,
+        m.user,
+        ...passengers,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(q);
+    },
+    [innerSearch]
+  );
+
+  const resetAllFilters = useCallback(() => {
+    setActiveFilters((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        next[k] = true;
+      });
+      return next;
+    });
+    setInnerSearch('');
+    setCurrency('ALL');
   }, []);
 
   // Real-Time Data Fetching (Zero Stale Delay)
@@ -679,7 +767,9 @@ export const ReportsPage: React.FC = () => {
     const isOpeningActive = !!activeFilters['openingBalance'];
     const isPrevActive = !!activeFilters['previousBalance'];
 
-    const filtered = statementMovements.filter((m) => {
+    // Type / currency / text filters first, then the period, so movements dated before
+    // the selected range can still be rolled into a carried-forward balance.
+    const inScope = statementMovements.filter((m) => {
       const cat = categorizeMovement(m);
       if (cat !== 'openingBalance' && cat !== 'previousBalance' && !activeFilters[cat]) return false;
 
@@ -690,17 +780,11 @@ export const ReportsPage: React.FC = () => {
         if (currency === 'IQD' && isItemUSD) return false;
       }
 
-      if (innerSearch.trim()) {
-        const q = innerSearch.trim().toLowerCase();
-        return (
-          (m.description || '').toLowerCase().includes(q) ||
-          (m.entryNumber || '').toString().includes(q) ||
-          (m.voucherNumber || '').includes(q) ||
-          (m.reference || '').includes(q)
-        );
-      }
-      return true;
+      return matchesTextSearch(m);
     });
+
+    const filtered = inScope.filter(isWithinRange);
+    const beforeRange = inScope.filter(isBeforeRange);
 
     const sortedFiltered = [...filtered].sort(compareByEntryOrder);
 
@@ -804,6 +888,50 @@ export const ReportsPage: React.FC = () => {
       });
     }
 
+    // Movements older than the selected period are summarised into one carried-forward
+    // line per currency, so the running balance of the period still ends on the truth.
+    const carried = { IQD: { debit: 0, credit: 0, count: 0 }, USD: { debit: 0, credit: 0, count: 0 } };
+    beforeRange.forEach((m) => {
+      const itemCurr = (m.currency || 'IQD').toUpperCase();
+      const bucket = itemCurr.includes('USD') || itemCurr.includes('$') ? carried.USD : carried.IQD;
+      bucket.debit += Number(m.debit || 0);
+      bucket.credit += Number(m.credit || 0);
+      bucket.count += 1;
+    });
+
+    (['IQD', 'USD'] as const).forEach((curr) => {
+      const bucket = carried[curr];
+      if (!bucket.count) return;
+      const net = bucket.debit - bucket.credit;
+      if (curr === 'USD') {
+        sumDebitUSD += bucket.debit;
+        sumCreditUSD += bucket.credit;
+        runningBalanceUSD += net;
+      } else {
+        sumDebitIQD += bucket.debit;
+        sumCreditIQD += bucket.credit;
+        runningBalanceIQD += net;
+      }
+      const running = curr === 'USD' ? runningBalanceUSD : runningBalanceIQD;
+      rows.push({
+        id: `carried_forward_${curr.toLowerCase()}_row`,
+        date: startDate || new Date().toISOString(),
+        entryNumber: curr === 'USD' ? '000-C$' : '000-C',
+        docType: isAr ? 'رصيد مدوّر' : 'Carried Forward',
+        voucherNumber: `FWD-${curr}`,
+        description: isAr
+          ? `مدوّر ما قبل ${rangeStartDay || ''} (${bucket.count} حركة)`
+          : `Carried forward before ${rangeStartDay || ''} (${bucket.count} movements)`,
+        debit: bucket.debit,
+        credit: bucket.credit,
+        runningBalance: running,
+        balanceNature: running >= 0 ? (isAr ? 'مدين' : 'Debit') : (isAr ? 'دائن' : 'Credit'),
+        voucherType: 'PREVIOUS',
+        isBalanceRow: true,
+        currency: curr,
+      });
+    });
+
     sortedFiltered.forEach((m) => {
       const itemCurr = (m.currency || 'IQD').toUpperCase();
       const isUSD = itemCurr.includes('USD') || itemCurr.includes('$');
@@ -854,8 +982,11 @@ export const ReportsPage: React.FC = () => {
     statementMovements,
     activeFilters,
     currency,
-    innerSearch,
+    matchesTextSearch,
     categorizeMovement,
+    isWithinRange,
+    isBeforeRange,
+    rangeStartDay,
     accounts,
     selectedAccountId,
     startDate,
@@ -1429,6 +1560,7 @@ export const ReportsPage: React.FC = () => {
           {/* Date Range Picker */}
           <div className="shrink-0">
             <AccountingDateRangePicker
+              withTime={false}
               startDate={startDate}
               endDate={endDate}
               onChange={(start, end) => {
@@ -1592,6 +1724,21 @@ export const ReportsPage: React.FC = () => {
               <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
                 {calculatedRows.length} {isAr ? 'حركة' : 'items'}
               </span>
+            </div>
+
+            {/* Active Period + Reset */}
+            <div className="flex items-center justify-between gap-2 -mt-1.5">
+              <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 truncate" dir="ltr">
+                {rangeStartDay || '—'} ➔ {rangeEndDay || '—'}
+              </span>
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="text-[10.5px] font-bold text-[#F45A0A] hover:underline cursor-pointer shrink-0"
+                title={isAr ? 'إرجاع كل الفلاتر للوضع الافتراضي' : 'Reset all filters'}
+              >
+                {isAr ? 'تصفير الفلاتر' : 'Reset'}
+              </button>
             </div>
 
             {/* Filter Tabs (Movements vs Services) */}
@@ -1933,8 +2080,8 @@ export const ReportsPage: React.FC = () => {
             accountPhone={selectedAccount.phone}
             accountEmail={selectedAccount.email}
             accountAddress={selectedAccount.address}
-            startDate={startDate}
-            endDate={endDate}
+            startDate={rangeStartDay}
+            endDate={rangeEndDay}
             rows={printRows}
             totals={{
               totalDebit,
@@ -1954,8 +2101,8 @@ export const ReportsPage: React.FC = () => {
             accountPhone={selectedAccount.phone}
             accountEmail={selectedAccount.email}
             accountAddress={selectedAccount.address}
-            startDate={startDate}
-            endDate={endDate}
+            startDate={rangeStartDay}
+            endDate={rangeEndDay}
             rows={printRows}
             totals={{
               totalDebit,
@@ -1974,8 +2121,8 @@ export const ReportsPage: React.FC = () => {
               accountPhone={selectedAccount.phone}
               accountEmail={selectedAccount.email}
               accountAddress={selectedAccount.address}
-              startDate={startDate}
-              endDate={endDate}
+              startDate={rangeStartDay}
+              endDate={rangeEndDay}
               rows={printRows}
               totals={{
                 totalDebit,
