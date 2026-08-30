@@ -18,12 +18,119 @@ import {
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 
+/**
+ * Attachments are stored as data URLs INSIDE the record, so every one of them travels
+ * in the same JSON body as the ticket and sits in the same database row. The server
+ * accepts a 50MB body (see main.ts) and base64 inflates a file by a third, so the real
+ * constraint is on the TOTAL, not on any one file: 35MB of files becomes ~47MB on the
+ * wire, which is as close to that ceiling as is safe to go.
+ *
+ * These numbers are stated rather than hidden because they are the honest limit of
+ * storing files inside records. Lifting them further is not a matter of raising a
+ * constant — it needs the files to live somewhere of their own, with the record keeping
+ * only a link.
+ *
+ * In practice nobody meets these limits: what people attach is a camera photo of a
+ * transfer receipt, and those are downscaled below to well under a megabyte before
+ * anything is stored.
+ */
+const MAX_ATTACHMENT_MB = 30;
+const MAX_ATTACHMENT_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
+/** Across every attachment on the record, new and already present. */
+const MAX_TOTAL_MB = 35;
+const MAX_TOTAL_BYTES = MAX_TOTAL_MB * 1024 * 1024;
+
+/** Long edge kept after downscaling. Plenty to read an account number off a slip. */
+const MAX_IMAGE_EDGE = 2200;
+const JPEG_QUALITY = 0.85;
+
+/** Base64 of a data URL is ~4 bytes per 3, so this is the real stored size. */
+const dataUrlBytes = (dataUrl: string): number => {
+  const comma = dataUrl.indexOf(',');
+  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  const padding = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+};
+
+const readAsDataUrl = (file: File): Promise<{ dataUrl: string; bytes: number }> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      resolve({ dataUrl, bytes: dataUrlBytes(dataUrl) });
+    };
+    reader.readAsDataURL(file);
+  });
+
+/**
+ * Downscales a photograph before it is stored.
+ *
+ * This is what makes «any size» true in practice: the files people actually attach
+ * are camera photos of receipts, and a modern phone produces 8–15MB of them. Storing
+ * that verbatim would bloat the record, slow every list that loads it, and eventually
+ * hit the server's body limit. Two thousand pixels on the long edge keeps every digit
+ * legible while cutting the size by an order of magnitude.
+ *
+ * If the compressed result is not actually smaller — a small screenshot, a scan that
+ * was already optimised — the original is kept, so the file is never made worse.
+ */
+async function compressImage(file: File): Promise<{ dataUrl: string; bytes: number }> {
+  const original = await readAsDataUrl(file);
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return original;
+    // Receipts are photographed against dark desks; a white base keeps any
+    // transparency from turning black when it becomes a JPEG.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close?.();
+
+    const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+    const bytes = dataUrlBytes(dataUrl);
+    return bytes < original.bytes ? { dataUrl, bytes } : original;
+  } catch {
+    // Any format the browser cannot decode is stored untouched rather than lost.
+    return original;
+  }
+}
+
 export interface AttachmentItem {
   id: string;
   name: string;
   url: string;
   type: 'image' | 'pdf';
   size?: number;
+}
+
+/**
+ * Cash across the counter leaves no document — there is nothing to attach and asking
+ * for one only clutters the form. Every other method (تحويل، زين كاش، FIB، كي كارد،
+ * آجل) produces a screenshot, a slip or a receipt, and that image is the only proof
+ * the agency keeps that the money arrived.
+ *
+ * The rule lives here, next to the section it governs, so the tickets, visas, hotels
+ * and refunds workspaces cannot drift apart on what counts as cash in hand.
+ */
+export function paymentNeedsAttachment(methodKey: string, method?: any): boolean {
+  const key = String(methodKey || '').trim().toUpperCase();
+  if (!key) return false;
+  if (key === 'CASH_HAND' || key === 'CASH') return false;
+  // A method that lands in the employee's own cashbox IS cash in hand, whatever it
+  // was named in system settings.
+  if (String(method?.targetAccountId || '').trim().toUpperCase() === 'EMPLOYEE_ASSIGNED') {
+    return false;
+  }
+  return true;
 }
 
 interface TicketAttachmentsSectionProps {
@@ -38,43 +145,81 @@ export const TicketAttachmentsSection: React.FC<TicketAttachmentsSectionProps> =
   disabled = false,
 }) => {
   const [previewFile, setPreviewFile] = useState<AttachmentItem | null>(null);
+  const [busy, setBusy] = useState(false);
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
 
-  const handleUpload = (files: File[]) => {
+  const handleUpload = async (files: File[]) => {
     if (!files || files.length === 0) return;
+    setBusy(true);
 
     const newItems: AttachmentItem[] = [];
+    const rejected: string[] = [];
+    const overBudget: string[] = [];
+    let shrunk = 0;
+    // The budget is what is already on the record plus what is being added, because
+    // the server sees them all in one body.
+    let running = attachments.reduce((sum, a) => sum + (Number(a.size) || 0), 0);
 
-    for (const file of files) {
-      if (file.size > 15 * 1024 * 1024) {
-        showErrorNotification(
-          isAr ? 'حجم الملف كبير' : 'File too large',
-          isAr ? `الملف ${file.name} يتجاوز الحد الأقصى (15MB)` : `File ${file.name} exceeds maximum limit (15MB)`
-        );
-        continue;
+    try {
+      // Sequential and awaited. The previous version pushed from inside a FileReader
+      // callback and only committed when `newItems.length === files.length` — so a
+      // single skipped file meant that count was never reached and EVERY file the
+      // user had just picked was silently thrown away.
+      for (const file of files) {
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        try {
+          const prepared = isPdf ? await readAsDataUrl(file) : await compressImage(file);
+          if (prepared.bytes > MAX_ATTACHMENT_BYTES) {
+            rejected.push(file.name);
+            continue;
+          }
+          if (running + prepared.bytes > MAX_TOTAL_BYTES) {
+            overBudget.push(file.name);
+            continue;
+          }
+          running += prepared.bytes;
+          if (!isPdf && prepared.bytes < file.size * 0.9) shrunk++;
+          newItems.push({
+            id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            name: file.name,
+            url: prepared.dataUrl,
+            type: isPdf ? 'pdf' : 'image',
+            size: prepared.bytes,
+          });
+        } catch {
+          rejected.push(file.name);
+        }
       }
 
-      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-      const reader = new FileReader();
-      reader.onload = () => {
-        newItems.push({
-          id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          name: file.name,
-          url: reader.result as string,
-          type: isPdf ? 'pdf' : 'image',
-          size: file.size,
-        });
-
-        if (newItems.length === files.length) {
-          onChange([...attachments, ...newItems]);
-          showSuccessNotification(
-            isAr ? 'تم إرفاق الملفات' : 'Files attached',
-            isAr ? `تم إرفاق ${newItems.length} ملف بنجاح` : `${newItems.length} file(s) attached successfully`
-          );
-        }
-      };
-      reader.readAsDataURL(file);
+      // Whatever succeeded is kept, even when part of the batch failed.
+      if (newItems.length > 0) {
+        onChange([...attachments, ...newItems]);
+        showSuccessNotification(
+          isAr ? 'تم إرفاق الملفات' : 'Files attached',
+          isAr
+            ? `تم إرفاق ${newItems.length} ملف${shrunk ? ` (ضُغطت ${shrunk} صورة تلقائياً)` : ''}`
+            : `${newItems.length} file(s) attached${shrunk ? ` (${shrunk} image(s) compressed)` : ''}`,
+        );
+      }
+      if (rejected.length > 0) {
+        showErrorNotification(
+          isAr ? 'تعذّر إرفاق بعض الملفات' : 'Some files could not be attached',
+          isAr
+            ? `${rejected.join('، ')} — الحد الأقصى للملف الواحد ${MAX_ATTACHMENT_MB}MB لأن المرفق يُحفظ داخل السجل نفسه.`
+            : `${rejected.join(', ')} — the per-file ceiling is ${MAX_ATTACHMENT_MB}MB because attachments are stored inside the record.`,
+        );
+      }
+      if (overBudget.length > 0) {
+        showErrorNotification(
+          isAr ? 'تجاوز مجموع المرفقات' : 'Attachment budget exceeded',
+          isAr
+            ? `${overBudget.join('، ')} — مجموع مرفقات السجل الواحد لا يتجاوز ${MAX_TOTAL_MB}MB. احذف مرفقاً قديماً أو وزّعها على أكثر من سجل.`
+            : `${overBudget.join(', ')} — one record holds at most ${MAX_TOTAL_MB}MB of attachments in total.`,
+        );
+      }
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -99,7 +244,7 @@ export const TicketAttachmentsSection: React.FC<TicketAttachmentsSectionProps> =
           {!disabled && (
             <FileButton
               multiple
-              accept="image/*,application/pdf"
+              accept="image/*,application/pdf,.pdf"
               onChange={handleUpload}
             >
               {(props) => (
@@ -108,10 +253,13 @@ export const TicketAttachmentsSection: React.FC<TicketAttachmentsSectionProps> =
                   size="xs"
                   variant="default"
                   radius="md"
-                  leftSection={<IconPlus size={13} />}
+                  loading={busy}
+                  leftSection={busy ? undefined : <IconPlus size={13} />}
                   className="font-semibold text-xs border-slate-200 text-slate-700 cursor-pointer"
                 >
-                  {isAr ? 'إرفاق ملف' : 'Attach File'}
+                  {busy
+                    ? (isAr ? 'جارٍ التحضير…' : 'Preparing…')
+                    : (isAr ? 'إرفاق ملف' : 'Attach File')}
                 </Button>
               )}
             </FileButton>

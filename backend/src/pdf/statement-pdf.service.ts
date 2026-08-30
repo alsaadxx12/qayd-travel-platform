@@ -34,7 +34,8 @@ export class StatementPdfService {
     };
 
     const html = this.templateService.renderStatementHtml(merged);
-    const buffer = await this.pdfService.generateFromHtml(html);
+    const raw = await this.pdfService.generateFromHtml(html);
+    const buffer = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
     // The period stamp arrives as 01/01/2026; slashes are not legal in a file name.
     const stamp = (merged.startDate || new Date().toISOString().slice(0, 10)).replace(/[\\/:*?"<>|]+/g, '-');
     const safeAccount = (merged.accountName || 'account').replace(/[\\/:*?"<>|]+/g, '-').trim();

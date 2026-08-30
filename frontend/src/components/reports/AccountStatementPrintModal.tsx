@@ -1107,7 +1107,12 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
           pdfBase64 = dataUri.split(',')[1] || dataUri;
         }
       } catch (pdfErr) {
-        console.warn('Client PDF generation error for email:', pdfErr);
+        console.error('Client PDF generation error for email:', pdfErr);
+        throw new Error('تعذر توليد ملف كشف الحساب. لن يُرسل البريد بدون المرفق.');
+      }
+
+      if (!pdfBase64) {
+        throw new Error('تعذر توليد ملف كشف الحساب. لن يُرسل البريد بدون المرفق.');
       }
 
       await apiRequest('/api/email/send-statement', {
@@ -1120,8 +1125,7 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
           currentBalance: totals.finalBalance,
           fromDate: startDate,
           toDate: endDate,
-          subject: `كشف حساب مالي رسمي — ${accountCode ? `${accountCode} - ` : ''}${accountName}`,
-          customMessage: 'مرحباً شريكنا، تجدون برفقه كشف الحساب المالي. لطفاً تسديد ما بذمتكم من متعلقات.',
+          subject: `كشف حساب — ${accountCode ? `${accountCode} - ` : ''}${accountName}`,
           pdfBase64: pdfBase64,
         }),
       });

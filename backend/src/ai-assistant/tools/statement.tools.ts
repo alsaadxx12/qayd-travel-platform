@@ -73,7 +73,7 @@ export class StatementTools implements AiToolProvider {
       {
         name: 'emailAccountStatement',
         description:
-          'أرسل كشف الحساب الرسمي PDF إلى إيميل العميل عبر خدمة إرسال الكشوفات (Brevo). لا ترسل قبل موافقة المستخدم (confirm=true). استخدمها لـ «أرسل الكشف» بعد اختيار الشركة أو العميل.',
+          'أرسل كشف الحساب الرسمي كملف PDF مرفق فقط عبر Brevo. لا تضع أرصدة أو حركات أو ملخصاً في نص الرسالة. لا ترسل قبل موافقة المستخدم (confirm=true).',
         parameters: {
           type: 'object',
           properties: {
@@ -86,7 +86,6 @@ export class StatementTools implements AiToolProvider {
             period: { type: 'string', enum: ['TODAY', 'WEEK', 'MONTH', 'LAST_MONTH', 'QUARTER', 'YEAR', 'FISCAL_YEAR'] },
             startDate: { type: 'string' },
             endDate: { type: 'string' },
-            customMessage: { type: 'string' },
           },
           additionalProperties: false,
         },
@@ -248,9 +247,13 @@ export class StatementTools implements AiToolProvider {
     let artifactId: string;
     try {
       generated = await this.statementPdf.generate(ctx.companyId, built.pdf);
-      if (!generated?.buffer?.length || generated.buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
+      const pdfBuf = Buffer.isBuffer(generated.buffer)
+        ? generated.buffer
+        : Buffer.from(generated.buffer as Uint8Array);
+      if (!pdfBuf.length || pdfBuf.subarray(0, 5).toString('latin1') !== '%PDF-') {
         throw new Error('الملف الناتج ليس ملف PDF صالحاً');
       }
+      generated = { ...generated, buffer: pdfBuf };
       artifactId = this.artifacts.put({
         buffer: generated.buffer,
         companyId: ctx.companyId,
@@ -279,12 +282,10 @@ export class StatementTools implements AiToolProvider {
         recipientName,
         accountName: built.account.nameAr,
         accountCode: built.account.code || undefined,
-        currency: 'IQD',
-        currentBalance: round2(built.closingBalance),
         fromDate: built.period.startDate,
         toDate: built.period.endDate,
         pdfBase64: generated.buffer.toString('base64'),
-        customMessage: typeof args.customMessage === 'string' ? args.customMessage : undefined,
+        attachmentName: `Account_Statement_${built.account.code || 'account'}_${String(built.period.endDate).replace(/[^0-9A-Za-z]+/g, '-')}`,
       });
 
       const uiBlocks: AiUiBlock[] = [

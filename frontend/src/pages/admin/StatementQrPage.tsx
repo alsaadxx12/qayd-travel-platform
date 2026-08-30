@@ -47,9 +47,9 @@ export const StatementQrPage: React.FC = () => {
     setLoading(true);
     try {
       const [issued, customers, suppliers] = await Promise.all([
-        apiRequest('/api/statement-tokens').catch(() => []),
-        apiRequest('/api/partners/customers').catch(() => []),
-        apiRequest('/api/partners/suppliers').catch(() => []),
+        apiRequest('/statement-tokens').catch(() => []),
+        apiRequest('/partners/customers').catch(() => []),
+        apiRequest('/partners/suppliers').catch(() => []),
       ]);
       setTokens(Array.isArray(issued) ? issued : []);
       setParties([
@@ -88,7 +88,7 @@ export const StatementQrPage: React.FC = () => {
         party.kind === 'CUSTOMER'
           ? { customerId: party.id, regenerate }
           : { supplierId: party.id, regenerate };
-      const created: QrToken = await apiRequest('/api/statement-tokens', {
+      const created: QrToken = await apiRequest('/statement-tokens', {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -110,7 +110,7 @@ export const StatementQrPage: React.FC = () => {
   const revoke = async (row: QrToken) => {
     setBusyId(row.id);
     try {
-      await apiRequest(`/api/statement-tokens/${row.id}`, { method: 'DELETE' });
+      await apiRequest(`/statement-tokens/${row.id}`, { method: 'DELETE' });
       showSuccessNotification('تم الإبطال', 'كل ورقة تحمل هذا الباركود توقفت عن العمل.');
       await load();
       setPreview(null);

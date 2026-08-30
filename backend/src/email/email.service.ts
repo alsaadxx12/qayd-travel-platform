@@ -118,6 +118,11 @@ export class SendStatementEmailDto {
   @IsBoolean()
   includeSummary?: boolean;
 
+  /** Debts digest only. Account statements must attach a PDF. */
+  @IsOptional()
+  @IsBoolean()
+  allowWithoutAttachment?: boolean;
+
   @IsOptional()
   @IsArray()
   rows?: Array<{
@@ -150,7 +155,24 @@ export function toMailSafeFileName(raw: string, fallback: string): string {
  * TCP connection used to hang the request (and the AI stream) forever.
  */
 const BREVO_SEND_TIMEOUT_MS = Number(process.env.BREVO_TIMEOUT_MS || 25_000);
+const BREVO_ATTACHMENT_TIMEOUT_MS = Number(process.env.BREVO_ATTACHMENT_TIMEOUT_MS || 60_000);
 const BREVO_META_TIMEOUT_MS = 12_000;
+const BREVO_MAX_ATTACHMENT_BYTES = 18 * 1024 * 1024;
+
+function decodePdfBase64(raw?: string): Buffer | null {
+  if (!raw || !raw.trim()) return null;
+  const clean = raw.replace(/^data:[^;]+;base64,/, '').replace(/\s+/g, '');
+  if (clean.length < 32) return null;
+  let buf: Buffer;
+  try {
+    buf = Buffer.from(clean, 'base64');
+  } catch {
+    return null;
+  }
+  if (buf.length < 8) return null;
+  if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') return null;
+  return buf;
+}
 
 async function brevoFetch(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController();
@@ -373,7 +395,10 @@ export class EmailService {
     }
 
     if (dto.attachment && dto.attachment.length > 0) {
-      bodyPayload.attachment = dto.attachment;
+      bodyPayload.attachment = dto.attachment.map((item) => ({
+        name: item.name,
+        content: item.content,
+      }));
     }
 
     const tenantId = dto.tenantId || '00000000-0000-0000-0000-000000000001';
@@ -438,7 +463,7 @@ export class EmailService {
           },
           body: JSON.stringify(bodyPayload),
         },
-        BREVO_SEND_TIMEOUT_MS,
+        dto.attachment?.length ? BREVO_ATTACHMENT_TIMEOUT_MS : BREVO_SEND_TIMEOUT_MS,
       );
 
       if (!res.ok) {
@@ -479,42 +504,28 @@ export class EmailService {
   }
 
   async sendStatementEmail(dto: SendStatementEmailDto): Promise<{ success: boolean; messageId?: string }> {
-    const subject = dto.subject || `كشف حساب مالي رسمي — ${dto.accountName}`;
-    const cur = dto.currency || 'IQD';
-    const balanceNum = typeof dto.currentBalance === 'number' ? dto.currentBalance : Number(dto.currentBalance) || 0;
-    const balanceFormatted = balanceNum.toLocaleString('en-US', { minimumFractionDigits: 2 });
-    const dateRangeStr = dto.fromDate && dto.toDate ? `${dto.fromDate} إلى ${dto.toDate}` : 'كافة الحركات المسجلة';
-    const hasPdf = !!(dto.pdfBase64 && dto.pdfBase64.trim());
-    const showSummary = dto.includeSummary === true;
+    const pdfBuffer = decodePdfBase64(dto.pdfBase64);
+    if (!pdfBuffer && dto.allowWithoutAttachment !== true) {
+      throw new Error(
+        'لا يمكن إرسال كشف الحساب بدون ملف PDF صالح. أعد توليد الكشف ثم حاول الإرسال من جديد.',
+      );
+    }
+    if (pdfBuffer && pdfBuffer.length > BREVO_MAX_ATTACHMENT_BYTES) {
+      throw new Error(
+        `ملف الكشف أكبر من الحد المسموح للمرفق (${Math.round(pdfBuffer.length / (1024 * 1024))} MB). قلّص فترة الكشف ثم أعد الإرسال.`,
+      );
+    }
 
-    const summaryHtml = showSummary
-      ? `
-          <!-- Account & Balance Summary Cards -->
-          <div style="display: table; width: 100%; margin: 20px 0; border-collapse: separate; border-spacing: 10px 0;">
-            <div style="display: table-cell; width: 50%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; text-align: center;">
-              <span style="font-size: 11px; color: #64748b; font-weight: bold; display: block;">الحساب المالي:</span>
-              <strong style="font-size: 13.5px; color: #0f172a; display: block; margin-top: 4px;">${dto.accountName}</strong>
-            </div>
-            <div style="display: table-cell; width: 50%; background-color: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: 14px; text-align: center;">
-              <span style="font-size: 11px; color: #c2410c; font-weight: bold; display: block;">الرصيد الصافي المطلوب:</span>
-              <strong style="font-size: 16px; color: #9a3412; font-family: monospace; display: block; margin-top: 4px;">${balanceFormatted} ${cur}</strong>
-            </div>
-          </div>
-
-          <div style="font-size: 12px; color: #64748b; margin-bottom: 18px;">
-            <span>📅 <strong>فترة الكشف:</strong> ${dateRangeStr}</span>
-          </div>
-      `
-      : '';
-
-    const attachmentNoticeHtml = hasPdf
-      ? `
-          <!-- Attachment Notice Box -->
-          <div style="background-color: #eff6ff; border: 1px dashed #93c5fd; border-radius: 10px; padding: 14px 18px; font-size: 13px; color: #1e40af; margin: 18px 0; text-align: center;">
-            📎 <strong>ملف كشف الحساب الرسمي (PDF)</strong> مرفق بالكامل مع هذه الرسالة للتدقيق والمطابقة.
-          </div>
-      `
-      : '';
+    const stamp = String(dto.toDate || new Date().toISOString().slice(0, 10)).replace(/[^0-9A-Za-z]+/g, '-');
+    const attachmentName = toMailSafeFileName(
+      dto.attachmentName || `Account_Statement_${dto.accountCode || ''}_${stamp}`,
+      `Account_Statement_${stamp}`,
+    );
+    const greetingName = dto.recipientName || dto.accountName || '';
+    const subject = dto.subject || `كشف حساب — ${dto.accountName}`;
+    const bodyLine = pdfBuffer
+      ? 'مرفق ملف كشف الحساب الرسمي (PDF).'
+      : (dto.customMessage || 'تجدون تفاصيل الحساب في هذه الرسالة.');
 
     const htmlContent = `
     <!DOCTYPE html>
@@ -523,71 +534,32 @@ export class EmailService {
       <meta charset="UTF-8">
       <title>${subject}</title>
     </head>
-    <body style="margin: 0; padding: 24px 12px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; color: #1e293b; direction: rtl; text-align: right;">
-      <div style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);">
-        
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); color: #ffffff; padding: 26px 24px; text-align: center;">
-          <h1 style="margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.3px;">كشف حساب مالي رسمي</h1>
-          <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9;">قسم الإدارة المالية والمحاسبة</p>
-        </div>
-
-        <!-- Main Body -->
-        <div style="padding: 26px 24px;">
-          <p style="font-size: 15px; line-height: 1.6; margin: 0 0 16px 0; color: #0f172a;">
-            مرحباً شريكنا <strong>${dto.recipientName || dto.accountName}</strong> المحترم،
-          </p>
-          
-          <!-- Beautiful Styled Message Container -->
-          <div style="background-color: #f8fafc; border-right: 4px solid #ea580c; border: 1px solid #e2e8f0; padding: 18px 20px; border-radius: 10px; font-size: 14px; line-height: 1.7; color: #1e293b; margin: 16px 0;">
-            ${dto.customMessage ? `<p style="margin: 0 0 10px 0; color: #334155;">${dto.customMessage}</p>` : ''}
-            <p style="margin: 0; font-weight: 600; color: #0f172a;">
-              ${hasPdf
-                ? 'تجدون برفقه كشف الحساب المالي المعتمد (ملف PDF المرفق). لطفاً تسديد ما بذمتكم من متعلقات مالية.'
-                : 'تجدون في هذه الرسالة إشعاراً بكشف حسابكم المالي المعتمد. لطفاً تسديد ما بذمتكم من متعلقات مالية.'}
-            </p>
-          </div>
-${summaryHtml}${attachmentNoticeHtml}
-
-          <!-- Signature Section as requested -->
-          <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 13.5px; line-height: 1.6;">
-            <p style="margin: 0; font-weight: bold; color: #1e293b;">شكراً لتعاملكم معنا،</p>
-            <p style="margin: 4px 0 0 0; color: #ea580c; font-weight: 800; font-size: 14px;">قسم الحسابات المالية</p>
-          </div>
-        </div>
-
-        <!-- Minimal Footer -->
-        <div style="background-color: #f8fafc; border-top: 1px solid #f1f5f9; padding: 14px 20px; text-align: center; font-size: 11px; color: #94a3b8;">
-          <p style="margin: 0;">تم الإرسال والتدقيق إلكترونياً • جميع الحقوق محفوظة © ${new Date().getFullYear()}</p>
-        </div>
+    <body style="margin:0;padding:24px 12px;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f8fafc;color:#0f172a;direction:rtl;text-align:right;">
+      <div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:22px 20px;">
+        <p style="margin:0 0 12px 0;font-size:15px;line-height:1.7;">
+          مرحباً${greetingName ? ` <strong>${greetingName}</strong>` : ''}،
+        </p>
+        <p style="margin:0;font-size:14px;line-height:1.7;color:#334155;">
+          ${bodyLine}
+        </p>
       </div>
     </body>
     </html>
     `;
 
-    const attachments: Array<{ name: string; content: string }> = [];
-    if (hasPdf) {
-      const cleanContent = (dto.pdfBase64 as string).replace(/^data:[^;]+;base64,/, '').replace(/\s+/g, '');
-      const stamp = (dto.toDate || new Date().toISOString().slice(0, 10)).replace(/[^0-9A-Za-z]+/g, '-');
-      attachments.push({
-        name: toMailSafeFileName(
-          dto.attachmentName || `Account_Statement_${dto.accountCode || ''}_${stamp}`,
-          `Account_Statement_${stamp}`,
-        ),
-        content: cleanContent,
-      });
-    }
-
     const result = await this.sendEmail({
-      to: [{ email: dto.recipientEmail, name: dto.recipientName || dto.accountName }],
+      to: [{ email: dto.recipientEmail, name: greetingName || undefined }],
       subject,
       htmlContent,
-      attachment: attachments.length > 0 ? attachments : undefined,
+      textContent: `مرحباً${greetingName ? ` ${greetingName}` : ''}،\n${bodyLine}\n`,
+      attachment: pdfBuffer
+        ? [{ name: attachmentName, content: pdfBuffer.toString('base64') }]
+        : undefined,
     });
 
     this.logger.log(
-      `Statement email sent to ${dto.recipientEmail} — attachment: ${
-        attachments.length ? `${attachments[0].name} (${Math.round(attachments[0].content.length / 1024)} KB base64)` : 'NONE'
+      `Statement email sent to ${dto.recipientEmail} — attachment ${
+        pdfBuffer ? `${attachmentName} (${Math.round(pdfBuffer.length / 1024)} KB)` : 'NONE'
       }`,
     );
 

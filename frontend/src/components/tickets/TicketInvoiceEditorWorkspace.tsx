@@ -35,7 +35,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FlightRouteSelector } from './FlightRouteSelector';
 import { TicketPassengersTable, PassengerLine } from './TicketPassengersTable';
 import { TicketFinancialSummary } from './TicketFinancialSummary';
-import { TicketAttachmentsSection, AttachmentItem } from './TicketAttachmentsSection';
+import { TicketAttachmentsSection, paymentNeedsAttachment, AttachmentItem } from './TicketAttachmentsSection';
 import { InvoiceAuditLogModal } from './InvoiceAuditLogModal';
 import { CurrencySwitchModal } from './CurrencySwitchModal';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
@@ -528,6 +528,20 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       { value: 'CREDIT', label: isAr ? 'آجل (على الحساب)' : 'Credit (On Account)', targetAccountId: 'RECEIVABLE' },
     ];
   }, [paymentMethodsConfig, isAr]);
+
+  /**
+   * Cash across the counter leaves no document, so the attachments box only appears
+   * for the methods that produce one: transfers, wallets, cards, credit.
+   *
+   * The `attachments.length` clause matters as much as the rule itself — if the user
+   * attaches a transfer screenshot and then switches to cash, hiding the box would
+   * leave those files still attached to the record with no way to see or remove
+   * them. Nothing that is still saved is ever hidden.
+   */
+  const showAttachments = useMemo(() => {
+    const selected = paymentMethodsList.find((pm: any) => pm.value === paymentMethod);
+    return paymentNeedsAttachment(paymentMethod, selected) || attachments.length > 0;
+  }, [paymentMethod, paymentMethodsList, attachments.length]);
 
   const applyEmployeeCashbox = useCallback((selectedEmpName: string, availableBoxes: any[]) => {
     if (!selectedEmpName || availableBoxes.length === 0) return false;
@@ -1833,16 +1847,18 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                     </div>
                     </div>
 
-                    {/* ── Attachments (moved here from Card 3) ── */}
-                    <div className="pt-3 border-t border-slate-100">
-                      <TicketAttachmentsSection
-                        attachments={attachments}
-                        onChange={(updatedAtts) => {
-                          setAttachments(updatedAtts);
-                          markDirty();
-                        }}
-                      />
-                    </div>
+                    {/* ── Attachments: only for methods that produce a document ── */}
+                    {showAttachments && (
+                      <div className="pt-3 border-t border-slate-100">
+                        <TicketAttachmentsSection
+                          attachments={attachments}
+                          onChange={(updatedAtts) => {
+                            setAttachments(updatedAtts);
+                            markDirty();
+                          }}
+                        />
+                      </div>
+                    )}
                   </section>
 
                   <section id="field-supplier" className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-3.5 sm:p-5 space-y-3 font-sans">

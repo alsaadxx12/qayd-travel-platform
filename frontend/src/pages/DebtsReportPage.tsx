@@ -634,6 +634,7 @@ export const DebtsReportPage: React.FC = () => {
           currentBalance: bal,
           subject: emailSubject,
           customMessage: emailBody,
+          allowWithoutAttachment: true,
           fromDate: batchStartDate ? new Date(batchStartDate).toLocaleDateString('ar-EG') : undefined,
           toDate: batchEndDate ? new Date(batchEndDate).toLocaleDateString('ar-EG') : undefined,
         }),
