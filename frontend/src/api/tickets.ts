@@ -131,7 +131,7 @@ export const ticketsApi = {
     apiRequest(`/tickets/flights${ticketListQuery(params)}`, { ttl: 60_000 }),
 
   getVisas: (params?: { limit?: number; dateFrom?: string; dateTo?: string }): Promise<TicketData[]> =>
-    apiRequest(`/tickets/visas${ticketListQuery(params)}`),
+    apiRequest(`/tickets/visas${ticketListQuery(params)}`, { ttl: 60_000 }),
 
   getOne: (id: string): Promise<TicketData> =>
     apiRequest(`/tickets/${id}`),

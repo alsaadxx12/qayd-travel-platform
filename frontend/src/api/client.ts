@@ -36,6 +36,7 @@ const STABLE_PREFIXES = [
   '/permission-groups',
   '/subscriptions/plans',
   '/accounts',
+  '/partners',
 ];
 
 /** Near-static data is worth holding for minutes, not seconds. */
@@ -56,6 +57,7 @@ const TTL_OVERRIDES: Array<[string, number]> = [
   ['/receipt-vouchers', 30 * 1000], // voucher lists are stable within a session
   ['/payment-vouchers', 30 * 1000],
   ['/journal-entries', 30 * 1000],
+  ['/tickets/visas', 60 * 1000], // visa list is stable within a session
 ];
 
 function ttlFor(path: string): number {
