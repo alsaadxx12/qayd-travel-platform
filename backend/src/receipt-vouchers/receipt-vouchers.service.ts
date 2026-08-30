@@ -205,6 +205,8 @@ export class ReceiptVouchersService {
         voucherNumber: true,
         date: true,
         amount: true,
+        currency: true,
+        exchangeRate: true,
         accountId: true,
         cashboxOrBankAccountId: true,
         customerId: true,

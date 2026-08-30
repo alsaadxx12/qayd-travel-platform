@@ -176,8 +176,25 @@ export const JournalEntriesPage: React.FC = () => {
 
         // Detect currency
         let currency = 'IQD';
-        if (desc.includes('$') || desc.includes('USD') || desc.includes('دولار') || entry.currency === 'USD') {
+        if (entry.currency === 'USD' || desc.includes('$') || desc.includes('USD') || desc.includes('دولار')) {
           currency = 'USD';
+        }
+
+        const isUSD = currency === 'USD';
+        const entryRate = Number(entry.exchangeRate) || 1;
+        let displayDebit = totalDebit;
+        let displayCredit = totalCredit;
+
+        if (isUSD) {
+          const debitsOrig = (entry.lines || [])
+            .filter((l: any) => Number(l.debit) > 0)
+            .map((l: any) => l.debitOriginal !== null && l.debitOriginal !== undefined ? Number(l.debitOriginal) : (entryRate > 1 ? Number(l.debit) / entryRate : Number(l.debit)));
+          const creditsOrig = (entry.lines || [])
+            .filter((l: any) => Number(l.credit) > 0)
+            .map((l: any) => l.creditOriginal !== null && l.creditOriginal !== undefined ? Number(l.creditOriginal) : (entryRate > 1 ? Number(l.credit) / entryRate : Number(l.credit)));
+          
+          if (debitsOrig.length > 0) displayDebit = debitsOrig.reduce((a: number, b: number) => a + b, 0);
+          if (creditsOrig.length > 0) displayCredit = creditsOrig.reduce((a: number, b: number) => a + b, 0);
         }
 
         const { cleanDescription } = readVoucherSplits(entry.description);
@@ -186,13 +203,15 @@ export const JournalEntriesPage: React.FC = () => {
           ...entry,
           _idx: idx + 1,
           dateFormatted: formatDateEn(entry.date || entry.createdAt),
-          totalDebit,
-          totalCredit,
+          totalDebit: displayDebit,
+          totalCredit: displayCredit,
+          postedAmountIQD: totalDebit,
           debitAccountName,
           creditAccountName,
           cashboxName,
           sourceType,
           currency,
+          exchangeRate: entryRate,
           cleanDescription: cleanDescription || entry.description || '—',
           userName: entry.createdBy?.name || entry.createdBy?.fullName || entry.createdBy?.email || 'علي جعفر محمود',
           sourceVoucherId: entry.receiptVoucherId || entry.paymentVoucherId || null,
