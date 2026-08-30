@@ -11,6 +11,7 @@ import { PdfFileBlock } from './PdfFileBlock';
 import { SourcesBlock } from './SourcesBlock';
 import { EmailConfirmBlock } from './EmailConfirmBlock';
 import { EntityCardBlock } from './EntityCardBlock';
+import { StatementEmailBlock } from './StatementEmailBlock';
 
 export const UiBlocks: React.FC<{ blocks?: any[]; onPrompt?: (text: string) => void }> = ({
   blocks,
@@ -41,6 +42,10 @@ export const UiBlocks: React.FC<{ blocks?: any[]; onPrompt?: (text: string) => v
             return <PdfFileBlock key={i} payload={block.payload} />;
           case 'sources':
             return <SourcesBlock key={i} payload={block.payload} />;
+          // Renders the statement and mails it from the browser — see the block for
+          // why the server does not do this.
+          case 'statement_email_client':
+            return <StatementEmailBlock key={i} payload={block.payload} />;
           case 'email_confirm':
             return <EmailConfirmBlock key={i} payload={block.payload} onPrompt={onPrompt} />;
           case 'journal_card':

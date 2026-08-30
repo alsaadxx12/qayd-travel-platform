@@ -242,109 +242,50 @@ export class StatementTools implements AiToolProvider {
     }
 
     /**
-     * The statement IS the PDF. The message that carries it is two lines of
-     * courtesy, so a failure to render must stop the send rather than substitute
-     * something else — a customer receiving a table where an official statement was
-     * promised is worse than receiving nothing and being told why.
+     * The statement is rendered and mailed by the BROWSER, not here.
+     *
+     * Two reasons, and the second is the stronger one. A server-side PDF needs a
+     * headless browser that a deployment may not have — but even where it does, the
+     * server renders its own Handlebars template, a different document from the sheet
+     * the accountant approves on the statement screen. Sending a customer a statement
+     * that does not look like the one the staff exported is a defect regardless of
+     * whether Chromium is installed.
+     *
+     * So the tool hands over the data and the front-end draws the same component the
+     * statement page prints, turns it into a PDF the same way, and posts it to the same
+     * email endpoint. One document, one code path, no browser on the server.
      */
-    let generated: Awaited<ReturnType<StatementPdfService['generate']>>;
-    let artifactId: string;
-    try {
-      generated = await this.statementPdf.generate(ctx.companyId, built.pdf);
-      const pdfBuf = Buffer.isBuffer(generated.buffer)
-        ? generated.buffer
-        : Buffer.from(generated.buffer as Uint8Array);
-      if (!pdfBuf.length || pdfBuf.subarray(0, 5).toString('latin1') !== '%PDF-') {
-        throw new Error('الملف الناتج ليس ملف PDF صالحاً');
-      }
-      generated = { ...generated, buffer: pdfBuf };
-      artifactId = this.artifacts.put({
-        buffer: generated.buffer,
-        companyId: ctx.companyId,
-        userId: ctx.userId,
-        filename: generated.downloadName,
-      });
-    } catch (err: any) {
-      const reason = err?.message || 'سبب غير معروف';
-      this.logger.error(
-        `Statement PDF failed, email aborted for ${built.account.nameAr}: ${reason}`,
-        err?.stack,
-      );
-      const message = `لم أرسل البريد لأن ملف كشف الحساب لم يُنتج (${reason}).`;
-      return {
-        ok: false,
-        data: { sent: false, pdfFailed: true, recipientEmail, message },
-        ui: [this.kpiBlock(built)],
-        suggestions: ['أعد إرسال الكشف', 'كشف PDF'],
-        note: message,
-      };
-    }
-
-    try {
-      const sent = await this.email.sendStatementEmail({
+    return {
+      ok: true,
+      data: {
+        sent: false,
+        handedToClient: true,
         recipientEmail,
-        recipientName,
-        accountName: built.account.nameAr,
-        accountCode: built.account.code || undefined,
-        fromDate: built.period.startDate,
-        toDate: built.period.endDate,
-        pdfBase64: generated.buffer.toString('base64'),
-        customMessage: 'الكشف المحدث لكم',
-        attachmentName: `Account_Statement_${built.account.code || 'account'}_${String(built.period.endDate).replace(/[^0-9A-Za-z]+/g, '-')}`,
-      });
-
-      const uiBlocks: AiUiBlock[] = [
+        account: { id: built.account.id, name: built.account.nameAr },
+        period: built.period.label,
+      },
+      ui: [
         {
-          type: 'pdf_file',
+          type: 'statement_email_client',
           payload: {
-            artifactId,
-            filename: generated.downloadName,
             accountName: built.account.nameAr,
-            period: built.period.label,
-            sizeBytes: generated.buffer.length,
-            closingBalance: round2(built.closingBalance),
-            emailedTo: recipientEmail,
+            accountCode: built.account.code || undefined,
+            accountPhone: built.contact?.phone || undefined,
+            accountEmail: built.contact?.email || undefined,
+            accountAddress: built.contact?.address || undefined,
+            recipientEmail,
+            recipientName,
+            startDate: built.pdf.startDate,
+            endDate: built.pdf.endDate,
+            periodLabel: built.period.label,
+            rows: built.pdf.rows,
+            totals: built.pdf.totals,
           },
         },
-      ];
-
-      return {
-        ok: true,
-        data: {
-          sent: true,
-          messageId: sent.messageId || null,
-          recipientEmail,
-          account: { id: built.account.id, name: built.account.nameAr },
-        },
-        ui: uiBlocks,
-        suggestions: ['كشف PDF', 'رصيده'],
-        note: `تم إرسال كشف «${built.account.nameAr}» إلى ${recipientEmail} مرفقاً بصيغة PDF.`,
-      };
-    } catch (err: any) {
-      const message = err?.message || 'تعذر إرسال كشف الحساب';
-      this.logger.error(`Statement email send failed for ${recipientEmail}: ${message}`, err?.stack);
-      const uiBlocks: AiUiBlock[] = [
-        {
-          type: 'pdf_file',
-          payload: {
-            artifactId,
-            filename: generated.downloadName,
-            accountName: built.account.nameAr,
-            period: built.period.label,
-            sizeBytes: generated.buffer.length,
-            closingBalance: round2(built.closingBalance),
-          },
-        },
-      ];
-
-      return {
-        ok: false,
-        data: { sent: false, message, artifactId, recipientEmail },
-        ui: uiBlocks,
-        suggestions: ['أرسل الكشف بالإيميل', 'كشف PDF'],
-        note: `${message} — يمكنك إعادة محاولة الإرسال أو فتح الكشف من الواجهة.`,
-      };
-    }
+      ],
+      suggestions: ['كشف PDF', 'رصيده'],
+      note: `جارٍ توليد كشف «${built.account.nameAr}» وإرساله إلى ${recipientEmail}.`,
+    };
   }
 
   private async lookupLedgerAccount(
