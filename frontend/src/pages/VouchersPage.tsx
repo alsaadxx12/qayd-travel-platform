@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { apiRequest } from '../api/client';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
-import { FinancialVoucherForm } from '../components/vouchers/FinancialVoucherForm';
+import { FinancialVoucherForm, readVoucherSplits } from '../components/vouchers/FinancialVoucherForm';
 import { VoucherPrintModal, type VoucherPrintItem } from '../components/vouchers/VoucherPrintModal';
 import { useLanguageStore } from '../store/useLanguageStore';
 import { useAiPageContext } from '../hooks/useAiPageContext';
@@ -146,31 +146,45 @@ export const VouchersPage: React.FC = () => {
         return `${y}-${m}-${day}`;
       };
 
-      const formattedReceipts = (receipts || []).map((r: any) => ({
-        ...r,
-        type: 'RECEIPT',
-        typeLabel: isAr ? 'سند قبض' : 'Receipt Voucher',
-        dateFormatted: formatDateEn(r.date || r.createdAt),
-        accountName: r.account?.nameAr || accountsMap[r.accountId] || (isAr ? 'حساب عميل/طرف' : 'Client Account'),
-        cashboxName: r.cashboxOrBankAccount?.nameAr || accountsMap[r.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox'),
-        amount: Number(r.amount || 0),
-        currency: r.currency || 'IQD',
-        userName: r.createdBy?.name || r.createdBy?.fullName || (isAr ? 'مدير النظام' : 'Administrator'),
-        slipsCount: r.slipsCount || 0,
-      })).sort((a: any, b: any) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
+      const formattedReceipts = (receipts || []).map((r: any) => {
+        const { cleanDescription, splitAccounts: parsedSplits } = readVoucherSplits(r.description);
+        const splits = (r.splitAccounts && Array.isArray(r.splitAccounts) && r.splitAccounts.length > 0) ? r.splitAccounts : parsedSplits;
+        return {
+          ...r,
+          type: 'RECEIPT',
+          typeLabel: isAr ? 'سند قبض' : 'Receipt Voucher',
+          dateFormatted: formatDateEn(r.date || r.createdAt),
+          accountName: r.account?.nameAr || accountsMap[r.accountId] || (isAr ? 'حساب عميل/طرف' : 'Client Account'),
+          cashboxName: r.cashboxOrBankAccount?.nameAr || accountsMap[r.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox'),
+          amount: Number(r.amount || 0),
+          currency: r.currency || 'IQD',
+          userName: r.createdBy?.name || r.createdBy?.fullName || (isAr ? 'مدير النظام' : 'Administrator'),
+          slipsCount: r.slipsCount || 0,
+          description: cleanDescription || r.description,
+          splitAccounts: splits.length > 0 ? splits : undefined,
+          splitDescription: splits.length > 0 ? splits.map((s: any) => `${s.accountName}: ${Number(s.amount).toLocaleString('en-US')}`).join(' | ') : undefined,
+        };
+      }).sort((a: any, b: any) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
 
-      const formattedPayments = (payments || []).map((p: any) => ({
-        ...p,
-        type: 'PAYMENT',
-        typeLabel: isAr ? 'سند دفع' : 'Payment Voucher',
-        dateFormatted: formatDateEn(p.date || p.createdAt),
-        accountName: p.supplier?.nameAr || p.account?.nameAr || accountsMap[p.accountId] || (isAr ? 'حساب مورد/طرف' : 'Supplier Account'),
-        cashboxName: p.cashboxOrBankAccount?.nameAr || accountsMap[p.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox'),
-        amount: Number(p.amount || 0),
-        currency: p.currency || 'IQD',
-        userName: p.createdBy?.name || p.createdBy?.fullName || (isAr ? 'مدير النظام' : 'Administrator'),
-        slipsCount: p.slipsCount || 0,
-      })).sort((a: any, b: any) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
+      const formattedPayments = (payments || []).map((p: any) => {
+        const { cleanDescription, splitAccounts: parsedSplits } = readVoucherSplits(p.description);
+        const splits = (p.splitAccounts && Array.isArray(p.splitAccounts) && p.splitAccounts.length > 0) ? p.splitAccounts : parsedSplits;
+        return {
+          ...p,
+          type: 'PAYMENT',
+          typeLabel: isAr ? 'سند دفع' : 'Payment Voucher',
+          dateFormatted: formatDateEn(p.date || p.createdAt),
+          accountName: p.supplier?.nameAr || p.account?.nameAr || accountsMap[p.accountId] || (isAr ? 'حساب مورد/طرف' : 'Supplier Account'),
+          cashboxName: p.cashboxOrBankAccount?.nameAr || accountsMap[p.cashboxOrBankAccountId] || (isAr ? 'الصندوق الرئيسي' : 'Main Cashbox'),
+          amount: Number(p.amount || 0),
+          currency: p.currency || 'IQD',
+          userName: p.createdBy?.name || p.createdBy?.fullName || (isAr ? 'مدير النظام' : 'Administrator'),
+          slipsCount: p.slipsCount || 0,
+          description: cleanDescription || p.description,
+          splitAccounts: splits.length > 0 ? splits : undefined,
+          splitDescription: splits.length > 0 ? splits.map((s: any) => `${s.accountName}: ${Number(s.amount).toLocaleString('en-US')}`).join(' | ') : undefined,
+        };
+      }).sort((a: any, b: any) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
 
       // Filter only user-created manual Journal Vouchers (سندات القيد) and exclude automated invoice entries
       const formattedManualJVs = (allJVs || [])

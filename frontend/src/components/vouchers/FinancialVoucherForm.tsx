@@ -36,7 +36,7 @@ import {
   IconArrowsExchange,
   IconAlertTriangle,
 } from '@tabler/icons-react';
-import { apiRequest } from '../../api/client';
+import { apiRequest, invalidateApiCache } from '../../api/client';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { getNextSequenceNumber } from '../../utils/sequenceUtils';
@@ -45,6 +45,35 @@ import { FormattedNumberInput } from '../common/FormattedNumberInput';
 import { AccountingDatePicker } from '../common/date/AccountingDatePicker';
 import { SmartAccountWizardModal } from '../accounts/SmartAccountWizardModal';
 import { employeesApi } from '../../api/employees';
+
+export const VOUCHER_SPLIT_MARKER = '[[VOUCHER_SPLIT:';
+
+export const readVoucherSplits = (desc?: string | null): { cleanDescription: string; splitAccounts: any[] } => {
+  if (!desc) return { cleanDescription: '', splitAccounts: [] };
+  const markerStart = desc.indexOf(VOUCHER_SPLIT_MARKER);
+  if (markerStart === -1) return { cleanDescription: desc, splitAccounts: [] };
+  const payloadStart = markerStart + VOUCHER_SPLIT_MARKER.length;
+  const payloadEnd = desc.indexOf(']]', payloadStart);
+  if (payloadEnd === -1) return { cleanDescription: desc, splitAccounts: [] };
+
+  const cleanDescription = (desc.slice(0, markerStart) + desc.slice(payloadEnd + 2)).trim();
+  try {
+    const parsed = JSON.parse(desc.slice(payloadStart, payloadEnd));
+    return {
+      cleanDescription,
+      splitAccounts: Array.isArray(parsed) ? parsed : [],
+    };
+  } catch {
+    return { cleanDescription, splitAccounts: [] };
+  }
+};
+
+export const writeVoucherSplits = (desc: string | null | undefined, splitAccounts: any[]): string => {
+  const { cleanDescription } = readVoucherSplits(desc);
+  if (!splitAccounts || splitAccounts.length === 0) return cleanDescription;
+  const marker = `${VOUCHER_SPLIT_MARKER}${JSON.stringify(splitAccounts)}]]`;
+  return cleanDescription ? `${cleanDescription}\n${marker}` : marker;
+};
 
 interface AccountOption {
   id: string;
@@ -672,10 +701,15 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     }
 
     // Restore or initialize split allocations
-    if (voucher.splitAccounts && Array.isArray(voucher.splitAccounts) && voucher.splitAccounts.length > 0) {
+    const { cleanDescription, splitAccounts: parsedSplits } = readVoucherSplits(voucher.description);
+    const splitSource = (voucher.splitAccounts && Array.isArray(voucher.splitAccounts) && voucher.splitAccounts.length > 0)
+      ? voucher.splitAccounts
+      : parsedSplits;
+
+    if (splitSource && Array.isArray(splitSource) && splitSource.length > 0) {
       setEnableSplitAllocation(true);
       setSplitAllocations(
-        voucher.splitAccounts.map((s: any, idx: number) => ({
+        splitSource.map((s: any, idx: number) => ({
           id: s.id || `split-${idx}`,
           accountId: s.accountId || '',
           accountName: s.accountName || s.accountCode || `حساب ${idx + 1}`,
@@ -702,10 +736,10 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     }
 
     setCurrency((voucher.currency as 'IQD' | 'USD') || 'IQD');
-    setDescription(voucher.description || '');
+    setDescription(cleanDescription || voucher.description || '');
     // Mark it manual, otherwise the auto-description effect fires on the next render
     // and overwrites the stored text with a freshly generated sentence.
-    setIsManualDescription(Boolean(voucher.description));
+    setIsManualDescription(Boolean(cleanDescription || voucher.description));
     if (voucher.paymentMethodId) {
       setSelectedPaymentMethodId(voucher.paymentMethodId);
     }
@@ -996,6 +1030,9 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       ? activeSplits.map((s) => `${s.accountName}: ${Number(s.amount).toLocaleString('en-US')} ${currency}`).join(' | ')
       : undefined;
 
+    const baseDescription = description || (isReceipt ? 'سند قبض مالي' : 'سند دفع مالي');
+    const finalDescription = writeVoucherSplits(baseDescription, activeSplits);
+
     const payload = {
       voucherNumber,
       amount: numAmount,
@@ -1003,7 +1040,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       date,
       accountId: oppositeAccountId,
       cashboxOrBankAccountId: cashboxAccountId,
-      description: description || (isReceipt ? 'سند قبض مالي' : 'سند دفع مالي'),
+      description: finalDescription,
       paymentMethodId: selectedPaymentMethodId,
       slipsCount: slipFiles.length,
       status: 'POSTED',
@@ -1020,6 +1057,12 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     try {
       const saved = await apiRequest(endpoint, { method, body: JSON.stringify(payload) });
 
+      // Invalidate relevant cache keys so list pages refresh instantly with latest data
+      invalidateApiCache('/receipt-vouchers');
+      invalidateApiCache('/payment-vouchers');
+      invalidateApiCache('/journal-entries');
+      invalidateApiCache('/accounts');
+
       const savedRow = {
         id: saved?.id || editingVoucherId,
         voucherType: savedVoucherType,
@@ -1031,7 +1074,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
         createdAt: saved?.createdAt || new Date().toISOString(),
         accountId: oppositeAccountId,
         cashboxOrBankAccountId: cashboxAccountId,
-        description: payload.description,
+        description: finalDescription,
         paymentMethodId: selectedPaymentMethodId,
         splitAccounts: activeSplits.length > 0 ? activeSplits : undefined,
         splitDescription: splitDesc,
