@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { StatementPortalService } from './statement-portal.service';
@@ -15,6 +15,24 @@ export class StatementTokensController {
   @ApiOperation({ summary: 'الباركودات الفعّالة في الشركة مع عدد مرات الاطلاع' })
   async list(@Req() req: any) {
     return this.portal.list(req.user.companyId);
+  }
+
+  /**
+   * The barcode picture for one account, for printing onto a receipt.
+   *
+   * Declared before any ':id' route would be, and it never issues — it returns null for
+   * an account with no barcode, so printing a voucher cannot create access to a
+   * statement as a side effect.
+   */
+  @Get('qr')
+  @ApiOperation({ summary: 'صورة باركود حساب معيّن للطباعة على الوصل. تعيد null إن لم يُصدر بعد.' })
+  async qrForAccount(
+    @Req() req: any,
+    @Query('accountId') accountId?: string,
+    @Query('accountCode') accountCode?: string,
+  ) {
+    const qrDataUrl = await this.portal.qrForAccount(req.user.companyId, accountId, accountCode);
+    return { qrDataUrl };
   }
 
   @Post()

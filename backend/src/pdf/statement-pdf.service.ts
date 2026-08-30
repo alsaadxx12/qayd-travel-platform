@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PdfService } from './pdf.service';
 import { TemplateService, StatementPdfData, TemplateSettings } from './template.service';
 import { PrintTemplatesService } from '../print-templates/print-templates.service';
+import { StatementPortalService } from '../statement-portal/statement-portal.service';
 
 export interface GeneratedStatementPdf {
   buffer: Buffer;
@@ -17,6 +18,7 @@ export class StatementPdfService {
     private readonly pdfService: PdfService,
     private readonly templateService: TemplateService,
     private readonly printTemplatesService: PrintTemplatesService,
+    private readonly statementPortal: StatementPortalService,
   ) {}
 
   /**
@@ -25,12 +27,33 @@ export class StatementPdfService {
    */
   async generate(companyId: string, body: StatementPdfData): Promise<GeneratedStatementPdf> {
     const savedConfig = await this.loadSavedSettings(companyId);
+    const settings = this.normalizeSettings({
+      ...savedConfig,
+      ...(body.settings || {}),
+    });
+
+    /**
+     * The barcode is fetched only when the template asks for it, so a company that
+     * turned the switch off pays nothing for it — and a failure to build the picture
+     * degrades to a statement without a code rather than to no statement at all.
+     */
+    let qrDataUrl: string | null = null;
+    if (settings.showQrCode !== false) {
+      try {
+        qrDataUrl = await this.statementPortal.qrForAccount(
+          companyId,
+          (body as any).accountId,
+          body.accountCode,
+        );
+      } catch (err: any) {
+        this.logger.warn(`Statement QR lookup failed: ${err?.message || err}`);
+      }
+    }
+
     const merged: StatementPdfData = {
       ...body,
-      settings: this.normalizeSettings({
-        ...savedConfig,
-        ...(body.settings || {}),
-      }),
+      settings,
+      qrDataUrl,
     };
 
     const html = this.templateService.renderStatementHtml(merged);

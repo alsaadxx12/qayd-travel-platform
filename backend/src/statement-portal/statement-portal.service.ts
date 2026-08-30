@@ -264,6 +264,43 @@ export class StatementPortalService {
     return { revoked: true };
   }
 
+  /**
+   * The barcode for an account's own statement, for printing onto documents.
+   *
+   * Returns null when no barcode has been issued for that account, rather than issuing
+   * one: a printed code is a credential, and printing a statement must never be the act
+   * that quietly creates access to it. Issuing stays an explicit decision on the staff
+   * screen.
+   *
+   * The account can be named by id or by code, because the PDF endpoint is called with
+   * whichever the calling screen happens to hold.
+   */
+  async qrForAccount(
+    companyId: string,
+    accountId?: string | null,
+    accountCode?: string | null,
+  ): Promise<string | null> {
+    let resolvedId = accountId || null;
+    if (!resolvedId && accountCode) {
+      const account = await this.prisma.account.findFirst({
+        where: { companyId, code: String(accountCode) },
+        select: { id: true },
+      });
+      resolvedId = account?.id || null;
+    }
+    if (!resolvedId) return null;
+
+    const row = await this.prisma.statementAccessToken.findFirst({
+      where: { companyId, accountId: resolvedId, revokedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { token: true, expiresAt: true },
+    });
+    if (!row) return null;
+    if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
+
+    return this.qrDataUrl(row.token);
+  }
+
   // ────────────────────────────────────────────────────────────────────────────
   // Public side: what an unauthenticated visitor can reach
   // ────────────────────────────────────────────────────────────────────────────

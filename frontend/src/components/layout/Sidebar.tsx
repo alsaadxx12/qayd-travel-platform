@@ -98,6 +98,7 @@ const DEFAULT_SIDEBAR_SECTIONS: NavSection[] = [
     items: [
       { id: 'coa', title: 'شجرة الحسابات', path: '/accounts', iconKey: 'ListTree' },
       { id: 'statement', title: 'كشف الحساب', path: '/reports', iconKey: 'FileText' },
+      { id: 'statement-qr', title: 'باركود كشف الحساب', path: '/statement-qr', iconKey: 'QrCode' },
       { id: 'journal-entries', title: 'القيود اليومية', path: '/journal-entries', iconKey: 'BookOpen' },
       { id: 'vouchers', title: 'السندات المالية', path: '/vouchers', iconKey: 'Receipt' },
       { id: 'expenses', title: 'سجل المصاريف', path: '/expenses', iconKey: 'Coins' },

@@ -109,6 +109,14 @@ export interface TemplateSettings {
   footerTextEn?: string;
   showSummary?: boolean;
   showOpeningBalance?: boolean;
+  /**
+   * The «إظهار رمز QR» switch from the print-template settings. Declared here so it
+   * is a real part of the contract rather than something that happened to survive
+   * the settings spread — the templates read it to decide whether to draw the code.
+   */
+  showQrCode?: boolean;
+  qrSize?: number;
+  qrShowLabel?: boolean;
   fontSizes?: {
     companyTitle?: number;
     subtitle?: number;
@@ -134,6 +142,12 @@ export interface StatementPdfData {
   totals: StatementTotals;
   lang?: 'ar' | 'en';
   settings?: TemplateSettings;
+  /**
+   * The account's portal barcode as a data URL. Absent when no barcode has been
+   * issued for this account — the templates then print nothing rather than a dead
+   * square, so an un-issued account never gets a code that leads nowhere.
+   */
+  qrDataUrl?: string | null;
 }
 
 @Injectable()
@@ -319,6 +333,12 @@ export class TemplateService {
       // Settings flags
       showSummary: settings.showSummary !== false,
       showOpeningBalance: settings.showOpeningBalance !== false,
+
+      // The barcode, and the size the settings asked for. 42px was hard-coded in the
+      // markup before, so the size control in the settings screen did nothing.
+      qrDataUrl: data.qrDataUrl || '',
+      qrSize: Math.min(120, Math.max(28, Number(settings.qrSize) || 42)),
+      qrLabel: isEn ? 'Scan for statement' : 'امسح لعرض كشفك',
 
       // Account info
       accountName: data.accountName,

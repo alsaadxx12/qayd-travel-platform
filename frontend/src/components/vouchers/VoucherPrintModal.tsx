@@ -23,6 +23,7 @@ import {
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
 import { fetchPrintTemplate } from '../../api/printTemplates';
+import { apiRequest } from '../../api/client';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { tafqeetArabic } from '../reports/AccountStatementPrintModal';
@@ -119,12 +120,19 @@ export interface PrintableVoucherSheetProps {
   voucher: VoucherPrintItem;
   config?: any;
   lang?: 'ar' | 'en';
+  /**
+   * The counter-party account's statement barcode. Supplied by the modal; absent
+   * when no barcode has been issued for that account, in which case nothing is
+   * printed rather than a square that leads nowhere.
+   */
+  qrDataUrl?: string | null;
 }
 
 export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   voucher,
   config: userConfig,
   lang = 'ar',
+  qrDataUrl,
 }) => {
   const isEn = lang === 'en';
   const isReceipt = voucher.type === 'RECEIPT';
@@ -620,6 +628,21 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           </div>
 
           {/* ═══════════════════════════════════════════════════════
+              4b. STATEMENT BARCODE
+              `showQrCode` existed in this config from the start but nothing ever read
+              it, so the switch in the print settings moved nothing on the paper. It
+              governs the block below now.
+             ═══════════════════════════════════════════════════════ */}
+          {cfg.showQrCode && qrDataUrl && (
+            <div className="flex flex-col items-center gap-1 my-3">
+              <img src={qrDataUrl} alt="" style={{ width: 84, height: 84 }} />
+              <span className="text-[9px] font-bold text-slate-500">
+                {isEn ? 'Scan to view your account statement' : 'امسح الرمز لعرض كشف حسابك'}
+              </span>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════
               5. SIGNATURES SECTION (2 Columns: Payer & Receiver Only)
              ═══════════════════════════════════════════════════════ */}
           {cfg.showSignatures && (
@@ -713,6 +736,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   const { language } = useLanguageStore();
   const [printLang, setPrintLang] = useState<'ar' | 'en'>(language === 'en' ? 'en' : 'ar');
   const [config, setConfig] = useState<any>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -732,6 +756,36 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
         setConfig(voucher.type === 'RECEIPT' ? DEFAULT_VOUCHER_CONFIG : DEFAULT_PAYMENT_VOUCHER_CONFIG);
       })
       .finally(() => setLoading(false));
+  }, [opened, voucher]);
+
+  /**
+   * The counter-party's statement barcode, fetched alongside the template.
+   *
+   * Kept separate from the config fetch so a missing or un-issued barcode can never
+   * stop the voucher from printing — the worst case is a receipt without a code,
+   * which is exactly what was printed before this existed.
+   */
+  useEffect(() => {
+    if (!opened || !voucher) {
+      setQrDataUrl(null);
+      return;
+    }
+    const accountId = (voucher as any).accountId;
+    if (!accountId) {
+      setQrDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    apiRequest(`/api/statement-tokens/qr?accountId=${encodeURIComponent(accountId)}`)
+      .then((res: any) => {
+        if (!cancelled) setQrDataUrl(res?.qrDataUrl || null);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [opened, voucher]);
 
   if (!voucher) return null;
@@ -881,6 +935,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
             <PrintableVoucherSheet
               voucher={voucher}
               config={config}
+              qrDataUrl={qrDataUrl}
               lang={printLang}
             />
           </div>

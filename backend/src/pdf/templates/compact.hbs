@@ -273,8 +273,17 @@
     font-weight: 800;
   }
   .footer-qr {
-    width: 38px;
-    height: 38px;
+    text-align: center;
+  }
+  .footer-qr img {
+    display: block;
+  }
+  .footer-qr-label {
+    font-size: 6.5px;
+    font-weight: 700;
+    color: #64748b;
+    margin-top: 2px;
+    white-space: nowrap;
   }
 </style>
 </head>
@@ -290,26 +299,20 @@
         <div><strong>Address:</strong> {{#if address}}{{address}}{{else}}Iraq - Baghdad{{/if}}</div>
       </div>
     </div>
-    <!-- Simple QR code graphic -->
+    {{#if settings.showQrCode}}
+    {{#if qrDataUrl}}
+    <!--
+      The real portal code. This template drew hand-made SVG rectangles that looked like
+      a QR but encoded nothing — and drew them UNCONDITIONALLY, so the «إظهار رمز QR»
+      switch had no effect here at all. Both faults are fixed: the switch governs it, and
+      the picture is the account's own portal link.
+    -->
     <div class="footer-qr">
-      <svg viewBox="0 0 100 100" width="38" height="38">
-        <rect width="100" height="100" fill="#ffffff"/>
-        <rect x="5" y="5" width="30" height="30" fill="#1e293b"/>
-        <rect x="10" y="10" width="20" height="20" fill="#ffffff"/>
-        <rect x="15" y="15" width="10" height="10" fill="#1e293b"/>
-        <rect x="65" y="5" width="30" height="30" fill="#1e293b"/>
-        <rect x="70" y="10" width="20" height="20" fill="#ffffff"/>
-        <rect x="75" y="15" width="10" height="10" fill="#1e293b"/>
-        <rect x="5" y="65" width="30" height="30" fill="#1e293b"/>
-        <rect x="10" y="70" width="20" height="20" fill="#ffffff"/>
-        <rect x="15" y="75" width="10" height="10" fill="#1e293b"/>
-        <rect x="45" y="15" width="10" height="10" fill="#1e293b"/>
-        <rect x="45" y="45" width="15" height="15" fill="#1e293b"/>
-        <rect x="65" y="45" width="10" height="10" fill="#1e293b"/>
-        <rect x="45" y="70" width="15" height="15" fill="#1e293b"/>
-        <rect x="70" y="70" width="15" height="15" fill="#1e293b"/>
-      </svg>
+      <img src="{{qrDataUrl}}" alt="" width="{{qrSize}}" height="{{qrSize}}" />
+      {{#if settings.qrShowLabel}}<div class="footer-qr-label">{{qrLabel}}</div>{{/if}}
     </div>
+    {{/if}}
+    {{/if}}
   </div>
 
   <table class="page-wrapper">

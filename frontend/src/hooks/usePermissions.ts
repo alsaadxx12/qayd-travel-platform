@@ -23,6 +23,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, { code: string; title: string 
   '/external-clearings': { code: 'clearings.view', title: 'المقاصات الخارجية ومزودي الخدمات' },
   '/profits': { code: 'profits.view', title: 'الأرباح وقائمة الدخل' },
   '/reports': { code: 'reports.statement.view', title: 'كشف الحساب والتقارير' },
+  '/statement-qr': { code: 'reports.statement.view', title: 'باركود كشف الحساب' },
   '/debts': { code: 'debts.view', title: 'تقرير الديون وأعمار الذمم' },
   '/debts-report': { code: 'debts.view', title: 'تقرير الديون وأعمار الذمم' },
   '/financial-reports': { code: 'financials.trialBalance', title: 'القوائم وميزان المراجعة' },
