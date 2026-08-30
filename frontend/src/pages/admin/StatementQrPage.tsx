@@ -23,6 +23,7 @@ interface QrToken {
   viewCount: number;
   lastViewedAt: string | null;
   createdAt: string;
+  accountId?: string | null;
   customerId?: string | null;
   supplierId?: string | null;
   lockedUntil?: string | null;
@@ -30,9 +31,11 @@ interface QrToken {
 
 interface Party {
   id: string;
+  code?: string;
   nameAr: string;
   phone?: string | null;
-  kind: 'CUSTOMER' | 'SUPPLIER';
+  kind: 'CUSTOMER' | 'SUPPLIER' | 'ACCOUNT';
+  accountId?: string;
 }
 
 export const StatementQrPage: React.FC = () => {
@@ -41,21 +44,62 @@ export const StatementQrPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'ACCOUNT' | 'CUSTOMER' | 'SUPPLIER'>('ALL');
   const [preview, setPreview] = useState<QrToken | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [issued, customers, suppliers] = await Promise.all([
+      const [issued, customers, suppliers, accounts] = await Promise.all([
         apiRequest('/statement-tokens').catch(() => []),
         apiRequest('/partners/customers').catch(() => []),
         apiRequest('/partners/suppliers').catch(() => []),
+        apiRequest('/accounts?lite=1').catch(() => []),
       ]);
       setTokens(Array.isArray(issued) ? issued : []);
-      setParties([
-        ...(customers || []).map((c: any) => ({ ...c, kind: 'CUSTOMER' as const })),
-        ...(suppliers || []).map((s: any) => ({ ...s, kind: 'SUPPLIER' as const })),
-      ]);
+
+      const list: Party[] = [];
+      const seenAccountIds = new Set<string>();
+
+      (customers || []).forEach((c: any) => {
+        list.push({
+          id: c.id,
+          code: c.code,
+          nameAr: c.nameAr,
+          phone: c.phone,
+          kind: 'CUSTOMER',
+          accountId: c.accountId,
+        });
+        if (c.accountId) seenAccountIds.add(c.accountId);
+      });
+
+      (suppliers || []).forEach((s: any) => {
+        list.push({
+          id: s.id,
+          code: s.code,
+          nameAr: s.nameAr,
+          phone: s.phone,
+          kind: 'SUPPLIER',
+          accountId: s.accountId,
+        });
+        if (s.accountId) seenAccountIds.add(s.accountId);
+      });
+
+      // Add all general ledger accounts / advances / employee accounts
+      (accounts || []).forEach((a: any) => {
+        if (!seenAccountIds.has(a.id)) {
+          list.push({
+            id: a.id,
+            code: a.code,
+            nameAr: a.nameAr,
+            phone: a.phone || null,
+            kind: 'ACCOUNT',
+            accountId: a.id,
+          });
+        }
+      });
+
+      setParties(list);
     } finally {
       setLoading(false);
     }
@@ -68,18 +112,25 @@ export const StatementQrPage: React.FC = () => {
   const issuedBy = useMemo(() => {
     const map = new Map<string, QrToken>();
     for (const t of tokens) {
-      const key = t.customerId || t.supplierId;
+      const key = t.customerId || t.supplierId || t.accountId;
       if (key) map.set(key, t);
     }
     return map;
   }, [tokens]);
 
   const rows = useMemo(() => {
-    const q = search.trim();
+    const q = search.trim().toLowerCase();
     return parties
-      .filter((p) => !q || p.nameAr?.includes(q) || String(p.phone || '').includes(q))
+      .filter((p) => {
+        if (activeTab !== 'ALL' && p.kind !== activeTab) return false;
+        if (!q) return true;
+        const nameMatch = (p.nameAr || '').toLowerCase().includes(q);
+        const codeMatch = String(p.code || '').toLowerCase().includes(q);
+        const phoneMatch = String(p.phone || '').includes(q);
+        return nameMatch || codeMatch || phoneMatch;
+      })
       .slice(0, 300);
-  }, [parties, search]);
+  }, [parties, search, activeTab]);
 
   const issue = async (party: Party, regenerate = false) => {
     setBusyId(party.id);
@@ -87,7 +138,10 @@ export const StatementQrPage: React.FC = () => {
       const body =
         party.kind === 'CUSTOMER'
           ? { customerId: party.id, regenerate }
-          : { supplierId: party.id, regenerate };
+          : party.kind === 'SUPPLIER'
+          ? { supplierId: party.id, regenerate }
+          : { accountId: party.id, label: party.nameAr, regenerate };
+
       const created: QrToken = await apiRequest('/statement-tokens', {
         method: 'POST',
         body: JSON.stringify(body),
@@ -121,11 +175,6 @@ export const StatementQrPage: React.FC = () => {
     }
   };
 
-  /**
-   * Printing opens a bare window with only the card in it. Printing the page itself
-   * would carry the whole table — every customer's code — onto paper, which is exactly
-   * the leak this feature exists to prevent.
-   */
   const printCard = (row: QrToken) => {
     const w = window.open('', '_blank', 'width=420,height=620');
     if (!w) return;
@@ -151,102 +200,172 @@ export const StatementQrPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 space-y-4">
-      <header>
-        <h1 className="text-lg font-black text-slate-900">باركود كشف الحساب</h1>
-        <p className="mt-1 text-xs text-slate-600">
-          يمسح العميل الرمز، يُدخل آخر أربعة أرقام من هاتفه، فيرى رصيده وكل حركاته. الرمز وحده لا
-          يكفي لفتح الكشف.
-        </p>
+    <div className="p-4 md:p-6 space-y-4 max-w-[1500px] mx-auto w-full font-sans" dir="rtl">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs">
+        <div>
+          <h1 className="text-xl font-black text-slate-900">باركود كشف الحساب وبطاقات العملاء</h1>
+          <p className="mt-1 text-xs text-slate-500 font-medium">
+            يمسح العميل أو الموظف الرمز بكاميرا الهاتف لمتابعة رصيده وكشف حسابه المحدث لحظة بلحظة.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => load()}
+            className="h-9 px-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+          >
+            تحديث القائمة
+          </button>
+        </div>
       </header>
 
-      <input
-        type="search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="ابحث بالاسم أو رقم الهاتف…"
-        aria-label="بحث عن عميل أو مورد"
-        className="h-10 w-full max-w-md rounded-xl border border-slate-300 px-3 text-sm font-medium focus:border-[#F45A0A] focus:outline-none"
-      />
+      {/* Tabs & Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+        {/* Category Tabs */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setActiveTab('ALL')}
+            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+              activeTab === 'ALL' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            الكل ({parties.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ACCOUNT')}
+            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+              activeTab === 'ACCOUNT' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            الحسابات والسلف ({parties.filter((p) => p.kind === 'ACCOUNT').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('CUSTOMER')}
+            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+              activeTab === 'CUSTOMER' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            العملاء ({parties.filter((p) => p.kind === 'CUSTOMER').length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('SUPPLIER')}
+            className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+              activeTab === 'SUPPLIER' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            الموردين ({parties.filter((p) => p.kind === 'SUPPLIER').length})
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="w-full sm:w-80">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ابحث بالاسم، رقم الحساب (مثل 16141110)، أو الهاتف..."
+            aria-label="بحث عن حساب أو عميل"
+            className="h-9 w-full rounded-xl border border-slate-300 px-3 text-xs font-semibold focus:border-[#F45A0A] focus:outline-none"
+          />
+        </div>
+      </div>
 
       {loading ? (
-        <div className="h-40 animate-pulse rounded-xl bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-2xl bg-slate-100" />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
           <table className="w-full text-xs">
-            <thead className="bg-slate-100 text-slate-800">
-              <tr className="h-9 font-bold">
-                <th className="px-3 text-center">الاسم</th>
-                <th className="px-3 text-center">النوع</th>
-                <th className="px-3 text-center">الهاتف</th>
-                <th className="px-3 text-center">الحالة</th>
-                <th className="px-3 text-center">مرات الاطلاع</th>
-                <th className="px-3 text-center">الإجراءات</th>
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-700">
+              <tr className="h-10 font-bold">
+                <th className="px-4 text-start">رقم الحساب / الكود</th>
+                <th className="px-4 text-start">اسم الحساب / الطرف</th>
+                <th className="px-3 text-center">النوع والتصنيف</th>
+                <th className="px-3 text-center">رقم الهاتف للتحقق</th>
+                <th className="px-3 text-center">حالة الباركود</th>
+                <th className="px-3 text-center">مرات الفتح</th>
+                <th className="px-4 text-center">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((party) => {
-                const issued = issuedBy.get(party.id);
+                const issued = issuedBy.get(party.id) || (party.accountId ? issuedBy.get(party.accountId) : undefined);
                 const busy = busyId === party.id || busyId === issued?.id;
                 return (
-                  <tr key={party.id} className="h-11 hover:bg-orange-50/40">
-                    <td className="px-3 text-center font-bold text-slate-900">{party.nameAr}</td>
-                    <td className="px-3 text-center text-slate-600">
-                      {party.kind === 'CUSTOMER' ? 'عميل' : 'مورد'}
+                  <tr key={party.id} className="h-12 hover:bg-orange-50/30 transition">
+                    <td className="px-4 text-start font-mono font-bold text-slate-600" dir="ltr">
+                      {party.code || '—'}
                     </td>
-                    <td className="px-3 text-center font-mono text-slate-600" dir="ltr">
-                      {party.phone || '—'}
+                    <td className="px-4 text-start font-extrabold text-slate-900 text-sm">
+                      {party.nameAr}
+                    </td>
+                    <td className="px-3 text-center">
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                          party.kind === 'ACCOUNT'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : party.kind === 'CUSTOMER'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-purple-50 text-purple-700 border border-purple-200'
+                        }`}
+                      >
+                        {party.kind === 'ACCOUNT' ? 'حساب / سلف' : party.kind === 'CUSTOMER' ? 'عميل' : 'مورد'}
+                      </span>
+                    </td>
+                    <td className="px-3 text-center font-mono font-semibold text-slate-600" dir="ltr">
+                      {party.phone || (issued?.phoneHint ? `***${issued.phoneHint}` : '—')}
                     </td>
                     <td className="px-3 text-center">
                       {!issued ? (
-                        <span className="text-slate-400">لم يُصدر</span>
+                        <span className="text-slate-400 font-semibold">لم يُصدر بعد</span>
                       ) : !issued.canVerify ? (
-                        // Without a phone the customer can never answer the question,
-                        // so the code is dead on arrival. Say so where it is issued.
-                        <span className="rounded-md bg-amber-50 px-2 py-0.5 font-bold text-amber-800">
-                          لا يعمل: لا يوجد هاتف
+                        <span className="rounded-md bg-amber-50 px-2 py-0.5 font-bold text-amber-800 border border-amber-200">
+                          بدون هاتف (مفتوح مباشر)
                         </span>
                       ) : (
-                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700">
-                          فعّال
+                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 border border-emerald-200">
+                          ✓ فعّال ومحمّي
                         </span>
                       )}
                     </td>
-                    <td className="px-3 text-center font-mono tabular-nums text-slate-700">
-                      {issued ? issued.viewCount : '—'}
+                    <td className="px-3 text-center font-mono font-bold tabular-nums text-slate-700">
+                      {issued ? issued.viewCount : '0'}
                     </td>
-                    <td className="px-3 text-center">
+                    <td className="px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         {!issued ? (
                           <button
                             type="button"
                             disabled={busy}
                             onClick={() => issue(party)}
-                            className="h-7 rounded-lg bg-[#F45A0A] px-2.5 font-bold text-white disabled:opacity-50"
+                            className="h-8 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] px-3 font-bold text-white transition cursor-pointer shadow-2xs disabled:opacity-50"
                           >
-                            إصدار
+                            إصدار باركود
                           </button>
                         ) : (
                           <>
                             <button
                               type="button"
                               onClick={() => setPreview(issued)}
-                              className="h-7 rounded-lg border border-slate-200 px-2.5 font-bold text-slate-700 hover:bg-slate-100"
+                              className="h-8 rounded-xl border border-slate-200 bg-white px-2.5 font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
                             >
-                              عرض
+                              معاينة
                             </button>
                             <button
                               type="button"
                               onClick={() => printCard(issued)}
-                              className="h-7 rounded-lg border border-slate-200 px-2.5 font-bold text-slate-700 hover:bg-slate-100"
+                              className="h-8 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] px-3 font-bold text-white transition cursor-pointer shadow-2xs"
                             >
-                              طباعة
+                              طباعة البطاقة
                             </button>
                             <button
                               type="button"
                               disabled={busy}
                               onClick={() => revoke(issued)}
-                              className="h-7 rounded-lg border border-rose-200 bg-rose-50 px-2.5 font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                              className="h-8 rounded-xl border border-rose-200 bg-rose-50 px-2.5 font-bold text-rose-700 hover:bg-rose-100 transition cursor-pointer disabled:opacity-50"
                             >
                               إبطال
                             </button>
@@ -259,8 +378,8 @@ export const StatementQrPage: React.FC = () => {
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-10 text-center font-bold text-slate-500">
-                    لا نتائج.
+                  <td colSpan={7} className="py-12 text-center font-bold text-slate-400 text-sm">
+                    لا توجد حسابات أو أطراف تطابق البحث.
                   </td>
                 </tr>
               )}
@@ -269,32 +388,36 @@ export const StatementQrPage: React.FC = () => {
         </div>
       )}
 
+      {/* Modal Preview */}
       {preview && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4"
           onClick={() => setPreview(null)}
         >
           <div
-            className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl"
+            className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl border border-slate-100"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-base font-black text-slate-900">{preview.holderName}</h2>
+            <h2 className="text-lg font-black text-slate-900">{preview.holderName}</h2>
+            <p className="text-xs text-slate-500 font-bold mt-0.5">بطاقة الباركود لكشف الحساب</p>
             {preview.qrDataUrl ? (
-              <img src={preview.qrDataUrl} alt="" className="mx-auto my-4 h-56 w-56" />
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl my-4 inline-block">
+                <img src={preview.qrDataUrl} alt="" className="h-56 w-56 mx-auto rounded-xl shadow-xs" />
+              </div>
             ) : (
               <p className="my-6 text-sm font-bold text-rose-700">تعذّر توليد صورة الباركود.</p>
             )}
-            <p className="text-[11px] leading-relaxed text-slate-500">
-              يمسح العميل الرمز ثم يُدخل آخر أربعة أرقام من هاتفه {preview.phoneHint ? `(${preview.phoneHint})` : ''}.
+            <p className="text-[11.5px] leading-relaxed text-slate-500 font-medium">
+              يمسح العميل الرمز ثم يُدخل آخر 4 أرقام من هاتفه {preview.phoneHint ? `(${preview.phoneHint})` : ''} لعرض حسابه.
             </p>
-            <p className="mt-3 break-all rounded-lg bg-slate-50 p-2 font-mono text-[10px] text-slate-500" dir="ltr">
+            <p className="mt-3 break-all rounded-xl bg-slate-100 p-2.5 font-mono text-[10px] text-slate-600 font-bold" dir="ltr">
               {preview.url}
             </p>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-5 flex gap-2">
               <button
                 type="button"
                 onClick={() => printCard(preview)}
-                className="h-9 flex-1 rounded-xl bg-[#F45A0A] font-bold text-white"
+                className="h-10 flex-1 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] font-bold text-white transition cursor-pointer shadow-xs"
               >
                 طباعة البطاقة
               </button>
@@ -302,11 +425,11 @@ export const StatementQrPage: React.FC = () => {
                 type="button"
                 onClick={() => {
                   const party = parties.find(
-                    (p) => p.id === (preview.customerId || preview.supplierId),
+                    (p) => p.id === (preview.customerId || preview.supplierId || preview.accountId),
                   );
                   if (party) void issue(party, true);
                 }}
-                className="h-9 flex-1 rounded-xl border border-slate-200 font-bold text-slate-700"
+                className="h-10 flex-1 rounded-xl border border-slate-200 hover:bg-slate-50 font-bold text-slate-700 transition cursor-pointer"
               >
                 إصدار بديل
               </button>

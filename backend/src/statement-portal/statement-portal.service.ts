@@ -98,7 +98,7 @@ export class StatementPortalService {
   // ────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Issues — or returns — the key for one customer or supplier.
+   * Issues — or returns — the key for one account, customer or supplier.
    *
    * Re-issuing by default would invalidate every statement and receipt already in the
    * customer's hands, so an existing live key is returned as-is. `regenerate` is the
@@ -107,35 +107,54 @@ export class StatementPortalService {
   async issue(
     companyId: string,
     userId: string,
-    input: { customerId?: string; supplierId?: string; regenerate?: boolean; label?: string },
+    input: { accountId?: string; customerId?: string; supplierId?: string; regenerate?: boolean; label?: string },
   ) {
-    const { customerId, supplierId } = input;
-    if (!customerId && !supplierId) {
-      throw new BadRequestException('حدّد العميل أو المورد الذي تريد إصدار الباركود له');
-    }
-    if (customerId && supplierId) {
-      throw new BadRequestException('الباركود يخصّ طرفاً واحداً: عميلاً أو مورداً، لا الاثنين');
+    const { customerId, supplierId, accountId } = input;
+    if (!customerId && !supplierId && !accountId) {
+      throw new BadRequestException('حدّد الحساب أو العميل أو المورد الذي تريد إصدار الباركود له');
     }
 
-    const party = customerId
-      ? await this.prisma.customer.findFirst({
-          where: { id: customerId, companyId },
-          select: { id: true, nameAr: true, phone: true, accountId: true },
-        })
-      : await this.prisma.supplier.findFirst({
-          where: { id: supplierId!, companyId },
-          select: { id: true, nameAr: true, phone: true, accountId: true },
-        });
+    let resolvedAccountId = '';
+    let partyNameAr = input.label || '';
+    let partyPhone: string | null = null;
 
-    if (!party) throw new NotFoundException('الطرف المحدد لا ينتمي إلى الشركة الحالية');
-    if (!party.accountId) {
-      throw new BadRequestException('لا يوجد حساب محاسبي مرتبط بهذا الطرف، فلا كشف يمكن عرضه');
+    if (customerId) {
+      const c = await this.prisma.customer.findFirst({
+        where: { id: customerId, companyId },
+        select: { id: true, nameAr: true, phone: true, accountId: true },
+      });
+      if (!c) throw new NotFoundException('العميل المحدد لا ينتمي إلى الشركة الحالية');
+      if (!c.accountId) throw new BadRequestException('لا يوجد حساب محاسبي مرتبط بهذا العميل');
+      resolvedAccountId = c.accountId;
+      partyNameAr = c.nameAr;
+      partyPhone = c.phone || null;
+    } else if (supplierId) {
+      const s = await this.prisma.supplier.findFirst({
+        where: { id: supplierId, companyId },
+        select: { id: true, nameAr: true, phone: true, accountId: true },
+      });
+      if (!s) throw new NotFoundException('المورد المحدد لا ينتمي إلى الشركة الحالية');
+      if (!s.accountId) throw new BadRequestException('لا يوجد حساب محاسبي مرتبط بهذا المورد');
+      resolvedAccountId = s.accountId;
+      partyNameAr = s.nameAr;
+      partyPhone = s.phone || null;
+    } else if (accountId) {
+      const a = await this.prisma.account.findFirst({
+        where: { id: accountId, companyId },
+        select: { id: true, nameAr: true, code: true, phone: true },
+      });
+      if (!a) throw new NotFoundException('الحساب المحدد غير موجود');
+      resolvedAccountId = a.id;
+      partyNameAr = a.nameAr;
+      partyPhone = a.phone || null;
     }
+
+    const party = { nameAr: partyNameAr, phone: partyPhone, accountId: resolvedAccountId };
 
     const existing = await this.prisma.statementAccessToken.findFirst({
       where: {
         companyId,
-        ...(customerId ? { customerId } : { supplierId }),
+        ...(customerId ? { customerId } : supplierId ? { supplierId } : { accountId: resolvedAccountId }),
         revokedAt: null,
       },
       orderBy: { createdAt: 'desc' },
@@ -156,10 +175,10 @@ export class StatementPortalService {
       data: {
         token: randomBytes(32).toString('base64url'),
         companyId,
-        accountId: party.accountId,
+        accountId: resolvedAccountId,
         customerId: customerId || null,
         supplierId: supplierId || null,
-        label: input.label || party.nameAr,
+        label: input.label || partyNameAr,
         createdById: userId,
       },
     });
@@ -169,7 +188,7 @@ export class StatementPortalService {
         action: input.regenerate ? 'REGENERATE_STATEMENT_QR' : 'ISSUE_STATEMENT_QR',
         entity: 'StatementAccessToken',
         entityId: created.id,
-        details: JSON.stringify({ customerId, supplierId, accountId: party.accountId }),
+        details: JSON.stringify({ customerId, supplierId, accountId: resolvedAccountId }),
         userId,
         companyId,
       },
@@ -206,8 +225,9 @@ export class StatementPortalService {
 
     const customerIds = rows.map((r) => r.customerId).filter((id): id is string => Boolean(id));
     const supplierIds = rows.map((r) => r.supplierId).filter((id): id is string => Boolean(id));
+    const accountIds = rows.map((r) => r.accountId).filter((id): id is string => Boolean(id));
 
-    const [customers, suppliers] = await Promise.all([
+    const [customers, suppliers, accounts] = await Promise.all([
       customerIds.length
         ? this.prisma.customer.findMany({
             where: { id: { in: customerIds } },
@@ -220,20 +240,29 @@ export class StatementPortalService {
             select: { id: true, nameAr: true, phone: true },
           })
         : Promise.resolve([]),
+      accountIds.length
+        ? this.prisma.account.findMany({
+            where: { id: { in: accountIds } },
+            select: { id: true, nameAr: true, phone: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     const byId = new Map<string, { nameAr: string; phone: string | null }>();
     for (const c of customers) byId.set(c.id, c);
     for (const s of suppliers) byId.set(s.id, s);
+    for (const a of accounts) byId.set(a.id, a);
 
     return Promise.all(
       rows.map(async (row) => {
-        const party = byId.get(row.customerId || row.supplierId || '') || {
-          nameAr: row.label || '',
-          phone: null,
-        };
+        const party = byId.get(row.customerId || row.supplierId || '') ||
+          byId.get(row.accountId) || {
+            nameAr: row.label || '',
+            phone: null,
+          };
         return {
           ...(await this.describeIssued(row, party)),
+          accountId: row.accountId,
           customerId: row.customerId,
           supplierId: row.supplierId,
           lockedUntil: row.lockedUntil,
