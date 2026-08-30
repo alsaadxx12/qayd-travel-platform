@@ -1,31 +1,62 @@
 # ── Runtime variables ──
 [variables]
-PUPPETEER_SKIP_DOWNLOAD = 'true'
-# The fast path. It is no longer the only path: when this file is absent at runtime the
-# service searches the usual install locations and then PATH, and logs what it found.
-PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium'
+# Puppeteer downloads its OWN Chrome, and that is deliberate.
+#
+# The apt route was tried first and fails on this image: `apt install chromium` gives
+# `/usr/bin/chromium-browser`, which on Ubuntu is not a browser at all but a stub script
+# that exits with «requires the chromium snap to be installed». Snaps cannot run inside
+# a container build, so that path is a dead end no matter how it is configured.
+#
+# `.puppeteerrc.cjs` points the cache at <project>/.cache/puppeteer, inside the app
+# directory, so the browser downloaded during install is still there at runtime.
+PUPPETEER_CACHE_DIR = '/app/.cache/puppeteer'
 # The address printed inside every statement barcode. It MUST be absolute — a relative
 # value makes a phone camera read the code as plain text and offer a web search instead
 # of opening the statement. Set it in the Railway variables to the front-end origin:
 # PORTAL_BASE_URL = 'https://<front-end-origin>'
 
-# ── System packages: Chromium for PDF generation + Arabic fonts ──
+# ── System packages ──
+# Chrome is a downloaded binary, but it still needs its shared libraries present. These
+# are exactly the ones a headless Chrome links against; without them the launch fails
+# with a bare "Code: 127" that says nothing about which library is missing.
 [phases.setup]
-aptPkgs = ['chromium', 'fonts-noto-color-emoji', 'unzip']
+aptPkgs = [
+  'fonts-liberation',
+  'fonts-noto-color-emoji',
+  'libasound2',
+  'libatk-bridge2.0-0',
+  'libatk1.0-0',
+  'libcups2',
+  'libdbus-1-3',
+  'libdrm2',
+  'libgbm1',
+  'libgtk-3-0',
+  'libnspr4',
+  'libnss3',
+  'libpango-1.0-0',
+  'libx11-6',
+  'libxcomposite1',
+  'libxdamage1',
+  'libxext6',
+  'libxfixes3',
+  'libxkbcommon0',
+  'libxrandr2',
+  'unzip',
+  'xdg-utils',
+]
 
-# ── Install: skip Puppeteer's own Chrome download ──
+# ── Install: let Puppeteer fetch the browser it was built against ──
 [phases.install]
-cmds = ['PUPPETEER_SKIP_DOWNLOAD=true npm ci --include=dev']
+cmds = ['npm ci --include=dev']
 
-# ── Build: generate Prisma client + compile NestJS ──
-# The last command is a check, not a gate. An image without Chromium still deploys —
-# statements are then delivered as HTML rather than PDF — but the reason appears in the
-# build log instead of being discovered later from a failed email.
+# ── Build: Prisma client, Nest build, then prove a browser exists ──
+# The check runs the binary rather than only looking for the file — the whole reason
+# PDFs were failing is that a file existed and was not a browser.
 [phases.build]
 cmds = [
   "npx prisma generate",
   "npx nest build",
-  "sh -c 'for b in chromium chromium-browser google-chrome; do p=$(command -v $b 2>/dev/null) && { echo \"PDF engine: found $b at $p\"; exit 0; }; done; echo \"PDF engine WARNING: no chromium in this image - statements will be sent as HTML\"'",
+  "node -e \"const p=require('puppeteer');const e=p.executablePath();const {execFileSync}=require('child_process');console.log('PDF engine: '+e);console.log(execFileSync(e,['--version']).toString().trim())\"",
 ]
 
 # ── Start command ──

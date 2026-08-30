@@ -242,18 +242,13 @@ export class StatementTools implements AiToolProvider {
     }
 
     /**
-     * A missing PDF must not become a missing statement.
-     *
-     * Producing the PDF needs a headless browser, and a server without Chromium
-     * cannot have one — which is a fact about the deployment, not about the
-     * customer's right to their statement. So a failed render falls through to
-     * sending the statement in the body of the message instead of refusing.
-     * Refusing was defensible only while the alternative was a bare balance recap;
-     * it is not, now that the whole statement can travel as a table.
+     * The statement IS the PDF. The message that carries it is two lines of
+     * courtesy, so a failure to render must stop the send rather than substitute
+     * something else — a customer receiving a table where an official statement was
+     * promised is worse than receiving nothing and being told why.
      */
-    let generated: Awaited<ReturnType<StatementPdfService['generate']>> | null = null;
-    let artifactId: string | null = null;
-    let pdfFailureReason = '';
+    let generated: Awaited<ReturnType<StatementPdfService['generate']>>;
+    let artifactId: string;
     try {
       generated = await this.statementPdf.generate(ctx.companyId, built.pdf);
       const pdfBuf = Buffer.isBuffer(generated.buffer)
@@ -270,35 +265,20 @@ export class StatementTools implements AiToolProvider {
         filename: generated.downloadName,
       });
     } catch (err: any) {
-      pdfFailureReason = err?.message || 'سبب غير معروف';
-      this.logger.warn(
-        `Statement PDF unavailable for ${built.account.nameAr} (${pdfFailureReason}); sending the statement in the message body instead.`,
+      const reason = err?.message || 'سبب غير معروف';
+      this.logger.error(
+        `Statement PDF failed, email aborted for ${built.account.nameAr}: ${reason}`,
+        err?.stack,
       );
+      const message = `لم أرسل البريد لأن ملف كشف الحساب لم يُنتج (${reason}).`;
+      return {
+        ok: false,
+        data: { sent: false, pdfFailed: true, recipientEmail, message },
+        ui: [this.kpiBlock(built)],
+        suggestions: ['أعد إرسال الكشف', 'كشف PDF'],
+        note: message,
+      };
     }
-
-    /**
-     * The fallback payload. `rows` is what renders inside the message, and the
-     * same statement is attached as an .html file so it can still be saved and
-     * printed — the print HTML needs no browser to be produced, only to be turned
-     * into a PDF.
-     */
-    let htmlAttachmentBase64: string | undefined;
-    if (!generated) {
-      try {
-        const rendered = await this.statementPdf.renderHtml(ctx.companyId, built.pdf);
-        htmlAttachmentBase64 = Buffer.from(rendered.html, 'utf-8').toString('base64');
-      } catch (err: any) {
-        this.logger.warn(`Statement HTML render failed: ${err?.message || err}`);
-      }
-    }
-
-    const inlineRows = (built.pdf.rows || []).map((row: any) => ({
-      date: String(row.date || ''),
-      description: String(row.statement || ''),
-      debit: Number(row.debit) || 0,
-      credit: Number(row.credit) || 0,
-      balance: Number(row.balance) || 0,
-    }));
 
     try {
       const sent = await this.email.sendStatementEmail({
@@ -308,31 +288,25 @@ export class StatementTools implements AiToolProvider {
         accountCode: built.account.code || undefined,
         fromDate: built.period.startDate,
         toDate: built.period.endDate,
-        pdfBase64: generated ? generated.buffer.toString('base64') : undefined,
-        htmlAttachmentBase64,
-        inlineStatement: !generated,
-        rows: generated ? undefined : inlineRows,
-        closingBalance: round2(built.closingBalance),
+        pdfBase64: generated.buffer.toString('base64'),
+        customMessage: 'الكشف المحدث لكم',
         attachmentName: `Account_Statement_${built.account.code || 'account'}_${String(built.period.endDate).replace(/[^0-9A-Za-z]+/g, '-')}`,
       });
 
-      // Without a PDF there is no file card to show, so the KPI block stands in.
-      const uiBlocks: AiUiBlock[] = generated
-        ? [
-            {
-              type: 'pdf_file',
-              payload: {
-                artifactId,
-                filename: generated.downloadName,
-                accountName: built.account.nameAr,
-                period: built.period.label,
-                sizeBytes: generated.buffer.length,
-                closingBalance: round2(built.closingBalance),
-                emailedTo: recipientEmail,
-              },
-            },
-          ]
-        : [this.kpiBlock(built)];
+      const uiBlocks: AiUiBlock[] = [
+        {
+          type: 'pdf_file',
+          payload: {
+            artifactId,
+            filename: generated.downloadName,
+            accountName: built.account.nameAr,
+            period: built.period.label,
+            sizeBytes: generated.buffer.length,
+            closingBalance: round2(built.closingBalance),
+            emailedTo: recipientEmail,
+          },
+        },
+      ];
 
       return {
         ok: true,
@@ -340,34 +314,28 @@ export class StatementTools implements AiToolProvider {
           sent: true,
           messageId: sent.messageId || null,
           recipientEmail,
-          deliveredAs: generated ? 'PDF' : 'HTML',
-          pdfUnavailableReason: generated ? undefined : pdfFailureReason,
           account: { id: built.account.id, name: built.account.nameAr },
         },
         ui: uiBlocks,
         suggestions: ['كشف PDF', 'رصيده'],
-        note: generated
-          ? `تم إرسال كشف «${built.account.nameAr}» إلى ${recipientEmail} عبر خدمة إرسال الكشوفات.`
-          : `تم إرسال كشف «${built.account.nameAr}» إلى ${recipientEmail} داخل نص الرسالة مع نسخة مرفقة، لأن توليد PDF غير متاح على الخادم (${pdfFailureReason}).`,
+        note: `تم إرسال كشف «${built.account.nameAr}» إلى ${recipientEmail} مرفقاً بصيغة PDF.`,
       };
     } catch (err: any) {
       const message = err?.message || 'تعذر إرسال كشف الحساب';
       this.logger.error(`Statement email send failed for ${recipientEmail}: ${message}`, err?.stack);
-      const uiBlocks: AiUiBlock[] = generated
-        ? [
-            {
-              type: 'pdf_file',
-              payload: {
-                artifactId,
-                filename: generated.downloadName,
-                accountName: built.account.nameAr,
-                period: built.period.label,
-                sizeBytes: generated.buffer.length,
-                closingBalance: round2(built.closingBalance),
-              },
-            },
-          ]
-        : [this.kpiBlock(built)];
+      const uiBlocks: AiUiBlock[] = [
+        {
+          type: 'pdf_file',
+          payload: {
+            artifactId,
+            filename: generated.downloadName,
+            accountName: built.account.nameAr,
+            period: built.period.label,
+            sizeBytes: generated.buffer.length,
+            closingBalance: round2(built.closingBalance),
+          },
+        },
+      ];
 
       return {
         ok: false,

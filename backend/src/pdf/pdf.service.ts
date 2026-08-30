@@ -61,6 +61,36 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   private resolvedExecutable?: string | null;
 
   /**
+   * Whether a path is a real browser rather than a stub that only complains.
+   *
+   * On Ubuntu `/usr/bin/chromium-browser` is not Chromium: it is a tiny shell script
+   * that exits with «requires the chromium snap to be installed». It EXISTS, so any
+   * check that merely asks whether the file is there picks it, and the launch then
+   * fails with an error that looks like a browser crash. A real browser is an ELF
+   * executable, so the first four bytes settle it without spawning anything.
+   */
+  private isRealBrowser(candidate: string): boolean {
+    try {
+      const fd = fs.openSync(candidate, 'r');
+      const head = Buffer.alloc(4);
+      fs.readSync(fd, head, 0, 4, 0);
+      fs.closeSync(fd);
+      // 0x7F 'E' 'L' 'F'
+      if (head[0] === 0x7f && head[1] === 0x45 && head[2] === 0x4c && head[3] === 0x46) return true;
+
+      // Not a binary. A wrapper script is only a stub if it points at the snap.
+      const text = fs.readFileSync(candidate, 'utf-8').slice(0, 4096);
+      if (/snap/i.test(text)) {
+        this.logger.warn(`Chromium: ${candidate} is a snap stub, not a browser — skipping it.`);
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Finds a real browser on this machine, wherever the host happens to put one.
    *
    * Naming the binary in an environment variable is the usual advice, and it is the
@@ -78,13 +108,13 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
     const configured = (process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH || '').trim();
     if (configured) {
-      if (fs.existsSync(configured)) {
+      if (fs.existsSync(configured) && this.isRealBrowser(configured)) {
         this.logger.log(`Chromium: using configured binary ${configured}`);
         this.resolvedExecutable = configured;
         return configured;
       }
       this.logger.warn(
-        `Chromium: PUPPETEER_EXECUTABLE_PATH points at ${configured}, which does not exist. Searching the machine instead.`,
+        `Chromium: PUPPETEER_EXECUTABLE_PATH points at ${configured}, which is missing or is not a real browser. Searching the machine instead.`,
       );
     }
 
@@ -98,11 +128,21 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       '/snap/bin/chromium',
     ];
     for (const candidate of candidates) {
-      if (fs.existsSync(candidate)) {
+      if (fs.existsSync(candidate) && this.isRealBrowser(candidate)) {
         this.logger.log(`Chromium: found ${candidate}`);
         this.resolvedExecutable = candidate;
         return candidate;
       }
+    }
+
+    // Puppeteer's own download, kept inside the project by .puppeteerrc.cjs so it
+    // survives from the build into the running image. Preferred over anything on
+    // PATH: it is a known-good build, matched to this puppeteer version.
+    const bundled = this.findBundledChrome();
+    if (bundled) {
+      this.logger.log(`Chromium: using puppeteer's own build at ${bundled}`);
+      this.resolvedExecutable = bundled;
+      return bundled;
     }
 
     // Nix-based images put the binary in a store path no list can predict, so PATH
@@ -112,7 +152,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       for (const name of names) {
         const full = path.join(dir, name);
         try {
-          if (fs.existsSync(full)) {
+          if (fs.existsSync(full) && this.isRealBrowser(full)) {
             this.logger.log(`Chromium: found ${full} on PATH`);
             this.resolvedExecutable = full;
             return full;
@@ -130,6 +170,43 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     );
     this.resolvedExecutable = null;
     return undefined;
+  }
+
+  /**
+   * Puppeteer stores its download under `<cacheDir>/chrome/<build>/chrome-linux64/chrome`.
+   * The build folder is named after a version that changes with every upgrade, so it
+   * is discovered rather than hard-coded.
+   */
+  private findBundledChrome(): string | null {
+    const roots = [
+      process.env.PUPPETEER_CACHE_DIR,
+      path.join(process.cwd(), '.cache', 'puppeteer'),
+      path.join(process.env.HOME || '/root', '.cache', 'puppeteer'),
+    ].filter((dir): dir is string => Boolean(dir));
+
+    for (const root of roots) {
+      for (const product of ['chrome', 'chrome-headless-shell', 'chromium']) {
+        const dir = path.join(root, product);
+        let builds: string[];
+        try {
+          builds = fs.readdirSync(dir);
+        } catch {
+          continue;
+        }
+        // Newest build first, so an upgrade does not leave the old one in use.
+        for (const build of builds.sort().reverse()) {
+          for (const rel of [
+            ['chrome-linux64', 'chrome'],
+            ['chrome-linux', 'chrome'],
+            ['chrome-headless-shell-linux64', 'chrome-headless-shell'],
+          ]) {
+            const full = path.join(dir, build, ...rel);
+            if (fs.existsSync(full) && this.isRealBrowser(full)) return full;
+          }
+        }
+      }
+    }
+    return null;
   }
 
   /**

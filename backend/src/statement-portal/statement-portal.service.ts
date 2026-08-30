@@ -120,7 +120,10 @@ export class StatementPortalService {
     } else if (input.accountId) {
       const account = await this.prisma.account.findFirst({
         where: { id: input.accountId, companyId },
-        select: { id: true, nameAr: true },
+        // The phone matters as much as the name: an account carries its own contact
+        // details, and ignoring them was what made «لا يوجد رقم هاتف» appear for
+        // accounts that plainly had one on their own record.
+        select: { id: true, nameAr: true, phone: true },
       });
       if (!account) throw new NotFoundException('الحساب المحدد لا ينتمي إلى الشركة الحالية');
 
@@ -139,7 +142,7 @@ export class StatementPortalService {
       ]);
       party = linkedCustomer || linkedSupplier || {
         nameAr: account.nameAr,
-        phone: null,
+        phone: account.phone,
         accountId: account.id,
       };
       if (linkedCustomer) input = { ...input, customerId: linkedCustomer.id };
@@ -167,9 +170,8 @@ export class StatementPortalService {
     if (existing && !input.regenerate) {
       // A number supplied now is still worth keeping: it may be what makes a previously
       // unusable barcode work.
-      const currentVerifyPhone = (existing as any).verifyPhone;
-      if (verifyPhone && currentVerifyPhone !== verifyPhone) {
-        const updated = await (this.prisma.statementAccessToken as any).update({
+      if (verifyPhone && existing.verifyPhone !== verifyPhone) {
+        const updated = await this.prisma.statementAccessToken.update({
           where: { id: existing.id },
           data: { verifyPhone },
         });
@@ -177,7 +179,7 @@ export class StatementPortalService {
       }
       return await this.describeIssued(existing, {
         ...party,
-        phone: party.phone || currentVerifyPhone,
+        phone: party.phone || existing.verifyPhone,
       });
     }
 
@@ -188,7 +190,7 @@ export class StatementPortalService {
       });
     }
 
-    const created = await (this.prisma.statementAccessToken as any).create({
+    const created = await this.prisma.statementAccessToken.create({
       data: {
         token: randomBytes(32).toString('base64url'),
         companyId,
@@ -245,8 +247,11 @@ export class StatementPortalService {
 
     const customerIds = rows.map((r) => r.customerId).filter((id): id is string => Boolean(id));
     const supplierIds = rows.map((r) => r.supplierId).filter((id): id is string => Boolean(id));
+    // Accounts are fetched too, so a token that belongs to a bare ledger account shows
+    // its verification number in the list instead of a dash.
+    const accountIds = Array.from(new Set(rows.map((r) => r.accountId).filter(Boolean)));
 
-    const [customers, suppliers] = await Promise.all([
+    const [customers, suppliers, accounts] = await Promise.all([
       customerIds.length
         ? this.prisma.customer.findMany({
             where: { id: { in: customerIds } },
@@ -259,20 +264,34 @@ export class StatementPortalService {
             select: { id: true, nameAr: true, phone: true },
           })
         : Promise.resolve([]),
+      accountIds.length
+        ? this.prisma.account.findMany({
+            where: { id: { in: accountIds } },
+            select: { id: true, nameAr: true, phone: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     const byId = new Map<string, { nameAr: string; phone: string | null }>();
     for (const c of customers) byId.set(c.id, c);
     for (const s of suppliers) byId.set(s.id, s);
+    const byAccount = new Map<string, { nameAr: string; phone: string | null }>();
+    for (const a of accounts) byAccount.set(a.id, a);
 
     return Promise.all(
       rows.map(async (row) => {
-        const party = byId.get(row.customerId || row.supplierId || '') || {
-          nameAr: row.label || '',
-          phone: null,
-        };
+        // Same order the verification uses: party first, then the account, then the
+        // number typed when the barcode was issued.
+        const party = byId.get(row.customerId || row.supplierId || '') ||
+          byAccount.get(row.accountId) || {
+            nameAr: row.label || '',
+            phone: null,
+          };
         return {
-          ...(await this.describeIssued(row, party)),
+          ...(await this.describeIssued(row, {
+            ...party,
+            phone: party.phone || row.verifyPhone,
+          })),
           customerId: row.customerId,
           supplierId: row.supplierId,
           lockedUntil: row.lockedUntil,
@@ -345,21 +364,41 @@ export class StatementPortalService {
    */
   private verificationPhone(
     party: { phone: string | null } | null,
-    row: any,
+    row: { verifyPhone?: string | null },
   ): string {
     return this.digitsOf(party?.phone) || this.digitsOf(row?.verifyPhone);
   }
 
-  private async partyOf(row: { customerId: string | null; supplierId: string | null }) {
+  /**
+   * Who the barcode belongs to, and the number to check against — read live every time.
+   *
+   * The account is the fallback rather than nothing at all: a ledger account holds its
+   * own name and phone, and for the many accounts with no customer or supplier behind
+   * them that record IS the contact. Reading it here means a phone corrected in the
+   * account screen takes effect immediately, exactly as it does for a customer.
+   */
+  private async partyOf(row: {
+    customerId: string | null;
+    supplierId: string | null;
+    accountId?: string | null;
+  }) {
     if (row.customerId) {
-      return this.prisma.customer.findUnique({
+      const customer = await this.prisma.customer.findUnique({
         where: { id: row.customerId },
         select: { nameAr: true, phone: true },
       });
+      if (customer) return customer;
     }
     if (row.supplierId) {
-      return this.prisma.supplier.findUnique({
+      const supplier = await this.prisma.supplier.findUnique({
         where: { id: row.supplierId },
+        select: { nameAr: true, phone: true },
+      });
+      if (supplier) return supplier;
+    }
+    if (row.accountId) {
+      return this.prisma.account.findUnique({
+        where: { id: row.accountId },
         select: { nameAr: true, phone: true },
       });
     }
@@ -500,8 +539,8 @@ export class StatementPortalService {
       endDate: String(data.endDate || '').slice(0, 10),
       rows,
       totals: {
-        totalDebit: rows.reduce((sum, r) => sum + (Number(r.debit) || 0), 0),
-        totalCredit: rows.reduce((sum, r) => sum + (Number(r.credit) || 0), 0),
+        totalDebit: (data as any).totalDebit ?? rows.reduce((sum, r) => sum + (Number(r.debit) || 0), 0),
+        totalCredit: (data as any).totalCredit ?? rows.reduce((sum, r) => sum + (Number(r.credit) || 0), 0),
         finalBalance: Number(data.closingBalance) || 0,
         openingBalance: Number(data.openingBalance) || 0,
         previousBalance: Number(data.openingBalance) || 0,
