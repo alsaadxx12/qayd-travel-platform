@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Res, Req, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Res, Req, HttpException, HttpStatus } from '@nestjs/common';
 import { PdfService, PdfGenerateOptions } from './pdf.service';
 import type { StatementPdfData } from './template.service';
 import { StatementPdfService } from './statement-pdf.service';
@@ -55,6 +55,19 @@ export class PdfController {
     private readonly pdfService: PdfService,
     private readonly statementPdfService: StatementPdfService,
   ) {}
+
+  /**
+   * What the PDF engine can actually do on THIS server.
+   *
+   * A statement arriving as HTML instead of PDF is a fact about the machine, and
+   * until now the only way to learn why was to read the logs. This answers it
+   * directly: which browser path was configured, whether that path exists, and
+   * which binary was actually found.
+   */
+  @Get('health')
+  async health() {
+    return this.pdfService.browserDiagnostics();
+  }
 
   @Post('generate')
   async generatePdf(

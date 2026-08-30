@@ -1,7 +1,13 @@
 # ── Runtime variables ──
 [variables]
 PUPPETEER_SKIP_DOWNLOAD = 'true'
+# The fast path. It is no longer the only path: when this file is absent at runtime the
+# service searches the usual install locations and then PATH, and logs what it found.
 PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium'
+# The address printed inside every statement barcode. It MUST be absolute — a relative
+# value makes a phone camera read the code as plain text and offer a web search instead
+# of opening the statement. Set it in the Railway variables to the front-end origin:
+# PORTAL_BASE_URL = 'https://<front-end-origin>'
 
 # ── System packages: Chromium for PDF generation + Arabic fonts ──
 [phases.setup]
@@ -12,8 +18,15 @@ aptPkgs = ['chromium', 'fonts-noto-color-emoji', 'unzip']
 cmds = ['PUPPETEER_SKIP_DOWNLOAD=true npm ci --include=dev']
 
 # ── Build: generate Prisma client + compile NestJS ──
+# The last command is a check, not a gate. An image without Chromium still deploys —
+# statements are then delivered as HTML rather than PDF — but the reason appears in the
+# build log instead of being discovered later from a failed email.
 [phases.build]
-cmds = ['npx prisma generate', 'npx nest build']
+cmds = [
+  "npx prisma generate",
+  "npx nest build",
+  "sh -c 'for b in chromium chromium-browser google-chrome; do p=$(command -v $b 2>/dev/null) && { echo \"PDF engine: found $b at $p\"; exit 0; }; done; echo \"PDF engine WARNING: no chromium in this image - statements will be sent as HTML\"'",
+]
 
 # ── Start command ──
 [start]

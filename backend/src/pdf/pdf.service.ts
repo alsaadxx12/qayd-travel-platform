@@ -1,5 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import * as puppeteer from 'puppeteer';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface PdfGenerateOptions {
   html: string;
@@ -54,6 +56,99 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   private browser: puppeteer.Browser | null = null;
   private launching: Promise<puppeteer.Browser> | null = null;
   private readonly logger = new Logger(PdfService.name);
+
+  /** Resolved once: the filesystem does not change under a running process. */
+  private resolvedExecutable?: string | null;
+
+  /**
+   * Finds a real browser on this machine, wherever the host happens to put one.
+   *
+   * Naming the binary in an environment variable is the usual advice, and it is the
+   * first thing tried — but it fails silently in the way that is hardest to debug:
+   * if the path is wrong, or the package landed under a different name, puppeteer
+   * reports only that it could not find a browser, and nothing says which path it
+   * looked at. So the configured path is CHECKED to exist, and when it does not the
+   * usual install locations and then PATH are searched before giving up.
+   *
+   * The result is logged once at the level that matters: which browser will be used,
+   * or that none exists and PDFs will fall back to HTML.
+   */
+  private resolveExecutablePath(): string | undefined {
+    if (this.resolvedExecutable !== undefined) return this.resolvedExecutable || undefined;
+
+    const configured = (process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH || '').trim();
+    if (configured) {
+      if (fs.existsSync(configured)) {
+        this.logger.log(`Chromium: using configured binary ${configured}`);
+        this.resolvedExecutable = configured;
+        return configured;
+      }
+      this.logger.warn(
+        `Chromium: PUPPETEER_EXECUTABLE_PATH points at ${configured}, which does not exist. Searching the machine instead.`,
+      );
+    }
+
+    const candidates = [
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/lib/chromium/chromium',
+      '/opt/google/chrome/chrome',
+      '/snap/bin/chromium',
+    ];
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        this.logger.log(`Chromium: found ${candidate}`);
+        this.resolvedExecutable = candidate;
+        return candidate;
+      }
+    }
+
+    // Nix-based images put the binary in a store path no list can predict, so PATH
+    // is walked directly rather than shelling out to `which`.
+    const names = ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable'];
+    for (const dir of String(process.env.PATH || '').split(path.delimiter).filter(Boolean)) {
+      for (const name of names) {
+        const full = path.join(dir, name);
+        try {
+          if (fs.existsSync(full)) {
+            this.logger.log(`Chromium: found ${full} on PATH`);
+            this.resolvedExecutable = full;
+            return full;
+          }
+        } catch {
+          /* an unreadable PATH entry is not a reason to stop looking */
+        }
+      }
+    }
+
+    // Nothing found: let puppeteer try its own bundled download. If that is absent
+    // too the launch fails, and the statement is delivered as HTML instead.
+    this.logger.warn(
+      'Chromium: no system browser found. Falling back to puppeteer\'s bundled build; if it was not downloaded, PDFs will be unavailable and statements will be sent as HTML.',
+    );
+    this.resolvedExecutable = null;
+    return undefined;
+  }
+
+  /**
+   * What the server can actually do, for the diagnostics endpoint — so «why is there
+   * no PDF» is answered by looking, not by guessing.
+   */
+  browserDiagnostics() {
+    const resolved = this.resolveExecutablePath();
+    return {
+      configuredPath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH || null,
+      configuredPathExists: (() => {
+        const configured = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH;
+        return configured ? fs.existsSync(configured) : null;
+      })(),
+      resolvedPath: resolved || null,
+      usingBundled: !resolved,
+      browserConnected: Boolean(this.browser && this.browser.connected),
+    };
+  }
 
   private getPuppeteerArgs(): string[] {
     const args = [
@@ -114,15 +209,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     if (this.browser && this.browser.connected) return this.browser;
     // Concurrent requests share one launch instead of spawning several Chromiums.
     if (!this.launching) {
-      /**
-       * A hosted runtime often has a Chrome of its own and no bundled Chromium — the
-       * npm postinstall that downloads one is commonly skipped in a build image. So
-       * an explicit binary is honoured when the environment names one, and puppeteer
-       * falls back to its own only when it does not. Set PUPPETEER_EXECUTABLE_PATH
-       * (or CHROME_PATH) on the server to point at an installed Chrome.
-       */
-      const executablePath =
-        process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH || undefined;
+      const executablePath = this.resolveExecutablePath();
       this.launching = withDeadline(
         puppeteer.launch({
           headless: true,
