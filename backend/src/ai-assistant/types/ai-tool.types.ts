@@ -27,7 +27,8 @@ export type AiUiBlockType =
   | 'generated_image'
   | 'pdf_file'
   | 'sources'
-  | 'email_confirm';
+  | 'email_confirm'
+  | 'statement_email_client';
 
 export interface AiUiBlock {
   type: AiUiBlockType;
