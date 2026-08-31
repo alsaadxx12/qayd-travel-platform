@@ -2267,6 +2267,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
+                      {/* DEBIT SIDE — Cashbox (Receipt) or Opposite (Payment) */}
                       <tr className="h-[32px] bg-emerald-50/40">
                         <td className="py-1 px-3 border-l border-slate-100 font-bold text-slate-900">
                           {isReceipt
@@ -2283,21 +2284,72 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                         <td className="py-1 px-3 text-center font-mono font-bold text-slate-500">{currency}</td>
                       </tr>
 
-                      <tr className="h-[32px] bg-slate-50">
-                        <td className="py-1 px-3 border-l border-slate-100 font-bold text-slate-900">
-                          {isReceipt
-                            ? oppositeAcc ? oppositeAcc.nameAr : '[الحساب المقابل]'
-                            : cashboxAcc ? cashboxAcc.nameAr : '[الصندوق / البنك]'}
-                        </td>
-                        <td className="py-1 px-3 border-l border-slate-100 text-slate-600 truncate max-w-[280px]">
-                          {description}
-                        </td>
-                        <td className="py-1 px-3 border-l border-slate-100 font-mono text-left text-slate-400">-</td>
-                        <td className="py-1 px-3 border-l border-slate-100 font-mono font-black tabular-nums text-left text-rose-800">
-                          {creditAmount > 0 ? creditAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '-'}
-                        </td>
-                        <td className="py-1 px-3 text-center font-mono font-bold text-slate-500">{currency}</td>
-                      </tr>
+                      {/* CREDIT SIDE — Split lines (if any) + primary account remainder */}
+                      {(() => {
+                        // When there are custom splits with amounts, show each split as a separate credit line
+                        const activeSplitLines = splitAllocations.filter((s) => parseCleanNumber(s.amount) > 0);
+                        if (activeSplitLines.length > 0) {
+                          const rows: React.ReactNode[] = [];
+                          activeSplitLines.forEach((split, idx) => {
+                            const splitAmt = parseCleanNumber(split.amount);
+                            rows.push(
+                              <tr key={`split-${idx}`} className="h-[32px] bg-orange-50/30">
+                                <td className="py-1 px-3 border-l border-slate-100 font-bold text-slate-900">
+                                  {split.accountName || accounts.find((a) => a.id === split.accountId)?.nameAr || '[حساب تقسيم]'}
+                                </td>
+                                <td className="py-1 px-3 border-l border-slate-100 text-slate-600 truncate max-w-[280px]">
+                                  {description}
+                                </td>
+                                <td className="py-1 px-3 border-l border-slate-100 font-mono text-left text-slate-400">-</td>
+                                <td className="py-1 px-3 border-l border-slate-100 font-mono font-black tabular-nums text-left text-rose-800">
+                                  {splitAmt > 0 ? splitAmt.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '-'}
+                                </td>
+                                <td className="py-1 px-3 text-center font-mono font-bold text-slate-500">{currency}</td>
+                              </tr>
+                            );
+                          });
+                          // Primary account gets the remainder
+                          if (systemAccountAmount > 0) {
+                            rows.push(
+                              <tr key="primary-remainder" className="h-[32px] bg-slate-50">
+                                <td className="py-1 px-3 border-l border-slate-100 font-bold text-slate-900">
+                                  {isReceipt
+                                    ? oppositeAcc ? oppositeAcc.nameAr : '[الحساب المقابل]'
+                                    : cashboxAcc ? cashboxAcc.nameAr : '[الصندوق / البنك]'}
+                                </td>
+                                <td className="py-1 px-3 border-l border-slate-100 text-slate-600 truncate max-w-[280px]">
+                                  {description}
+                                </td>
+                                <td className="py-1 px-3 border-l border-slate-100 font-mono text-left text-slate-400">-</td>
+                                <td className="py-1 px-3 border-l border-slate-100 font-mono font-black tabular-nums text-left text-rose-800">
+                                  {systemAccountAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="py-1 px-3 text-center font-mono font-bold text-slate-500">{currency}</td>
+                              </tr>
+                            );
+                          }
+                          return rows;
+                        }
+
+                        // Default: single credit line for the primary account
+                        return (
+                          <tr className="h-[32px] bg-slate-50">
+                            <td className="py-1 px-3 border-l border-slate-100 font-bold text-slate-900">
+                              {isReceipt
+                                ? oppositeAcc ? oppositeAcc.nameAr : '[الحساب المقابل]'
+                                : cashboxAcc ? cashboxAcc.nameAr : '[الصندوق / البنك]'}
+                            </td>
+                            <td className="py-1 px-3 border-l border-slate-100 text-slate-600 truncate max-w-[280px]">
+                              {description}
+                            </td>
+                            <td className="py-1 px-3 border-l border-slate-100 font-mono text-left text-slate-400">-</td>
+                            <td className="py-1 px-3 border-l border-slate-100 font-mono font-black tabular-nums text-left text-rose-800">
+                              {creditAmount > 0 ? creditAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '-'}
+                            </td>
+                            <td className="py-1 px-3 text-center font-mono font-bold text-slate-500">{currency}</td>
+                          </tr>
+                        );
+                      })()}
                     </tbody>
                   </table>
                 </div>
