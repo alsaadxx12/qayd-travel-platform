@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as QRCode from 'qrcode';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -65,20 +66,17 @@ export class StatementQrService {
   /**
    * The barcode for an account's own statement, for printing onto documents.
    *
-   * Returns null when no barcode has been issued for that account, rather than issuing
-   * one: a printed code is a credential, and printing a statement must never be the act
-   * that quietly creates access to it. Issuing stays an explicit decision on the staff
-   * screen.
-   *
-   * The account can be named by id or by code, because the PDF endpoint is called with
-   * whichever the calling screen happens to hold.
+   * Finds the existing active token or auto-issues a live statement access token
+   * so that every printed statement always carries a valid, scannable QR code.
    */
   async forAccount(
     companyId: string,
     accountId?: string | null,
     accountCode?: string | null,
+    accountName?: string | null,
   ): Promise<string | null> {
     const code = accountCode ? String(accountCode).trim() : '';
+    const name = accountName ? String(accountName).trim() : '';
     let resolvedAccountIds: string[] = accountId ? [String(accountId)] : [];
 
     if (code) {
@@ -103,6 +101,28 @@ export class StatementQrService {
       if (supplier?.id) resolvedAccountIds.push(supplier.id);
     }
 
+    if (!resolvedAccountIds.length && name) {
+      const [accountByName, customerByName, supplierByName] = await Promise.all([
+        this.prisma.account.findFirst({
+          where: { companyId, nameAr: name },
+          select: { id: true },
+        }),
+        this.prisma.customer.findFirst({
+          where: { companyId, nameAr: name },
+          select: { id: true, accountId: true },
+        }),
+        this.prisma.supplier.findFirst({
+          where: { companyId, nameAr: name },
+          select: { id: true, accountId: true },
+        }),
+      ]);
+      if (accountByName?.id) resolvedAccountIds.push(accountByName.id);
+      if (customerByName?.accountId) resolvedAccountIds.push(customerByName.accountId);
+      if (customerByName?.id) resolvedAccountIds.push(customerByName.id);
+      if (supplierByName?.accountId) resolvedAccountIds.push(supplierByName.accountId);
+      if (supplierByName?.id) resolvedAccountIds.push(supplierByName.id);
+    }
+
     resolvedAccountIds = Array.from(new Set(resolvedAccountIds.filter(Boolean)));
     if (!resolvedAccountIds.length) return null;
 
@@ -120,9 +140,50 @@ export class StatementQrService {
       select: { token: true, expiresAt: true },
     });
 
-    if (!row) return null;
-    if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
+    if (row && (!row.expiresAt || row.expiresAt.getTime() > Date.now())) {
+      return this.dataUrl(row.token);
+    }
 
-    return this.dataUrl(row.token);
+    // Auto-issue an active statement access token so every statement has a valid QR
+    const primaryAccountId = resolvedAccountIds.find(id => id.length > 5) || resolvedAccountIds[0];
+    if (primaryAccountId) {
+      try {
+        const account = await this.prisma.account.findFirst({
+          where: { id: primaryAccountId, companyId },
+          select: { id: true, nameAr: true },
+        });
+
+        const [linkedCustomer, linkedSupplier] = await Promise.all([
+          this.prisma.customer.findFirst({
+            where: { accountId: primaryAccountId, companyId },
+            select: { id: true },
+          }),
+          this.prisma.supplier.findFirst({
+            where: { accountId: primaryAccountId, companyId },
+            select: { id: true },
+          }),
+        ]);
+
+        const created = await this.prisma.statementAccessToken.create({
+          data: {
+            token: randomBytes(32).toString('base64url'),
+            companyId,
+            accountId: primaryAccountId,
+            customerId: linkedCustomer?.id || null,
+            supplierId: linkedSupplier?.id || null,
+            label: account?.nameAr || name || 'كشف حساب',
+            createdById: 'SYSTEM',
+          },
+        });
+
+        if (created) {
+          return this.dataUrl(created.token);
+        }
+      } catch (err: any) {
+        this.logger.warn(`Auto-creating statement QR token error: ${err?.message}`);
+      }
+    }
+
+    return null;
   }
 }

@@ -257,11 +257,11 @@ export interface StatementMovementItem {
  * the real one and renders nothing when there is none, so no customer is handed a
  * code that leads nowhere.
  */
-export function useStatementQr(accountCode?: string, accountId?: string, enabled = true) {
+export function useStatementQr(accountCode?: string, accountId?: string, enabled = true, accountName?: string) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!enabled || (!accountCode && !accountId)) {
+    if (!enabled || (!accountCode && !accountId && !accountName)) {
       setQrDataUrl(null);
       return;
     }
@@ -269,6 +269,7 @@ export function useStatementQr(accountCode?: string, accountId?: string, enabled
     const params = new URLSearchParams();
     if (accountId) params.set('accountId', accountId);
     if (accountCode) params.set('accountCode', accountCode);
+    if (accountName) params.set('accountName', accountName);
     apiRequest(`/statement-tokens/qr?${params.toString()}`)
       .then((res: any) => {
         if (!cancelled) setQrDataUrl(res?.qrDataUrl || null);
@@ -280,7 +281,7 @@ export function useStatementQr(accountCode?: string, accountId?: string, enabled
     return () => {
       cancelled = true;
     };
-  }, [accountCode, accountId, enabled]);
+  }, [accountCode, accountId, enabled, accountName]);
 
   return qrDataUrl;
 }
@@ -745,6 +746,7 @@ export interface AccountStatementPrintModalProps {
   opened: boolean;
   onClose: () => void;
   accountName: string;
+  accountId?: string;
   accountCode?: string;
   accountPhone?: string;
   accountEmail?: string;
@@ -765,6 +767,7 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
   opened,
   onClose,
   accountName,
+  accountId,
   accountCode,
   accountPhone,
   accountEmail,
@@ -777,7 +780,7 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
   const { language } = useLanguageStore();
   const [config, setConfig] = useState<any>(DEFAULT_STATEMENT_CONFIG);
   // The account's real barcode, resolved once per open.
-  const qrDataUrl = useStatementQr(accountCode, undefined, opened);
+  const qrDataUrl = useStatementQr(accountCode, accountId, opened, accountName);
   const [loading, setLoading] = useState(false);
   const [printLang, setPrintLang] = useState<LangKey>((language as LangKey) || 'ar');
 
@@ -965,6 +968,7 @@ export interface AccountStatementQuickExportModalProps {
   opened: boolean;
   onClose: () => void;
   accountName: string;
+  accountId?: string;
   accountCode?: string;
   accountPhone?: string;
   accountEmail?: string;
@@ -986,6 +990,7 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
   opened,
   onClose,
   accountName,
+  accountId,
   accountCode,
   accountPhone,
   accountEmail,
@@ -1001,7 +1006,7 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
   const [downloading, setDownloading] = useState(false);
   const [config, setConfig] = useState<any>(DEFAULT_STATEMENT_CONFIG);
   // The account's real barcode, resolved once per open.
-  const qrDataUrl = useStatementQr(accountCode, undefined, opened);
+  const qrDataUrl = useStatementQr(accountCode, accountId, opened, accountName);
 
   useEffect(() => {
     if (language === 'en' || language === 'ar') {

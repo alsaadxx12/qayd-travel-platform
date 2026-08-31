@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFeedbackDto, ResolveFeedbackDto } from './feedback.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class FeedbackService {
+  private readonly logger = new Logger(FeedbackService.name);
+
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
@@ -169,18 +171,64 @@ export class FeedbackService {
       },
     });
 
-    // Send in-app notification to the user
-    await this.notificationsService.create({
-      tenantId: feedback.tenantId || undefined,
-      userId: feedback.userId || undefined,
-      title: `تم حل المشكلة / الملاحظة: ${feedback.title.substring(0, 35)}...`,
-      message: dto.adminReply || 'قام فريق الدعم الفني بمعالجة البلاغ الخاص بك بنجاح.',
-      type: 'FEEDBACK_RESOLVED',
-      severity: 'SUCCESS',
-      link: '/help-center',
-    });
+    /**
+     * The reply goes to whoever raised the ticket — and to nobody else.
+     *
+     * Older tickets were stored without a userId (it is only captured when the
+     * reporter was signed in and the token carried an id), so the reporter is looked
+     * up by the email on the ticket as well. Without one of the two there is no
+     * person to notify, and the reply is NOT broadcast to the company instead: a
+     * support answer is addressed to one employee, and sending it to all of their
+     * colleagues is both noise and a small disclosure.
+     */
+    const recipientId = feedback.userId || (await this.findReporterId(feedback));
 
-    return updated;
+    if (recipientId) {
+      await this.notificationsService.create({
+        tenantId: feedback.tenantId || undefined,
+        userId: recipientId,
+        title: `تم حل المشكلة / الملاحظة: ${feedback.title.substring(0, 35)}...`,
+        message: dto.adminReply || 'قام فريق الدعم الفني بمعالجة البلاغ الخاص بك بنجاح.',
+        type: 'FEEDBACK_RESOLVED',
+        severity: 'SUCCESS',
+        link: '/help-center',
+      });
+    } else {
+      this.logger.warn(
+        `Feedback ${id} resolved but no user could be matched (userId and userEmail both unusable) — nobody was notified.`,
+      );
+    }
+
+    // Reported back so the screen can say the reply landed nowhere, rather than
+    // showing a success that silently notified no one.
+    return { ...updated, notifiedUserId: recipientId || null };
+  }
+
+  /**
+   * Matches a ticket to a real user account by the email it was filed with.
+   *
+   * Email is the only identifier a ticket reliably carries, and it is compared
+   * case-insensitively because people type their own address both ways.
+   */
+  private async findReporterId(feedback: {
+    userEmail?: string | null;
+    companyId?: string | null;
+  }): Promise<string | null> {
+    const email = String(feedback.userEmail || '').trim();
+    if (!email) return null;
+    try {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          email: { equals: email, mode: 'insensitive' },
+          ...(feedback.companyId ? { companyId: feedback.companyId } : {}),
+        },
+        select: { id: true },
+      });
+      return user?.id || null;
+    } catch (err: any) {
+      this.logger.warn(`Reporter lookup failed for ${email}: ${err?.message || err}`);
+      return null;
+    }
   }
 
   async deleteFeedback(id: string) {

@@ -11,6 +11,19 @@ export interface CreateNotificationDto {
   link?: string;
 }
 
+/**
+ * Whose notification is whose.
+ *
+ * A row carries a userId when it is addressed to ONE person and a tenantId to say
+ * which company it belongs to — and a personal notification carries both. The
+ * queries below used to treat any tenant match as «mine», so a reply written for one
+ * employee was handed to every colleague in the company, the admin who wrote it
+ * included. That is why resolving a support ticket notified the resolver instead of
+ * the person who raised it.
+ *
+ * The rule now: a notification with a userId belongs to that user alone. A tenant
+ * row counts as everyone's only when it names no user — a real broadcast.
+ */
 @Injectable()
 export class NotificationsService {
   constructor(private prisma: PrismaService) {}
@@ -22,7 +35,9 @@ export class NotificationsService {
         isDeleted: false,
         OR: [
           ...(userId ? [{ userId }] : []),
-          ...(tenantId ? [{ tenantId }] : []),
+          // Tenant notifications are BROADCASTS, so only the ones addressed to
+          // nobody in particular belong to everybody. See the note above.
+          ...(tenantId ? [{ tenantId, userId: null }] : []),
           { userId: null, tenantId: null }, // Global notifications
         ],
       },
@@ -38,7 +53,9 @@ export class NotificationsService {
         isRead: false,
         OR: [
           ...(userId ? [{ userId }] : []),
-          ...(tenantId ? [{ tenantId }] : []),
+          // Tenant notifications are BROADCASTS, so only the ones addressed to
+          // nobody in particular belong to everybody. See the note above.
+          ...(tenantId ? [{ tenantId, userId: null }] : []),
           { userId: null, tenantId: null },
         ],
       },
@@ -73,7 +90,9 @@ export class NotificationsService {
         isRead: false,
         OR: [
           ...(userId ? [{ userId }] : []),
-          ...(tenantId ? [{ tenantId }] : []),
+          // Tenant notifications are BROADCASTS, so only the ones addressed to
+          // nobody in particular belong to everybody. See the note above.
+          ...(tenantId ? [{ tenantId, userId: null }] : []),
           { userId: null, tenantId: null },
         ],
       },
@@ -95,7 +114,9 @@ export class NotificationsService {
         isDeleted: false,
         OR: [
           ...(userId ? [{ userId }] : []),
-          ...(tenantId ? [{ tenantId }] : []),
+          // Tenant notifications are BROADCASTS, so only the ones addressed to
+          // nobody in particular belong to everybody. See the note above.
+          ...(tenantId ? [{ tenantId, userId: null }] : []),
           { userId: null, tenantId: null },
         ],
       },

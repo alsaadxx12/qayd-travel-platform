@@ -29,13 +29,14 @@ export class StatementTokensController {
    * statement as a side effect.
    */
   @Get('qr')
-  @ApiOperation({ summary: 'صورة باركود حساب معيّن للطباعة على الوصل. تعيد null إن لم يُصدر بعد.' })
+  @ApiOperation({ summary: 'صورة باركود حساب معيّن للطباعة على الوصل والكشف' })
   async qrForAccount(
     @Req() req: any,
     @Query('accountId') accountId?: string,
     @Query('accountCode') accountCode?: string,
+    @Query('accountName') accountName?: string,
   ) {
-    const qrDataUrl = await this.qr.forAccount(req.user.companyId, accountId, accountCode);
+    const qrDataUrl = await this.qr.forAccount(req.user.companyId, accountId, accountCode, accountName);
     return { qrDataUrl };
   }
 

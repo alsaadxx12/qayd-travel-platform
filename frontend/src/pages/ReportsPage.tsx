@@ -2076,6 +2076,7 @@ export const ReportsPage: React.FC = () => {
             opened={printModalOpened}
             onClose={() => setPrintModalOpened(false)}
             accountName={isAr ? selectedAccount.nameAr : (selectedAccount.nameEn || selectedAccount.nameAr)}
+            accountId={selectedAccount.id}
             accountCode={selectedAccount.code}
             accountPhone={selectedAccount.phone}
             accountEmail={selectedAccount.email}
@@ -2097,6 +2098,7 @@ export const ReportsPage: React.FC = () => {
             onClose={() => setQuickExportModalOpened(false)}
             onOpenAdvancedPreview={() => setPrintModalOpened(true)}
             accountName={isAr ? selectedAccount.nameAr : (selectedAccount.nameEn || selectedAccount.nameAr)}
+            accountId={selectedAccount.id}
             accountCode={selectedAccount.code}
             accountPhone={selectedAccount.phone}
             accountEmail={selectedAccount.email}

@@ -51,6 +51,7 @@ export class StatementPdfService {
           companyId,
           (body as any).accountId,
           body.accountCode,
+          body.accountName,
         );
       } catch (err: any) {
         this.logger.warn(`Statement QR lookup failed: ${err?.message || err}`);
