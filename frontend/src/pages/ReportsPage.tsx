@@ -1404,88 +1404,119 @@ export const ReportsPage: React.FC = () => {
   );
 
   return (
-    <div className="p-5 md:p-6 space-y-4 max-w-[1750px] mx-auto w-full select-none font-sans" dir={direction}>
-      {/* ── 1. SUMMARY KPI FINANCIAL CARDS (FIRST ELEMENT AT THE TOP) ── */}
+    <div className="p-4 md:p-6 space-y-4 max-w-[1750px] mx-auto w-full select-none font-sans" dir={direction}>
+      {/* ── 1. SUMMARY KPI FINANCIAL CARDS (TOP SECTION) ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 no-print">
         {/* Card 1: Account Header & Opening */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11.5px] font-bold text-slate-500">{isAr ? 'الحساب ورصيد البداية' : 'Account & Opening'}</span>
-            <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center font-bold">
+            <span className="text-xs font-bold text-slate-500">{isAr ? 'الحساب ورصيد البداية' : 'Account & Opening'}</span>
+            <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#F45A0A] border border-orange-100 flex items-center justify-center font-bold">
               <IconWallet size={16} />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-sm font-black text-slate-900 truncate">
+          <div className="mt-2.5">
+            <div className="text-base font-black text-slate-900 truncate">
               {selectedAccount ? (isAr ? selectedAccount.nameAr : (selectedAccount.nameEn || selectedAccount.nameAr)) : (isAr ? 'لم يتم اختيار حساب' : 'No Account Selected')}
             </div>
-            <div className="text-xs font-mono font-bold text-slate-500 mt-0.5" dir="ltr">
-              {selectedAccount ? `${selectedAccount.code} • ${isAr ? 'افتتاحي:' : 'Op:'} ${(openingBalIQD || 0).toLocaleString()} IQD` : '—'}
+            <div className="text-xs font-mono font-bold text-slate-500 mt-1 flex items-center gap-1.5" dir="ltr">
+              {selectedAccount ? (
+                <>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[11px]">
+                    {selectedAccount.code}
+                  </span>
+                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-600 font-semibold">{isAr ? 'افتتاحي:' : 'Op:'}</span>
+                  <span className="font-black text-slate-800">{(openingBalIQD || 0).toLocaleString()} IQD</span>
+                </>
+              ) : (
+                <span className="text-slate-400 font-sans text-xs">{isAr ? 'اختر حساباً للبدء' : 'Select an account to begin'}</span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Card 2: Total Debits */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+        {/* Card 2: Total Debits (عليك / طلب) */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11.5px] font-bold text-slate-500">{isAr ? 'إجمالي المدين (+)' : 'Total Debits (+)'}</span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+            <span className="text-xs font-bold text-slate-500">{isAr ? 'إجمالي المدين (طلب +)' : 'Total Debits (+)'}</span>
+            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center font-bold">
               <IconArrowDownLeft size={16} />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-base font-black text-rose-700 font-mono" dir="ltr">
+          <div className="mt-2.5">
+            <div className="text-2xl font-black text-rose-700 font-mono tracking-tight tabular-nums" dir="ltr">
               {(totalDebitIQD || 0).toLocaleString()}{' '}
-              <span className="text-[11px] font-sans font-semibold text-slate-500">IQD</span>
+              <span className="text-xs font-sans font-bold text-slate-500">IQD</span>
             </div>
             {totalDebitUSD !== 0 && (
-              <div className="text-xs font-bold text-rose-600 font-mono mt-0.5" dir="ltr">
+              <div className="text-xs font-bold text-rose-600 font-mono mt-0.5 tabular-nums" dir="ltr">
                 ${(totalDebitUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </div>
             )}
           </div>
         </div>
 
-        {/* Card 3: Total Credits */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+        {/* Card 3: Total Credits (لك / مدفوع) */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-[11.5px] font-bold text-slate-500">{isAr ? 'إجمالي الدائن (-)' : 'Total Credits (-)'}</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <span className="text-xs font-bold text-slate-500">{isAr ? 'إجمالي الدائن (مدفوع -)' : 'Total Credits (-)'}</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center font-bold">
               <IconArrowUpRight size={16} />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-base font-black text-emerald-700 font-mono" dir="ltr">
+          <div className="mt-2.5">
+            <div className="text-2xl font-black text-emerald-700 font-mono tracking-tight tabular-nums" dir="ltr">
               {(totalCreditIQD || 0).toLocaleString()}{' '}
-              <span className="text-[11px] font-sans font-semibold text-slate-500">IQD</span>
+              <span className="text-xs font-sans font-bold text-slate-500">IQD</span>
             </div>
             {totalCreditUSD !== 0 && (
-              <div className="text-xs font-bold text-emerald-600 font-mono mt-0.5" dir="ltr">
+              <div className="text-xs font-bold text-emerald-600 font-mono mt-0.5 tabular-nums" dir="ltr">
                 ${(totalCreditUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </div>
             )}
           </div>
         </div>
 
-        {/* Card 4: Net Balance & Status */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+        {/* Card 4: Net Balance & Dynamic Status */}
+        <div className={`p-4.5 rounded-2xl border shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between ${
+          balanceIQD === 0 && selectedAccount
+            ? 'bg-slate-50 border-slate-200'
+            : balanceIQD > 0
+              ? 'bg-gradient-to-br from-white via-rose-50/20 to-rose-50/40 border-rose-200/80'
+              : 'bg-gradient-to-br from-white via-emerald-50/20 to-emerald-50/40 border-emerald-200/80'
+        }`}>
           <div className="flex items-center justify-between">
-            <span className="text-[11.5px] font-bold text-slate-500">{isAr ? 'صافي الرصيد الختامي' : 'Net Closing Balance'}</span>
+            <span className="text-xs font-bold text-slate-600">{isAr ? 'صافي الرصيد الختامي' : 'Net Closing Balance'}</span>
             <span
-              className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold ${
-                balanceIQD >= 0 ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-black border ${
+                !selectedAccount
+                  ? 'bg-slate-100 text-slate-500 border-slate-200'
+                  : balanceIQD === 0
+                    ? 'bg-slate-100 text-slate-700 border-slate-300'
+                    : balanceIQD > 0
+                      ? 'bg-rose-100/80 text-rose-800 border-rose-300'
+                      : 'bg-emerald-100/80 text-emerald-800 border-emerald-300'
               }`}
             >
-              {balanceIQD >= 0 ? (isAr ? 'طلب / مدين' : 'Debit (Claim)') : (isAr ? 'رصيد / دائن' : 'Credit (Payable)')}
+              {!selectedAccount
+                ? (isAr ? 'غير محدد' : 'Unset')
+                : balanceIQD === 0
+                  ? (isAr ? 'خالص الرصيد ⚖️' : 'Settled ⚖️')
+                  : balanceIQD > 0
+                    ? (isAr ? 'المطلوب منك (مدين 🔴)' : 'Debit (Claim 🔴)')
+                    : (isAr ? 'الرصيد لك (دائن 🟢)' : 'Credit (Payable 🟢)')}
             </span>
           </div>
-          <div className="mt-2">
-            <div className={`text-base font-black font-mono ${balanceIQD >= 0 ? 'text-rose-700' : 'text-emerald-700'}`} dir="ltr">
+          <div className="mt-2.5">
+            <div className={`text-2xl sm:text-3xl font-black font-mono tracking-tight tabular-nums ${
+              !selectedAccount ? 'text-slate-400' : balanceIQD >= 0 ? 'text-rose-700' : 'text-emerald-700'
+            }`} dir="ltr">
               {Math.abs(balanceIQD || 0).toLocaleString()}{' '}
-              <span className="text-[11px] font-sans font-semibold text-slate-500">IQD</span>
+              <span className="text-xs font-sans font-bold text-slate-500">IQD</span>
             </div>
             {balanceUSD !== 0 && (
-              <div className={`text-xs font-bold font-mono mt-0.5 ${balanceUSD >= 0 ? 'text-rose-600' : 'text-emerald-600'}`} dir="ltr">
+              <div className={`text-xs font-bold font-mono mt-0.5 tabular-nums ${balanceUSD >= 0 ? 'text-rose-600' : 'text-emerald-600'}`} dir="ltr">
                 ${Math.abs(balanceUSD || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
               </div>
             )}
@@ -1493,14 +1524,14 @@ export const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── 2. MODERN CONTROL TOOLBAR ── */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs no-print flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+      {/* ── 2. MODERN CONTROL TOOLBAR (UNIFIED & CLEAN) ── */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs no-print flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         {/* Left Side: Account Search + Date Range */}
-        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
           {/* Account Search Combobox */}
-          <div className="flex-1 min-w-[280px] max-w-lg relative">
+          <div className="flex-1 min-w-[260px] max-w-md relative">
             <div className="relative">
-              <IconSearch size={15} className="absolute top-1/2 -translate-y-1/2 start-3 text-slate-400" />
+              <IconSearch size={16} className="absolute top-1/2 -translate-y-1/2 start-3.5 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 value={accountSearch}
@@ -1512,7 +1543,7 @@ export const ReportsPage: React.FC = () => {
                 onFocus={() => setShowAccountDropdown(true)}
                 onBlur={() => setTimeout(() => setShowAccountDropdown(false), 220)}
                 placeholder={isAr ? 'ابحث عن الحساب بالاسم أو الرمز...' : 'Search account by name or code...'}
-                className="w-full h-11 ps-9 pe-8 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white focus:bg-white focus:border-[#F45A0A] focus:ring-3 focus:ring-[#F45A0A]/10 text-xs font-bold text-slate-900 placeholder:text-slate-400 outline-none transition-all"
+                className="w-full h-11 ps-10 pe-9 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-white focus:bg-white focus:border-[#F45A0A] focus:ring-3 focus:ring-[#F45A0A]/10 text-xs font-bold text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs"
               />
               {accountSearch && (
                 <button
@@ -1523,9 +1554,9 @@ export const ReportsPage: React.FC = () => {
                     setStatementMovements([]);
                     setHasSearched(false);
                   }}
-                  className="absolute top-1/2 -translate-y-1/2 end-2.5 text-slate-400 hover:text-red-500 cursor-pointer"
+                  className="absolute top-1/2 -translate-y-1/2 end-3 text-slate-400 hover:text-red-500 cursor-pointer transition-colors"
                 >
-                  <IconX size={14} />
+                  <IconX size={15} />
                 </button>
               )}
             </div>
@@ -1538,14 +1569,13 @@ export const ReportsPage: React.FC = () => {
                     key={acc.id}
                     onMouseDown={() => selectAccount(acc)}
                     className={`w-full text-start px-3.5 py-2.5 text-xs hover:bg-orange-50 transition-colors cursor-pointer flex items-center justify-between ${
-                      selectedAccountId === acc.id ? 'bg-orange-50/80 text-[#C2410C]' : 'text-slate-800'
+                      selectedAccountId === acc.id ? 'bg-orange-50/90 text-[#C2410C]' : 'text-slate-800'
                     }`}
                   >
                     <div className="flex items-center gap-2 truncate">
-                      <span className="font-mono font-bold text-slate-900" dir="ltr">
+                      <span className="font-mono font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]" dir="ltr">
                         {acc.code}
                       </span>
-                      <span className="text-slate-400">—</span>
                       <span className="font-bold truncate">{isAr ? acc.nameAr : (acc.nameEn || acc.nameAr)}</span>
                     </div>
                     <Badge size="xs" color="gray" variant="light" className="shrink-0 font-semibold">
@@ -1578,21 +1608,21 @@ export const ReportsPage: React.FC = () => {
             type="button"
             onClick={() => handleFetchStatement(true)}
             disabled={!selectedAccountId || loading}
-            className="h-11 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-2xs disabled:opacity-50"
+            className="h-11 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
             title={isAr ? 'تحديث الكشف من الخادم' : 'Refresh Statement'}
           >
-            <IconRefresh size={15} className={loading ? 'animate-spin text-[#F45A0A]' : 'text-slate-500'} />
+            <IconRefresh size={16} className={loading ? 'animate-spin text-[#F45A0A]' : 'text-slate-500'} />
             <span className="hidden sm:inline">{isAr ? 'تحديث' : 'Refresh'}</span>
           </button>
 
           {/* Actions & Export Menu */}
-          <Menu position="bottom-end" shadow="xl" width={180} radius="md">
+          <Menu position="bottom-end" shadow="xl" width={190} radius="md">
             <Menu.Target>
               <button
                 type="button"
-                className="h-11 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-2xs"
+                className="h-11 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
-                <IconDotsVertical size={15} className="text-slate-500" />
+                <IconDotsVertical size={16} className="text-slate-500" />
                 <span>{isAr ? 'الإجراءات والتصدير' : 'Actions & Export'}</span>
                 <IconChevronDown size={12} className="text-slate-400" />
               </button>
@@ -1631,9 +1661,9 @@ export const ReportsPage: React.FC = () => {
             <Menu.Target>
               <button
                 type="button"
-                className="h-11 px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs transition-all flex items-center gap-2 cursor-pointer hover:shadow-md"
+                className="h-11 px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-xs shadow-md shadow-orange-500/20 transition-all flex items-center gap-2 cursor-pointer hover:shadow-lg active:scale-98"
               >
-                <IconPlus size={16} />
+                <IconPlus size={16} stroke={2.5} />
                 <span>{isAr ? 'إضافة سند مالي' : 'New Voucher'}</span>
                 <IconChevronDown size={12} className="text-white/80" />
               </button>
@@ -1688,7 +1718,7 @@ export const ReportsPage: React.FC = () => {
             type="button"
             onClick={() => setPrintModalOpened(true)}
             disabled={!selectedAccountId}
-            className="h-11 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-2xs transition-all flex items-center gap-2 cursor-pointer hover:shadow-sm disabled:opacity-50"
+            className="h-11 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer hover:shadow-sm disabled:opacity-50"
           >
             <IconPrinter size={16} className="text-slate-500" />
             <span>{isAr ? 'طباعة الكشف' : 'Print Statement'}</span>
@@ -1698,14 +1728,15 @@ export const ReportsPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setFiltersVisible(!filtersVisible)}
-            className={`h-11 w-11 rounded-xl border transition-colors flex items-center justify-center cursor-pointer shadow-2xs ${
+            className={`h-11 px-3 rounded-xl border transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs ${
               filtersVisible
-                ? 'bg-slate-100 border-slate-300 text-slate-800'
-                : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                ? 'bg-orange-50/80 border-orange-200 text-[#F45A0A] font-bold'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold'
             }`}
             title={isAr ? 'إظهار/إخفاء الفلاتر الجانبية' : 'Toggle Filters Sidebar'}
           >
             <IconFilter size={16} />
+            <span className="text-xs">{isAr ? 'الفلاتر' : 'Filters'}</span>
           </button>
         </div>
       </div>
@@ -1714,14 +1745,14 @@ export const ReportsPage: React.FC = () => {
       <div className="flex items-start gap-3.5 w-full">
         {/* Collapsible Sidebar Filter Panel */}
         {filtersVisible && (
-          <div className="w-64 bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-3.5 space-y-3.5 shrink-0 no-print">
+          <div className="w-64 bg-white rounded-2xl border border-slate-200/90 shadow-xs p-3.5 space-y-3.5 shrink-0 no-print">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div className="flex items-center gap-2 font-black text-xs text-slate-900">
-                <IconAdjustmentsHorizontal size={15} className="text-[#F45A0A]" />
+                <IconAdjustmentsHorizontal size={16} className="text-[#F45A0A]" />
                 <span>{isAr ? 'فلاتر الكشف' : 'Statement Filters'}</span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+              <span className="text-[10.5px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
                 {calculatedRows.length} {isAr ? 'حركة' : 'items'}
               </span>
             </div>
@@ -1890,18 +1921,48 @@ export const ReportsPage: React.FC = () => {
         {/* Transactions Accounting Grid */}
         <div className="flex-1 min-w-0">
           {!selectedAccountId && !hasSearched ? (
-            <div className="text-center py-24 px-4 space-y-3 bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
-              <div className="w-16 h-16 rounded-2xl bg-orange-50 text-[#F45A0A] border border-orange-200 flex items-center justify-center mx-auto shadow-xs">
-                <IconFileText size={32} />
+            <div className="text-center py-16 px-6 space-y-4 bg-white rounded-2xl border border-slate-200/90 shadow-xs">
+              <div className="mx-auto w-44 h-44 flex items-center justify-center pointer-events-none">
+                <img
+                  src="/illustrations/organizing-papers.svg"
+                  alt="Account Statement"
+                  className="w-full h-full object-contain drop-shadow-xs"
+                />
               </div>
-              <h3 className="font-extrabold text-base text-slate-900">
-                {isAr ? 'اختر حسابًا لعرض كشف الحساب' : 'Select an Account to View Statement'}
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                {isAr
-                  ? 'قم بالبحث عن الحساب المحاسبي من الشريط العلوي واختياره لعرض الحركات المالية والمطابقات تلقائياً.'
-                  : 'Search and select an account from the top bar to automatically load the financial ledger.'}
-              </p>
+              <div className="space-y-1 max-w-lg mx-auto">
+                <h3 className="font-black text-lg text-slate-900 tracking-tight">
+                  {isAr ? 'اختر حساباً لعرض كشف الحساب المالي' : 'Select an Account to View Statement'}
+                </h3>
+                <p className="text-xs font-bold text-slate-500 leading-relaxed">
+                  {isAr
+                    ? 'قم بالبحث عن الحساب المحاسبي من الشريط العلوي، أو اختر مباشرة من الحسابات الشائعة أدناه لعرض الحركات المالية فورياً:'
+                    : 'Search and select an account from the top toolbar, or pick directly from the suggested accounts below to load the ledger instantly:'}
+                </p>
+              </div>
+
+              {/* Quick Account Selection Chips */}
+              {accounts && accounts.length > 0 && (
+                <div className="pt-3 max-w-xl mx-auto">
+                  <span className="text-[11px] font-black text-slate-400 block mb-2">
+                    {isAr ? '⚡ وصول سريع للحسابات الأكثر استخداماً:' : '⚡ Quick access to common accounts:'}
+                  </span>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {accounts.slice(0, 8).map((acc) => (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => selectAccount(acc)}
+                        className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-orange-50 hover:border-orange-200 hover:text-[#C2410C] text-xs font-bold text-slate-700 transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 active:scale-95"
+                      >
+                        <span className="font-mono text-[10.5px] text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          {acc.code}
+                        </span>
+                        <span>{isAr ? acc.nameAr : (acc.nameEn || acc.nameAr)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <AccountingGrid
