@@ -208,15 +208,13 @@ export class ReceiptVouchersService {
    */
   async findAll(companyId: string, requestedLimit?: number) {
     const take = Math.min(Math.max(Number(requestedLimit) || 150, 1), 300);
-    const rows = await (this.prisma.receiptVoucher as any).findMany({
+    const rows = await this.prisma.receiptVoucher.findMany({
       where: { companyId },
       select: {
         id: true,
         voucherNumber: true,
         date: true,
         amount: true,
-        currency: true,
-        exchangeRate: true,
         accountId: true,
         cashboxOrBankAccountId: true,
         customerId: true,
@@ -230,6 +228,8 @@ export class ReceiptVouchersService {
         createdBy: { select: { id: true, name: true } },
         journalEntry: {
           select: {
+            currency: true,
+            exchangeRate: true,
             lines: {
               select: {
                 accountId: true,
@@ -260,6 +260,8 @@ export class ReceiptVouchersService {
       const { journalEntry: _entry, ...rest } = row;
       return {
         ...rest,
+        currency: _entry?.currency || 'IQD',
+        exchangeRate: _entry?.exchangeRate || 1,
         splitAccounts: legs.map((leg) => ({
           accountId: leg.accountId,
           accountName: names.get(leg.accountId) || '',
