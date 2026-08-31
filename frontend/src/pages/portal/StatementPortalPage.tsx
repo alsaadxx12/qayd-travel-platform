@@ -1,20 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-
-/**
- * What a customer sees after scanning the barcode on their statement or receipt.
- *
- * This page lives OUTSIDE the application shell — no sidebar, no login, no staff
- * session — because the person holding the phone is not a user of the system. It talks
- * to the public portal endpoints only, and keeps its short-lived session in memory
- * rather than in storage: closing the tab ends the visit, which is the right default
- * for a screen opened on a borrowed or shared phone.
- *
- * The design goal is that the two questions a customer actually has — «كم عليّ؟» and
- * «من أين جاء هذا الرقم؟» — are answered in that order, the first without scrolling.
- */
-
+import { Lottie } from 'lottie-react';
 import { API_BASE_URL } from '../../api/client';
+import manBalanceAnimation from '../../assets/animations/man-balance-sheet.json';
 
 interface PortalIntro {
   companyName: string;
@@ -67,12 +55,14 @@ export const StatementPortalPage: React.FC = () => {
   const [data, setData] = useState<StatementData | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [downloaded, setDownloaded] = useState<'pdf' | 'html' | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
   const [otp, setOtp] = useState<string[]>(['', '', '', '']);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     document.documentElement.setAttribute('dir', 'rtl');
-    document.title = 'كشف الحساب';
+    document.title = 'كشف الحساب الإلكتروني المعتمد';
   }, []);
 
   useEffect(() => {
@@ -80,7 +70,7 @@ export const StatementPortalPage: React.FC = () => {
     (async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}`);
-        if (!res.ok) throw new Error('هذا الباركود غير صالح أو تم إبطاله.');
+        if (!res.ok) throw new Error('هذا الباركود غير صالح أو تم إبطاله من قبل الإدارة.');
         const json = await res.json();
         if (!cancelled) setIntro(json);
       } catch (err: any) {
@@ -91,6 +81,31 @@ export const StatementPortalPage: React.FC = () => {
       cancelled = true;
     };
   }, [token]);
+
+  const submitDigits = useCallback(
+    async (code: string) => {
+      if (code.length !== 4 || verifying) return;
+      setVerifying(true);
+      setVerifyError('');
+      try {
+        const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ last4: code }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.message || 'الأرقام غير صحيحة، يرجى إعادة المحاولة.');
+        setSession(json.session);
+      } catch (err: any) {
+        setVerifyError(err?.message || 'الأرقام غير صحيحة، يرجى التحقق وإعادة الإدخال.');
+        setOtp(['', '', '', '']);
+        otpRefs.current[0]?.focus();
+      } finally {
+        setVerifying(false);
+      }
+    },
+    [token, verifying],
+  );
 
   const handleOtpChange = (index: number, val: string) => {
     setVerifyError('');
@@ -103,7 +118,6 @@ export const StatementPortalPage: React.FC = () => {
     }
 
     if (cleaned.length > 1) {
-      // Pasted code (e.g. "9278")
       const chars = cleaned.slice(0, 4).split('');
       const next = ['', '', '', ''];
       chars.forEach((ch, i) => {
@@ -152,51 +166,32 @@ export const StatementPortalPage: React.FC = () => {
     }
   };
 
-  const submitDigits = useCallback(async (code: string) => {
-    if (code.length !== 4 || verifying) return;
-    setVerifying(true);
-    setVerifyError('');
-    try {
-      const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ last4: code }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.message || 'الأرقام غير صحيحة.');
-      setSession(json.session);
-    } catch (err: any) {
-      setVerifyError(err?.message || 'الأرقام غير صحيحة.');
-      setOtp(['', '', '', '']);
-      otpRefs.current[0]?.focus();
-    } finally {
-      setVerifying(false);
-    }
-  }, [token, verifying]);
-
-  /**
-   * The statement download: session is passed both in header and query string
-   * for 100% preflight/CORS resilience.
-   */
   const downloadStatement = useCallback(async () => {
-    if (!session) return;
-    const res = await fetch(
-      `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/download?session=${encodeURIComponent(session)}`,
-    );
-    if (!res.ok) throw new Error('تعذّر تحضير ملف الكشف.');
+    if (!session || downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/download?session=${encodeURIComponent(session)}`,
+      );
+      if (!res.ok) throw new Error('تعذّر تحضير ملف الكشف.');
 
-    const kind = (res.headers.get('X-Statement-Kind') as 'pdf' | 'html') || 'pdf';
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `statement.${kind}`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    setDownloaded(kind);
-  }, [session, token]);
+      const kind = (res.headers.get('X-Statement-Kind') as 'pdf' | 'html') || 'pdf';
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `statement_${intro?.holderName || 'account'}.${kind}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setDownloaded(kind);
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setDownloading(false);
+    }
+  }, [session, token, downloading, intro]);
 
   useEffect(() => {
     if (!session) return;
@@ -206,7 +201,7 @@ export const StatementPortalPage: React.FC = () => {
       try {
         await downloadStatement();
       } catch {
-        /* fall through to the on-screen statement */
+        /* fall through to display the on-screen statement */
       }
       try {
         const res = await fetch(
@@ -230,54 +225,77 @@ export const StatementPortalPage: React.FC = () => {
   }, [session, token, downloadStatement]);
 
   const balance = data?.closingBalance ?? 0;
-  const balanceLabel = useMemo(() => {
-    if (!data) return '';
-    if (Math.abs(balance) < 0.01) return 'لا يوجد رصيد مستحق';
-    return balance > 0 ? 'الرصيد المطلوب منك' : 'الرصيد لك';
-  }, [balance, data]);
+  const isSettled = Math.abs(balance) < 0.01;
+  const isCredit = balance < 0; // Balance is for customer (Green)
 
-  // ── Refused ────────────────────────────────────────────────────────────────
+  // ── 1. Error State ──────────────────────────────────────────────────────────
   if (introError) {
     return (
       <Shell>
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center">
-          <p className="text-base font-bold text-rose-900">{introError}</p>
-          <p className="mt-2 text-sm text-rose-800">يرجى مراجعة الوكالة للحصول على باركود جديد.</p>
+        <div className="rounded-3xl border border-rose-200 bg-white p-8 text-center shadow-xl">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="mt-4 text-lg font-black text-rose-900">تعذّر الوصول للكشف</h2>
+          <p className="mt-2 text-sm text-slate-600 leading-relaxed">{introError}</p>
+          <p className="mt-4 text-xs font-bold text-slate-400">يرجى مراجعة إدارة الشركة للحصول على باركود حديث ومفعّل.</p>
         </div>
       </Shell>
     );
   }
 
+  // ── 2. Loading State ────────────────────────────────────────────────────────
   if (!intro) {
     return (
       <Shell>
-        <div className="h-40 animate-pulse rounded-2xl bg-slate-100" />
+        <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-lg animate-pulse">
+          <div className="mx-auto h-28 w-28 rounded-full bg-slate-100 mb-4" />
+          <div className="h-6 w-48 bg-slate-200 rounded-xl mx-auto mb-3" />
+          <div className="h-4 w-32 bg-slate-100 rounded-lg mx-auto" />
+        </div>
       </Shell>
     );
   }
 
-  // ── The challenge ──────────────────────────────────────────────────────────
+  // ── 3. Challenge Screen (Animation + 4-Box PIN) ─────────────────────────────
   if (!data) {
     return (
       <Shell companyName={intro.companyName}>
-        <div className="rounded-3xl border border-slate-200/90 bg-white p-7 text-center shadow-lg">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-[#F45A0A]">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+        <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 text-center shadow-2xl shadow-slate-200/60">
+          {/* Subtle Orange Accent Top Line */}
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-400 via-[#F45A0A] to-amber-500" />
+
+          {/* Lottie Animated Character */}
+          <div className="mx-auto w-48 h-48 -mt-2 mb-1 flex items-center justify-center">
+            <Lottie
+              src={manBalanceAnimation}
+              loop={true}
+              autoplay={true}
+              className="w-full h-full"
+            />
           </div>
 
-          <p className="mt-3 text-xs font-black uppercase tracking-wider text-slate-400">كشف حساب إلكتروني</p>
-          <h1 className="mt-1 text-2xl font-black text-slate-900">{intro.holderName}</h1>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-[#F45A0A] text-xs font-extrabold mb-2 border border-orange-200/60">
+            <span>🛡️</span>
+            <span>بوابة الاستعلام والتدقيق المالي</span>
+          </div>
+
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">{intro.holderName}</h1>
+          <p className="text-xs font-bold text-slate-400 mt-1">كشف الحساب المالي المعتمد</p>
 
           {intro.phoneHint ? (
-            <div className="mt-6">
-              <label className="block text-sm font-bold text-slate-700">
-                أدخل آخر 4 أرقام من رقم الهاتف المسجّل للتحقق
+            <div className="mt-6 pt-5 border-t border-slate-100">
+              <label className="block text-sm font-black text-slate-800">
+                أدخل آخر 4 أرقام من رقم الهاتف لتأكيد الهوية
               </label>
+              <p className="mt-1 text-xs text-slate-400">
+                لحماية خصوصيتك، يرجى تأكيد ملكية الحساب بمطابقة آخر 4 أرقام
+              </p>
 
               {/* 4 Connected/Separated OTP Digit Boxes */}
-              <div className="mt-5 flex items-center justify-center gap-3" dir="ltr">
+              <div className="mt-5 flex items-center justify-center gap-3 sm:gap-4" dir="ltr">
                 {[0, 1, 2, 3].map((idx) => (
                   <input
                     key={idx}
@@ -292,13 +310,13 @@ export const StatementPortalPage: React.FC = () => {
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(idx, e)}
                     disabled={verifying}
-                    className="h-16 w-14 rounded-2xl border-2 border-slate-300 bg-slate-50/50 text-center font-mono text-2xl font-black text-slate-900 shadow-xs transition focus:border-[#F45A0A] focus:bg-white focus:shadow-md focus:shadow-orange-500/10 focus:outline-none disabled:opacity-60"
+                    className="h-16 w-14 sm:h-18 sm:w-16 rounded-2xl border-2 border-slate-200 bg-slate-50/70 text-center font-mono text-3xl font-black text-slate-900 shadow-xs transition-all duration-200 focus:border-[#F45A0A] focus:bg-white focus:shadow-lg focus:shadow-orange-500/15 focus:scale-105 focus:outline-none disabled:opacity-60"
                   />
                 ))}
               </div>
             </div>
           ) : (
-            <div className="mt-6">
+            <div className="mt-6 pt-5 border-t border-slate-100">
               <button
                 type="button"
                 disabled={verifying}
@@ -320,141 +338,233 @@ export const StatementPortalPage: React.FC = () => {
                     setVerifying(false);
                   }
                 }}
-                className="h-13 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-sm shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+                className="h-14 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-base shadow-lg shadow-orange-500/25 transition cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.01]"
               >
-                {verifying ? 'جارٍ فتح الكشف…' : 'عرض وتحميل كشف الحساب 📄'}
+                {verifying ? 'جارٍ التحقق وفتح الكشف…' : 'عرض وتحميل كشف الحساب 📄'}
               </button>
             </div>
           )}
 
-          {verifying && <p className="mt-4 text-xs font-bold text-slate-500">جارٍ التحقق من الهوية…</p>}
+          {verifying && (
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-slate-500 animate-pulse">
+              <div className="h-2 w-2 rounded-full bg-[#F45A0A] animate-ping" />
+              <span>جارٍ التحقق من الأرقام وفتح الكشف…</span>
+            </div>
+          )}
+
           {verifyError && (
-            <p id="last4-error" role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-800 border border-rose-200">
+            <p id="last4-error" role="alert" className="mt-4 rounded-2xl bg-rose-50 p-3.5 text-xs font-black text-rose-700 border border-rose-200">
               {verifyError}
             </p>
           )}
-          {loadingData && <p className="mt-4 text-xs font-bold text-slate-500">جارٍ تحميل بيانات الكشف المالي…</p>}
+
+          {loadingData && (
+            <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-slate-500">
+              <span>جارٍ تحميل وتجهيز البيانات المالية… 📊</span>
+            </div>
+          )}
+
+          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-400">
+            <span>🔒</span>
+            <span>جلسة مؤقتة ومحمية بتشفير مالي آمن</span>
+          </div>
         </div>
       </Shell>
     );
   }
 
-  // ── The statement ──────────────────────────────────────────────────────────
+  // ── 4. The Verified Statement Screen ────────────────────────────────────────
   return (
     <Shell companyName={data.company?.name || intro.companyName}>
-      {/* The balance is the answer to the question that made them scan, so it comes
-          first and large, before any table. */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-semibold text-slate-500">{data.holderName}</p>
-        <p className="mt-4 text-sm font-bold text-slate-600">{balanceLabel}</p>
-        <p
-          className={`mt-1 font-mono text-4xl font-black tabular-nums ${
-            Math.abs(balance) < 0.01 ? 'text-emerald-700' : balance > 0 ? 'text-rose-700' : 'text-emerald-700'
-          }`}
-          dir="ltr"
-        >
-          {money(Math.abs(balance))} <span className="text-lg text-slate-500">د.ع</span>
-        </p>
-        <p className="mt-3 text-xs text-slate-500">
-          الحساب {data.account?.code} — {data.account?.nameAr}
-        </p>
-      </div>
+      <div className="space-y-4">
+        {/* Main Balance Hero Card */}
+        <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/50">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-400 via-[#F45A0A] to-amber-500" />
+          
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">كشف حساب العميل</span>
+              <h1 className="text-xl font-black text-slate-900 mt-0.5">{data.holderName}</h1>
+              <p className="text-xs font-bold text-slate-500 mt-1 font-mono" dir="ltr">
+                {data.account?.code} — {data.account?.nameAr}
+              </p>
+            </div>
+            <div className={`px-3 py-1.5 rounded-2xl text-xs font-black border ${
+              isSettled
+                ? 'bg-slate-50 text-slate-700 border-slate-200'
+                : isCredit
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-rose-50 text-rose-700 border-rose-200'
+            }`}>
+              {isSettled ? 'خالص الرصيد ⚖️' : isCredit ? 'الرصيد لك (دائن) 🟢' : 'المطلوب منك (مدين) 🔴'}
+            </div>
+          </div>
 
-      <button
-        type="button"
-        onClick={() => { void downloadStatement().catch(() => {}); }}
-        className="mt-4 h-12 w-full rounded-2xl bg-[#F45A0A] text-sm font-black text-white"
-      >
-        {downloaded === 'html'
-          ? 'تنزيل الكشف مرة أخرى'
-          : downloaded === 'pdf'
-            ? 'تنزيل ملف PDF مرة أخرى'
-            : 'تنزيل الكشف'}
-      </button>
-      {downloaded === 'html' && (
-        <p className="mt-2 text-center text-[11px] text-slate-500">
-          نُزّل الكشف كملف صفحة، لأن تحويله إلى PDF غير متاح حالياً على الخادم.
-        </p>
-      )}
+          <div className="mt-6 pt-5 border-t border-slate-100 text-center bg-slate-50/60 rounded-2xl p-4">
+            <span className="text-xs font-bold text-slate-500">صافي الرصيد الحالي المستحق</span>
+            <div className="mt-1 flex items-baseline justify-center gap-2" dir="ltr">
+              <span
+                className={`font-mono text-4xl font-black tabular-nums tracking-tight ${
+                  isSettled ? 'text-slate-800' : isCredit ? 'text-emerald-600' : 'text-rose-600'
+                }`}
+              >
+                {money(Math.abs(balance))}
+              </span>
+              <span className="text-base font-black text-slate-500">د.ع</span>
+            </div>
+          </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <Stat label="إجمالي المدين" value={money(data.totalDebit)} />
-        <Stat label="إجمالي الدائن" value={money(data.totalCredit)} />
-      </div>
+          {/* Quick Stats Grid */}
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 text-center">
+              <p className="text-[11px] font-bold text-slate-500">إجمالي المدين (عليك)</p>
+              <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
+                {money(data.totalDebit)} <span className="text-xs font-bold text-slate-400">د.ع</span>
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 text-center">
+              <p className="text-[11px] font-bold text-slate-500">إجمالي الدائن (لك)</p>
+              <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
+                {money(data.totalCredit)} <span className="text-xs font-bold text-slate-400">د.ع</span>
+              </p>
+            </div>
+          </div>
 
-      <h2 className="mt-6 mb-2 text-sm font-black text-slate-800">كل الحركات</h2>
+          {/* Action Buttons */}
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              disabled={downloading}
+              onClick={() => { void downloadStatement(); }}
+              className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>{downloading ? 'جارٍ التحميل…' : 'تحميل كشف PDF الرسمي'}</span>
+            </button>
 
-      {/* A phone is narrow, so the movements are cards rather than a wide table that
-          would force horizontal scrolling on the device this page is made for. */}
-      <ol className="space-y-2">
-        {data.lines.length === 0 && (
-          <li className="rounded-xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-500">
-            لا توجد حركات في هذه الفترة.
-          </li>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              <span>طباعة الكشف 🖨️</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Transactions List */}
+        <div className="rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xl shadow-slate-200/50">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <span>سجل الحركات والمعاملات</span>
+              <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-bold font-mono">
+                {data.lines.length}
+              </span>
+            </h2>
+            <span className="text-[11px] font-bold text-slate-400">مرتبة حسب التاريخ</span>
+          </div>
+
+          {data.lines.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center">
+              <span className="text-2xl">📋</span>
+              <p className="mt-2 text-xs font-bold text-slate-500">لا توجد حركات مالية مسجلة في هذا الكشف</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {data.lines.map((line) => {
+                const isDebit = Number(line.debit) > 0;
+                return (
+                  <div
+                    key={line.id}
+                    className="rounded-2xl border border-slate-100 bg-white p-4 shadow-xs hover:border-slate-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`flex h-7 w-7 items-center justify-center rounded-xl text-xs font-black ${
+                          isDebit ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
+                        }`}>
+                          {isDebit ? '−' : '+'}
+                        </span>
+                        <div>
+                          <span className="font-mono text-[11px] font-black text-slate-400" dir="ltr">
+                            {formatDate(line.date)}
+                          </span>
+                        </div>
+                      </div>
+                      <span
+                        className={`font-mono text-base font-black tabular-nums ${
+                          isDebit ? 'text-rose-600' : 'text-emerald-600'
+                        }`}
+                        dir="ltr"
+                      >
+                        {isDebit ? '−' : '+'}
+                        {money(isDebit ? line.debit : line.credit)}
+                        <span className="text-[10px] font-normal text-slate-400 mr-1">د.ع</span>
+                      </span>
+                    </div>
+
+                    <p className="mt-2 text-xs font-bold leading-relaxed text-slate-800">
+                      {line.description || 'حركة مالية'}
+                    </p>
+
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-400">
+                      <span className="font-mono bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100" dir="ltr">
+                        {line.entryNumber}
+                      </span>
+                      <span className="font-mono" dir="ltr">
+                        الرصيد: <strong className="text-slate-700">{money(line.runningBalance)}</strong> د.ع
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Company Info & Support */}
+        {data.company && (
+          <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 text-center text-xs text-slate-500">
+            <p className="font-black text-slate-700">{data.company.name}</p>
+            {data.company.address && <p className="text-[11px] text-slate-400 mt-0.5">{data.company.address}</p>}
+            {data.company.phone && (
+              <p className="mt-2 text-xs font-bold text-[#F45A0A] font-mono" dir="ltr">
+                📞 {data.company.phone}
+              </p>
+            )}
+          </div>
         )}
-        {data.lines.map((line) => {
-          const isDebit = Number(line.debit) > 0;
-          return (
-            <li key={line.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <span className="font-mono text-xs font-bold text-slate-500" dir="ltr">
-                  {formatDate(line.date)}
-                </span>
-                <span
-                  className={`font-mono text-sm font-black tabular-nums ${
-                    isDebit ? 'text-rose-700' : 'text-emerald-700'
-                  }`}
-                  dir="ltr"
-                >
-                  {isDebit ? '+' : '−'}
-                  {money(isDebit ? line.debit : line.credit)}
-                </span>
-              </div>
-              <p className="mt-1 text-sm font-medium leading-relaxed text-slate-800">{line.description}</p>
-              <div className="mt-1.5 flex items-center justify-between gap-3 text-[11px] text-slate-500">
-                <span className="font-mono" dir="ltr">
-                  {line.entryNumber}
-                </span>
-                <span className="font-mono tabular-nums" dir="ltr">
-                  الرصيد: {money(line.runningBalance)}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-
-      {data.company?.phone && (
-        <p className="mt-6 text-center text-xs text-slate-500">
-          لأي استفسار: <span dir="ltr">{data.company.phone}</span>
-        </p>
-      )}
+      </div>
     </Shell>
   );
 };
-
-const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="rounded-xl border border-slate-200 bg-white p-3">
-    <p className="text-[11px] font-bold text-slate-500">{label}</p>
-    <p className="mt-0.5 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
-      {value}
-    </p>
-  </div>
-);
 
 const Shell: React.FC<{ companyName?: string; children: React.ReactNode }> = ({
   companyName,
   children,
 }) => (
-  <div className="min-h-screen bg-slate-50 px-4 py-6">
+  <div className="min-h-screen bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 px-4 py-8 antialiased">
     <div className="mx-auto w-full max-w-lg">
       {companyName && (
-        <p className="mb-4 text-center text-sm font-black text-slate-700">{companyName}</p>
+        <div className="mb-5 text-center">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            <span className="text-xs font-black text-slate-800">{companyName}</span>
+          </div>
+        </div>
       )}
       {children}
-      <p className="mt-8 text-center text-[11px] text-slate-400">
-        هذه الصفحة خاصة بك. لا تشارك الباركود مع أحد.
-      </p>
+      <div className="mt-8 text-center space-y-1">
+        <p className="text-[11px] font-bold text-slate-400 flex items-center justify-center gap-1.5">
+          <span>🔒</span>
+          <span>هذا الكشف صادر وموثق إلكترونياً — نظام قيّد المحاسبي</span>
+        </p>
+      </div>
     </div>
   </div>
 );
