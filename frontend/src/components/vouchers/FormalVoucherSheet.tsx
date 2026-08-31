@@ -102,6 +102,40 @@ const PAPER = {
   THERMAL80: { width: 302, minHeight: 0 },
 };
 
+/**
+ * التاريخ كما يُقرأ لا كما يُخزَّن.
+ *
+ * كان السند يطبع «2026-08-30T00:00:00.000Z» حرفياً، لأن القيمة تصل من الخادم طابعاً
+ * زمنياً كاملاً بتوقيت UTC وكانت تُعرض بلا معالجة. ونأخذ الجزء النصّي مباشرة بدل
+ * `new Date(...)` عمداً: التحويل عبر كائن التاريخ يُزيح اليوم يوماً كاملاً لأي مستخدم
+ * شرق غرينتش أو غربها حين يكون الوقت منتصف الليل — وهو ما يجعل سنداً حُرّر يوم 30
+ * يُطبع بتاريخ 29.
+ */
+const formatVoucherDate = (value?: string): string => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? raw : parsed.toISOString().slice(0, 10);
+};
+
+/**
+ * الوقت — ولا شيء حين لا وقت.
+ *
+ * منتصف الليل بالضبط في طابع UTC ليس وقت إصدار، بل هو ما يبقى حين يُحفظ التاريخ
+ * وحده. طباعة «12:00 AM» في تلك الحالة تُقدّم معلومة مخترَعة على أنها موثّقة، فيُحذف
+ * السطر بدلاً من ذلك.
+ */
+const formatVoucherTime = (voucher: { time?: string; date?: string }): string => {
+  const explicit = String(voucher.time || '').trim();
+  if (explicit) return explicit;
+  const m = String(voucher.date || '').match(/T(\d{2}):(\d{2})/);
+  if (!m) return '';
+  if (m[1] === '00' && m[2] === '00') return '';
+  return `${m[1]}:${m[2]}`;
+};
+
 const money = (value: number) =>
   Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -134,6 +168,20 @@ export const FormalVoucherSheet: React.FC<{
 
   const currency = voucher.currency || 'IQD';
   const amountText = `${money(voucher.amount)} ${currency}`;
+  const dateText = formatVoucherDate(voucher.date);
+  const timeText = formatVoucherTime(voucher);
+
+  /** سطر بيانات الاتصال — بالترتيب، وبلا خانات فارغة تترك نقاطاً معلّقة. */
+  const contactLine = isThermal
+    ? []
+    : [
+        config.showAddress !== false ? config.address : '',
+        config.showPhone !== false ? config.phone : '',
+        config.showEmail !== false ? config.email : '',
+        config.showCommercialReg ? config.commercialReg : '',
+      ]
+        .map((v) => String(v || '').trim())
+        .filter(Boolean);
 
   const values: Record<string, string> = {
     party: voucher.receivedFromOrPaidTo || voucher.accountName || '',
@@ -238,51 +286,49 @@ export const FormalVoucherSheet: React.FC<{
                 : undefined
           }
         >
-          <div className={`flex items-center gap-3 ${align}`}>
-            <div className="flex items-center gap-3 min-w-0">
-              {config.logoUrl && (
-                <img
-                  src={config.logoUrl}
-                  alt=""
-                  style={{ height: config.logoHeight || 44, maxWidth: config.logoWidth || 180, objectFit: 'contain' }}
-                />
-              )}
-              <div className="min-w-0">
-                <div
-                  className="font-black leading-tight truncate"
-                  style={{ fontSize: isThermal ? 13 : 17 }}
-                >
-                  {(isEn ? config.companyNameEn : config.companyName) || config.companyName || ''}
-                </div>
-                {(isEn ? config.subtitleEn : config.subtitle) && (
-                  <div
-                    className="opacity-80 truncate"
-                    style={{ fontSize: d.label }}
-                  >
-                    {isEn ? config.subtitleEn : config.subtitle}
-                  </div>
-                )}
-              </div>
-            </div>
+          {/*
+            الترويسة سطران لا ثلاثة أعمدة.
 
-            {!isThermal && (
-              <div className="text-end shrink-0" style={{ fontSize: d.label, lineHeight: 1.8 }}>
-                {config.showPhone !== false && config.phone && (
-                  <div dir="ltr">{config.phone}</div>
-                )}
-                {config.showEmail !== false && config.email && (
-                  <div dir="ltr">{config.email}</div>
-                )}
-                {config.showCommercialReg && config.commercialReg && (
-                  <div>{config.commercialReg}</div>
-                )}
-              </div>
+            كانت بيانات الاتصال عموداً منفصلاً في الطرف المقابل للاسم، فينفتح بينهما
+            فراغ كبير في وسط الترويسة ويبدو السطران غير مرتبطين. الآن: سطر للهوية
+            (الشعار والاسم والوصف)، وتحته سطر واحد يجمع العنوان والهاتف والبريد
+            والسجل مفصولةً بنقاط — أهدأ للعين، ويحترم مفاتيح الإظهار كما هي.
+          */}
+          <div className={`flex items-center gap-3 ${align}`}>
+            {config.logoUrl && (
+              <img
+                src={config.logoUrl}
+                alt=""
+                className="shrink-0"
+                style={{ height: config.logoHeight || 44, maxWidth: config.logoWidth || 180, objectFit: 'contain' }}
+              />
             )}
+            <div className="min-w-0">
+              <div
+                className="font-black leading-tight truncate"
+                style={{ fontSize: isThermal ? 13 : 17 }}
+              >
+                {(isEn ? config.companyNameEn : config.companyName) || config.companyName || ''}
+              </div>
+              {(isEn ? config.subtitleEn : config.subtitle) && (
+                <div className="opacity-80 truncate" style={{ fontSize: d.label }}>
+                  {isEn ? config.subtitleEn : config.subtitle}
+                </div>
+              )}
+            </div>
           </div>
 
-          {config.showAddress !== false && config.address && !isThermal && (
-            <div className="mt-1 opacity-75" style={{ fontSize: d.label }}>
-              {config.address}
+          {contactLine.length > 0 && (
+            <div
+              className={`mt-1.5 opacity-75 flex flex-wrap gap-x-2 gap-y-0.5 ${align}`}
+              style={{ fontSize: d.label }}
+            >
+              {contactLine.map((part, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <span aria-hidden="true" className="opacity-50">·</span>}
+                  <span dir={/[A-Za-z0-9@+]/.test(part[0] || '') ? 'ltr' : undefined}>{part}</span>
+                </React.Fragment>
+              ))}
             </div>
           )}
         </header>
@@ -290,9 +336,16 @@ export const FormalVoucherSheet: React.FC<{
         {/* ── Title + identity strip ──
             The document type, its number and its date are what an auditor looks for
             first, so they sit together on one line directly under the letterhead. */}
-        <div className="mt-4 flex items-end justify-between gap-3 flex-wrap">
+        {/*
+            العنوان لا ينكسر أبداً.
+
+            «سند قبض» كان يُطبع على سطرين — «سند» ثم «قبض» — لأن العنوان وشريط الأرقام
+            يتقاسمان صفاً واحداً، فإذا طال رقم السند ضُغط العنوان حتى انكسر. الآن
+            العنوان shrink-0 وبلا كسر، والشريط هو الذي يلتفّ عند الضيق.
+        */}
+        <div className="mt-4 flex items-end justify-between gap-x-4 gap-y-1 flex-wrap">
           <h1
-            className="font-black tracking-tight"
+            className="font-black tracking-tight shrink-0 whitespace-nowrap"
             style={{ fontSize: isThermal ? 15 : 21, color: ink }}
           >
             {isEn
@@ -314,12 +367,12 @@ export const FormalVoucherSheet: React.FC<{
             </span>
             <span className="whitespace-nowrap">
               <span className="opacity-60">{isEn ? 'Date' : 'التاريخ'}: </span>
-              <span className="font-mono font-bold" dir="ltr">{voucher.date}</span>
+              <span className="font-mono font-bold" dir="ltr">{dateText}</span>
             </span>
-            {voucher.time && (
+            {timeText && (
               <span className="whitespace-nowrap">
                 <span className="opacity-60">{isEn ? 'Time' : 'الوقت'}: </span>
-                <span className="font-mono font-bold" dir="ltr">{voucher.time}</span>
+                <span className="font-mono font-bold" dir="ltr">{timeText}</span>
               </span>
             )}
           </div>
@@ -427,12 +480,6 @@ export const FormalVoucherSheet: React.FC<{
                     <span className="opacity-60 px-1">{isEn ? 'QR' : 'رمز الكشف'}</span>
                   </div>
                 )}
-                <div
-                  className="mt-0.5 opacity-60 mx-auto"
-                  style={{ fontSize: 7.5, maxWidth: 62, lineHeight: 1.25 }}
-                >
-                  {isEn ? 'Scan for statement' : 'امسح لعرض كشفك'}
-                </div>
               </div>
             )}
           </div>
