@@ -67,10 +67,27 @@ export const StatementPortalPage: React.FC = () => {
   const [otp, setOtp] = useState<string[]>(['', '', '', '']);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  // Prevent any body/html scrolling while on verification screen
   useEffect(() => {
     document.documentElement.setAttribute('dir', 'rtl');
     document.title = 'كشف الحساب الإلكتروني';
-  }, []);
+
+    if (!data) {
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      document.body.style.touchAction = '';
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      document.body.style.touchAction = '';
+    };
+  }, [data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,138 +251,129 @@ export const StatementPortalPage: React.FC = () => {
   const isSettled = Math.abs(balance) < 0.01;
   const isCredit = balance < 0; // Balance is for customer (Green)
 
-  // ── 1. Error State (No Scroll) ──────────────────────────────────────────────
+  // ── 1. Error State (Fixed, No Scroll) ──────────────────────────────────────
   if (introError) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 p-4 overflow-hidden">
-        <div className="max-w-sm w-full rounded-3xl border border-rose-200 bg-white p-7 text-center shadow-xl">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-            <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden touch-none">
+        <div className="max-w-xs w-full rounded-3xl border border-rose-200 bg-white p-6 text-center shadow-xl">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="mt-4 text-base font-black text-rose-900">تعذّر فتح الكشف</h2>
-          <p className="mt-2 text-xs text-slate-600 leading-relaxed">{introError}</p>
+          <h2 className="mt-3 text-sm font-black text-rose-900">تعذّر فتح الكشف</h2>
+          <p className="mt-1 text-xs text-slate-600 leading-relaxed">{introError}</p>
         </div>
       </div>
     );
   }
 
-  // ── 2. Initial Loading State (No Scroll) ───────────────────────────────────
+  // ── 2. Initial Loading State (Fixed, No Scroll) ────────────────────────────
   if (!intro) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 p-4 overflow-hidden">
-        <div className="max-w-sm w-full rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-lg animate-pulse">
-          <div className="mx-auto h-24 w-24 rounded-full bg-slate-100 mb-4" />
-          <div className="h-5 w-40 bg-slate-200 rounded-xl mx-auto mb-2.5" />
-          <div className="h-3.5 w-24 bg-slate-100 rounded-lg mx-auto" />
+      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden touch-none">
+        <div className="max-w-xs w-full rounded-3xl border border-slate-200 bg-white p-7 text-center shadow-lg animate-pulse">
+          <div className="mx-auto h-20 w-20 rounded-full bg-slate-100 mb-3" />
+          <div className="h-4 w-32 bg-slate-200 rounded-xl mx-auto mb-2" />
+          <div className="h-3 w-20 bg-slate-100 rounded-lg mx-auto" />
         </div>
       </div>
     );
   }
 
-  // ── 3. Challenge Screen: No-Scroll, Minimal Text, Lottie Animation ───────────
+  // ── 3. Challenge Screen: Strictly Fixed, No-Scroll, Mobile Keyboard Resilient ─
   if (!data) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-orange-50/25 to-slate-100 p-4 overflow-hidden select-none">
-        <div className="w-full max-w-sm">
-          {intro.companyName && (
-            <div className="mb-3 text-center">
-              <span className="inline-block px-3.5 py-1 rounded-full bg-white/90 border border-slate-200/80 text-xs font-black text-slate-700 shadow-xs">
-                {intro.companyName}
-              </span>
+      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 p-4 overflow-hidden touch-none select-none">
+        <div className="w-full max-w-[340px] rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 text-center shadow-2xl shadow-slate-200/60">
+          {/* Lottie Animation: Man Analyzing Balance Sheet */}
+          <div className="mx-auto w-32 h-32 sm:w-36 sm:h-36 -mt-1 flex items-center justify-center pointer-events-none">
+            <Lottie
+              src={manBalanceAnimation}
+              loop={true}
+              autoplay={true}
+              className="w-full h-full"
+            />
+          </div>
+
+          {/* Clean Single Account Holder Name */}
+          <h1 className="text-lg font-black text-slate-900 tracking-tight mt-0.5">{intro.holderName}</h1>
+
+          {intro.phoneHint ? (
+            <div className="mt-3">
+              <label className="block text-xs font-bold text-slate-500">
+                أدخل آخر 4 أرقام من هاتفك
+              </label>
+
+              {/* 4 Connected/Separated OTP Digit Boxes */}
+              <div className="mt-3 flex items-center justify-center gap-2.5" dir="ltr">
+                {[0, 1, 2, 3].map((idx) => (
+                  <input
+                    key={idx}
+                    ref={(el) => {
+                      otpRefs.current[idx] = el;
+                    }}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={1}
+                    value={otp[idx]}
+                    onChange={(e) => handleOtpChange(idx, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                    disabled={verifying}
+                    className="h-13 w-12 sm:h-14 sm:w-13 rounded-2xl border-2 border-slate-200 bg-slate-50/80 text-center font-mono text-2xl font-black text-slate-900 shadow-xs transition-all duration-150 focus:border-[#F45A0A] focus:bg-white focus:shadow-md focus:shadow-orange-500/15 focus:scale-105 focus:outline-none disabled:opacity-60"
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3">
+              <button
+                type="button"
+                disabled={verifying}
+                onClick={async () => {
+                  setVerifying(true);
+                  setVerifyError('');
+                  try {
+                    const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/verify`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ last4: '' }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok) throw new Error(json?.message || 'تعذّر فتح الكشف.');
+                    setSession(json.session);
+                  } catch (err: any) {
+                    setVerifyError(err?.message || 'تعذّر فتح الكشف.');
+                  } finally {
+                    setVerifying(false);
+                  }
+                }}
+                className="h-11 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-xs shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                {verifying ? 'جارٍ الفتح…' : 'عرض كشف الحساب 📄'}
+              </button>
             </div>
           )}
 
-          <div className="rounded-3xl border border-slate-200/90 bg-white p-6 text-center shadow-2xl shadow-slate-200/60">
-            {/* Lottie Animation (Man Analyzing Balance Sheet) */}
-            <div className="mx-auto w-36 h-36 -mt-1 flex items-center justify-center">
-              <Lottie
-                src={manBalanceAnimation}
-                loop={true}
-                autoplay={true}
-                className="w-full h-full"
-              />
+          {verifying && (
+            <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 animate-pulse">
+              <div className="h-1.5 w-1.5 rounded-full bg-[#F45A0A] animate-ping" />
+              <span>جارٍ التحقق…</span>
             </div>
+          )}
 
-            <h1 className="text-xl font-black text-slate-900 tracking-tight mt-1">{intro.holderName}</h1>
+          {verifyError && (
+            <p id="last4-error" role="alert" className="mt-2.5 rounded-xl bg-rose-50 p-2 text-xs font-bold text-rose-700 border border-rose-200">
+              {verifyError}
+            </p>
+          )}
 
-            {intro.phoneHint ? (
-              <div className="mt-4">
-                <label className="block text-xs font-black text-slate-600">
-                  أدخل آخر 4 أرقام من هاتفك
-                </label>
-
-                {/* 4 Connected/Separated OTP Digit Boxes */}
-                <div className="mt-3.5 flex items-center justify-center gap-2.5 sm:gap-3" dir="ltr">
-                  {[0, 1, 2, 3].map((idx) => (
-                    <input
-                      key={idx}
-                      ref={(el) => {
-                        otpRefs.current[idx] = el;
-                      }}
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={1}
-                      value={otp[idx]}
-                      onChange={(e) => handleOtpChange(idx, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                      disabled={verifying}
-                      className="h-14 w-12 sm:h-15 sm:w-13 rounded-2xl border-2 border-slate-200 bg-slate-50/70 text-center font-mono text-2xl font-black text-slate-900 shadow-xs transition-all duration-200 focus:border-[#F45A0A] focus:bg-white focus:shadow-md focus:shadow-orange-500/15 focus:scale-105 focus:outline-none disabled:opacity-60"
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4">
-                <button
-                  type="button"
-                  disabled={verifying}
-                  onClick={async () => {
-                    setVerifying(true);
-                    setVerifyError('');
-                    try {
-                      const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/verify`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ last4: '' }),
-                      });
-                      const json = await res.json();
-                      if (!res.ok) throw new Error(json?.message || 'تعذّر فتح الكشف.');
-                      setSession(json.session);
-                    } catch (err: any) {
-                      setVerifyError(err?.message || 'تعذّر فتح الكشف.');
-                    } finally {
-                      setVerifying(false);
-                    }
-                  }}
-                  className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-xs shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
-                >
-                  {verifying ? 'جارٍ الفتح…' : 'عرض كشف الحساب 📄'}
-                </button>
-              </div>
-            )}
-
-            {verifying && (
-              <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 animate-pulse">
-                <div className="h-1.5 w-1.5 rounded-full bg-[#F45A0A] animate-ping" />
-                <span>جارٍ التحقق…</span>
-              </div>
-            )}
-
-            {verifyError && (
-              <p id="last4-error" role="alert" className="mt-3 rounded-xl bg-rose-50 p-2.5 text-xs font-black text-rose-700 border border-rose-200">
-                {verifyError}
-              </p>
-            )}
-
-            {loadingData && (
-              <div className="mt-3 text-xs font-bold text-slate-500">
-                <span>جارٍ تحميل البيانات…</span>
-              </div>
-            )}
-          </div>
+          {loadingData && (
+            <div className="mt-2.5 text-xs font-bold text-slate-500">
+              <span>جارٍ تحميل البيانات…</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -387,7 +395,7 @@ export const StatementPortalPage: React.FC = () => {
         {/* Hero Card with Woman Accounting Animation */}
         <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/50">
           {/* Woman Doing Financial Accounting Animation */}
-          <div className="mx-auto w-40 h-40 -mt-2 mb-2 flex items-center justify-center">
+          <div className="mx-auto w-36 h-36 -mt-2 mb-2 flex items-center justify-center pointer-events-none">
             <Lottie
               src={womanAccountingAnimation}
               loop={true}
