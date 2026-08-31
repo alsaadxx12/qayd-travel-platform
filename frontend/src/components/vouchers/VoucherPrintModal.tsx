@@ -28,6 +28,7 @@ import { generateChromiumPdf, serializeElementForChromium } from '../../utils/ch
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { tafqeetArabic } from '../reports/AccountStatementPrintModal';
+import { FormalVoucherSheet } from './FormalVoucherSheet';
 
 export type VoucherType = 'RECEIPT' | 'PAYMENT' | 'JOURNAL';
 
@@ -83,7 +84,6 @@ export function toVoucherPrintItem(row: any): VoucherPrintItem {
     currency: row.currency,
     accountId: row.accountId || row.account?.id,
     accountName: row.accountName || row.account?.nameAr || '',
-    accountCode: row.accountCode || row.account?.code,
     accountEmail: pickAccountEmail(row),
     accountPhone: row.accountPhone || row.account?.phone || row.customer?.phone,
     cashboxName: row.cashboxName,
@@ -142,6 +142,27 @@ export const DEFAULT_VOUCHER_CONFIG = {
     body: 11,
     amount: 19,
   },
+
+  /* ── التخطيط (تبويب «التخطيط» في إعدادات الطباعة) ──
+     كلّ ما يلي يصف شكل الورقة لا ألوانها، وهو ما كان ينقص: الورق، الكثافة،
+     الهوامش، شكل الترويسة، أي الحقول تُطبع وبأي ترتيب، والتواقيع والختم. */
+  sheetStyle: 'formal' as 'formal' | 'modern',
+  voucherPaperSize: 'A4' as 'A4' | 'A5' | 'THERMAL80',
+  density: 'normal' as 'comfortable' | 'normal' | 'compact',
+  marginMm: 14,
+  copiesPerPage: 1 as 1 | 2,
+  voucherHeaderStyle: 'rule' as 'band' | 'rule' | 'plain',
+  logoPosition: 'start' as 'start' | 'center' | 'end',
+  showAddress: true,
+  showPhone: true,
+  showEmail: true,
+  showCommercialReg: false,
+  fieldOrder: ['party', 'amountWords', 'reason', 'split', 'paymentMethod', 'cashbox', 'reference', 'notes'],
+  hiddenFields: [] as string[],
+  signatureTitles: ['توقيع الدافع / المسلِّم', 'توقيع المستلم / المحاسب'],
+  showStamp: false,
+  stampPosition: 'end' as 'start' | 'center' | 'end',
+  stampText: 'الختم',
 };
 
 export const DEFAULT_PAYMENT_VOUCHER_CONFIG = {
@@ -168,6 +189,8 @@ export interface PrintableVoucherSheetProps {
   qrDataUrl?: string | null;
   /** Custom allocation accounts from system settings — used to resolve display names. */
   customAccounts?: Array<{ nameAr: string; targetAccountId: string; targetAccountName?: string }>;
+  /** Design-preview only: outline the QR area when no code has been issued yet. */
+  qrPlaceholder?: boolean;
 }
 
 export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
@@ -176,6 +199,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   lang = 'ar',
   qrDataUrl,
   customAccounts,
+  qrPlaceholder = false,
 }) => {
   const isEn = lang === 'en';
   const isReceipt = voucher.type === 'RECEIPT';
@@ -211,15 +235,11 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   const cardTitleEn = isReceipt ? 'Receipt Voucher Details' : 'Payment Voucher Details';
 
   const partyNameRaw = voucher.accountName || (isEn ? 'Client / Entity' : 'العميل / الطرف المستفيد');
-  const codePrefix = String(voucher.accountCode || '').trim();
-  const partyName = (() => {
-    let n = String(partyNameRaw).trim();
-    if (codePrefix && n.startsWith(codePrefix)) {
-      n = n.slice(codePrefix.length).replace(/^\s*[-–—:]\s*/, '').trim();
-    }
-    n = n.replace(/^\d{3,}\s*[-–—:]\s*/, '').trim();
-    return n || String(partyNameRaw).trim();
-  })();
+  const partyName = String(partyNameRaw)
+    .replace(/^[\u200e\u200f]+/, '')
+    .replace(/^[0-9٠-٩]{3,}\s*[-–—:\/]\s*/, '')
+    .replace(/^[0-9٠-٩]{3,}\s+/, '')
+    .trim() || String(partyNameRaw).trim();
   const partyLabelAr = isReceipt ? 'استلمنا من السيد/السادة :' : 'ادفعوا للسيد/السادة :';
   const partyLabelEn = isReceipt ? 'Received From:' : 'Paid To:';
 
@@ -280,6 +300,42 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   const timeFormatted = voucher.time || '11:00 AM';
   const yearFormatted = dateFormatted.split('-')[0] || '2026';
 
+  /**
+   * التخطيط الرسمي — وهو الافتراضي الآن.
+   *
+   * صُمّم مكوّناً مستقلاً لا فرعاً داخل هذا المكوّن: التصميمان لا يتشاركان أي شيء من
+   * البنية، وخلطهما بشروط داخل ملف واحد كان سيجعل تعديل أيّهما أصعب من تعديل
+   * الاثنين منفصلين. و«العصري» (البطاقات الملوّنة) باقٍ كخيار — لم يُحذف شيء، إنما
+   * لم يعد هو الافتراضي.
+   *
+   * أسماء التقسيم تُمرَّر محلولة (الاسم التعريفي من إعدادات النظام) كي لا يحتاج
+   * التخطيط الرسمي بدوره إلى معرفة شيء عن الحسابات المخصصة.
+   */
+  if ((cfg.sheetStyle || 'formal') === 'formal') {
+    const resolvedVoucher = splitAccountsList
+      ? {
+          ...voucher,
+          accountName: partyName,
+          splitAccounts: splitAccountsList.map((sp: any) => ({
+            ...sp,
+            accountName: resolveCustomDisplayName(sp) || sp.accountName,
+          })),
+        }
+      : { ...voucher, accountName: partyName };
+
+    return (
+      <div id="printable-voucher-sheet">
+        <FormalVoucherSheet
+          voucher={resolvedVoucher}
+          config={cfg}
+          lang={lang}
+          qrDataUrl={qrDataUrl}
+          qrPlaceholder={qrPlaceholder}
+        />
+      </div>
+    );
+  }
+
   const logoUrl = cfg.logoUrl || '';
 
   const topPadding = cfg.headerMarginTop !== undefined
@@ -301,7 +357,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
         boxSizing: 'border-box',
         backgroundColor: '#ffffff',
         position: 'relative',
-        overflow: 'hidden',
+        overflow: 'visible',
         color: '#1e293b',
       }}
     >
@@ -391,38 +447,67 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-4 pb-4 mb-5 border-b border-slate-100">
-              {/* Header Right (in RTL): Meta Box (رقم السند، التاريخ، وقت الإصدار، الصفحة) */}
-              <div
-                className="bg-white rounded-xl border p-2.5 min-w-[200px] space-y-1 shadow-2xs text-xs font-bold shrink-0"
-                style={{ borderColor: fieldBorderColor }}
+            <div className="flex items-start justify-between gap-4 pb-4 mb-5 border-b border-slate-100">
+              {/*
+                صندوق رقم السند والتاريخ والوقت.
+
+                كان ينكسر: الصندوق عرضه ثابت تقريباً (minWidth 210) وقابل للانكماش داخل
+                صفّ flex، وخلايا القيم بلا nowrap — فرقم مثل KAB-RV-2026-01029 ينقسم على
+                سطرين، ويصطدم التاريخ بالوقت. الآن الصندوق لا ينكمش (shrink-0) ولا تنكسر
+                القيم، فيتّسع الصندوق لمحتواه بدل أن يُقسّمه.
+              */}
+              <table
+                className="shrink-0"
+                style={{
+                  width: 'auto',
+                  borderCollapse: 'collapse',
+                  border: `1px solid ${fieldBorderColor}`,
+                  borderRadius: 12,
+                  background: '#ffffff',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  tableLayout: 'auto',
+                }}
               >
-                <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                  <span className="text-slate-600 font-bold">{isEn ? 'Voucher No :' : 'رقم السند :'}</span>
-                  <span className="font-mono font-black tracking-wider text-xs" dir="ltr" style={{ color: primaryColor }}>
-                    {voucher.voucherNumber || 'RCV-2025-000123'}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600 flex items-center gap-1 font-bold">
-                    <IconCalendar size={12} className="text-slate-400" />
-                    <span>{isEn ? 'Date :' : 'التاريخ :'}</span>
-                  </span>
-                  <span className="font-mono font-bold text-slate-800" dir="ltr">{dateFormatted}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-600 flex items-center gap-1 font-bold">
-                    <IconClock size={12} className="text-slate-400" />
-                    <span>{isEn ? 'Issue Time :' : 'وقت الإصدار :'}</span>
-                  </span>
-                  <span className="font-mono font-bold text-slate-800" dir="ltr">{timeFormatted}</span>
-                </div>
-              </div>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: '8px 10px', lineHeight: 1.6, whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                      {isEn ? 'Voucher No :' : 'رقم السند :'}
+                    </td>
+                    <td
+                      dir="ltr"
+                      style={{ padding: '8px 10px', lineHeight: 1.6, textAlign: 'left', color: primaryColor, fontFamily: 'monospace', verticalAlign: 'middle', whiteSpace: 'nowrap' }}
+                    >
+                      {voucher.voucherNumber || 'RCV-2025-000123'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '8px 10px', lineHeight: 1.6, whiteSpace: 'nowrap', verticalAlign: 'middle', borderTop: '1px solid #f1f5f9' }}>
+                      {isEn ? 'Date :' : 'التاريخ :'}
+                    </td>
+                    <td
+                      dir="ltr"
+                      style={{ padding: '8px 10px', lineHeight: 1.6, textAlign: 'left', borderTop: '1px solid #f1f5f9', fontFamily: 'monospace', verticalAlign: 'middle', whiteSpace: 'nowrap' }}
+                    >
+                      {dateFormatted}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '8px 10px', lineHeight: 1.6, whiteSpace: 'nowrap', verticalAlign: 'middle', borderTop: '1px solid #f1f5f9' }}>
+                      {isEn ? 'Issue Time :' : 'وقت الإصدار :'}
+                    </td>
+                    <td
+                      dir="ltr"
+                      style={{ padding: '8px 10px', lineHeight: 1.6, textAlign: 'left', borderTop: '1px solid #f1f5f9', fontFamily: 'monospace', verticalAlign: 'middle', whiteSpace: 'nowrap' }}
+                    >
+                      {timeFormatted}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
 
               {/* Header Center (CENTERED): Clean Document Icon & Title Only */}
-              <div className="flex flex-col items-center justify-center text-center pt-1">
+              <div className="flex-1 min-w-0 flex flex-col items-center justify-center text-center pt-1">
                 <div
                   className="w-11 h-11 rounded-2xl flex items-center justify-center mb-1 shadow-2xs"
                   style={{ backgroundColor: fieldBgColor, border: `1.5px solid ${primaryColor}` }}
@@ -455,7 +540,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </div>
 
               {/* Header Left (in RTL): Company Logo ONLY (No address or phone) */}
-              <div className="min-w-[200px] flex items-center justify-end">
+              <div className="shrink-0 flex items-center justify-end" style={{ minWidth: 140 }}>
                 {logoUrl ? (
                   <img
                     src={logoUrl}
@@ -529,15 +614,19 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                   {amountFormatted}
                 </div>
 
-                {/* حقل العملة الأنيق على طرف الحاوية (موضع مطلق لا يؤثر على توسيط المبلغ) */}
-                <div
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 px-3 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold flex items-center gap-1.5 shadow-2xs"
+                {/*
+                  رمز العملة فقط — بلا حاوية.
+
+                  كان هنا صندوق أبيض بحدّ وظلّ يحمل «دينار عراقي (IQD)» داخل حقل
+                  المبلغ، أي حاوية داخل حاوية، والاسم الكامل يزاحم الرقم وهو أهمّ ما
+                  في السند. الرمز وحده (IQD / USD) يكفي محاسبياً ويُقرأ فوراً.
+                */}
+                <span
+                  className="absolute left-3 top-1/2 -translate-y-1/2 font-mono font-black text-xs"
+                  style={{ color: primaryColor }}
                 >
-                  <IconWorld size={14} style={{ color: primaryColor }} />
-                  <span className="font-black text-xs" style={{ color: primaryColor }}>
-                    {currencyName}
-                  </span>
-                </div>
+                  {currencyCode}
+                </span>
               </div>
             </div>
 
@@ -588,11 +677,12 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </span>
 
               <div
-                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-800 border text-center"
+                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-800 text-center"
                 style={{
-                  backgroundColor: fieldBgColor,
-                  borderColor: fieldBorderColor,
                   letterSpacing: 0,
+                  lineHeight: 1.6,
+                  background: 'transparent',
+                  border: 'none',
                 }}
               >
                 {splitAccountsList
@@ -616,7 +706,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </span>
 
               <div
-                className="flex-1 rounded-xl p-3 px-4 font-bold text-xs text-slate-700 border min-h-[88px] leading-relaxed text-center"
+                className="flex-1 rounded-xl p-4 px-4 font-bold text-xs text-slate-700 border min-h-[110px] leading-relaxed text-center"
                 style={{
                   backgroundColor: fieldBgColor,
                   borderColor: fieldBorderColor,
@@ -828,9 +918,33 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
     setRecipientEmail(pickAccountEmail(voucher));
     setEmailResolved(!voucher.accountId);
     setLoading(true);
-    const docType = voucher.type === 'RECEIPT' ? 'receipt_voucher' : 'payment_voucher';
+
+    /**
+     * المفتاح الصحيح للتصميم المحفوظ.
+     *
+     * هذا هو سبب أنّ تبويب تصميم السند بدا بلا أثر: صفحة «إعدادات الطباعة» تحفظ
+     * تصميم سند القبض تحت النوع `receipt` (انظر TemplateDocType هناك)، بينما كانت
+     * هذه النافذة تطلب `receipt_voucher` — اسماً لا يكتبه أحد. فيعود الطلب فارغاً،
+     * وتسقط النافذة بهدوء إلى الإعدادات الافتراضية، فتضيع كل الألوان والخطوط
+     * والشعار التي اختارها المستخدم في طريقها إلى الورقة، دون أي رسالة خطأ — لأنّ
+     * «لا يوجد تصميم محفوظ» جواب طبيعي تماماً من وجهة نظر النافذة.
+     *
+     * ويُجرَّب الاسم القديم بعده، فلا يضيع تصميم قد يكون خُزّن تحته سابقاً.
+     */
+    const isReceiptDoc = voucher.type === 'RECEIPT';
+    const docType = isReceiptDoc ? 'receipt' : 'payment';
+    const legacyDocType = isReceiptDoc ? 'receipt_voucher' : 'payment_voucher';
+
+    const loadTemplate = async () => {
+      for (const key of [docType, legacyDocType]) {
+        const res = await fetchPrintTemplate(key).catch(() => null);
+        if (res && res.config) return res;
+      }
+      return null;
+    };
+
     Promise.all([
-      fetchPrintTemplate(docType).catch(() => null),
+      loadTemplate(),
       fetchPrintTemplate('custom_voucher_accounts').catch(() => null),
     ])
       .then(([templateRes, customAccsRes]) => {
@@ -994,6 +1108,17 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   const emailOk = EMAIL_RE.test(recipientEmail.trim());
 
   return (
+    /**
+     * الورقة المخفية خارج النافذة عمداً.
+     *
+     * كانت داخل <Modal>، وهذا سبب امتداد النافذة إلى الأسفل: العنصر المخفي ورقة
+     * كاملة بعرض 210mm وبارتفاع صفحة، وهو موضوع بـ position:fixed — لكن نافذة
+     * Mantine تُحرّك محتواها بـ transform، وأي سلف مُحوَّل يجعل fixed يتموضع داخله
+     * بدل الشاشة. فصار للنافذة محتوى بحجم صفحة A4 كاملة تحت الأزرار، ومنطقة تمرير
+     * فارغة طويلة. خارج النافذة يعود fixed إلى معناه الأصلي: منسوباً إلى الشاشة،
+     * لا يشغل أي مساحة، ولا تراه العين — بينما html2canvas ما زال يجده ويصوّره.
+     */
+    <>
     <Modal
       opened={opened}
       onClose={onClose}
@@ -1133,7 +1258,11 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
           </button>
         </div>
       </div>
+    </Modal>
 
+    {/* مرتبطة بحالة الفتح: خارج النافذة لم تعد Mantine تُلغي تركيبها، فنتكفّل بذلك
+        هنا كي لا تبقى ورقة سند مركّبة في الصفحة بعد إغلاق النافذة. */}
+    {opened && (
       <div
         aria-hidden="true"
         dir={printLang === 'en' ? 'ltr' : 'rtl'}
@@ -1155,6 +1284,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
           customAccounts={customAccounts}
         />
       </div>
-    </Modal>
+    )}
+    </>
   );
 };

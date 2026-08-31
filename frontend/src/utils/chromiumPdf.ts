@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '../api/client';
 
-/** CSS properties that break Arabic joining / RTL when flattened onto every node. */
+/** CSS properties that break Arabic joining / RTL or lock layout when flattened. */
 const SKIP_STYLE_PROPS = new Set([
   'letter-spacing',
   'word-spacing',
@@ -22,6 +22,15 @@ const SKIP_STYLE_PROPS = new Set([
   'zoom',
   'text-spacing-trim',
   'hanging-punctuation',
+  'height',
+  'max-height',
+  'block-size',
+  'max-block-size',
+  'line-height',
+  'overflow',
+  'overflow-x',
+  'overflow-y',
+  'transform',
 ]);
 
 function capFontWeight(value: string): string {
@@ -33,9 +42,16 @@ function capFontWeight(value: string): string {
   return n > 700 ? '700' : String(n);
 }
 
+function isReplacedElement(el: HTMLElement): boolean {
+  const tag = el.tagName;
+  return tag === 'IMG' || tag === 'SVG' || tag === 'CANVAS' || tag === 'VIDEO';
+}
+
 /**
  * Inline computed styles so Chromium on the server can print without the Vite CSS bundle.
  * Arabic-unsafe properties are stripped so HarfBuzz can join letters.
+ * Height/line-height are not copied: locked pixel heights from the browser
+ * cause rows to overlap when the PDF font metrics differ.
  */
 export function serializeElementForChromium(element: HTMLElement): string {
   const clone = element.cloneNode(true) as HTMLElement;
@@ -43,12 +59,20 @@ export function serializeElementForChromium(element: HTMLElement): string {
   const copyStyles = (from: Element, to: Element) => {
     if (!(from instanceof HTMLElement) || !(to instanceof HTMLElement)) return;
     const computed = window.getComputedStyle(from);
+    const replaced = isReplacedElement(from);
     const parts: string[] = [];
     for (let i = 0; i < computed.length; i++) {
       const prop = computed[i];
       if (!prop || SKIP_STYLE_PROPS.has(prop)) continue;
       if (prop.startsWith('--')) continue;
       parts.push(`${prop}:${computed.getPropertyValue(prop)}`);
+    }
+
+    if (replaced) {
+      const h = computed.getPropertyValue('height');
+      const w = computed.getPropertyValue('width');
+      if (h) parts.push(`height:${h}`);
+      if (w) parts.push(`width:${w}`);
     }
 
     const dirAttr = from.getAttribute('dir') || to.getAttribute('dir');
@@ -65,6 +89,8 @@ export function serializeElementForChromium(element: HTMLElement): string {
       'font-variant-ligatures:common-ligatures',
       'font-synthesis:none',
       'text-rendering:optimizeLegibility',
+      'line-height:1.55',
+      'overflow:visible',
       `font-weight:${capFontWeight(computed.getPropertyValue('font-weight') || '400')}`,
       "font-family:'IBM Plex Sans Arabic','Tajawal','Cairo',sans-serif",
     );
@@ -81,13 +107,15 @@ export function serializeElementForChromium(element: HTMLElement): string {
   copyStyles(element, clone);
   clone.style.width = '210mm';
   clone.style.maxWidth = '210mm';
-  clone.style.minHeight = 'auto';
+  clone.style.height = 'auto';
+  clone.style.minHeight = '297mm';
   clone.style.margin = '0';
   clone.style.boxShadow = 'none';
   clone.style.opacity = '1';
   clone.style.position = 'relative';
   clone.style.left = '0';
   clone.style.top = '0';
+  clone.style.overflow = 'visible';
   return clone.outerHTML;
 }
 

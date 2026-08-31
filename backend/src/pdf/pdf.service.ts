@@ -463,6 +463,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
                 unicode-bidi: isolate !important;
               }
               table { width: 100%; border-collapse: collapse; }
+              td, th { height: auto !important; line-height: 1.55 !important; vertical-align: middle !important; }
               thead { display: table-header-group; }
               tbody { display: table-row-group; }
               tfoot { display: table-footer-group; }
