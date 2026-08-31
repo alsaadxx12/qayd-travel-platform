@@ -419,15 +419,32 @@ export class StatementPortalService {
    */
   async describe(token: string) {
     const row = await this.liveToken(token);
-    const [party, company] = await Promise.all([
+    const [party, company, mainBranch, anyBranchWithLogo] = await Promise.all([
       this.partyOf(row),
       this.prisma.company.findUnique({
         where: { id: row.companyId },
-        select: { name: true, logo: true },
+        select: { name: true, logo: true, tenantId: true },
+      }),
+      this.prisma.branch.findFirst({
+        where: { companyId: row.companyId, isMain: true },
+        select: { logo: true },
+      }),
+      this.prisma.branch.findFirst({
+        where: { companyId: row.companyId, logo: { not: null } },
+        select: { logo: true },
       }),
     ]);
 
-    const logoUrl = company?.logo || null;
+    let tenantLogo: string | null = null;
+    if (company?.tenantId) {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: company.tenantId },
+        select: { logo: true },
+      });
+      tenantLogo = tenant?.logo || null;
+    }
+
+    const logoUrl = mainBranch?.logo || anyBranchWithLogo?.logo || company?.logo || tenantLogo || null;
     const locked = row.lockedUntil && row.lockedUntil.getTime() > Date.now();
     const digits = this.verificationPhone(party);
     const requiresPhone = digits.length >= 4;
@@ -599,16 +616,33 @@ export class StatementPortalService {
       throw new ForbiddenException('لم يعد هذا الباركود صالحاً.');
     }
 
-    const [statement, company, party] = await Promise.all([
+    const [statement, company, party, mainBranch, anyBranchWithLogo] = await Promise.all([
       this.reports.getAccountStatement(payload.companyId, payload.accountId, startDate, endDate),
       this.prisma.company.findUnique({
         where: { id: payload.companyId },
-        select: { name: true, phone: true, address: true, logo: true },
+        select: { name: true, phone: true, address: true, logo: true, tenantId: true },
       }),
       this.partyOf(row),
+      this.prisma.branch.findFirst({
+        where: { companyId: payload.companyId, isMain: true },
+        select: { logo: true },
+      }),
+      this.prisma.branch.findFirst({
+        where: { companyId: payload.companyId, logo: { not: null } },
+        select: { logo: true },
+      }),
     ]);
 
-    const logoUrl = company?.logo || null;
+    let tenantLogo: string | null = null;
+    if (company?.tenantId) {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: company.tenantId },
+        select: { logo: true },
+      });
+      tenantLogo = tenant?.logo || null;
+    }
+
+    const logoUrl = mainBranch?.logo || anyBranchWithLogo?.logo || company?.logo || tenantLogo || null;
 
     return {
       company: company ? { ...company, logoUrl } : null,

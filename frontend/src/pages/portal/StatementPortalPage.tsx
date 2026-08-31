@@ -69,7 +69,7 @@ export const StatementPortalPage: React.FC = () => {
   const [otp, setOtp] = useState<string[]>(['', '', '', '']);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Prevent any body/html scrolling while on verification screen
+  // Prevent background html scrolling on verification screen while allowing smooth internal center
   useEffect(() => {
     document.documentElement.setAttribute('dir', 'rtl');
     document.title = 'كشف الحساب الإلكتروني';
@@ -77,17 +77,14 @@ export const StatementPortalPage: React.FC = () => {
     if (!data) {
       document.body.style.overflow = 'hidden';
       document.documentElement.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';
     } else {
       document.body.style.overflow = '';
       document.documentElement.style.overflow = '';
-      document.body.style.touchAction = '';
     }
 
     return () => {
       document.body.style.overflow = '';
       document.documentElement.style.overflow = '';
-      document.body.style.touchAction = '';
     };
   }, [data]);
 
@@ -253,31 +250,31 @@ export const StatementPortalPage: React.FC = () => {
   const isSettled = Math.abs(balance) < 0.01;
   const isCredit = balance < 0; // Balance is for customer (Green)
 
-  // ── 1. Error State (Fixed, No Scroll) ──────────────────────────────────────
+  // ── 1. Error State (Fixed) ────────────────────────────────────────────────
   if (introError) {
     return (
-      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden touch-none">
-        <div className="max-w-xs w-full rounded-3xl border border-rose-200 bg-white p-6 text-center shadow-xl">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden">
+        <div className="max-w-sm w-full rounded-3xl border border-rose-200 bg-white p-7 text-center shadow-xl">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+            <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="mt-3 text-sm font-black text-rose-900">تعذّر فتح الكشف</h2>
+          <h2 className="mt-3 text-base font-black text-rose-900">تعذّر فتح الكشف</h2>
           <p className="mt-1 text-xs text-slate-600 leading-relaxed">{introError}</p>
         </div>
       </div>
     );
   }
 
-  // ── 2. Initial Loading State (Fixed, No Scroll) ────────────────────────────
+  // ── 2. Initial Loading State (Fixed) ──────────────────────────────────────
   if (!intro) {
     return (
-      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden touch-none">
-        <div className="max-w-xs w-full rounded-3xl border border-slate-200 bg-white p-7 text-center shadow-lg animate-pulse">
+      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden">
+        <div className="max-w-sm w-full rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-lg animate-pulse">
           <div className="mx-auto h-20 w-20 rounded-full bg-slate-100 mb-3" />
-          <div className="h-4 w-32 bg-slate-200 rounded-xl mx-auto mb-2" />
-          <div className="h-3 w-20 bg-slate-100 rounded-lg mx-auto" />
+          <div className="h-4 w-36 bg-slate-200 rounded-xl mx-auto mb-2" />
+          <div className="h-3 w-24 bg-slate-100 rounded-lg mx-auto" />
         </div>
       </div>
     );
@@ -285,24 +282,25 @@ export const StatementPortalPage: React.FC = () => {
 
   const effectiveLogo = intro?.logoUrl || null;
 
-  // ── 3. Challenge Screen: Fixed 100dvh, No-Scroll, Mobile Keyboard Resilient ──
+  // ── 3. Challenge Screen: Enlarged Container, Prominent Logo, Keyboard-Resilient
   if (!data) {
     return (
-      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 p-4 overflow-hidden touch-none select-none">
-        <div className="w-full max-w-[340px] rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 text-center shadow-2xl shadow-slate-200/60 relative">
-          {/* Branch/Company Logo inside container if available */}
+      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 p-4 sm:p-6 overflow-y-auto overscroll-none select-none">
+        <div className="my-auto w-full max-w-[440px] sm:max-w-[460px] rounded-[32px] border border-slate-200/90 bg-white p-7 sm:p-9 text-center shadow-2xl shadow-slate-200/70 relative">
+          
+          {/* Company/Branch Logo inside container */}
           {effectiveLogo && (
-            <div className="mb-2 flex justify-center">
+            <div className="mb-3 flex justify-center">
               <img
                 src={effectiveLogo}
-                alt="Logo"
-                className="h-10 w-auto max-w-[120px] object-contain rounded-md"
+                alt="شعار الشركة"
+                className="h-14 sm:h-16 w-auto max-w-[190px] object-contain drop-shadow-xs"
               />
             </div>
           )}
 
           {/* Lottie Animation: Man Analyzing Balance Sheet */}
-          <div className="mx-auto w-32 h-32 sm:w-36 sm:h-36 -mt-1 flex items-center justify-center pointer-events-none">
+          <div className="mx-auto w-36 h-36 sm:w-44 sm:h-44 -mt-1 flex items-center justify-center pointer-events-none">
             <Lottie
               src={manBalanceAnimation}
               loop={true}
@@ -311,17 +309,19 @@ export const StatementPortalPage: React.FC = () => {
             />
           </div>
 
-          {/* Clean Single Account Holder Name (No Codes or Duplications) */}
-          <h1 className="text-lg font-black text-slate-900 tracking-tight mt-0.5">{intro.holderName}</h1>
+          {/* Clean Single Account Holder Name */}
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
+            {intro.holderName}
+          </h1>
 
           {intro.phoneHint ? (
-            <div className="mt-3">
-              <label className="block text-xs font-bold text-slate-500">
+            <div className="mt-4">
+              <label className="block text-sm font-bold text-slate-600">
                 أدخل آخر 4 أرقام من هاتفك
               </label>
 
-              {/* 4 Connected/Separated OTP Digit Boxes */}
-              <div className="mt-3 flex items-center justify-center gap-2.5" dir="ltr">
+              {/* 4 Large Connected/Separated OTP Digit Boxes */}
+              <div className="mt-3.5 flex items-center justify-center gap-3 sm:gap-3.5" dir="ltr">
                 {[0, 1, 2, 3].map((idx) => (
                   <input
                     key={idx}
@@ -336,13 +336,13 @@ export const StatementPortalPage: React.FC = () => {
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(idx, e)}
                     disabled={verifying}
-                    className="h-13 w-12 sm:h-14 sm:w-13 rounded-2xl border-2 border-slate-200 bg-slate-50/80 text-center font-mono text-2xl font-black text-slate-900 shadow-xs transition-all duration-150 focus:border-[#F45A0A] focus:bg-white focus:shadow-md focus:shadow-orange-500/15 focus:scale-105 focus:outline-none disabled:opacity-60"
+                    className="h-15 w-13 sm:h-18 sm:w-16 rounded-2xl border-2 border-slate-200 bg-slate-50/80 text-center font-mono text-2xl sm:text-3xl font-black text-slate-900 shadow-xs transition-all duration-150 focus:border-[#F45A0A] focus:bg-white focus:shadow-md focus:shadow-orange-500/15 focus:scale-105 focus:outline-none disabled:opacity-60"
                   />
                 ))}
               </div>
             </div>
           ) : (
-            <div className="mt-3">
+            <div className="mt-4">
               <button
                 type="button"
                 disabled={verifying}
@@ -364,7 +364,7 @@ export const StatementPortalPage: React.FC = () => {
                     setVerifying(false);
                   }
                 }}
-                className="h-11 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-xs shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+                className="h-13 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-sm shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
               >
                 {verifying ? 'جارٍ الفتح…' : 'عرض كشف الحساب 📄'}
               </button>
@@ -372,20 +372,20 @@ export const StatementPortalPage: React.FC = () => {
           )}
 
           {verifying && (
-            <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 animate-pulse">
+            <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 animate-pulse">
               <div className="h-1.5 w-1.5 rounded-full bg-[#F45A0A] animate-ping" />
               <span>جارٍ التحقق…</span>
             </div>
           )}
 
           {verifyError && (
-            <p id="last4-error" role="alert" className="mt-2.5 rounded-xl bg-rose-50 p-2 text-xs font-bold text-rose-700 border border-rose-200">
+            <p id="last4-error" role="alert" className="mt-3 rounded-xl bg-rose-50 p-2.5 text-xs font-bold text-rose-700 border border-rose-200">
               {verifyError}
             </p>
           )}
 
           {loadingData && (
-            <div className="mt-2.5 text-xs font-bold text-slate-500">
+            <div className="mt-3 text-xs font-bold text-slate-500">
               <span>جارٍ تحميل البيانات…</span>
             </div>
           )}
@@ -400,21 +400,22 @@ export const StatementPortalPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 px-4 py-6 antialiased">
       <div className="mx-auto w-full max-w-lg space-y-4">
-        {/* Main Hero Card with Woman Accounting Animation & Branch Logo */}
-        <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/50 relative">
-          {/* Branch Logo at Top of Container */}
+        {/* Main Hero Card with Woman Accounting Animation & Company Logo */}
+        <div className="rounded-[32px] border border-slate-200/90 bg-white p-6 sm:p-7 shadow-xl shadow-slate-200/50 relative">
+          
+          {/* Company/Branch Logo at Top of Container */}
           {statementLogo && (
-            <div className="mb-2 flex justify-center">
+            <div className="mb-3 flex justify-center">
               <img
                 src={statementLogo}
-                alt="Branch Logo"
-                className="h-12 w-auto max-w-[140px] object-contain rounded-md"
+                alt="شعار الشركة"
+                className="h-14 sm:h-16 w-auto max-w-[190px] object-contain drop-shadow-xs"
               />
             </div>
           )}
 
           {/* Woman Doing Financial Accounting Animation */}
-          <div className="mx-auto w-36 h-36 -mt-1 mb-2 flex items-center justify-center pointer-events-none">
+          <div className="mx-auto w-40 h-40 -mt-1 mb-2 flex items-center justify-center pointer-events-none">
             <Lottie
               src={womanAccountingAnimation}
               loop={true}
@@ -426,7 +427,7 @@ export const StatementPortalPage: React.FC = () => {
           <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
             <div>
               <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block">كشف حساب العميل</span>
-              <h1 className="text-xl font-black text-slate-900 mt-0.5">{data.holderName}</h1>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{data.holderName}</h1>
             </div>
 
             {/* Dynamic Arrow Badge for Credit / Debit */}
@@ -462,7 +463,7 @@ export const StatementPortalPage: React.FC = () => {
             <span className="text-xs font-bold text-slate-500">صافي الرصيد الحالي المستحق</span>
             <div className="mt-1 flex items-baseline justify-center gap-2" dir="ltr">
               <span
-                className={`font-mono text-4xl font-black tabular-nums tracking-tight ${
+                className={`font-mono text-4xl sm:text-5xl font-black tabular-nums tracking-tight ${
                   isSettled ? 'text-slate-800' : isCredit ? 'text-emerald-600' : 'text-rose-600'
                 }`}
               >
@@ -474,15 +475,15 @@ export const StatementPortalPage: React.FC = () => {
 
           {/* Quick Stats Grid */}
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-center">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 text-center">
               <p className="text-[11px] font-bold text-slate-500">إجمالي المدين (عليك)</p>
-              <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
+              <p className="mt-1 font-mono text-base sm:text-lg font-black tabular-nums text-slate-900" dir="ltr">
                 {money(data.totalDebit)} <span className="text-xs font-bold text-slate-500">IQD</span>
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-center">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 text-center">
               <p className="text-[11px] font-bold text-slate-500">إجمالي الدائن (لك)</p>
-              <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
+              <p className="mt-1 font-mono text-base sm:text-lg font-black tabular-nums text-slate-900" dir="ltr">
                 {money(data.totalCredit)} <span className="text-xs font-bold text-slate-500">IQD</span>
               </p>
             </div>
@@ -514,7 +515,7 @@ export const StatementPortalPage: React.FC = () => {
         </div>
 
         {/* Transactions List */}
-        <div className="rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xl shadow-slate-200/50">
+        <div className="rounded-[32px] border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xl shadow-slate-200/50">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
               <span>سجل الحركات والمعاملات</span>
