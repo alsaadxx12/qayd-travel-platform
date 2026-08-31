@@ -40,6 +40,18 @@ interface SearchItem {
   action: () => void;
 }
 
+// Robust Arabic Text Normalization (removes variations of Alef, Ta Marbuta, Ya, and Diacritics)
+function normalizeArabic(text?: string | null): string {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[\u064B-\u065F\u0640]/g, '') // remove tashkeel and tatweel
+    .replace(/[\s\-_/]+/g, ' ')
+    .trim();
+}
+
 export const GlobalSearch: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -85,33 +97,30 @@ export const GlobalSearch: React.FC = () => {
     }
   }, [open]);
 
-  // On-demand search query condition to minimize backend/database load
-  const isSearchActive = open && (query.trim().length > 0 || (selectedCategory !== 'ALL' && selectedCategory !== 'ACTION' && selectedCategory !== 'PAGE'));
-
-  // Fetch accounts data on-demand
+  // Fetch accounts data on-demand as soon as modal opens
   const { data: accountsData = [] } = useQuery({
     queryKey: ['global-search-accounts'],
-    queryFn: () => accountsApi.getFlat(),
-    staleTime: 60000,
-    enabled: isSearchActive && (query.trim().length > 0 || selectedCategory === 'ACCOUNT'),
+    queryFn: () => accountsApi.getFlat(undefined, undefined, true),
+    staleTime: 5 * 60 * 1000,
+    enabled: open,
   });
 
   const flatAccounts = useMemo(() => {
     return Array.isArray(accountsData) ? accountsData : (accountsData as any)?.data || [];
   }, [accountsData]);
 
-  // Fetch partners data on-demand
+  // Fetch partners data on-demand as soon as modal opens
   const { data: customers = [] } = useQuery({
     queryKey: ['global-search-customers'],
     queryFn: () => partnersApi.getCustomers(),
-    staleTime: 60000,
-    enabled: isSearchActive && (query.trim().length > 0 || selectedCategory === 'PARTNER'),
+    staleTime: 5 * 60 * 1000,
+    enabled: open,
   });
   const { data: suppliers = [] } = useQuery({
     queryKey: ['global-search-suppliers'],
     queryFn: () => partnersApi.getSuppliers(),
-    staleTime: 60000,
-    enabled: isSearchActive && (query.trim().length > 0 || selectedCategory === 'PARTNER'),
+    staleTime: 5 * 60 * 1000,
+    enabled: open,
   });
 
   const partnersList = useMemo(() => {
@@ -120,14 +129,13 @@ export const GlobalSearch: React.FC = () => {
     return [...custs, ...supps];
   }, [customers, suppliers, isAr]);
 
-  // Fetch tickets & invoices data on-demand
+  // Fetch tickets & invoices data on-demand as soon as modal opens
   const { data: rawInvoicesList = [] } = useQuery({
     queryKey: ['global-search-tickets'],
     queryFn: () => ticketsApi.getAll(),
-    staleTime: 60000,
-    enabled: isSearchActive && (query.trim().length > 0 || selectedCategory === 'TICKET' || selectedCategory === 'VISA'),
+    staleTime: 5 * 60 * 1000,
+    enabled: open,
   });
-
 
   // Separate Flights vs Visas
   const { ticketsList, visasList } = useMemo(() => {
@@ -394,43 +402,46 @@ export const GlobalSearch: React.FC = () => {
     [navigate, isAr]
   );
 
-  // 3. Filtered Accounts
+  // 3. Filtered Accounts (Map all accounts without truncation)
   const accountItems: SearchItem[] = useMemo(() => {
-    return flatAccounts.slice(0, 100).map((acc: any) => ({
-      id: `acc-${acc.id}`,
-      category: 'ACCOUNT',
-      titleAr: `${acc.code} — ${acc.nameAr}`,
-      titleEn: `${acc.code} — ${acc.nameEn || acc.nameAr}`,
-      subAr: `النوع: ${acc.type} | الطبيعة: ${acc.nature === 'DEBIT' ? 'مدين' : 'دائن'} | الرصيد: ${(acc.balanceIQD || 0).toLocaleString()} IQD`,
-      subEn: `Type: ${acc.type} | Nature: ${acc.nature} | Balance: ${(acc.balanceIQD || 0).toLocaleString()} IQD`,
-      code: acc.code,
-      keywords: `${acc.code} ${acc.nameAr} ${acc.nameEn || ''} ${acc.type || ''} حساب account`,
-      icon: <ListTree size={17} />,
-      badge: acc.type || (isAr ? 'حساب' : 'Account'),
-      action: () => {
-        navigate(`/reports?accountId=${acc.id}`);
-        setOpen(false);
-      },
-    }));
+    return flatAccounts.map((acc: any) => {
+      const cleanName = acc.nameAr || acc.name || `حساب ${acc.code}`;
+      return {
+        id: `acc-${acc.id}`,
+        category: 'ACCOUNT',
+        titleAr: `${cleanName} (${acc.code})`,
+        titleEn: `${acc.nameEn || cleanName} (${acc.code})`,
+        code: acc.code,
+        keywords: `${acc.code} ${cleanName} ${acc.nameEn || ''} ${acc.type || ''} ${acc.category || ''} حساب دليل شجرة الحسابات سلف سلفة ذمم account`,
+        icon: <ListTree size={17} />,
+        badge: acc.type || (isAr ? 'حساب' : 'Account'),
+        action: () => {
+          navigate(`/reports?accountId=${acc.id}`);
+          setOpen(false);
+        },
+      };
+    });
   }, [flatAccounts, navigate, isAr]);
 
-  // 4. Filtered Partners
+  // 4. Filtered Partners (Map all partners without truncation)
   const partnerItems: SearchItem[] = useMemo(() => {
-    return partnersList.slice(0, 100).map((p: any) => ({
-      id: `partner-${p.id}`,
-      category: 'PARTNER',
-      titleAr: p.nameAr || p.name || 'طرف مسجل',
-      titleEn: p.nameEn || p.nameAr || p.name || 'Partner',
-      subAr: `الهاتف: ${p.phone || 'غير مسجل'} | النوع: ${p.partnerType || 'عميل'} | الرصيد: ${(p.balanceIQD || 0).toLocaleString()} IQD`,
-      subEn: `Phone: ${p.phone || 'N/A'} | Type: ${p.partnerType || 'Client'} | Balance: ${(p.balanceIQD || 0).toLocaleString()} IQD`,
-      keywords: `${p.nameAr || ''} ${p.nameEn || ''} ${p.phone || ''} ${p.partnerType || ''} عميل مورد partner client`,
-      icon: <Users size={17} />,
-      badge: p.partnerType || (isAr ? 'طرف' : 'Partner'),
-      action: () => {
-        navigate(`/partners?id=${p.id}`);
-        setOpen(false);
-      },
-    }));
+    return partnersList.map((p: any) => {
+      const cleanName = p.nameAr || p.name || (isAr ? 'طرف مسجل' : 'Partner');
+      return {
+        id: `partner-${p.id}`,
+        category: 'PARTNER',
+        titleAr: cleanName,
+        titleEn: p.nameEn || cleanName,
+        code: p.code,
+        keywords: `${cleanName} ${p.nameEn || ''} ${p.code || ''} ${p.phone || ''} ${p.partnerType || ''} عميل مورد زبون شركة partner customer supplier`,
+        icon: <Users size={17} />,
+        badge: p.partnerType || (isAr ? 'طرف' : 'Partner'),
+        action: () => {
+          navigate(`/partners?id=${p.id}`);
+          setOpen(false);
+        },
+      };
+    });
   }, [partnersList, navigate, isAr]);
 
   // Resolve Partner/Customer clean name
@@ -454,7 +465,7 @@ export const GlobalSearch: React.FC = () => {
 
   // 5. Filtered Tickets (Enhanced with search for Refunds, Changes, Reissues, Groups)
   const ticketItems: SearchItem[] = useMemo(() => {
-    return ticketsList.slice(0, 150).map((t: any) => {
+    return ticketsList.slice(0, 500).map((t: any) => {
       const passNames = (t.passengers || []).map((p: any) => p.name).filter(Boolean).join(', ');
       const isRefund = t.tripType === 'REFUND' || t.status === 'REFUNDED' || String(t.invoiceNumber || '').startsWith('REF-') || t.notes?.includes('استرجاع') || t.notes?.includes('ريفاوند');
       const isReissue = t.tripType === 'REISSUE' || t.notes?.includes('تعديل') || t.notes?.includes('تغيير') || t.notes?.includes('reissue');
@@ -478,8 +489,6 @@ export const GlobalSearch: React.FC = () => {
         category: 'TICKET',
         titleAr,
         titleEn,
-        subAr: `PNR: ${t.pnr || '—'} | الخط: ${t.airline || '—'} | المسافرون: ${passNames || 'مسافر'} | المبلغ: ${Number(t.totalSell || 0).toLocaleString()} ${t.currency || 'USD'}`,
-        subEn: `PNR: ${t.pnr || '—'} | Line: ${t.airline || '—'} | Travelers: ${passNames || '1'} | Total: ${Number(t.totalSell || 0).toLocaleString()} ${t.currency || 'USD'}`,
         code: t.pnr || t.invoiceNumber,
         keywords,
         icon: <Plane size={17} />,
@@ -498,7 +507,7 @@ export const GlobalSearch: React.FC = () => {
 
   // 6. Filtered Visas (Enhanced with search for Refunds, Changes, Reissues, Groups)
   const visaItems: SearchItem[] = useMemo(() => {
-    return visasList.slice(0, 150).map((v: any) => {
+    return visasList.slice(0, 500).map((v: any) => {
       const passNames = (v.passengers || []).map((p: any) => p.name).filter(Boolean).join(', ');
       const destination = v.passengers?.[0]?.pnr || v.airline || (isAr ? 'تأشيرة' : 'Visa');
       const isRefund = v.status === 'REFUNDED' || String(v.invoiceNumber || '').startsWith('REF-') || v.notes?.includes('استرجاع') || v.notes?.includes('ريفاوند');
@@ -520,8 +529,6 @@ export const GlobalSearch: React.FC = () => {
         category: 'VISA',
         titleAr: `تأشيرة: ${v.invoiceNumber || 'VISA'} — ${destination} (${resolvedCust})`,
         titleEn: `Visa: ${v.invoiceNumber || 'VISA'} — ${destination} (${resolvedCust})`,
-        subAr: `الوجهة: ${destination} | المسافرون: ${passNames || 'مسافر'} | المبلغ: ${Number(v.totalSell || 0).toLocaleString()} ${v.currency || 'USD'}`,
-        subEn: `Destination: ${destination} | Travelers: ${passNames || '1'} | Total: ${Number(v.totalSell || 0).toLocaleString()} ${v.currency || 'USD'}`,
         code: v.invoiceNumber,
         keywords,
         icon: <FileCheck size={17} />,
@@ -536,46 +543,29 @@ export const GlobalSearch: React.FC = () => {
 
   // All unified items
   const allItems = useMemo(() => {
-    return [...actionItems, ...screenItems, ...ticketItems, ...visaItems, ...partnerItems, ...accountItems];
-  }, [actionItems, screenItems, ticketItems, visaItems, partnerItems, accountItems]);
+    return [...actionItems, ...screenItems, ...accountItems, ...partnerItems, ...ticketItems, ...visaItems];
+  }, [actionItems, screenItems, accountItems, partnerItems, ticketItems, visaItems]);
 
-  // Filter items based on query & selected category
+  // Filter items based on normalized Arabic & English multi-token query
   const filteredResults = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const rawQ = query.trim();
 
-    if (!q) {
-      if (selectedCategory === 'ACTION') return actionItems;
-      if (selectedCategory === 'PAGE') return screenItems;
-      if (selectedCategory === 'TICKET') return ticketItems;
-      if (selectedCategory === 'VISA') return visaItems;
-      if (selectedCategory === 'PARTNER') return partnerItems;
-      if (selectedCategory === 'ACCOUNT') return accountItems;
+    if (!rawQ) {
       return [...actionItems, ...screenItems];
     }
 
+    const normQ = normalizeArabic(rawQ);
+    const tokens = normQ.split(' ').filter(Boolean);
+
     return allItems
       .filter((item) => {
-        if (selectedCategory !== 'ALL' && item.category !== selectedCategory) {
-          return false;
-        }
-        const titleA = (item.titleAr || '').toLowerCase();
-        const titleE = (item.titleEn || '').toLowerCase();
-        const subA = (item.subAr || '').toLowerCase();
-        const subE = (item.subEn || '').toLowerCase();
-        const code = (item.code || '').toLowerCase();
-        const kw = (item.keywords || '').toLowerCase();
-
-        return (
-          titleA.includes(q) ||
-          titleE.includes(q) ||
-          subA.includes(q) ||
-          subE.includes(q) ||
-          code.includes(q) ||
-          kw.includes(q)
+        const itemNorm = normalizeArabic(
+          `${item.titleAr || ''} ${item.titleEn || ''} ${item.code || ''} ${item.keywords || ''} ${item.badge || ''}`
         );
+        return tokens.every((token) => itemNorm.includes(token));
       })
-      .slice(0, 35);
-  }, [allItems, actionItems, screenItems, ticketItems, visaItems, partnerItems, accountItems, query, selectedCategory]);
+      .slice(0, 50);
+  }, [allItems, actionItems, screenItems, query]);
 
   // Save recent search on execution
   const executeItem = (item: SearchItem) => {
