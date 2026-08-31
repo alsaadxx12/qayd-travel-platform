@@ -1,7 +1,41 @@
 import { API_BASE_URL } from '../api/client';
 
+/** CSS properties that break Arabic joining / RTL when flattened onto every node. */
+const SKIP_STYLE_PROPS = new Set([
+  'letter-spacing',
+  'word-spacing',
+  'unicode-bidi',
+  'writing-mode',
+  'text-orientation',
+  'text-rendering',
+  'font-kerning',
+  'font-variant',
+  'font-variant-ligatures',
+  'font-variant-caps',
+  'font-variant-numeric',
+  'font-variant-east-asian',
+  'font-feature-settings',
+  'font-variation-settings',
+  'font-synthesis',
+  'font-optical-sizing',
+  'direction',
+  'zoom',
+  'text-spacing-trim',
+  'hanging-punctuation',
+]);
+
+function capFontWeight(value: string): string {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n)) {
+    if (value === 'black' || value === 'bolder') return '700';
+    return value;
+  }
+  return n > 700 ? '700' : String(n);
+}
+
 /**
  * Inline computed styles so Chromium on the server can print without the Vite CSS bundle.
+ * Arabic-unsafe properties are stripped so HarfBuzz can join letters.
  */
 export function serializeElementForChromium(element: HTMLElement): string {
   const clone = element.cloneNode(true) as HTMLElement;
@@ -12,9 +46,29 @@ export function serializeElementForChromium(element: HTMLElement): string {
     const parts: string[] = [];
     for (let i = 0; i < computed.length; i++) {
       const prop = computed[i];
-      if (!prop) continue;
+      if (!prop || SKIP_STYLE_PROPS.has(prop)) continue;
+      if (prop.startsWith('--')) continue;
       parts.push(`${prop}:${computed.getPropertyValue(prop)}`);
     }
+
+    const dirAttr = from.getAttribute('dir') || to.getAttribute('dir');
+    if (dirAttr === 'ltr') {
+      parts.push('direction:ltr', 'unicode-bidi:isolate');
+    } else if (dirAttr === 'rtl') {
+      parts.push('direction:rtl', 'unicode-bidi:normal');
+    }
+
+    parts.push(
+      'letter-spacing:0',
+      'word-spacing:0',
+      'font-kerning:none',
+      'font-variant-ligatures:common-ligatures',
+      'font-synthesis:none',
+      'text-rendering:optimizeLegibility',
+      `font-weight:${capFontWeight(computed.getPropertyValue('font-weight') || '400')}`,
+      "font-family:'IBM Plex Sans Arabic','Tajawal','Cairo',sans-serif",
+    );
+
     to.setAttribute('style', parts.join(';'));
     to.removeAttribute('class');
     const fromKids = from.children;

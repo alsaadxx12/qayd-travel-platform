@@ -256,7 +256,7 @@ export class PaymentVouchersService {
         description: true,
         status: true,
         createdAt: true,
-        account: { select: { id: true, code: true, nameAr: true, nameEn: true, type: true, isParent: true } },
+        account: { select: { id: true, code: true, nameAr: true, nameEn: true, type: true, isParent: true, email: true, phone: true } },
         cashboxOrBankAccount: { select: { id: true, code: true, nameAr: true } },
         createdBy: { select: { id: true, name: true } },
         journalEntry: {
@@ -304,9 +304,9 @@ export class PaymentVouchersService {
     const voucher = await this.prisma.paymentVoucher.findFirst({
       where: { id, companyId },
       include: {
-        account: { select: { id: true, code: true, nameAr: true, nameEn: true, type: true } },
+        account: { select: { id: true, code: true, nameAr: true, nameEn: true, type: true, email: true, phone: true } },
         cashboxOrBankAccount: { select: { id: true, code: true, nameAr: true } },
-        supplier: { select: { id: true, code: true, nameAr: true, isAirline: true } },
+        supplier: { select: { id: true, code: true, nameAr: true, isAirline: true, email: true, phone: true } },
         createdBy: { select: { id: true, name: true } },
         journalEntry: {
           include: {

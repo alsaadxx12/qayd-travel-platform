@@ -157,6 +157,10 @@ export class TemplateService {
   private compiledTemplates: Map<string, Handlebars.TemplateDelegate> = new Map();
   private fontFaceCss: string = '';
 
+  getFontFaceCss(): string {
+    return this.fontFaceCss;
+  }
+
   constructor() {
     this.registerHelpers();
     this.loadFonts();

@@ -256,9 +256,9 @@ export class ReceiptVouchersService {
         description: true,
         status: true,
         createdAt: true,
-        account: { select: { id: true, code: true, nameAr: true } },
+        account: { select: { id: true, code: true, nameAr: true, email: true, phone: true } },
         cashboxOrBankAccount: { select: { id: true, code: true, nameAr: true } },
-        customer: { select: { id: true, code: true, nameAr: true } },
+        customer: { select: { id: true, code: true, nameAr: true, email: true, phone: true } },
         createdBy: { select: { id: true, name: true } },
         journalEntry: {
           select: {
@@ -309,9 +309,9 @@ export class ReceiptVouchersService {
     const voucher = await this.prisma.receiptVoucher.findFirst({
       where: { id, companyId },
       include: {
-        account: { select: { id: true, code: true, nameAr: true } },
+        account: { select: { id: true, code: true, nameAr: true, email: true, phone: true } },
         cashboxOrBankAccount: { select: { id: true, code: true, nameAr: true } },
-        customer: { select: { id: true, code: true, nameAr: true } },
+        customer: { select: { id: true, code: true, nameAr: true, email: true, phone: true } },
         createdBy: { select: { id: true, name: true } },
         journalEntry: {
           include: {

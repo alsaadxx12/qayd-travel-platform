@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { apiRequest } from '../api/client';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { FinancialVoucherForm, readVoucherSplits, parseCleanNumber } from '../components/vouchers/FinancialVoucherForm';
-import { VoucherPrintModal, type VoucherPrintItem } from '../components/vouchers/VoucherPrintModal';
+import { VoucherPrintModal, toVoucherPrintItem, type VoucherPrintItem } from '../components/vouchers/VoucherPrintModal';
 import { useLanguageStore } from '../store/useLanguageStore';
 import { useAiPageContext } from '../hooks/useAiPageContext';
 import { SegmentedDatePicker } from '../components/ui/SegmentedDatePicker';
@@ -1247,14 +1247,7 @@ export const VouchersPage: React.FC = () => {
                     onClick={() => {
                       const first = currentGridData.find((r: any) => selectedIds.has(r.id));
                       if (first) {
-                        setVoucherToPrint({
-                          voucherNumber: first.voucherNumber, type: first.type, date: first.date,
-                          amount: first.amount, currency: first.currency,                           accountName: first.accountName,
-                          accountCode: first.accountCode, accountEmail: first.accountEmail || first.email, cashboxName: first.cashboxName,
-                          reference: first.reference, description: first.description, user: first.userName,
-                          splitAccounts: first.splitAccounts, splitDescription: first.splitDescription,
-                          customCategory: first.customCategory,
-                        });
+                        setVoucherToPrint(toVoucherPrintItem(first));
                         setPrintModalOpen(true);
                       }
                     }}
@@ -1658,23 +1651,7 @@ export const VouchersPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => {
-                                setVoucherToPrint({
-                                  voucherNumber: row.voucherNumber,
-                                  type: row.type,
-                                  date: row.date,
-                                  amount: row.amount,
-                                  currency: row.currency,
-                                  accountName: row.accountName,
-                                  accountCode: row.accountCode,
-                                  accountEmail: row.accountEmail || row.email,
-                                  cashboxName: row.cashboxName,
-                                  reference: row.reference,
-                                  description: row.description,
-                                  user: row.userName,
-                                  splitAccounts: row.splitAccounts,
-                                  splitDescription: row.splitDescription,
-                                  customCategory: row.customCategory,
-                                });
+                                setVoucherToPrint(toVoucherPrintItem(row));
                                 setPrintModalOpen(true);
                               }}
                               aria-label={isAr ? 'طباعة السند' : 'Print voucher'}
@@ -1709,23 +1686,7 @@ export const VouchersPage: React.FC = () => {
                               <Menu.Item
                                 leftSection={<Printer size={13} className="text-slate-500" />}
                                 onClick={() => {
-                                  setVoucherToPrint({
-                                    voucherNumber: row.voucherNumber,
-                                    type: row.type,
-                                    date: row.date,
-                                    amount: row.amount,
-                                    currency: row.currency,
-                                    accountName: row.accountName,
-                                    accountCode: row.accountCode,
-                                    accountEmail: row.accountEmail || row.email,
-                                    cashboxName: row.cashboxName,
-                                    reference: row.reference,
-                                    description: row.description,
-                                    user: row.userName,
-                                    splitAccounts: row.splitAccounts,
-                                    splitDescription: row.splitDescription,
-                                    customCategory: row.customCategory,
-                                  });
+                                  setVoucherToPrint(toVoucherPrintItem(row));
                                   setPrintModalOpen(true);
                                 }}
                                 className="font-bold text-slate-800 hover:bg-slate-50 py-1.5"
@@ -1928,23 +1889,7 @@ export const VouchersPage: React.FC = () => {
                 type="button"
                 onClick={() => {
                   if (!selectedVoucher) return;
-                  setVoucherToPrint({
-                    voucherNumber: selectedVoucher.voucherNumber,
-                    type: selectedVoucher.type,
-                    date: selectedVoucher.date,
-                    amount: selectedVoucher.amount,
-                    currency: selectedVoucher.currency,
-                    accountName: selectedVoucher.accountName,
-                    accountCode: selectedVoucher.accountCode,
-                    accountEmail: selectedVoucher.accountEmail || selectedVoucher.email,
-                    cashboxName: selectedVoucher.cashboxName,
-                    reference: selectedVoucher.reference,
-                    description: selectedVoucher.description,
-                    user: selectedVoucher.userName,
-                    splitAccounts: selectedVoucher.splitAccounts,
-                    splitDescription: selectedVoucher.splitDescription,
-                    customCategory: selectedVoucher.customCategory,
-                  });
+                  setVoucherToPrint(toVoucherPrintItem(selectedVoucher));
                   setPrintModalOpen(true);
                 }}
                 className="flex-1 h-[38px] rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"

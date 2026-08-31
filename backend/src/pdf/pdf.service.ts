@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger, HttpException, HttpS
 import * as puppeteer from 'puppeteer';
 import * as fs from 'fs';
 import * as path from 'path';
+import { TemplateService } from './template.service';
 
 export interface PdfGenerateOptions {
   html: string;
@@ -56,6 +57,8 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   private browser: puppeteer.Browser | null = null;
   private launching: Promise<puppeteer.Browser> | null = null;
   private readonly logger = new Logger(PdfService.name);
+
+  constructor(private readonly templateService: TemplateService) {}
 
   /** Resolved once: the filesystem does not change under a running process. */
   private resolvedExecutable?: string | null;
@@ -417,20 +420,29 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     const dir = isEn ? 'ltr' : 'rtl';
     const langAttr = isEn ? 'en' : 'ar';
 
+    const fontFaceCss = this.templateService.getFontFaceCss();
     const fullHtml = `
         <!DOCTYPE html>
         <html lang="${langAttr}" dir="${dir}">
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            ${fontFaceCss ? `<style>${fontFaceCss}</style>` : `
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-            <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700;800&family=Tajawal:wght@400;500;700;800;900&family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Tajawal:wght@400;500;700&family=Cairo:wght@400;600;700&display=block" rel="stylesheet">
+            `}
             <style>
               *, *::before, *::after {
                 box-sizing: border-box !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+                letter-spacing: 0 !important;
+                word-spacing: 0 !important;
+                font-kerning: none !important;
+                font-synthesis: none !important;
+                font-variant-ligatures: common-ligatures !important;
+                text-rendering: optimizeLegibility !important;
               }
               html, body {
                 margin: 0 !important;
@@ -438,14 +450,17 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
                 background: #ffffff !important;
                 color: #000000 !important;
                 width: 100% !important;
-                font-smooth: always !important;
+                direction: ${dir} !important;
+                unicode-bidi: isolate !important;
                 -webkit-font-smoothing: antialiased !important;
                 -moz-osx-font-smoothing: grayscale !important;
-                text-rendering: geometricPrecision !important;
-                font-kerning: normal !important;
               }
               body {
-                font-family: 'IBM Plex Sans Arabic', 'Tajawal', 'Cairo', sans-serif;
+                font-family: 'IBM Plex Sans Arabic', 'Tajawal', 'Cairo', sans-serif !important;
+              }
+              [dir="ltr"] {
+                direction: ltr !important;
+                unicode-bidi: isolate !important;
               }
               table { width: 100%; border-collapse: collapse; }
               thead { display: table-header-group; }

@@ -38,6 +38,7 @@ export interface VoucherPrintItem {
   date: string;
   amount: number;
   currency?: string;
+  accountId?: string;
   accountName: string;
   accountCode?: string;
   accountPhone?: string;
@@ -59,6 +60,43 @@ export interface VoucherPrintItem {
     note?: string;
   }>;
 }
+
+function pickAccountEmail(source: any): string {
+  if (!source) return '';
+  const raw =
+    source.accountEmail ||
+    source.email ||
+    source.account?.email ||
+    source.customer?.email ||
+    source.supplier?.email ||
+    '';
+  return String(raw).trim();
+}
+
+export function toVoucherPrintItem(row: any): VoucherPrintItem {
+  return {
+    id: row.id,
+    voucherNumber: row.voucherNumber,
+    type: row.type,
+    date: row.date,
+    amount: row.amount,
+    currency: row.currency,
+    accountId: row.accountId || row.account?.id,
+    accountName: row.accountName || row.account?.nameAr || '',
+    accountCode: row.accountCode || row.account?.code,
+    accountEmail: pickAccountEmail(row),
+    accountPhone: row.accountPhone || row.account?.phone || row.customer?.phone,
+    cashboxName: row.cashboxName,
+    reference: row.reference,
+    description: row.description,
+    user: row.userName || row.user,
+    splitAccounts: row.splitAccounts,
+    splitDescription: row.splitDescription,
+    customCategory: row.customCategory,
+  };
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const DEFAULT_VOUCHER_CONFIG = {
   companyName: 'رودا 10 للبرمجيات والحلول المحاسبية',
@@ -272,8 +310,8 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               opacity: 0.045,
               whiteSpace: 'nowrap',
               color: watermarkColor,
-              fontWeight: 900,
-              letterSpacing: 'normal',
+              fontWeight: 700,
+              letterSpacing: 0,
             }}
           >
             {cfg.watermarkText || 'نسخة رسمية'}
@@ -406,16 +444,19 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                   </div>
                 </div>
 
-                <h1
-                  className="font-black"
+                <div
+                  dir={isEn ? 'ltr' : 'rtl'}
+                  className="font-bold"
                   style={{
                     fontSize: `${cfg.fontSizes?.docTitle || 24}px`,
                     color: '#0f172a',
-                    letterSpacing: 'normal',
+                    letterSpacing: 0,
+                    fontWeight: 700,
+                    unicodeBidi: 'normal',
                   }}
                 >
                   {isEn ? docTitleEn : docTitleAr}
-                </h1>
+                </div>
                 <div className="w-12 h-0.5 mt-1 rounded-full" style={{ backgroundColor: primaryColor }} />
               </div>
 
@@ -451,8 +492,9 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           >
             {/* Top Pill Badge (Floating on Card Header) */}
             <div
-              className={`absolute -top-3.5 right-6 px-5 py-1 rounded-full text-white font-black text-xs shadow-xs flex items-center gap-1.5 ${isEn ? 'tracking-wide' : ''}`}
-              style={{ backgroundColor: headerBgColor }}
+              dir={isEn ? 'ltr' : 'rtl'}
+              className="absolute -top-3.5 right-6 px-5 py-1 rounded-full text-white font-bold text-xs shadow-xs flex items-center gap-1.5"
+              style={{ backgroundColor: headerBgColor, letterSpacing: 0, fontWeight: 700, unicodeBidi: 'normal' }}
             >
               <span>{isEn ? cardTitleEn : cardTitleAr}</span>
             </div>
@@ -612,8 +654,9 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           >
             {/* Top Pill Badge */}
             <div
-              className={`absolute -top-3.5 right-6 px-4 py-1 rounded-full text-white font-black text-xs shadow-xs flex items-center gap-1 ${isEn ? 'tracking-wide' : ''}`}
-              style={{ backgroundColor: headerBgColor }}
+              dir={isEn ? 'ltr' : 'rtl'}
+              className="absolute -top-3.5 right-6 px-4 py-1 rounded-full text-white font-bold text-xs shadow-xs flex items-center gap-1"
+              style={{ backgroundColor: headerBgColor, letterSpacing: 0, fontWeight: 700, unicodeBidi: 'normal' }}
             >
               <span>{isEn ? 'Voucher Summary' : 'ملخص السند'}</span>
             </div>
@@ -659,7 +702,11 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
              ═══════════════════════════════════════════════════════ */}
           <div className="flex items-center justify-center gap-4 my-4">
             <div className="h-0.5 flex-1 rounded-full" style={{ backgroundColor: primaryColor }} />
-            <span className="font-black text-xs text-slate-800 px-3 select-none" style={{ letterSpacing: 'normal' }}>
+            <span
+              dir={isEn ? 'ltr' : 'rtl'}
+              className="font-bold text-xs text-slate-800 px-3 select-none"
+              style={{ letterSpacing: 0, fontWeight: 700, unicodeBidi: 'normal' }}
+            >
               {cfg.thankYouText || (isEn ? 'Thank you for your trust and business' : 'نشكر لكم ثقتكم ونتطلع إلى المزيد من التعاملات')}
             </span>
             <div className="h-0.5 flex-1 rounded-full" style={{ backgroundColor: primaryColor }} />
@@ -786,6 +833,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   const [exporting, setExporting] = useState(false);
   const [sending, setSending] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState('');
+  const [emailResolved, setEmailResolved] = useState(false);
 
   useEffect(() => {
     if (language === 'en' || language === 'ar') setPrintLang(language);
@@ -793,7 +841,8 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
 
   useEffect(() => {
     if (!opened || !voucher) return;
-    setRecipientEmail((voucher.accountEmail || '').trim());
+    setRecipientEmail(pickAccountEmail(voucher));
+    setEmailResolved(!voucher.accountId);
     setLoading(true);
     const docType = voucher.type === 'RECEIPT' ? 'receipt_voucher' : 'payment_voucher';
     Promise.all([
@@ -813,6 +862,30 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
         setConfig(voucher.type === 'RECEIPT' ? DEFAULT_VOUCHER_CONFIG : DEFAULT_PAYMENT_VOUCHER_CONFIG);
       })
       .finally(() => setLoading(false));
+  }, [opened, voucher]);
+
+  useEffect(() => {
+    if (!opened || !voucher?.accountId) {
+      if (opened) setEmailResolved(true);
+      return;
+    }
+    let cancelled = false;
+    setEmailResolved(false);
+    apiRequest(`/api/accounts/${voucher.accountId}`)
+      .then((acc: any) => {
+        if (cancelled) return;
+        const email = pickAccountEmail(acc);
+        if (email) setRecipientEmail(email);
+      })
+      .catch(() => {
+        /* keep whatever was already on the voucher */
+      })
+      .finally(() => {
+        if (!cancelled) setEmailResolved(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [opened, voucher]);
 
   useEffect(() => {
@@ -891,10 +964,10 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
 
   const handleSendEmail = async () => {
     const email = recipientEmail.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!EMAIL_RE.test(email)) {
       showErrorNotification(
         isEn ? 'Email required' : 'البريد مطلوب',
-        isEn ? 'Enter a valid recipient email' : 'أدخل بريداً إلكترونياً صحيحاً للمستلم',
+        isEn ? 'This account has no email on file' : 'لا يوجد بريد إلكتروني على هذا الحساب',
       );
       return;
     }
@@ -934,6 +1007,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   };
 
   const busy = exporting || sending || loading;
+  const emailOk = EMAIL_RE.test(recipientEmail.trim());
 
   return (
     <Modal
@@ -1022,7 +1096,12 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
           onChange={(e) => setRecipientEmail(e.currentTarget.value)}
           disabled={busy}
           dir="ltr"
-          styles={{ label: { fontWeight: 800, fontSize: 12, marginBottom: 6 } }}
+          description={
+            emailResolved && !emailOk
+              ? (isEn ? 'No email on this account — send is disabled' : 'لا يوجد بريد على هذا الحساب — زر الإرسال معطّل')
+              : undefined
+          }
+          styles={{ label: { fontWeight: 800, fontSize: 12, marginBottom: 6 }, description: { fontSize: 11, fontWeight: 700 } }}
         />
 
         <div className="space-y-2.5 pt-1">
@@ -1048,8 +1127,13 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
           <button
             type="button"
             onClick={handleSendEmail}
-            disabled={busy}
-            className="w-full h-12 rounded-2xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-950 font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            disabled={busy || !emailOk}
+            title={
+              emailOk
+                ? undefined
+                : (isEn ? 'This account has no email' : 'لا يوجد بريد إلكتروني على هذا الحساب')
+            }
+            className="w-full h-12 rounded-2xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-950 font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-sky-50"
           >
             {sending ? (
               <>
@@ -1068,6 +1152,8 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
 
       <div
         aria-hidden="true"
+        dir={printLang === 'en' ? 'ltr' : 'rtl'}
+        lang={printLang === 'en' ? 'en' : 'ar'}
         style={{
           position: 'fixed',
           left: '-9999px',
