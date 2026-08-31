@@ -377,6 +377,70 @@ export const VouchersPage: React.FC = () => {
     fetchAllData();
   }, [fetchAllData]);
 
+  /**
+   * Cross-tab & cross-window real-time sync.
+   * When a voucher is created/deleted/updated in one tab, all other open tabs
+   * of the same origin receive the broadcast and silently refresh their data.
+   * Additionally, switching back to an idle tab triggers a refetch so stale
+   * data never lingers.
+   */
+  const channelRef = React.useRef<BroadcastChannel | null>(null);
+  const lastChangeRef = React.useRef<number>(Date.now());
+
+  useEffect(() => {
+    // BroadcastChannel: listen for changes from other tabs
+    try {
+      const ch = new BroadcastChannel('qayd-vouchers-sync');
+      ch.onmessage = (ev) => {
+        if (ev.data?.type === 'vouchers-changed') {
+          lastChangeRef.current = Date.now();
+          fetchAllData(true);
+        }
+      };
+      channelRef.current = ch;
+    } catch {
+      // BroadcastChannel not supported — fall back to storage event
+    }
+
+    // Fallback: storage event (works cross-tab even without BroadcastChannel)
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'qayd-vouchers-changed') {
+        lastChangeRef.current = Date.now();
+        fetchAllData(true);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    // Visibility: refetch when user switches back to this tab after >10s
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const elapsed = Date.now() - lastChangeRef.current;
+        if (elapsed > 10_000) {
+          lastChangeRef.current = Date.now();
+          fetchAllData(true);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      channelRef.current?.close();
+      window.removeEventListener('storage', onStorage);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [fetchAllData]);
+
+  /** Notify other tabs that voucher data has changed. */
+  const broadcastVouchersChanged = useCallback(() => {
+    try {
+      channelRef.current?.postMessage({ type: 'vouchers-changed' });
+    } catch { /* ignore */ }
+    // Fallback: localStorage event fires in OTHER tabs automatically
+    try {
+      localStorage.setItem('qayd-vouchers-changed', String(Date.now()));
+    } catch { /* ignore */ }
+  }, []);
+
   // Handle Quick Date Presets
   const handleQuickPreset = (preset: string) => {
     setQuickDatePreset(preset);
@@ -552,6 +616,9 @@ export const VouchersPage: React.FC = () => {
         setJournalVouchersList((prev) => prev.filter((v) => v.id !== deletedId));
       }
 
+      // Notify other open tabs/windows
+      broadcastVouchersChanged();
+
       setDeleteConfirmOpen(false);
       setVoucherToDelete(null);
     } catch (err: any) {
@@ -583,6 +650,8 @@ export const VouchersPage: React.FC = () => {
     // The form only calls this after the server has confirmed the write, so a single
     // refresh is both correct and sufficient.
     fetchAllData(true);
+    // Notify other open tabs/windows
+    broadcastVouchersChanged();
   };
 
   // Export to Excel Function — the library is fetched on demand, not at page load.
