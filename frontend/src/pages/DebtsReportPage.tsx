@@ -106,6 +106,7 @@ export const DebtsReportPage: React.FC = () => {
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const [printConfig, setPrintConfig] = useState<any>(null);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
   const [batchRenderState, setBatchRenderState] = useState<{
     accountName: string;
     accountCode: string;
@@ -425,11 +426,38 @@ export const DebtsReportPage: React.FC = () => {
     }
   };
 
+  // Static Header Export Button Handler
+  const handleStaticExportClick = () => {
+    if (selectedAccountIds.size === 0) {
+      showErrorNotification(
+        'تنبيه — لم يتم تحديد حسابات',
+        'يجب تحديد حساب واحد على الأقل من الجدول عبر مفتاح التشغيل للتصدير.'
+      );
+      return;
+    }
+    handleExportBatchZipPDF(Array.from(selectedAccountIds));
+  };
+
   // Bulk PDF Export Handler: Generates real official PDF files using the approved Account Statement template!
-  const handleExportBatchZipPDF = async () => {
-    const targetAccounts = getSelectedAccountsForBatch();
+  const handleExportBatchZipPDF = async (overrideSelectedIds?: string[]) => {
+    const idsToUse = overrideSelectedIds && overrideSelectedIds.length > 0
+      ? overrideSelectedIds
+      : Array.from(selectedAccountIds);
+
+    if (idsToUse.length === 0) {
+      showErrorNotification(
+        'تنبيه — لم يتم تحديد حسابات',
+        'يجب تحديد حساب واحد على الأقل من الجدول عبر مفتاح التشغيل للتصدير.'
+      );
+      return;
+    }
+
+    const targetAccounts = debtRows.filter(r => idsToUse.includes(r.id));
     if (targetAccounts.length === 0) {
-      showErrorNotification('تنبيه', 'يرجى اختيار حساب واحد على الأقل لتصدير الكشوفات.');
+      showErrorNotification(
+        'تنبيه — لم يتم تحديد حسابات',
+        'يجب تحديد حساب واحد على الأقل من الجدول عبر مفتاح التشغيل للتصدير.'
+      );
       return;
     }
 
@@ -1035,38 +1063,19 @@ export const DebtsReportPage: React.FC = () => {
     return cols;
   }, [pageShowIQD, pageShowUSD, handleOpenAmountTrace, handleOpenStatement]);
 
-  // Render Dynamic Actions when 1 or more accounts are selected via Checkbox
+  // Render Dynamic Actions when 1 or more accounts are selected via Switch
   const renderSelectedActions = (selectedIds: string[], _clearSelection: () => void) => {
     return (
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2">
         <Button
           size="xs"
           color="orange"
           variant="filled"
-          leftSection={<IconFileZip size={15} />}
-          onClick={() => {
-            setBatchTarget('CUSTOM');
-            setCustomSelectedAccIds(selectedIds);
-            handleExportBatchZipPDF();
-          }}
+          leftSection={<IconFileTypePdf size={15} />}
+          onClick={() => handleExportBatchZipPDF(selectedIds)}
           className="font-bold text-xs h-8 px-3.5 shadow-2xs rounded-lg cursor-pointer"
         >
-          تصدير ملف لكل حساب (ZIP) ({selectedIds.length})
-        </Button>
-
-        <Button
-          size="xs"
-          color="blue"
-          variant="light"
-          leftSection={<IconFiles size={15} />}
-          onClick={() => {
-            setBatchTarget('CUSTOM');
-            setCustomSelectedAccIds(selectedIds);
-            handleExportBatchPDF();
-          }}
-          className="font-bold text-xs h-8 px-3 rounded-lg cursor-pointer"
-        >
-          كشف موحد مدمج (PDF)
+          تصدير PDF ({selectedIds.length})
         </Button>
 
         <Button
@@ -1074,60 +1083,11 @@ export const DebtsReportPage: React.FC = () => {
           color="emerald"
           variant="light"
           leftSection={<IconFileSpreadsheet size={15} />}
-          onClick={() => {
-            setBatchTarget('CUSTOM');
-            setCustomSelectedAccIds(selectedIds);
-            handleExportBatchExcel();
-          }}
+          onClick={handleExportExcel}
           className="font-bold text-xs h-8 px-3 rounded-lg cursor-pointer"
         >
           تصدير Excel
         </Button>
-
-        <Menu position="bottom-end" shadow="md" width={220} withinPortal={false}>
-          <Menu.Target>
-            <Button
-              size="xs"
-              color="gray"
-              variant="outline"
-              leftSection={<IconDotsVertical size={14} />}
-              rightSection={<IconChevronDown size={13} />}
-              className="font-bold text-xs h-8 px-2.5 rounded-lg border-slate-300 bg-white"
-            >
-              خيارات إضافية
-            </Button>
-          </Menu.Target>
-
-          <Menu.Dropdown p="xs" className="space-y-1">
-            <Menu.Item
-              leftSection={<IconFileText size={15} className="text-orange-600" />}
-              onClick={() => {
-                setBatchTarget('CUSTOM');
-                setCustomSelectedAccIds(selectedIds);
-                setIsBatchModalOpen(true);
-              }}
-              className="font-bold text-xs"
-            >
-              تخصيص الفترة والخيارات المجمعة...
-            </Menu.Item>
-
-            <Menu.Item
-              leftSection={<IconMail size={15} className="text-indigo-600" />}
-              onClick={() => handleOpenEmailModal(selectedIds)}
-              className="font-bold text-xs"
-            >
-              إرسال عبر الإيميل
-            </Menu.Item>
-
-            <Menu.Item
-              leftSection={<IconPrinter size={15} className="text-slate-600" />}
-              onClick={() => window.print()}
-              className="font-bold text-xs"
-            >
-              طباعة الجدول المالي
-            </Menu.Item>
-          </Menu.Dropdown>
-        </Menu>
       </div>
     );
   };
@@ -1220,7 +1180,7 @@ export const DebtsReportPage: React.FC = () => {
 
       {/* ── Filter Controls Toolbar (شريط الفلترة المنظم) ── */}
       <div className="bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
-        {/* Right Side (RTL Start): Search Input */}
+        {/* Right Side (RTL Start): Search Input & Static PDF Button */}
         <div className="flex items-center gap-2">
           <TextInput
             placeholder="بحث باسم الحساب أو الكود..."
@@ -1228,9 +1188,20 @@ export const DebtsReportPage: React.FC = () => {
             onChange={(e) => setSearchQuery(e.currentTarget.value)}
             leftSection={<IconSearch size={15} className="text-slate-400" />}
             size="xs"
-            className="w-64"
+            className="w-56"
             styles={{ input: { borderRadius: 8, height: 36, borderColor: '#cbd5e1' } }}
           />
+
+          <Button
+            size="xs"
+            color="orange"
+            variant="filled"
+            leftSection={<IconFileTypePdf size={16} />}
+            onClick={() => handleStaticExportClick()}
+            className="font-bold text-xs h-9 px-3.5 shadow-2xs rounded-lg cursor-pointer shrink-0"
+          >
+            تصدير PDF {selectedAccountIds.size > 0 ? `(${selectedAccountIds.size})` : ''}
+          </Button>
         </div>
 
         {/* Center: Segmented Filter Pills (التبويبات في الوسط) */}
@@ -1345,6 +1316,8 @@ export const DebtsReportPage: React.FC = () => {
           loading={loading}
           onRefresh={() => { void refetch(); }}
           gridKey="debts_report_grid"
+          selectedRowIds={selectedAccountIds}
+          onSelectionChange={setSelectedAccountIds}
           hideSearch={true}
           hideFilters={true}
           hideDateFilter={true}
@@ -1628,7 +1601,7 @@ export const DebtsReportPage: React.FC = () => {
                 color="orange"
                 size="sm"
                 leftSection={<IconFileZip size={16} />}
-                onClick={handleExportBatchZipPDF}
+                onClick={() => handleExportBatchZipPDF()}
                 loading={isGeneratingBatch}
                 className="font-bold shadow-xs cursor-pointer"
               >
@@ -1727,6 +1700,45 @@ export const DebtsReportPage: React.FC = () => {
             </Button>
           </div>
         </Stack>
+      </Modal>
+
+      {/* ── Small Progress Popup Modal for Export Progress Tracking (نافذة تحميل صغيرة منبثقة) ── */}
+      <Modal
+        opened={isGeneratingBatch}
+        onClose={() => {}}
+        withCloseButton={false}
+        closeOnClickOutside={false}
+        closeOnEscape={false}
+        size="sm"
+        centered
+        radius="lg"
+        padding="lg"
+        styles={{
+          content: {
+            borderRadius: 16,
+            border: '1px solid #fed7aa',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          },
+        }}
+      >
+        <div className="text-center space-y-4 py-2">
+          <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center mx-auto shadow-2xs">
+            <IconFileTypePdf size={26} />
+          </div>
+          <div>
+            <h4 className="font-extrabold text-sm text-slate-900 mb-1">جاري تصدير كشوفات PDF</h4>
+            <p className="text-xs text-slate-500 font-medium px-2 leading-relaxed">
+              {exportStatusText || 'يرجى الانتظار، جاري معالجة الكشوفات...'}
+            </p>
+          </div>
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center justify-between text-xs font-mono font-bold text-orange-800">
+              <span>التقدم</span>
+              <span>{exportProgress}%</span>
+            </div>
+            <Progress value={exportProgress} animated color="orange" size="sm" radius="xl" />
+          </div>
+        </div>
       </Modal>
 
       {/* ── Hidden Mount for Official Statement Template PDF Generation ── */}

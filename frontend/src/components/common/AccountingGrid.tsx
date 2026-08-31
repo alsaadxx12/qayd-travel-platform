@@ -87,6 +87,8 @@ interface AccountingGridProps {
   renderTableSummaryRow?: (visibleColumns: AccountingColumnDef[]) => React.ReactNode;
   onRowContextMenu?: (e: React.MouseEvent, row: any) => void;
   renderSelectedActions?: (selectedRows: any[], clearSelection: () => void) => React.ReactNode;
+  selectedRowIds?: Set<string>;
+  onSelectionChange?: (selectedIds: Set<string>) => void;
   onExportExcel?: () => void;
   onOpenBatchStatements?: (selectedIds: string[]) => void;
   onSendEmail?: (selectedIds: string[]) => void;
@@ -124,6 +126,8 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
   renderTableSummaryRow,
   onRowContextMenu,
   renderSelectedActions,
+  selectedRowIds: propSelectedRowIds,
+  onSelectionChange,
   onExportExcel,
   onOpenBatchStatements,
   onSendEmail,
@@ -162,7 +166,18 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
   // Pagination & Selection & Expand State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<string>('25');
-  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [internalSelectedRowIds, setInternalSelectedRowIds] = useState<Set<string>>(new Set());
+  const selectedRowIds = propSelectedRowIds !== undefined ? propSelectedRowIds : internalSelectedRowIds;
+
+  const updateSelectedRowIds = (next: Set<string>) => {
+    if (propSelectedRowIds === undefined) {
+      setInternalSelectedRowIds(next);
+    }
+    if (onSelectionChange) {
+      onSelectionChange(next);
+    }
+  };
+
   const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(new Set());
 
   // Column Order State (Drag & Drop)
@@ -416,9 +431,9 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
 
   const toggleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedRowIds(new Set(paginatedData.map((r) => r.id)));
+      updateSelectedRowIds(new Set(paginatedData.map((r) => r.id)));
     } else {
-      setSelectedRowIds(new Set());
+      updateSelectedRowIds(new Set());
     }
   };
 
@@ -426,7 +441,7 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
     const next = new Set(selectedRowIds);
     if (next.has(id)) next.delete(id);
     else next.add(id);
-    setSelectedRowIds(next);
+    updateSelectedRowIds(next);
   };
 
   return (
@@ -665,12 +680,12 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
-            {renderSelectedActions && renderSelectedActions(Array.from(selectedRowIds), () => setSelectedRowIds(new Set()))}
+            {renderSelectedActions && renderSelectedActions(Array.from(selectedRowIds), () => updateSelectedRowIds(new Set()))}
             <Button
               size="xs"
               variant="subtle"
               color="gray"
-              onClick={() => setSelectedRowIds(new Set())}
+              onClick={() => updateSelectedRowIds(new Set())}
               className="font-semibold text-xs px-2.5"
             >
               إلغاء التحديد
@@ -701,7 +716,7 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
                           } else {
                             paginatedData.forEach(r => next.delete(r.id));
                           }
-                          setSelectedRowIds(next);
+                          updateSelectedRowIds(next);
                         }}
                         className="cursor-pointer"
                         title={isAr ? 'تحديد الكل في هذه الصفحة' : 'Toggle all on this page'}
@@ -836,7 +851,7 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
                                   } else {
                                     next.delete(row.id);
                                   }
-                                  setSelectedRowIds(next);
+                                  updateSelectedRowIds(next);
                                 }}
                                 className="cursor-pointer"
                               />
