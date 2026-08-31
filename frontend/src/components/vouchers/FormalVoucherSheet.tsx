@@ -132,13 +132,13 @@ export interface VoucherSheetConfig {
   /** حشوة الصف العمودية بالبكسل — تعلو كثافة الأسطر حين تُضبط. */
   fieldRowPadding?: number;
   /**
-   * شكل «تقسيم المبلغ»: سطر واحد، أو قيد محاسبي بطرفيه.
+   * شكل «تقسيم المبلغ»: جدول بسيط (الافتراضي)، أو قيد محاسبي، أو سطر واحد.
    *
-   * القيد يعرض الحركة كما تُقيَّد في الدفتر: الصندوق مديناً بالمبلغ والحسابات
-   * المقسّم عليها دائنةً في سند القبض، ومعكوساً في سند الدفع — بجدول صغير
-   * بعمودي مدين ودائن وسطر مجموع.
+   * الجدول يعرض الحسابات المقسّم عليها ومبلغ كلٍّ منها وسطر مجموع — بلا طرفي
+   * قيد. والقيد يبقى خياراً لمن يريد الحركة كما تُقيَّد في الدفتر: الصندوق
+   * مديناً والحسابات دائنةً في القبض، ومعكوساً في الدفع.
    */
-  splitStyle?: 'inline' | 'entry';
+  splitStyle?: 'inline' | 'table' | 'entry';
   /**
    * حقول تُطبع ولو كانت فارغة — سطرٌ للكتابة اليدوية.
    *
@@ -487,7 +487,7 @@ export const FormalVoucherSheet: React.FC<{
     .filter(
       (key) =>
         String(values[key] || '').trim().length > 0 ||
-        (key === 'split' && (config.splitStyle || 'entry') === 'entry') ||
+        (key === 'split' && (config.splitStyle || 'table') !== 'inline') ||
         (config.printEmptyFields || ['notes']).includes(key)
     )
     .map((key) => ({ ...fieldByKey.get(key)!, value: values[key] }));
@@ -499,17 +499,22 @@ export const FormalVoucherSheet: React.FC<{
    * (أو الطرف نفسه إن لم يوجد تقسيم) دائنة؛ وفي سند الدفع ينعكس الطرفان.
    * والمجموعان متساويان بالضرورة — فيُطبع سطر المجموع توكيداً يقرؤه المدقّق.
    */
-  const splitAsEntry = (config.splitStyle || 'entry') === 'entry';
+  const splitStyle = config.splitStyle || 'table';
+  const splitAsGrid = splitStyle === 'table' || splitStyle === 'entry';
   const entryRows = (() => {
-    if (!splitAsEntry) return [];
+    if (!splitAsGrid) return [];
     const total = Number(voucher.amount) || 0;
-    const cashboxName = voucher.cashboxName || (isEn ? 'Cashbox' : 'الصندوق');
     const counter = voucher.splitAccounts?.length
       ? voucher.splitAccounts.map((sp) => ({
           name: sp.accountName,
           amount: Number(sp.amount) || 0,
         }))
       : [{ name: values.party || (isEn ? 'Account' : 'الحساب'), amount: total }];
+    if (splitStyle === 'table') {
+      /* جدول بسيط: الحسابات المقسّم عليها ومبلغ كلٍّ منها — بلا طرفي قيد. */
+      return counter.map((c) => ({ name: c.name, debit: c.amount, credit: 0 }));
+    }
+    const cashboxName = voucher.cashboxName || (isEn ? 'Cashbox' : 'الصندوق');
     return isReceipt
       ? [
           { name: cashboxName, debit: total, credit: 0 },
@@ -848,11 +853,12 @@ export const FormalVoucherSheet: React.FC<{
           );
           const blank = String(row.value || '').trim().length === 0;
           const padY = config.fieldRowPadding;
-          /* «تقسيم المبلغ» بشكل القيد: جدول مدين/دائن مكان النص المسطور. */
+          /* «تقسيم المبلغ» جدولاً — بسيطاً أو بطرفي قيد — مكان النص المسطور. */
           const valueNode =
-            row.key === 'split' && splitAsEntry ? (
+            row.key === 'split' && splitAsGrid ? (
               <SplitEntryTable
                 rows={entryRows}
+                mode={splitStyle === 'entry' ? 'entry' : 'table'}
                 isEn={isEn}
                 labelSize={t.label}
                 border={config.fieldBorderColor || softRule}
@@ -1159,18 +1165,25 @@ export const FormalVoucherSheet: React.FC<{
   );
 };
 
-/** جدول القيد: الحساب ومدينه ودائنه، وسطر مجموع يطابق مبلغ السند. */
+/**
+ * جدول التقسيم — بشكليه.
+ *
+ * «جدول»: عمودان، الحساب ومبلغه، وسطر مجموع. و«قيد»: ثلاثة أعمدة بمدين ودائن
+ * وسطر مجموع متوازن. البنية واحدة والفرق أعمدة فقط، فهما مكوّن واحد لا اثنان.
+ */
 const SplitEntryTable: React.FC<{
   rows: Array<{ name: string; debit: number; credit: number }>;
+  mode: 'table' | 'entry';
   isEn: boolean;
   labelSize: number;
   border: string;
   headBg: string;
-}> = ({ rows, isEn, labelSize, border, headBg }) => {
+}> = ({ rows, mode, isEn, labelSize, border, headBg }) => {
   const totalDebit = rows.reduce((a, r) => a + r.debit, 0);
   const totalCredit = rows.reduce((a, r) => a + r.credit, 0);
   const cell: React.CSSProperties = { padding: '3px 8px', border: `1px solid ${border}` };
   const num: React.CSSProperties = { ...cell, textAlign: 'center', whiteSpace: 'nowrap' };
+  const isEntry = mode === 'entry';
   return (
     <table
       className="w-full font-semibold"
@@ -1179,30 +1192,52 @@ const SplitEntryTable: React.FC<{
       <thead>
         <tr className="font-bold" style={{ backgroundColor: headBg }}>
           <th style={{ ...cell, textAlign: 'start' }}>{isEn ? 'Account' : 'الحساب'}</th>
-          <th style={num}>{isEn ? 'Debit' : 'مدين'}</th>
-          <th style={num}>{isEn ? 'Credit' : 'دائن'}</th>
+          {isEntry ? (
+            <>
+              <th style={num}>{isEn ? 'Debit' : 'مدين'}</th>
+              <th style={num}>{isEn ? 'Credit' : 'دائن'}</th>
+            </>
+          ) : (
+            <th style={num}>{isEn ? 'Amount' : 'المبلغ'}</th>
+          )}
         </tr>
       </thead>
       <tbody>
         {rows.map((r, i) => (
           <tr key={i}>
             <td style={{ ...cell, textAlign: 'start' }}>{r.name}</td>
-            <td className="font-mono" dir="ltr" style={num}>
-              {r.debit ? money(r.debit) : '—'}
-            </td>
-            <td className="font-mono" dir="ltr" style={num}>
-              {r.credit ? money(r.credit) : '—'}
-            </td>
+            {isEntry ? (
+              <>
+                <td className="font-mono" dir="ltr" style={num}>
+                  {r.debit ? money(r.debit) : '—'}
+                </td>
+                <td className="font-mono" dir="ltr" style={num}>
+                  {r.credit ? money(r.credit) : '—'}
+                </td>
+              </>
+            ) : (
+              <td className="font-mono" dir="ltr" style={num}>
+                {money(r.debit)}
+              </td>
+            )}
           </tr>
         ))}
         <tr className="font-bold" style={{ backgroundColor: headBg }}>
           <td style={{ ...cell, textAlign: 'start' }}>{isEn ? 'Total' : 'المجموع'}</td>
-          <td className="font-mono" dir="ltr" style={num}>
-            {money(totalDebit)}
-          </td>
-          <td className="font-mono" dir="ltr" style={num}>
-            {money(totalCredit)}
-          </td>
+          {isEntry ? (
+            <>
+              <td className="font-mono" dir="ltr" style={num}>
+                {money(totalDebit)}
+              </td>
+              <td className="font-mono" dir="ltr" style={num}>
+                {money(totalCredit)}
+              </td>
+            </>
+          ) : (
+            <td className="font-mono" dir="ltr" style={num}>
+              {money(totalDebit)}
+            </td>
+          )}
         </tr>
       </tbody>
     </table>

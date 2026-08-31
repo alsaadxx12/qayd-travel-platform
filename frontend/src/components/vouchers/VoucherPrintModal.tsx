@@ -195,7 +195,7 @@ export const DEFAULT_VOUCHER_CONFIG = {
   amountAlign: 'center' as 'center' | 'edge',
   tafqeetPlacement: 'underAmount' as 'underAmount' | 'field',
   fieldStyle: 'table' as 'lines' | 'grid' | 'zebra' | 'table',
-  splitStyle: 'entry' as 'inline' | 'entry',
+  splitStyle: 'table' as 'inline' | 'table' | 'entry',
   labelWidth: 150,
   fieldLabelBg: '',
   fieldRowPadding: 8,

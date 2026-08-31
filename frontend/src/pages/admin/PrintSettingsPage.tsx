@@ -2122,9 +2122,10 @@ export const PrintSettingsPage: React.FC = () => {
                       </label>
                       <Select
                         size="xs"
-                        value={currentConfig.splitStyle || 'entry'}
-                        onChange={(v) => updateCurrentConfig('splitStyle', v || 'entry')}
+                        value={currentConfig.splitStyle || 'table'}
+                        onChange={(v) => updateCurrentConfig('splitStyle', v || 'table')}
                         data={[
+                          { value: 'table', label: isAr ? 'جدول (الحساب والمبلغ)' : 'Table (account & amount)' },
                           {
                             value: 'entry',
                             label: isAr ? 'قيد محاسبي (مدين / دائن)' : 'Journal entry (debit/credit)',
@@ -2133,11 +2134,6 @@ export const PrintSettingsPage: React.FC = () => {
                         ]}
                         allowDeselect={false}
                       />
-                      <p className="text-[9px] text-slate-500 mt-1 font-medium">
-                        {isAr
-                          ? 'القيد: الصندوق مديناً والحسابات المقسّم عليها دائنةً في القبض، ومعكوساً في الدفع.'
-                          : 'Entry: cashbox debited, allocated accounts credited on receipts; reversed on payments.'}
-                      </p>
                     </div>
 
                     <div>
