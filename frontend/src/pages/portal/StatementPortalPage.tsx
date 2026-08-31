@@ -1,6 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Lottie } from 'lottie-react';
+import {
+  IconPrinter,
+  IconDownload,
+  IconArrowDownLeft,
+  IconArrowUpRight,
+  IconMinus,
+} from '@tabler/icons-react';
 import { API_BASE_URL } from '../../api/client';
 import manBalanceAnimation from '../../assets/animations/man-balance-sheet.json';
 import womanAccountingAnimation from '../../assets/animations/woman-accounting.json';
@@ -55,7 +62,6 @@ export const StatementPortalPage: React.FC = () => {
   const [session, setSession] = useState<string>('');
   const [data, setData] = useState<StatementData | null>(null);
   const [loadingData, setLoadingData] = useState(false);
-  const [downloaded, setDownloaded] = useState<'pdf' | 'html' | null>(null);
   const [downloading, setDownloading] = useState(false);
 
   const [otp, setOtp] = useState<string[]>(['', '', '', '']);
@@ -186,7 +192,6 @@ export const StatementPortalPage: React.FC = () => {
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      setDownloaded(kind);
     } catch (err: any) {
       console.error(err);
     } finally {
@@ -272,10 +277,7 @@ export const StatementPortalPage: React.FC = () => {
             </div>
           )}
 
-          <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-6 text-center shadow-2xl shadow-slate-200/60">
-            {/* Brand Accent Top Line */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 via-[#F45A0A] to-amber-500" />
-
+          <div className="rounded-3xl border border-slate-200/90 bg-white p-6 text-center shadow-2xl shadow-slate-200/60">
             {/* Lottie Animation (Man Analyzing Balance Sheet) */}
             <div className="mx-auto w-36 h-36 -mt-1 flex items-center justify-center">
               <Lottie
@@ -383,11 +385,9 @@ export const StatementPortalPage: React.FC = () => {
         )}
 
         {/* Hero Card with Woman Accounting Animation */}
-        <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/50">
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-400 via-[#F45A0A] to-amber-500" />
-
+        <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/50">
           {/* Woman Doing Financial Accounting Animation */}
-          <div className="mx-auto w-40 h-40 -mt-2 mb-1 flex items-center justify-center">
+          <div className="mx-auto w-40 h-40 -mt-2 mb-2 flex items-center justify-center">
             <Lottie
               src={womanAccountingAnimation}
               loop={true}
@@ -396,16 +396,15 @@ export const StatementPortalPage: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-start justify-between gap-3 pt-2 border-t border-slate-100">
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
             <div>
-              <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">كشف حساب العميل</span>
+              <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block">كشف حساب العميل</span>
               <h1 className="text-xl font-black text-slate-900 mt-0.5">{data.holderName}</h1>
-              <p className="text-xs font-bold text-slate-500 mt-1 font-mono" dir="ltr">
-                {data.account?.code} — {data.account?.nameAr}
-              </p>
             </div>
+
+            {/* Dynamic Arrow Badge for Credit / Debit */}
             <div
-              className={`px-3 py-1.5 rounded-2xl text-xs font-black border ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-black border ${
                 isSettled
                   ? 'bg-slate-50 text-slate-700 border-slate-200'
                   : isCredit
@@ -413,7 +412,22 @@ export const StatementPortalPage: React.FC = () => {
                     : 'bg-rose-50 text-rose-700 border-rose-200'
               }`}
             >
-              {isSettled ? 'خالص الرصيد ⚖️' : isCredit ? 'الرصيد لك (دائن) 🟢' : 'المطلوب منك (مدين) 🔴'}
+              {isSettled ? (
+                <>
+                  <IconMinus size={15} className="text-slate-500" />
+                  <span>خالص الرصيد</span>
+                </>
+              ) : isCredit ? (
+                <>
+                  <IconArrowDownLeft size={16} className="text-emerald-600" />
+                  <span>الرصيد لك (دائن)</span>
+                </>
+              ) : (
+                <>
+                  <IconArrowUpRight size={16} className="text-rose-600" />
+                  <span>المطلوب منك (مدين)</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -427,7 +441,7 @@ export const StatementPortalPage: React.FC = () => {
               >
                 {money(Math.abs(balance))}
               </span>
-              <span className="text-base font-black text-slate-500">د.ع</span>
+              <span className="text-base font-black text-slate-600">IQD</span>
             </div>
           </div>
 
@@ -436,18 +450,18 @@ export const StatementPortalPage: React.FC = () => {
             <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-center">
               <p className="text-[11px] font-bold text-slate-500">إجمالي المدين (عليك)</p>
               <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
-                {money(data.totalDebit)} <span className="text-xs font-bold text-slate-400">د.ع</span>
+                {money(data.totalDebit)} <span className="text-xs font-bold text-slate-500">IQD</span>
               </p>
             </div>
             <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-center">
               <p className="text-[11px] font-bold text-slate-500">إجمالي الدائن (لك)</p>
               <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
-                {money(data.totalCredit)} <span className="text-xs font-bold text-slate-400">د.ع</span>
+                {money(data.totalCredit)} <span className="text-xs font-bold text-slate-500">IQD</span>
               </p>
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons with Standard System Tabler Icons */}
           <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <button
               type="button"
@@ -457,9 +471,7 @@ export const StatementPortalPage: React.FC = () => {
               }}
               className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
+              <IconDownload size={18} stroke={2.5} />
               <span>{downloading ? 'جارٍ التحميل…' : 'تحميل كشف PDF الرسمي'}</span>
             </button>
 
@@ -468,10 +480,8 @@ export const StatementPortalPage: React.FC = () => {
               onClick={() => window.print()}
               className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black transition cursor-pointer flex items-center justify-center gap-2"
             >
-              <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-              </svg>
-              <span>طباعة الكشف 🖨️</span>
+              <IconPrinter size={18} stroke={2} className="text-slate-600" />
+              <span>طباعة كشف الحساب</span>
             </button>
           </div>
         </div>
@@ -509,7 +519,7 @@ export const StatementPortalPage: React.FC = () => {
                             isDebit ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
                           }`}
                         >
-                          {isDebit ? '−' : '+'}
+                          {isDebit ? <IconArrowUpRight size={15} /> : <IconArrowDownLeft size={15} />}
                         </span>
                         <div>
                           <span className="font-mono text-[11px] font-black text-slate-400" dir="ltr">
@@ -525,7 +535,7 @@ export const StatementPortalPage: React.FC = () => {
                       >
                         {isDebit ? '−' : '+'}
                         {money(isDebit ? line.debit : line.credit)}
-                        <span className="text-[10px] font-normal text-slate-400 mr-1">د.ع</span>
+                        <span className="text-[11px] font-bold text-slate-400 mr-1">IQD</span>
                       </span>
                     </div>
 
@@ -538,7 +548,7 @@ export const StatementPortalPage: React.FC = () => {
                         {line.entryNumber}
                       </span>
                       <span className="font-mono" dir="ltr">
-                        الرصيد: <strong className="text-slate-700">{money(line.runningBalance)}</strong> د.ع
+                        الرصيد: <strong className="text-slate-700">{money(line.runningBalance)}</strong> IQD
                       </span>
                     </div>
                   </div>
