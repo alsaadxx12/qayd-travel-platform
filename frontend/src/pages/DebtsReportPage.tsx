@@ -513,13 +513,18 @@ export const DebtsReportPage: React.FC = () => {
           previousBalance: previousBalance,
         };
 
+        const stmtAcc = (stmt as any).account || {};
+        const accountPhone = stmtAcc.phone || (acc as any).phone || (acc as any).customer?.phone || (acc as any).supplier?.phone || '';
+        const accountEmail = stmtAcc.email || (acc as any).email || (acc as any).contactEmail || (acc as any).customer?.email || (acc as any).supplier?.email || '';
+        const accountAddress = stmtAcc.address || (acc as any).address || (acc as any).customer?.address || (acc as any).supplier?.address || '';
+
         const payload: StatementPdfPayload = {
           accountId: acc.id,
           accountName: acc.nameAr,
           accountCode: acc.code,
-          accountPhone: (acc as any).phone || (acc as any).customer?.phone || (acc as any).supplier?.phone,
-          accountEmail: (acc as any).email || (acc as any).contactEmail || (acc as any).customer?.email || (acc as any).supplier?.email,
-          accountAddress: (acc as any).address || (acc as any).customer?.address || (acc as any).supplier?.address,
+          accountPhone,
+          accountEmail,
+          accountAddress,
           startDate: batchStartDate || '2026-01-01',
           endDate: batchEndDate || new Date().toISOString().split('T')[0],
           rows: rawLines,

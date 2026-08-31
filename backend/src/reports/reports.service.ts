@@ -30,6 +30,23 @@ export class ReportsService {
         category: true,
         type: true,
         currency: true,
+        phone: true,
+        email: true,
+        address: true,
+        customer: {
+          select: {
+            phone: true,
+            email: true,
+            address: true,
+          },
+        },
+        supplier: {
+          select: {
+            phone: true,
+            email: true,
+            address: true,
+          },
+        },
       },
       orderBy: { code: 'asc' },
     });
@@ -128,6 +145,9 @@ export class ReportsService {
         debtType,
         debtLabel,
         accountCurrency,
+        phone: account.phone || account.customer?.phone || account.supplier?.phone || null,
+        email: account.email || account.customer?.email || account.supplier?.email || null,
+        address: account.address || account.customer?.address || account.supplier?.address || null,
       };
     });
 
@@ -582,6 +602,22 @@ export class ReportsService {
   async getAccountStatement(companyId: string, accountId: string, startDate?: string, endDate?: string) {
     const account = await this.prisma.account.findFirst({
       where: { id: accountId, companyId },
+      include: {
+        customer: {
+          select: {
+            phone: true,
+            email: true,
+            address: true,
+          },
+        },
+        supplier: {
+          select: {
+            phone: true,
+            email: true,
+            address: true,
+          },
+        },
+      },
     });
     if (!account) throw new NotFoundException('الحساب غير موجود');
 
@@ -675,7 +711,11 @@ export class ReportsService {
         id: account.id,
         code: account.code,
         nameAr: account.nameAr,
+        nameEn: account.nameEn,
         type: account.type,
+        phone: account.phone || account.customer?.phone || account.supplier?.phone || null,
+        email: account.email || account.customer?.email || account.supplier?.email || null,
+        address: account.address || account.customer?.address || account.supplier?.address || null,
       },
       startDate: start,
       endDate: end,

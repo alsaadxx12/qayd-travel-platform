@@ -241,7 +241,10 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
       '--disable-renderer-backgrounding',
       '--hide-scrollbars',
       '--mute-audio',
+      // Vector PDF: hinting + LCD subpixel AA make Arabic look soft/fringed in viewers.
       '--font-render-hinting=none',
+      '--disable-lcd-text',
+      '--force-color-profile=srgb',
     ];
     // --single-process (with --no-zygote) halves memory but is a known source of
     // deadlocks inside page.pdf(). Off by default; opt in only on tiny instances.
@@ -342,6 +345,24 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Print media + A4 CSS pixels at 2× so logos/QR stay crisp while text stays vector.
+   */
+  private async loadPrintDocument(
+    page: puppeteer.Page,
+    html: string,
+    opts: { settleImages: boolean },
+  ) {
+    await page.emulateMediaType('print');
+    await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
+    await page.setContent(html, {
+      waitUntil: 'domcontentloaded',
+      timeout: SET_CONTENT_TIMEOUT_MS,
+    });
+    await this.settleFonts(page);
+    if (opts.settleImages) await this.settleImages(page);
+  }
+
   /** Wait for webfonts, but never longer than FONTS_WAIT_MS. */
   private async settleFonts(page: puppeteer.Page) {
     try {
@@ -419,7 +440,9 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
                 width: 100% !important;
                 font-smooth: always !important;
                 -webkit-font-smoothing: antialiased !important;
-                text-rendering: optimizeLegibility !important;
+                -moz-osx-font-smoothing: grayscale !important;
+                text-rendering: geometricPrecision !important;
+                font-kerning: normal !important;
               }
               body {
                 font-family: 'IBM Plex Sans Arabic', 'Tajawal', 'Cairo', sans-serif;
@@ -444,12 +467,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
     return this.onPage('generatePdf', async (page) => {
       try {
-        await page.setContent(fullHtml, {
-          waitUntil: 'domcontentloaded',
-          timeout: SET_CONTENT_TIMEOUT_MS,
-        });
-
-        await this.settleFonts(page);
+        await this.loadPrintDocument(page, fullHtml, { settleImages: false });
 
         const isHeaderFooter = !!(options.headerHtml || options.footerHtml);
 
@@ -459,6 +477,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
           printBackground: true,
           displayHeaderFooter: isHeaderFooter,
           timeout: RENDER_TIMEOUT_MS,
+          scale: 1,
           headerTemplate: options.headerHtml
             ? `<div style="font-size: 10px; width: 100%; padding: 0 4mm; box-sizing: border-box; font-family: 'IBM Plex Sans Arabic', 'Tajawal', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #ffffff;">
               ${options.headerHtml}
@@ -495,23 +514,19 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   async generateFromHtml(html: string): Promise<Buffer> {
     return this.onPage('generateFromHtml', async (page) => {
       try {
-        await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
-        await page.setContent(html, {
-          waitUntil: 'domcontentloaded',
-          timeout: SET_CONTENT_TIMEOUT_MS,
-        });
+        await this.loadPrintDocument(page, html, { settleImages: true });
 
-        await this.settleFonts(page);
-        await this.settleImages(page);
-
+        // Template owns @page { size: A4; margin: 0 }. Extra Puppeteer margins
+        // shrink the sheet and make type look like a scaled screenshot.
         const pdfBuffer = await page.pdf({
           format: 'A4',
           landscape: false,
           printBackground: true,
           displayHeaderFooter: false,
           timeout: RENDER_TIMEOUT_MS,
-          margin: { top: '4mm', bottom: '4mm', left: '4mm', right: '4mm' },
-          preferCSSPageSize: false,
+          margin: { top: '0', bottom: '0', left: '0', right: '0' },
+          preferCSSPageSize: true,
+          scale: 1,
         });
 
         return Buffer.from(pdfBuffer);

@@ -218,7 +218,7 @@ export class TemplateService {
   font-family: 'IBM Plex Sans Arabic';
   font-style: normal;
   font-weight: ${weight};
-  font-display: swap;
+  font-display: block;
   src: url(data:font/woff2;base64,${base64}) format('woff2');
 }`);
         this.logger.log(`Font loaded: ${file} (${buffer.length} bytes)`);
@@ -324,7 +324,7 @@ export class TemplateService {
       primaryColor: settings.primaryColor || '#163B5C',
       primaryColorLight: this.lightenColor(settings.primaryColor || '#163B5C', 15),
       fontFamily: settings.fontFamily || 'IBM Plex Sans Arabic',
-      fontSize: settings.fontSize || 10,
+      fontSize: settings.fontSize || 11,
       tableTextColor: settings.tableTextColor || '#0f172a',
       tableHeaderTextColor: settings.tableHeaderTextColor || '#ffffff',
 
