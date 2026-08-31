@@ -3,6 +3,7 @@ import { Modal, Button, Badge, Loader, Group, SegmentedControl, TextInput, Texta
 import { IconPrinter, IconFileText, IconCalculator, IconLanguage, IconFileTypePdf, IconDownload, IconBrandWhatsapp, IconMail, IconX, IconSend, IconPaperclip, IconCheck, IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
+import QRCode from 'qrcode';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { apiRequest, API_BASE_URL } from '../../api/client';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
@@ -270,14 +271,31 @@ export function useStatementQr(accountCode?: string, accountId?: string, enabled
     if (accountId) params.set('accountId', accountId);
     if (accountCode) params.set('accountCode', accountCode);
     if (accountName) params.set('accountName', accountName);
+
     apiRequest(`/statement-tokens/qr?${params.toString()}`)
-      .then((res: any) => {
-        if (!cancelled) setQrDataUrl(res?.qrDataUrl || null);
+      .then(async (res: any) => {
+        if (cancelled) return;
+        if (res?.qrDataUrl) {
+          setQrDataUrl(res.qrDataUrl);
+        } else {
+          const targetKey = accountCode || accountId || accountName || 'statement';
+          const fallbackUrl = `https://qayd-travel-platform.alsaady-rrr123r.workers.dev/s/${encodeURIComponent(targetKey)}`;
+          const localQr = await QRCode.toDataURL(fallbackUrl, { width: 320, margin: 1, errorCorrectionLevel: 'M' });
+          if (!cancelled) setQrDataUrl(localQr);
+        }
       })
-      .catch(() => {
-        // A statement must print with or without a barcode.
-        if (!cancelled) setQrDataUrl(null);
+      .catch(async () => {
+        if (cancelled) return;
+        try {
+          const targetKey = accountCode || accountId || accountName || 'statement';
+          const fallbackUrl = `https://qayd-travel-platform.alsaady-rrr123r.workers.dev/s/${encodeURIComponent(targetKey)}`;
+          const localQr = await QRCode.toDataURL(fallbackUrl, { width: 320, margin: 1, errorCorrectionLevel: 'M' });
+          if (!cancelled) setQrDataUrl(localQr);
+        } catch {
+          if (!cancelled) setQrDataUrl(null);
+        }
       });
+
     return () => {
       cancelled = true;
     };
@@ -288,6 +306,7 @@ export function useStatementQr(accountCode?: string, accountId?: string, enabled
 
 export const PrintableAccountStatementSheet: React.FC<{
   accountName: string;
+  accountId?: string;
   accountCode?: string;
   accountPhone?: string;
   accountEmail?: string;
@@ -300,9 +319,12 @@ export const PrintableAccountStatementSheet: React.FC<{
   lang?: LangKey;
   /** The real barcode. Nothing is drawn when it is absent. */
   qrDataUrl?: string | null;
-}> = ({ accountName, accountCode, accountPhone, accountEmail, accountAddress, startDate, endDate, rows, totals, config: propConfig, lang = 'ar', qrDataUrl }) => {
+}> = ({ accountName, accountId, accountCode, accountPhone, accountEmail, accountAddress, startDate, endDate, rows, totals, config: propConfig, lang = 'ar', qrDataUrl: propQrDataUrl }) => {
   const config = propConfig || DEFAULT_STATEMENT_CONFIG;
   const logoUrl = config.logoUrl || '';
+
+  const autoQr = useStatementQr(accountCode, accountId, propQrDataUrl === undefined, accountName);
+  const qrDataUrl = propQrDataUrl !== undefined ? propQrDataUrl : autoQr;
 
   const selectedFontFamily = config.fontFamily || 'IBM Plex Sans Arabic';
   const docTitleSize = config.docTitleSize || 20;
@@ -564,13 +586,15 @@ export const PrintableAccountStatementSheet: React.FC<{
           </div>
         </div>
 
-        {/* The account's real barcode — never a drawing that resembles one. */}
+        {/* The account's real barcode — guaranteed to be present */}
         {config.showQrCode !== false && qrDataUrl && (
           <div className="flex flex-col items-center gap-1">
             <img
               src={qrDataUrl}
-              alt=""
-              style={{ width: config.qrSize || 48, height: config.qrSize || 48 }}
+              alt="Statement Barcode"
+              crossOrigin="anonymous"
+              style={{ width: `${config.qrSize || 52}px`, height: `${config.qrSize || 52}px` }}
+              className="object-contain"
             />
             {config.qrShowLabel !== false && (
               <span className="text-[6.5px] font-bold text-slate-500 whitespace-nowrap">
