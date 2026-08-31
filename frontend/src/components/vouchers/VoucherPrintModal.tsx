@@ -171,12 +171,29 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   const partyLabelAr = isReceipt ? 'استلمنا من السيد/السادة :' : 'ادفعوا للسيد/السادة :';
   const partyLabelEn = isReceipt ? 'Received From:' : 'Paid To:';
 
-  const splitLabelAr = isReceipt ? 'تقسيم القبض :' : 'تقسيم الصرف :';
-  const splitLabelEn = isReceipt ? 'Split Receipt:' : 'Split Payment:';
-
   const splitAccountsList = voucher.splitAccounts && voucher.splitAccounts.length > 0
     ? voucher.splitAccounts
     : null;
+
+  // Dynamic split label: show the actual split account name(s) instead of the static "تقسيم القبض"
+  const splitLabelAr = (() => {
+    if (splitAccountsList && splitAccountsList.length > 0) {
+      if (splitAccountsList.length === 1) {
+        return `${splitAccountsList[0].accountName || (isReceipt ? 'تقسيم القبض' : 'تقسيم الصرف')} :`;
+      }
+      return `${splitAccountsList.map((s: any) => s.accountName).filter(Boolean).join(' ، ')} :`;
+    }
+    return isReceipt ? 'تقسيم القبض :' : 'تقسيم الصرف :';
+  })();
+  const splitLabelEn = (() => {
+    if (splitAccountsList && splitAccountsList.length > 0) {
+      if (splitAccountsList.length === 1) {
+        return `${splitAccountsList[0].accountName || (isReceipt ? 'Split Receipt' : 'Split Payment')}:`;
+      }
+      return `${splitAccountsList.map((s: any) => s.accountName).filter(Boolean).join(', ')}:`;
+    }
+    return isReceipt ? 'Split Receipt:' : 'Split Payment:';
+  })();
 
   const defaultSplitText = isReceipt
     ? `حساب مخصص / مباشر على حـ (${partyName})`
@@ -425,7 +442,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 <span>{isEn ? partyLabelEn : partyLabelAr}</span>
               </span>
               <div
-                className="flex-1 rounded-xl p-2.5 px-4 font-black text-sm text-slate-900 border"
+                className="flex-1 rounded-xl p-2.5 px-4 font-black text-sm text-slate-900 border text-center"
                 style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
               >
                 {voucher.accountCode ? `${voucher.accountCode} - ` : ''}
@@ -514,7 +531,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </span>
 
               <div
-                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-800 border flex items-center gap-2 overflow-hidden flex-wrap"
+                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-800 border flex items-center justify-center gap-2 overflow-hidden flex-wrap"
                 style={{
                   backgroundColor: fieldBgColor,
                   borderColor: fieldBorderColor,
@@ -552,7 +569,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </span>
 
               <div
-                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-700 border min-h-[42px] leading-relaxed"
+                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-700 border min-h-[42px] leading-relaxed text-center"
                 style={{
                   backgroundColor: fieldBgColor,
                   borderColor: fieldBorderColor,
