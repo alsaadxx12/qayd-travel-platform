@@ -104,6 +104,7 @@ export const DebtsReportPage: React.FC = () => {
   const [emailSubject, setEmailSubject] = useState('كشف حساب تفصيلي — نظام المحاسبة والذمم');
   const [emailBody, setEmailBody] = useState('مرحباً، تجدون برفقه كشف الحساب التفصيلي للذمم المالية للفترة المحددة.');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isExportChoiceModalOpen, setIsExportChoiceModalOpen] = useState(false);
 
   const [printConfig, setPrintConfig] = useState<any>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
@@ -431,11 +432,11 @@ export const DebtsReportPage: React.FC = () => {
     if (selectedAccountIds.size === 0) {
       showErrorNotification(
         'تنبيه — لم يتم تحديد حسابات',
-        'يجب تحديد حساب واحد على الأقل من الجدول عبر مفتاح التشغيل للتصدير.'
+        'يجب تحديد حساب واحد على الأقل من الجدول عبر مفتاح التشغيل للتصدير أو الإرسال.'
       );
       return;
     }
-    handleExportBatchZipPDF(Array.from(selectedAccountIds));
+    setIsExportChoiceModalOpen(true);
   };
 
   // Bulk PDF Export Handler: Generates real official PDF files using the approved Account Statement template!
@@ -1428,6 +1429,84 @@ export const DebtsReportPage: React.FC = () => {
           handleOpenStatement(account as AccountDebtRow);
         }}
       />
+
+      {/* ── Modal for Choosing Export vs Email (نافذة الاختيار بين تصدير PDF أو إرسال إيميل) ── */}
+      <Modal
+        opened={isExportChoiceModalOpen}
+        onClose={() => setIsExportChoiceModalOpen(false)}
+        title={
+          <div className="flex items-center gap-2 font-black text-slate-900 text-sm sm:text-base">
+            <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center font-bold">
+              <IconFileTypePdf size={18} />
+            </div>
+            <span>خيارات تصدير وإرسال كشوفات الحسابات</span>
+          </div>
+        }
+        size="md"
+        centered
+        radius="lg"
+        padding="lg"
+      >
+        <div className="space-y-4">
+          {/* Selected accounts summary */}
+          <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-700">عدد الحسابات المحددة للعملية:</span>
+            <Badge color="orange" size="md" variant="filled" className="font-bold">
+              {selectedAccountIds.size} حساب
+            </Badge>
+          </div>
+
+          <p className="text-xs text-slate-500 font-medium leading-relaxed m-0">
+            يرجى اختيار طريقة إخراج أو تسليم الكشوفات للحسابات المحددة:
+          </p>
+
+          {/* Option 1: PDF Export */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsExportChoiceModalOpen(false);
+              handleExportBatchZipPDF(Array.from(selectedAccountIds));
+            }}
+            className="w-full text-right p-4 rounded-xl border-2 border-orange-200 bg-orange-50/50 hover:bg-orange-100/70 hover:border-[#F45A0A] transition-all cursor-pointer flex items-center gap-3.5 group shadow-2xs"
+          >
+            <div className="w-11 h-11 rounded-xl bg-[#F45A0A] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+              <IconFileTypePdf size={22} />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 mb-0.5">
+                تصدير وتحميل كشوفات PDF
+              </h4>
+              <p className="text-[11px] text-slate-500 leading-tight m-0">
+                {selectedAccountIds.size === 1
+                  ? 'تحميل كشف الحساب مباشرة بصيغة PDF الرسمية المعتمدة'
+                  : 'توليد ملف PDF مستقل لكل حساب وتنزيلها معاً في ملف ZIP واحد'}
+              </p>
+            </div>
+          </button>
+
+          {/* Option 2: Send via Email */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsExportChoiceModalOpen(false);
+              handleOpenEmailModal(Array.from(selectedAccountIds));
+            }}
+            className="w-full text-right p-4 rounded-xl border-2 border-indigo-200 bg-indigo-50/40 hover:bg-indigo-100/70 hover:border-indigo-600 transition-all cursor-pointer flex items-center gap-3.5 group shadow-2xs"
+          >
+            <div className="w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+              <IconMail size={22} />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 mb-0.5">
+                إرسال الكشوفات عبر البريد الإلكتروني
+              </h4>
+              <p className="text-[11px] text-slate-500 leading-tight m-0">
+                إرسال كشوفات الحسابات المحددة مباشرة إلى البريد الإلكتروني للمستلم عبر Brevo
+              </p>
+            </div>
+          </button>
+        </div>
+      </Modal>
 
       {/* ── Modal for Bulk Batch Account Statements Export ── */}
       <Modal
