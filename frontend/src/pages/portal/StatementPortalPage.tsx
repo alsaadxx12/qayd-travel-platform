@@ -182,7 +182,6 @@ export const StatementPortalPage: React.FC = () => {
     if (!session) return;
     const res = await fetch(
       `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/download?session=${encodeURIComponent(session)}`,
-      { headers: { 'x-portal-session': session } },
     );
     if (!res.ok) throw new Error('تعذّر تحضير ملف الكشف.');
 
@@ -212,7 +211,6 @@ export const StatementPortalPage: React.FC = () => {
       try {
         const res = await fetch(
           `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/data?session=${encodeURIComponent(session)}`,
-          { headers: { 'x-portal-session': session } },
         );
         const json = await res.json();
         if (!res.ok) throw new Error(json?.message || 'تعذّر تحميل الكشف.');
