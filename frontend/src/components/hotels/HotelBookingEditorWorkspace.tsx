@@ -1209,7 +1209,7 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
                   {/* Payment Term (نوع السداد) */}
-                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-2'}>
+                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-1 md:col-span-2'}>
                     <label className="block font-bold text-slate-700 text-xs mb-1">
                       {isAr ? 'نوع السداد' : 'Payment Term'}
                     </label>
@@ -1272,30 +1272,8 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                     </>
                   )}
 
-                  {/* Purchase Cashbox */}
-                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-1'}>
-                    <label className="block font-bold text-slate-700 text-xs mb-1">
-                      {isAr ? 'صندوق دفع المشتريات' : 'Purchase Cashbox'}
-                    </label>
-                    <SearchableCombobox
-                      options={cashboxAccounts.map((c) => ({
-                        value: c.id,
-                        label: c.nameAr,
-                        accountCode: c.code,
-                      }))}
-                      value={purchaseCashboxId}
-                      onChange={(val: string) => {
-                        setPurchaseCashboxId(val);
-                        const found = cashboxAccounts.find((c) => c.id === val);
-                        if (found) setPurchaseCashboxName(found.nameAr);
-                      }}
-                      placeholder={isAr ? 'صندوق المشتريات...' : 'Purchase cashbox...'}
-                      className="h-[48px]"
-                    />
-                  </div>
-
                   {/* Issuing Staff (Compact Dropdown) */}
-                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-2 md:col-span-4' : 'sm:col-span-1'}>
+                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-1 md:col-span-2'}>
                     <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
                       <UserCheck size={13} className="text-[#F45A0A]" />
                       <span>{isAr ? 'موظف الإصدار المسؤول' : 'Issuing Staff'}</span>
