@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Lottie } from 'lottie-react';
 import { API_BASE_URL } from '../../api/client';
 import manBalanceAnimation from '../../assets/animations/man-balance-sheet.json';
+import womanAccountingAnimation from '../../assets/animations/woman-accounting.json';
 
 interface PortalIntro {
   companyName: string;
@@ -62,7 +63,7 @@ export const StatementPortalPage: React.FC = () => {
 
   useEffect(() => {
     document.documentElement.setAttribute('dir', 'rtl');
-    document.title = 'كشف الحساب الإلكتروني المعتمد';
+    document.title = 'كشف الحساب الإلكتروني';
   }, []);
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export const StatementPortalPage: React.FC = () => {
     (async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}`);
-        if (!res.ok) throw new Error('هذا الباركود غير صالح أو تم إبطاله من قبل الإدارة.');
+        if (!res.ok) throw new Error('هذا الباركود غير صالح أو تم إبطاله.');
         const json = await res.json();
         if (!cancelled) setIntro(json);
       } catch (err: any) {
@@ -94,10 +95,10 @@ export const StatementPortalPage: React.FC = () => {
           body: JSON.stringify({ last4: code }),
         });
         const json = await res.json();
-        if (!res.ok) throw new Error(json?.message || 'الأرقام غير صحيحة، يرجى إعادة المحاولة.');
+        if (!res.ok) throw new Error(json?.message || 'الأرقام غير صحيحة');
         setSession(json.session);
       } catch (err: any) {
-        setVerifyError(err?.message || 'الأرقام غير صحيحة، يرجى التحقق وإعادة الإدخال.');
+        setVerifyError(err?.message || 'الأرقام غير صحيحة، يرجى إعادة المحاولة.');
         setOtp(['', '', '', '']);
         otpRefs.current[0]?.focus();
       } finally {
@@ -228,160 +229,174 @@ export const StatementPortalPage: React.FC = () => {
   const isSettled = Math.abs(balance) < 0.01;
   const isCredit = balance < 0; // Balance is for customer (Green)
 
-  // ── 1. Error State ──────────────────────────────────────────────────────────
+  // ── 1. Error State (No Scroll) ──────────────────────────────────────────────
   if (introError) {
     return (
-      <Shell>
-        <div className="rounded-3xl border border-rose-200 bg-white p-8 text-center shadow-xl">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <div className="h-screen w-full flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 p-4 overflow-hidden">
+        <div className="max-w-sm w-full rounded-3xl border border-rose-200 bg-white p-7 text-center shadow-xl">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+            <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="mt-4 text-lg font-black text-rose-900">تعذّر الوصول للكشف</h2>
-          <p className="mt-2 text-sm text-slate-600 leading-relaxed">{introError}</p>
-          <p className="mt-4 text-xs font-bold text-slate-400">يرجى مراجعة إدارة الشركة للحصول على باركود حديث ومفعّل.</p>
+          <h2 className="mt-4 text-base font-black text-rose-900">تعذّر فتح الكشف</h2>
+          <p className="mt-2 text-xs text-slate-600 leading-relaxed">{introError}</p>
         </div>
-      </Shell>
+      </div>
     );
   }
 
-  // ── 2. Loading State ────────────────────────────────────────────────────────
+  // ── 2. Initial Loading State (No Scroll) ───────────────────────────────────
   if (!intro) {
     return (
-      <Shell>
-        <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-lg animate-pulse">
-          <div className="mx-auto h-28 w-28 rounded-full bg-slate-100 mb-4" />
-          <div className="h-6 w-48 bg-slate-200 rounded-xl mx-auto mb-3" />
-          <div className="h-4 w-32 bg-slate-100 rounded-lg mx-auto" />
+      <div className="h-screen w-full flex items-center justify-center bg-gradient-to-b from-slate-50 to-slate-100 p-4 overflow-hidden">
+        <div className="max-w-sm w-full rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-lg animate-pulse">
+          <div className="mx-auto h-24 w-24 rounded-full bg-slate-100 mb-4" />
+          <div className="h-5 w-40 bg-slate-200 rounded-xl mx-auto mb-2.5" />
+          <div className="h-3.5 w-24 bg-slate-100 rounded-lg mx-auto" />
         </div>
-      </Shell>
+      </div>
     );
   }
 
-  // ── 3. Challenge Screen (Animation + 4-Box PIN) ─────────────────────────────
+  // ── 3. Challenge Screen: No-Scroll, Minimal Text, Lottie Animation ───────────
   if (!data) {
     return (
-      <Shell companyName={intro.companyName}>
-        <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 text-center shadow-2xl shadow-slate-200/60">
-          {/* Subtle Orange Accent Top Line */}
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-orange-50/25 to-slate-100 p-4 overflow-hidden select-none">
+        <div className="w-full max-w-sm">
+          {intro.companyName && (
+            <div className="mb-3 text-center">
+              <span className="inline-block px-3.5 py-1 rounded-full bg-white/90 border border-slate-200/80 text-xs font-black text-slate-700 shadow-xs">
+                {intro.companyName}
+              </span>
+            </div>
+          )}
+
+          <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-6 text-center shadow-2xl shadow-slate-200/60">
+            {/* Brand Accent Top Line */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 via-[#F45A0A] to-amber-500" />
+
+            {/* Lottie Animation (Man Analyzing Balance Sheet) */}
+            <div className="mx-auto w-36 h-36 -mt-1 flex items-center justify-center">
+              <Lottie
+                src={manBalanceAnimation}
+                loop={true}
+                autoplay={true}
+                className="w-full h-full"
+              />
+            </div>
+
+            <h1 className="text-xl font-black text-slate-900 tracking-tight mt-1">{intro.holderName}</h1>
+
+            {intro.phoneHint ? (
+              <div className="mt-4">
+                <label className="block text-xs font-black text-slate-600">
+                  أدخل آخر 4 أرقام من هاتفك
+                </label>
+
+                {/* 4 Connected/Separated OTP Digit Boxes */}
+                <div className="mt-3.5 flex items-center justify-center gap-2.5 sm:gap-3" dir="ltr">
+                  {[0, 1, 2, 3].map((idx) => (
+                    <input
+                      key={idx}
+                      ref={(el) => {
+                        otpRefs.current[idx] = el;
+                      }}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={1}
+                      value={otp[idx]}
+                      onChange={(e) => handleOtpChange(idx, e.target.value)}
+                      onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                      disabled={verifying}
+                      className="h-14 w-12 sm:h-15 sm:w-13 rounded-2xl border-2 border-slate-200 bg-slate-50/70 text-center font-mono text-2xl font-black text-slate-900 shadow-xs transition-all duration-200 focus:border-[#F45A0A] focus:bg-white focus:shadow-md focus:shadow-orange-500/15 focus:scale-105 focus:outline-none disabled:opacity-60"
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  disabled={verifying}
+                  onClick={async () => {
+                    setVerifying(true);
+                    setVerifyError('');
+                    try {
+                      const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/verify`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ last4: '' }),
+                      });
+                      const json = await res.json();
+                      if (!res.ok) throw new Error(json?.message || 'تعذّر فتح الكشف.');
+                      setSession(json.session);
+                    } catch (err: any) {
+                      setVerifyError(err?.message || 'تعذّر فتح الكشف.');
+                    } finally {
+                      setVerifying(false);
+                    }
+                  }}
+                  className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-xs shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {verifying ? 'جارٍ الفتح…' : 'عرض كشف الحساب 📄'}
+                </button>
+              </div>
+            )}
+
+            {verifying && (
+              <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 animate-pulse">
+                <div className="h-1.5 w-1.5 rounded-full bg-[#F45A0A] animate-ping" />
+                <span>جارٍ التحقق…</span>
+              </div>
+            )}
+
+            {verifyError && (
+              <p id="last4-error" role="alert" className="mt-3 rounded-xl bg-rose-50 p-2.5 text-xs font-black text-rose-700 border border-rose-200">
+                {verifyError}
+              </p>
+            )}
+
+            {loadingData && (
+              <div className="mt-3 text-xs font-bold text-slate-500">
+                <span>جارٍ تحميل البيانات…</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 4. The Verified Statement Screen (With Woman Accounting Animation) ───────
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 px-4 py-6 antialiased">
+      <div className="mx-auto w-full max-w-lg space-y-4">
+        {data.company?.name && (
+          <div className="text-center">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="text-xs font-black text-slate-800">{data.company.name}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Hero Card with Woman Accounting Animation */}
+        <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/50">
           <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-400 via-[#F45A0A] to-amber-500" />
 
-          {/* Lottie Animated Character */}
-          <div className="mx-auto w-48 h-48 -mt-2 mb-1 flex items-center justify-center">
+          {/* Woman Doing Financial Accounting Animation */}
+          <div className="mx-auto w-40 h-40 -mt-2 mb-1 flex items-center justify-center">
             <Lottie
-              src={manBalanceAnimation}
+              src={womanAccountingAnimation}
               loop={true}
               autoplay={true}
               className="w-full h-full"
             />
           </div>
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-[#F45A0A] text-xs font-extrabold mb-2 border border-orange-200/60">
-            <span>🛡️</span>
-            <span>بوابة الاستعلام والتدقيق المالي</span>
-          </div>
-
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">{intro.holderName}</h1>
-          <p className="text-xs font-bold text-slate-400 mt-1">كشف الحساب المالي المعتمد</p>
-
-          {intro.phoneHint ? (
-            <div className="mt-6 pt-5 border-t border-slate-100">
-              <label className="block text-sm font-black text-slate-800">
-                أدخل آخر 4 أرقام من رقم الهاتف لتأكيد الهوية
-              </label>
-              <p className="mt-1 text-xs text-slate-400">
-                لحماية خصوصيتك، يرجى تأكيد ملكية الحساب بمطابقة آخر 4 أرقام
-              </p>
-
-              {/* 4 Connected/Separated OTP Digit Boxes */}
-              <div className="mt-5 flex items-center justify-center gap-3 sm:gap-4" dir="ltr">
-                {[0, 1, 2, 3].map((idx) => (
-                  <input
-                    key={idx}
-                    ref={(el) => {
-                      otpRefs.current[idx] = el;
-                    }}
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={1}
-                    value={otp[idx]}
-                    onChange={(e) => handleOtpChange(idx, e.target.value)}
-                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                    disabled={verifying}
-                    className="h-16 w-14 sm:h-18 sm:w-16 rounded-2xl border-2 border-slate-200 bg-slate-50/70 text-center font-mono text-3xl font-black text-slate-900 shadow-xs transition-all duration-200 focus:border-[#F45A0A] focus:bg-white focus:shadow-lg focus:shadow-orange-500/15 focus:scale-105 focus:outline-none disabled:opacity-60"
-                  />
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="mt-6 pt-5 border-t border-slate-100">
-              <button
-                type="button"
-                disabled={verifying}
-                onClick={async () => {
-                  setVerifying(true);
-                  setVerifyError('');
-                  try {
-                    const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/verify`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ last4: '' }),
-                    });
-                    const json = await res.json();
-                    if (!res.ok) throw new Error(json?.message || 'تعذّر فتح الكشف.');
-                    setSession(json.session);
-                  } catch (err: any) {
-                    setVerifyError(err?.message || 'تعذّر فتح الكشف.');
-                  } finally {
-                    setVerifying(false);
-                  }
-                }}
-                className="h-14 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-base shadow-lg shadow-orange-500/25 transition cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.01]"
-              >
-                {verifying ? 'جارٍ التحقق وفتح الكشف…' : 'عرض وتحميل كشف الحساب 📄'}
-              </button>
-            </div>
-          )}
-
-          {verifying && (
-            <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-slate-500 animate-pulse">
-              <div className="h-2 w-2 rounded-full bg-[#F45A0A] animate-ping" />
-              <span>جارٍ التحقق من الأرقام وفتح الكشف…</span>
-            </div>
-          )}
-
-          {verifyError && (
-            <p id="last4-error" role="alert" className="mt-4 rounded-2xl bg-rose-50 p-3.5 text-xs font-black text-rose-700 border border-rose-200">
-              {verifyError}
-            </p>
-          )}
-
-          {loadingData && (
-            <div className="mt-4 flex items-center justify-center gap-2 text-xs font-bold text-slate-500">
-              <span>جارٍ تحميل وتجهيز البيانات المالية… 📊</span>
-            </div>
-          )}
-
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] font-bold text-slate-400">
-            <span>🔒</span>
-            <span>جلسة مؤقتة ومحمية بتشفير مالي آمن</span>
-          </div>
-        </div>
-      </Shell>
-    );
-  }
-
-  // ── 4. The Verified Statement Screen ────────────────────────────────────────
-  return (
-    <Shell companyName={data.company?.name || intro.companyName}>
-      <div className="space-y-4">
-        {/* Main Balance Hero Card */}
-        <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/50">
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-orange-400 via-[#F45A0A] to-amber-500" />
-          
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3 pt-2 border-t border-slate-100">
             <div>
               <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">كشف حساب العميل</span>
               <h1 className="text-xl font-black text-slate-900 mt-0.5">{data.holderName}</h1>
@@ -389,18 +404,20 @@ export const StatementPortalPage: React.FC = () => {
                 {data.account?.code} — {data.account?.nameAr}
               </p>
             </div>
-            <div className={`px-3 py-1.5 rounded-2xl text-xs font-black border ${
-              isSettled
-                ? 'bg-slate-50 text-slate-700 border-slate-200'
-                : isCredit
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-rose-50 text-rose-700 border-rose-200'
-            }`}>
+            <div
+              className={`px-3 py-1.5 rounded-2xl text-xs font-black border ${
+                isSettled
+                  ? 'bg-slate-50 text-slate-700 border-slate-200'
+                  : isCredit
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-rose-50 text-rose-700 border-rose-200'
+              }`}
+            >
               {isSettled ? 'خالص الرصيد ⚖️' : isCredit ? 'الرصيد لك (دائن) 🟢' : 'المطلوب منك (مدين) 🔴'}
             </div>
           </div>
 
-          <div className="mt-6 pt-5 border-t border-slate-100 text-center bg-slate-50/60 rounded-2xl p-4">
+          <div className="mt-5 pt-4 border-t border-slate-100 text-center bg-slate-50/60 rounded-2xl p-4">
             <span className="text-xs font-bold text-slate-500">صافي الرصيد الحالي المستحق</span>
             <div className="mt-1 flex items-baseline justify-center gap-2" dir="ltr">
               <span
@@ -416,13 +433,13 @@ export const StatementPortalPage: React.FC = () => {
 
           {/* Quick Stats Grid */}
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 text-center">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-center">
               <p className="text-[11px] font-bold text-slate-500">إجمالي المدين (عليك)</p>
               <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
                 {money(data.totalDebit)} <span className="text-xs font-bold text-slate-400">د.ع</span>
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 text-center">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-center">
               <p className="text-[11px] font-bold text-slate-500">إجمالي الدائن (لك)</p>
               <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
                 {money(data.totalCredit)} <span className="text-xs font-bold text-slate-400">د.ع</span>
@@ -435,7 +452,9 @@ export const StatementPortalPage: React.FC = () => {
             <button
               type="button"
               disabled={downloading}
-              onClick={() => { void downloadStatement(); }}
+              onClick={() => {
+                void downloadStatement();
+              }}
               className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -485,9 +504,11 @@ export const StatementPortalPage: React.FC = () => {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <span className={`flex h-7 w-7 items-center justify-center rounded-xl text-xs font-black ${
-                          isDebit ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
-                        }`}>
+                        <span
+                          className={`flex h-7 w-7 items-center justify-center rounded-xl text-xs font-black ${
+                            isDebit ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
+                          }`}
+                        >
                           {isDebit ? '−' : '+'}
                         </span>
                         <div>
@@ -539,34 +560,16 @@ export const StatementPortalPage: React.FC = () => {
             )}
           </div>
         )}
-      </div>
-    </Shell>
-  );
-};
 
-const Shell: React.FC<{ companyName?: string; children: React.ReactNode }> = ({
-  companyName,
-  children,
-}) => (
-  <div className="min-h-screen bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 px-4 py-8 antialiased">
-    <div className="mx-auto w-full max-w-lg">
-      {companyName && (
-        <div className="mb-5 text-center">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            <span className="text-xs font-black text-slate-800">{companyName}</span>
-          </div>
+        <div className="text-center pt-2">
+          <p className="text-[11px] font-bold text-slate-400 flex items-center justify-center gap-1.5">
+            <span>🔒</span>
+            <span>هذا الكشف صادر وموثق إلكترونياً — نظام قيّد المحاسبي</span>
+          </p>
         </div>
-      )}
-      {children}
-      <div className="mt-8 text-center space-y-1">
-        <p className="text-[11px] font-bold text-slate-400 flex items-center justify-center gap-1.5">
-          <span>🔒</span>
-          <span>هذا الكشف صادر وموثق إلكترونياً — نظام قيّد المحاسبي</span>
-        </p>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default StatementPortalPage;
