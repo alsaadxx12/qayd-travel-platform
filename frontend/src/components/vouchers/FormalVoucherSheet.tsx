@@ -132,6 +132,14 @@ export interface VoucherSheetConfig {
   /** حشوة الصف العمودية بالبكسل — تعلو كثافة الأسطر حين تُضبط. */
   fieldRowPadding?: number;
   /**
+   * شكل «تقسيم المبلغ»: سطر واحد، أو قيد محاسبي بطرفيه.
+   *
+   * القيد يعرض الحركة كما تُقيَّد في الدفتر: الصندوق مديناً بالمبلغ والحسابات
+   * المقسّم عليها دائنةً في سند القبض، ومعكوساً في سند الدفع — بجدول صغير
+   * بعمودي مدين ودائن وسطر مجموع.
+   */
+  splitStyle?: 'inline' | 'entry';
+  /**
    * حقول تُطبع ولو كانت فارغة — سطرٌ للكتابة اليدوية.
    *
    * القاعدة العامة أن الحقل الفارغ لا يُطبع كي لا يُقرأ نقصاً في البيانات، لكن
@@ -479,9 +487,39 @@ export const FormalVoucherSheet: React.FC<{
     .filter(
       (key) =>
         String(values[key] || '').trim().length > 0 ||
+        (key === 'split' && (config.splitStyle || 'entry') === 'entry') ||
         (config.printEmptyFields || ['notes']).includes(key)
     )
     .map((key) => ({ ...fieldByKey.get(key)!, value: values[key] }));
+
+  /**
+   * القيد المحاسبي لتقسيم المبلغ.
+   *
+   * في سند القبض يدخل المال إلى الصندوق فهو المدين، والحسابات المقسّم عليها
+   * (أو الطرف نفسه إن لم يوجد تقسيم) دائنة؛ وفي سند الدفع ينعكس الطرفان.
+   * والمجموعان متساويان بالضرورة — فيُطبع سطر المجموع توكيداً يقرؤه المدقّق.
+   */
+  const splitAsEntry = (config.splitStyle || 'entry') === 'entry';
+  const entryRows = (() => {
+    if (!splitAsEntry) return [];
+    const total = Number(voucher.amount) || 0;
+    const cashboxName = voucher.cashboxName || (isEn ? 'Cashbox' : 'الصندوق');
+    const counter = voucher.splitAccounts?.length
+      ? voucher.splitAccounts.map((sp) => ({
+          name: sp.accountName,
+          amount: Number(sp.amount) || 0,
+        }))
+      : [{ name: values.party || (isEn ? 'Account' : 'الحساب'), amount: total }];
+    return isReceipt
+      ? [
+          { name: cashboxName, debit: total, credit: 0 },
+          ...counter.map((c) => ({ name: c.name, debit: 0, credit: c.amount })),
+        ]
+      : [
+          ...counter.map((c) => ({ name: c.name, debit: c.amount, credit: 0 })),
+          { name: cashboxName, debit: 0, credit: total },
+        ];
+  })();
 
   /**
    * التواقيع: الجديد أولاً، ثم التسميتان اللتان يحفظهما التصميم القديم.
@@ -808,9 +846,23 @@ export const FormalVoucherSheet: React.FC<{
           const mutedLabel = !(
             config.labelColor || pickStyle(['fieldLabel', `fieldLabel:${row.key}`]).color
           );
-          /* الحقل المطبوع فارغاً عمداً يُظهر خطاً منقّطاً — مساحة كتابة لا نسياناً. */
           const blank = String(row.value || '').trim().length === 0;
           const padY = config.fieldRowPadding;
+          /* «تقسيم المبلغ» بشكل القيد: جدول مدين/دائن مكان النص المسطور. */
+          const valueNode =
+            row.key === 'split' && splitAsEntry ? (
+              <SplitEntryTable
+                rows={entryRows}
+                isEn={isEn}
+                labelSize={t.label}
+                border={config.fieldBorderColor || softRule}
+                headBg={config.fieldLabelBg || config.fieldBgColor || tint(ink, 0.05)}
+              />
+            ) : blank ? (
+              <BlankLine />
+            ) : (
+              row.value
+            );
 
           if (fieldStyle === 'table') {
             /* جدول بيانات مغلق: خانة تسمية مصبوغة وخانة قيمة، بفواصل كاملة —
@@ -848,7 +900,7 @@ export const FormalVoucherSheet: React.FC<{
                     paddingInline: 10,
                   }}
                 >
-                  {blank ? <BlankLine /> : row.value}
+                  {valueNode}
                 </dd>
               </div>
             );
@@ -875,7 +927,7 @@ export const FormalVoucherSheet: React.FC<{
                 {labelText}
               </dt>
               <dd className="font-semibold break-words" style={valueStyle}>
-                {blank ? <BlankLine /> : row.value}
+                {valueNode}
               </dd>
             </div>
           );
@@ -1107,13 +1159,59 @@ export const FormalVoucherSheet: React.FC<{
   );
 };
 
-/** خط منقّط خفيف حيث يُطبع حقل فارغ عمداً — مساحة للكتابة اليدوية. */
+/** جدول القيد: الحساب ومدينه ودائنه، وسطر مجموع يطابق مبلغ السند. */
+const SplitEntryTable: React.FC<{
+  rows: Array<{ name: string; debit: number; credit: number }>;
+  isEn: boolean;
+  labelSize: number;
+  border: string;
+  headBg: string;
+}> = ({ rows, isEn, labelSize, border, headBg }) => {
+  const totalDebit = rows.reduce((a, r) => a + r.debit, 0);
+  const totalCredit = rows.reduce((a, r) => a + r.credit, 0);
+  const cell: React.CSSProperties = { padding: '3px 8px', border: `1px solid ${border}` };
+  const num: React.CSSProperties = { ...cell, textAlign: 'center', whiteSpace: 'nowrap' };
+  return (
+    <table
+      className="w-full font-semibold"
+      style={{ borderCollapse: 'collapse', fontSize: labelSize }}
+    >
+      <thead>
+        <tr className="font-bold" style={{ backgroundColor: headBg }}>
+          <th style={{ ...cell, textAlign: 'start' }}>{isEn ? 'Account' : 'الحساب'}</th>
+          <th style={num}>{isEn ? 'Debit' : 'مدين'}</th>
+          <th style={num}>{isEn ? 'Credit' : 'دائن'}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i}>
+            <td style={{ ...cell, textAlign: 'start' }}>{r.name}</td>
+            <td className="font-mono" dir="ltr" style={num}>
+              {r.debit ? money(r.debit) : '—'}
+            </td>
+            <td className="font-mono" dir="ltr" style={num}>
+              {r.credit ? money(r.credit) : '—'}
+            </td>
+          </tr>
+        ))}
+        <tr className="font-bold" style={{ backgroundColor: headBg }}>
+          <td style={{ ...cell, textAlign: 'start' }}>{isEn ? 'Total' : 'المجموع'}</td>
+          <td className="font-mono" dir="ltr" style={num}>
+            {money(totalDebit)}
+          </td>
+          <td className="font-mono" dir="ltr" style={num}>
+            {money(totalCredit)}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+};
+
+/** فراغ صامت حيث يُطبع حقل فارغ عمداً — مساحة كتابة بلا أي خط يشغلها. */
 const BlankLine: React.FC = () => (
-  <span
-    aria-hidden="true"
-    className="block w-full opacity-30"
-    style={{ borderBottom: '1px dashed currentColor', height: '1em' }}
-  />
+  <span aria-hidden="true" className="block w-full" style={{ height: '1em' }} />
 );
 
 /** قيم سطر الاتصال مفصولةً بنقاط — تُرسم في الترويسة أو في التذييل سواء. */

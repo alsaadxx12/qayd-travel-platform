@@ -2118,6 +2118,30 @@ export const PrintSettingsPage: React.FC = () => {
 
                     <div>
                       <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'شكل تقسيم المبلغ' : 'Allocation Style'}
+                      </label>
+                      <Select
+                        size="xs"
+                        value={currentConfig.splitStyle || 'entry'}
+                        onChange={(v) => updateCurrentConfig('splitStyle', v || 'entry')}
+                        data={[
+                          {
+                            value: 'entry',
+                            label: isAr ? 'قيد محاسبي (مدين / دائن)' : 'Journal entry (debit/credit)',
+                          },
+                          { value: 'inline', label: isAr ? 'سطر واحد' : 'Single line' },
+                        ]}
+                        allowDeselect={false}
+                      />
+                      <p className="text-[9px] text-slate-500 mt-1 font-medium">
+                        {isAr
+                          ? 'القيد: الصندوق مديناً والحسابات المقسّم عليها دائنةً في القبض، ومعكوساً في الدفع.'
+                          : 'Entry: cashbox debited, allocated accounts credited on receipts; reversed on payments.'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-700 block mb-1">
                         {isAr ? 'موضع التفقيط (المبلغ كتابةً)' : 'Amount in Words Placement'}
                       </label>
                       <Select
