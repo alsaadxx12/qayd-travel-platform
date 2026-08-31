@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { IsNotEmpty, IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   SplitInput,
@@ -15,6 +16,7 @@ import {
   VoucherLineContext,
   VOUCHER_SPLIT_MARKER,
 } from '../vouchers/voucher-splits';
+import { rethrowVoucherWriteError } from '../vouchers/voucher-write-error';
 
 export class CreatePaymentVoucherDto {
   @ApiPropertyOptional({ example: '2026-08-03', description: 'تاريخ السند' })
@@ -23,6 +25,7 @@ export class CreatePaymentVoucherDto {
   date?: string;
 
   @ApiProperty({ example: 3500, description: 'مبلغ سند الدفع' })
+  @Type(() => Number)
   @IsNumber()
   amount: number;
 
@@ -57,6 +60,7 @@ export class CreatePaymentVoucherDto {
   currency?: string;
 
   @ApiPropertyOptional({ example: 1550, description: 'سعر صرف الدولار المستخدم عند الترحيل' })
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   exchangeRate?: number;
@@ -67,6 +71,7 @@ export class CreatePaymentVoucherDto {
   paymentMethodId?: string;
 
   @ApiPropertyOptional({ description: 'عدد المرفقات والوصولات' })
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   slipsCount?: number;
@@ -499,16 +504,7 @@ export class PaymentVouchersService {
         return voucher;
       });
     } catch (err: any) {
-      if (err instanceof BadRequestException || err instanceof NotFoundException) {
-        throw err;
-      }
-      if (err?.code === 'P2002') {
-        throw new BadRequestException('رقم السند أو رقم القيد مستخدم مسبقاً في النظام. يرجى تجربة رقم سند آخر.');
-      }
-      if (err?.code === 'P2003') {
-        throw new BadRequestException('أحد الحسابات أو الكيانات المحددة غير موجود في قاعدة البيانات.');
-      }
-      throw new BadRequestException(err?.message || 'تعذّر إنشاء سند الصرف في النظام.');
+      rethrowVoucherWriteError(err, 'تعذّر إنشاء سند الصرف في النظام.');
     }
   }
 
@@ -944,8 +940,7 @@ export class PaymentVouchersService {
       return updatedVoucher;
     });
     } catch (err) {
-      console.error('Error in PaymentVouchersService.update:', err);
-      throw err;
+      rethrowVoucherWriteError(err, 'تعذّر تعديل سند الصرف في النظام.');
     }
   }
 }

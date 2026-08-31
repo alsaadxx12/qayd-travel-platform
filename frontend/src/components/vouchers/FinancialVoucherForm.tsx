@@ -1154,16 +1154,13 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       voucherNumber,
       amount: numAmount,
       currency,
+      exchangeRate: currency === 'USD' ? Number(exchangeRate) || 1 : 1,
       date,
       accountId: oppositeAccountId,
       cashboxOrBankAccountId: cashboxAccountId,
       description: finalDescription,
-      paymentMethodId: selectedPaymentMethodId,
+      ...(selectedPaymentMethodId ? { paymentMethodId: selectedPaymentMethodId } : {}),
       slipsCount: slipFiles.length,
-      status: 'POSTED',
-      // Structured, because the backend now books one journal line per account.
-      // Only accountId and amount matter to the ledger; the remainder is derived
-      // there from the voucher amount, exactly as it is derived here.
       splitAccounts: activeSplits
         .filter((s) => s.accountId && Number(s.amount) > 0)
         .map((s) => ({

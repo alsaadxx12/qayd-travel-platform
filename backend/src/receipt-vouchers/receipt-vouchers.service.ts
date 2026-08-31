@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { IsNotEmpty, IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   SplitInput,
@@ -15,6 +16,7 @@ import {
   VoucherLineContext,
   VOUCHER_SPLIT_MARKER,
 } from '../vouchers/voucher-splits';
+import { rethrowVoucherWriteError } from '../vouchers/voucher-write-error';
 
 export class CreateReceiptVoucherDto {
   @ApiPropertyOptional({ example: '2026-08-03', description: 'تاريخ السند' })
@@ -23,6 +25,7 @@ export class CreateReceiptVoucherDto {
   date?: string;
 
   @ApiProperty({ example: 5000, description: 'مبلغ سند القبض' })
+  @Type(() => Number)
   @IsNumber()
   amount: number;
 
@@ -57,6 +60,7 @@ export class CreateReceiptVoucherDto {
   currency?: string;
 
   @ApiPropertyOptional({ example: 1550, description: 'سعر الصرف' })
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   exchangeRate?: number;
@@ -67,6 +71,7 @@ export class CreateReceiptVoucherDto {
   paymentMethodId?: string;
 
   @ApiPropertyOptional({ description: 'عدد المرفقات والوصولات' })
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   slipsCount?: number;
@@ -431,13 +436,14 @@ export class ReceiptVouchersService {
           },
         });
 
+        // ReceiptVoucher has no currency/exchangeRate columns (unlike PaymentVoucher).
+        // Those live on the journal entry. Passing them here made Prisma reject the
+        // write with an inspect dump that the UI showed as the save error.
         const voucher = await tx.receiptVoucher.create({
           data: {
             voucherNumber,
             date: dto.date ? new Date(dto.date) : new Date(),
             amount: new Prisma.Decimal(amount),
-            currency,
-            exchangeRate: new Prisma.Decimal(exchangeRate),
             accountId: dto.accountId,
             cashboxOrBankAccountId: dto.cashboxOrBankAccountId,
             customerId: dto.customerId || null,
@@ -447,7 +453,7 @@ export class ReceiptVouchersService {
             journalEntryId: journalEntry.id,
             companyId,
             createdById: userId,
-          } as any,
+          },
         });
 
         // One decrement per credited account, so a split moves each account's balance
@@ -471,16 +477,7 @@ export class ReceiptVouchersService {
         return voucher;
       });
     } catch (err: any) {
-      if (err instanceof BadRequestException || err instanceof NotFoundException) {
-        throw err;
-      }
-      if (err?.code === 'P2002') {
-        throw new BadRequestException('رقم السند أو رقم القيد مستخدم مسبقاً في النظام. يرجى تجربة رقم سند آخر.');
-      }
-      if (err?.code === 'P2003') {
-        throw new BadRequestException('أحد الحسابات أو الكيانات المحددة غير موجود في قاعدة البيانات.');
-      }
-      throw new BadRequestException(err?.message || 'تعذّر إنشاء سند القبض في النظام.');
+      rethrowVoucherWriteError(err, 'تعذّر إنشاء سند القبض في النظام.');
     }
   }
 
@@ -893,22 +890,19 @@ export class ReceiptVouchersService {
         where: { id },
         data: {
           amount: new Prisma.Decimal(amount),
-          currency,
-          exchangeRate: new Prisma.Decimal(exchangeRate),
           date: dto.date ? new Date(dto.date) : voucher.date,
           accountId: newAccountId,
           cashboxOrBankAccountId: newCashboxId,
           customerId: newCustomerId,
           reference: dto.reference !== undefined ? dto.reference : voucher.reference,
           description: note,
-        } as any,
+        },
       });
 
       return updatedVoucher;
     });
     } catch (err) {
-      console.error('Error in ReceiptVouchersService.update:', err);
-      throw err;
+      rethrowVoucherWriteError(err, 'تعذّر تعديل سند القبض في النظام.');
     }
   }
 }

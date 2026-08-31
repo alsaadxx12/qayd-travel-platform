@@ -159,6 +159,31 @@ function invalidateAfterMutation(mutatedPath: string) {
 // Warm the cache from the previous page load before the first request goes out.
 hydratePersistedCache();
 
+function formatApiErrorMessage(errorData: any): string {
+  const msg = errorData?.message;
+  if (Array.isArray(msg)) {
+    return msg
+      .map((item) => (typeof item === 'string' ? item : item?.message || ''))
+      .filter(Boolean)
+      .join(' | ');
+  }
+  if (typeof msg === 'string') {
+    if (
+      msg.includes('Prisma') ||
+      msg.includes('Unknown argument') ||
+      msg.includes('Invalid `prisma') ||
+      msg.includes('new Prisma.')
+    ) {
+      return 'تعذّر حفظ السند. تحقق من البيانات وأعد المحاولة.';
+    }
+    return msg;
+  }
+  if (typeof errorData?.error === 'string' && errorData.error !== 'Bad Request') {
+    return errorData.error;
+  }
+  return '';
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit & {
@@ -251,11 +276,7 @@ export async function apiRequest<T = any>(
         let errorMessage = 'حدث خطأ في الاتصال بالخادم';
         try {
           const errorData = await response.json();
-          if (Array.isArray(errorData.message)) {
-            errorMessage = errorData.message.join(' | ');
-          } else if (errorData.message) {
-            errorMessage = errorData.message;
-          }
+          errorMessage = formatApiErrorMessage(errorData) || errorMessage;
         } catch {
           // Ignore json parse error
         }
