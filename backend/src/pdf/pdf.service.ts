@@ -467,7 +467,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
 
     return this.onPage('generatePdf', async (page) => {
       try {
-        await this.loadPrintDocument(page, fullHtml, { settleImages: false });
+        await this.loadPrintDocument(page, fullHtml, { settleImages: true });
 
         const isHeaderFooter = !!(options.headerHtml || options.footerHtml);
 

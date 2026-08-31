@@ -77,8 +77,9 @@ const LABELS: Record<LangKey, Record<string, string>> = {
 };
 
 // ── Arabic Tafqeet Helper ──
-export function tafqeetArabic(num: number): string {
-  if (!num || isNaN(num) || num === 0) return 'صفر دينار عراقي لا غير';
+export function tafqeetArabic(num: number, currency: 'IQD' | 'USD' = 'IQD'): string {
+  const unit = currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي';
+  if (!num || isNaN(num) || num === 0) return `صفر ${unit} لا غير`;
   const absNum = Math.abs(Math.round(num));
 
   const units = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة'];
@@ -139,7 +140,7 @@ export function tafqeetArabic(num: number): string {
   }
 
   const text = parts.join(' و');
-  return `فقط ${text} دينار عراقي لا غير`;
+  return `فقط ${text} ${unit} لا غير`;
 }
 
 // Default fallback config matching PrintTemplatesPage

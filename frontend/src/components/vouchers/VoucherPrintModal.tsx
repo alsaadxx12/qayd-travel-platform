@@ -22,10 +22,9 @@ import {
   IconDownload,
   IconX,
 } from '@tabler/icons-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas-pro';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { apiRequest } from '../../api/client';
+import { generateChromiumPdf, serializeElementForChromium } from '../../utils/chromiumPdf';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { tafqeetArabic } from '../reports/AccountStatementPrintModal';
@@ -165,7 +164,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
     maximumFractionDigits: 2,
   });
 
-  const tafqeetText = tafqeetArabic(voucher.amount || 0);
+  const tafqeetText = tafqeetArabic(voucher.amount || 0, currencyCode);
 
   const docTitleAr = isReceipt ? 'سند قبض' : 'سند صرف ودفع';
   const docTitleEn = isReceipt ? 'RECEIPT VOUCHER' : 'PAYMENT VOUCHER';
@@ -245,6 +244,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
       id="printable-voucher-sheet"
       className="bg-white text-slate-900 mx-auto relative select-text"
       dir={isEn ? 'ltr' : 'rtl'}
+      lang={isEn ? 'en' : 'ar'}
       style={{
         width: '100%',
         maxWidth: '210mm',
@@ -265,7 +265,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           style={{ zIndex: 0 }}
         >
           <span
-            className="font-black tracking-widest select-none"
+            className="font-black select-none"
             style={{
               fontSize: '85px',
               transform: 'rotate(-28deg)',
@@ -273,6 +273,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               whiteSpace: 'nowrap',
               color: watermarkColor,
               fontWeight: 900,
+              letterSpacing: 'normal',
             }}
           >
             {cfg.watermarkText || 'نسخة رسمية'}
@@ -406,10 +407,11 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 </div>
 
                 <h1
-                  className="font-black tracking-tight"
+                  className="font-black"
                   style={{
                     fontSize: `${cfg.fontSizes?.docTitle || 24}px`,
                     color: '#0f172a',
+                    letterSpacing: 'normal',
                   }}
                 >
                   {isEn ? docTitleEn : docTitleAr}
@@ -449,7 +451,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           >
             {/* Top Pill Badge (Floating on Card Header) */}
             <div
-              className="absolute -top-3.5 right-6 px-5 py-1 rounded-full text-white font-black text-xs tracking-wide shadow-xs flex items-center gap-1.5"
+              className={`absolute -top-3.5 right-6 px-5 py-1 rounded-full text-white font-black text-xs shadow-xs flex items-center gap-1.5 ${isEn ? 'tracking-wide' : ''}`}
               style={{ backgroundColor: headerBgColor }}
             >
               <span>{isEn ? cardTitleEn : cardTitleAr}</span>
@@ -610,7 +612,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           >
             {/* Top Pill Badge */}
             <div
-              className="absolute -top-3.5 right-6 px-4 py-1 rounded-full text-white font-black text-xs tracking-wide shadow-xs flex items-center gap-1"
+              className={`absolute -top-3.5 right-6 px-4 py-1 rounded-full text-white font-black text-xs shadow-xs flex items-center gap-1 ${isEn ? 'tracking-wide' : ''}`}
               style={{ backgroundColor: headerBgColor }}
             >
               <span>{isEn ? 'Voucher Summary' : 'ملخص السند'}</span>
@@ -657,7 +659,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
              ═══════════════════════════════════════════════════════ */}
           <div className="flex items-center justify-center gap-4 my-4">
             <div className="h-0.5 flex-1 rounded-full" style={{ backgroundColor: primaryColor }} />
-            <span className="font-black text-xs text-slate-800 px-3 tracking-wide select-none">
+            <span className="font-black text-xs text-slate-800 px-3 select-none" style={{ letterSpacing: 'normal' }}>
               {cfg.thankYouText || (isEn ? 'Thank you for your trust and business' : 'نشكر لكم ثقتكم ونتطلع إلى المزيد من التعاملات')}
             </span>
             <div className="h-0.5 flex-1 rounded-full" style={{ backgroundColor: primaryColor }} />
@@ -846,49 +848,16 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
 
   const buildPdf = async (): Promise<{ base64: string; filename: string }> => {
     await waitFrame();
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 80));
 
     const element = document.getElementById('printable-voucher-sheet');
     if (!element) {
       throw new Error(isEn ? 'Print sheet is not ready' : 'ورقة الطباعة غير جاهزة');
     }
 
-    const origMinHeight = element.style.minHeight;
-    element.style.minHeight = 'auto';
-
-    const canvas = await html2canvas(element, {
-      scale: 3,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      windowWidth: element.scrollWidth,
-    });
-
-    element.style.minHeight = origMinHeight;
-
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pageWidth = 210;
-    const pageHeight = 297;
-    const margin = 5;
-    const usableWidth = pageWidth - margin * 2;
-    const usableHeight = pageHeight - margin * 2;
-    const imgHeight = (canvas.height * usableWidth) / canvas.width;
-
-    if (imgHeight <= usableHeight) {
-      pdf.addImage(imgData, 'PNG', margin, margin, usableWidth, imgHeight);
-    } else {
-      const scaleFactor = usableHeight / imgHeight;
-      const finalWidth = usableWidth * scaleFactor;
-      const xOffset = margin + (usableWidth - finalWidth) / 2;
-      pdf.addImage(imgData, 'PNG', xOffset, margin, finalWidth, usableHeight);
-    }
-
+    const html = serializeElementForChromium(element);
     const filename = `voucher_${voucher.voucherNumber || 'doc'}_${printLang}.pdf`;
-    const dataUri = pdf.output('datauristring') as string;
-    const base64 = dataUri.split(',')[1] || '';
-    if (!base64) throw new Error(isEn ? 'Could not build the PDF' : 'تعذر توليد ملف PDF');
-    return { base64, filename };
+    return generateChromiumPdf({ html, lang: printLang, filename });
   };
 
   const handleDownloadPdf = async () => {

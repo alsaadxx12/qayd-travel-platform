@@ -10,6 +10,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class ReceiptVouchersController {
   constructor(private readonly receiptVouchersService: ReceiptVouchersService) {}
 
+  @Get('last-modified')
+  @ApiOperation({ summary: 'آخر تعديل على سندات القبض — polling خفيف' })
+  async getLastModified(@Req() req: any) {
+    return this.receiptVouchersService.getLastModified(req.user.companyId);
+  }
+
   @Get()
   @ApiOperation({ summary: 'قائمة سندات القبض' })
   async findAll(@Req() req: any) {

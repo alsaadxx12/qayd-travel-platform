@@ -74,6 +74,7 @@ export class PdfController {
   }
 
   @Post('generate')
+  @UseGuards(JwtAuthGuard)
   async generatePdf(
     @Body() body: GeneratePdfDto,
     @Res() res: any,

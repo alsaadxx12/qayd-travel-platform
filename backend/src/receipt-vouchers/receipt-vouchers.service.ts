@@ -206,6 +206,40 @@ export class ReceiptVouchersService {
    * columns are selected, and the row count is capped, so this is a fraction of what
    * the old include cost.
    */
+
+  /**
+   * Ultra-lightweight endpoint for fast polling.
+   * Returns only the total count and the latest createdAt timestamp.
+   * If either changes, the client knows to do a full refetch.
+   */
+  async getLastModified(companyId: string) {
+    const [countResult, latestReceipt, latestPayment] = await Promise.all([
+      this.prisma.receiptVoucher.count({ where: { companyId } }),
+      this.prisma.receiptVoucher.findFirst({
+        where: { companyId },
+        select: { createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.paymentVoucher.findFirst({
+        where: { companyId },
+        select: { createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const timestamps = [
+      latestReceipt?.createdAt?.getTime() || 0,
+      latestPayment?.createdAt?.getTime() || 0,
+    ];
+    const latestTs = Math.max(...timestamps);
+
+    return {
+      count: countResult,
+      lastModified: latestTs > 0 ? new Date(latestTs).toISOString() : null,
+      hash: `${countResult}-${latestTs}`,
+    };
+  }
+
   async findAll(companyId: string, requestedLimit?: number) {
     const take = Math.min(Math.max(Number(requestedLimit) || 150, 1), 300);
     const rows = await this.prisma.receiptVoucher.findMany({

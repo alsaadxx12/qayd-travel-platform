@@ -382,11 +382,15 @@ export const VouchersPage: React.FC = () => {
    *
    * Three layers ensure changes propagate everywhere:
    * 1. BroadcastChannel  → instant for same-browser tabs
-   * 2. Polling (12s)      → works across ALL devices/browsers/users
+   * 2. Fast polling (3s)  → lightweight hash-check across ALL devices
    * 3. visibilitychange   → immediate refetch when switching back to an idle tab
+   *
+   * The polling hits a tiny endpoint that returns only a hash (count + timestamp).
+   * A full data refetch happens ONLY when the hash changes, so 3s is safe.
    */
   const channelRef = React.useRef<BroadcastChannel | null>(null);
   const lastFetchRef = React.useRef<number>(Date.now());
+  const lastHashRef = React.useRef<string>('');
   const pollingRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -413,16 +417,27 @@ export const VouchersPage: React.FC = () => {
     };
     window.addEventListener('storage', onStorage);
 
-    // ── 2. Polling: cross-device sync every 12 seconds ──
-    // Only polls when the tab is visible to avoid wasting resources.
-    const startPolling = () => {
-      if (pollingRef.current) return;
-      pollingRef.current = setInterval(() => {
-        if (document.visibilityState === 'visible') {
+    // ── 2. Fast polling: lightweight hash-check every 3 seconds ──
+    // Only checks a tiny endpoint; full refetch only when data changed.
+    const checkForChanges = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const res = await apiRequest('/api/receipt-vouchers/last-modified', { noCache: true });
+        const newHash = res?.hash || '';
+        if (lastHashRef.current && newHash && newHash !== lastHashRef.current) {
+          // Data changed on the server — do full refetch
           lastFetchRef.current = Date.now();
           fetchAllData(true);
         }
-      }, 12_000);
+        lastHashRef.current = newHash;
+      } catch {
+        // Ignore — next poll will retry
+      }
+    };
+
+    const startPolling = () => {
+      if (pollingRef.current) return;
+      pollingRef.current = setInterval(checkForChanges, 3_000);
     };
     const stopPolling = () => {
       if (pollingRef.current) {
@@ -439,7 +454,7 @@ export const VouchersPage: React.FC = () => {
       if (document.visibilityState === 'visible') {
         // Refetch immediately when coming back
         const elapsed = Date.now() - lastFetchRef.current;
-        if (elapsed > 5_000) {
+        if (elapsed > 3_000) {
           lastFetchRef.current = Date.now();
           fetchAllData(true);
         }
