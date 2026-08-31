@@ -1318,6 +1318,7 @@ export const DebtsReportPage: React.FC = () => {
           gridKey="debts_report_grid"
           selectedRowIds={selectedAccountIds}
           onSelectionChange={setSelectedAccountIds}
+          hideSelectionBanner={true}
           hideSearch={true}
           hideFilters={true}
           hideDateFilter={true}
@@ -1349,7 +1350,6 @@ export const DebtsReportPage: React.FC = () => {
               )}
             </div>
           }
-          renderSelectedActions={renderSelectedActions}
           onExportExcel={handleExportExcel}
           onOpenBatchStatements={(selectedIds) => {
             if (selectedIds && selectedIds.length > 0) {

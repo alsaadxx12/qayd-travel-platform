@@ -149,6 +149,7 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
   const [supplierAccountId, setSupplierAccountId] = useState<string>('');
 
   // Payment & Settlement State (CARD 4: Payment & Attachments)
+  const [paymentTerm, setPaymentTerm] = useState<'نقدي' | 'آجل'>('نقدي');
   const [paymentType, setPaymentType] = useState<string>('كاش باليد (نقدي)');
   const [salesCashboxId, setSalesCashboxId] = useState<string>('');
   const [salesCashboxName, setSalesCashboxName] = useState<string>('');
@@ -1207,44 +1208,72 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
-                  {/* Real Payment Method Select from Settings */}
-                  <div className="sm:col-span-2">
+                  {/* Payment Term (نوع السداد) */}
+                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-2'}>
                     <label className="block font-bold text-slate-700 text-xs mb-1">
-                      {isAr ? 'طريقة الدفع والتسوية (من الإعدادات) *' : 'Payment Method (Settings) *'}
+                      {isAr ? 'نوع السداد' : 'Payment Term'}
                     </label>
                     <SearchableCombobox
-                      options={realPaymentOptions}
-                      value={paymentType}
-                      onChange={(val: string) => setPaymentType(val)}
-                      placeholder={isAr ? 'طريقة الدفع' : 'Payment Method'}
+                      options={[
+                        { value: 'نقدي', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
+                        { value: 'آجل', label: isAr ? 'آجل (ذمة العميل)' : 'Credit (On Account)' },
+                      ]}
+                      value={paymentTerm}
+                      onChange={(val: string) => {
+                        const next = (val as any) || 'نقدي';
+                        setPaymentTerm(next);
+                        if (next === 'آجل') {
+                          setSalesCashboxId('');
+                          setSalesCashboxName('');
+                        }
+                      }}
+                      placeholder={isAr ? 'نوع السداد' : 'Payment Term'}
                       className="h-[48px]"
                     />
                   </div>
 
-                  {/* Sales Cashbox */}
-                  <div>
-                    <label className="block font-bold text-slate-700 text-xs mb-1">
-                      {isAr ? 'صندوق تحصيل المبيعات' : 'Sales Cashbox'}
-                    </label>
-                    <SearchableCombobox
-                      options={cashboxAccounts.map((c) => ({
-                        value: c.id,
-                        label: c.nameAr,
-                        accountCode: c.code,
-                      }))}
-                      value={salesCashboxId}
-                      onChange={(val: string) => {
-                        setSalesCashboxId(val);
-                        const found = cashboxAccounts.find((c) => c.id === val);
-                        if (found) setSalesCashboxName(found.nameAr);
-                      }}
-                      placeholder={isAr ? 'صندوق المبيعات...' : 'Sales cashbox...'}
-                      className="h-[48px]"
-                    />
-                  </div>
+                  {paymentTerm === 'نقدي' && (
+                    <>
+                      {/* Real Payment Method Select from Settings */}
+                      <div className="sm:col-span-1">
+                        <label className="block font-bold text-slate-700 text-xs mb-1">
+                          {isAr ? 'طريقة الاستلام (من الإعدادات) *' : 'Receiving Method *'}
+                        </label>
+                        <SearchableCombobox
+                          options={realPaymentOptions}
+                          value={paymentType}
+                          onChange={(val: string) => setPaymentType(val)}
+                          placeholder={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
+                          className="h-[48px]"
+                        />
+                      </div>
+
+                      {/* Sales Cashbox */}
+                      <div className="sm:col-span-1">
+                        <label className="block font-bold text-slate-700 text-xs mb-1">
+                          {isAr ? 'صندوق تحصيل المبيعات' : 'Sales Cashbox'}
+                        </label>
+                        <SearchableCombobox
+                          options={cashboxAccounts.map((c) => ({
+                            value: c.id,
+                            label: c.nameAr,
+                            accountCode: c.code,
+                          }))}
+                          value={salesCashboxId}
+                          onChange={(val: string) => {
+                            setSalesCashboxId(val);
+                            const found = cashboxAccounts.find((c) => c.id === val);
+                            if (found) setSalesCashboxName(found.nameAr);
+                          }}
+                          placeholder={isAr ? 'صندوق المبيعات...' : 'Sales cashbox...'}
+                          className="h-[48px]"
+                        />
+                      </div>
+                    </>
+                  )}
 
                   {/* Purchase Cashbox */}
-                  <div>
+                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-1'}>
                     <label className="block font-bold text-slate-700 text-xs mb-1">
                       {isAr ? 'صندوق دفع المشتريات' : 'Purchase Cashbox'}
                     </label>
@@ -1266,7 +1295,7 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                   </div>
 
                   {/* Issuing Staff (Compact Dropdown) */}
-                  <div className="sm:col-span-2 md:col-span-2">
+                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-2 md:col-span-4' : 'sm:col-span-1'}>
                     <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
                       <UserCheck size={13} className="text-[#F45A0A]" />
                       <span>{isAr ? 'موظف الإصدار المسؤول' : 'Issuing Staff'}</span>
@@ -1275,7 +1304,7 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       options={employeeOptions}
                       value={issuerEmployee}
                       onChange={(val: string) => setIssuerEmployee(val)}
-                      placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
+                      placeholder={isAr ? 'اختر الموظف...' : 'Issuing employee...'}
                       className="h-[48px]"
                     />
                   </div>
