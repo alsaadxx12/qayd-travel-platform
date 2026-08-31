@@ -121,9 +121,24 @@ export interface VoucherSheetConfig {
    * تُطبَّق في اللغتين سواء: من كتب تسميته بنفسه فهي تسميته.
    */
   fieldLabels?: Record<string, string>;
-  fieldStyle?: 'lines' | 'grid' | 'zebra';
+  fieldStyle?: 'lines' | 'grid' | 'zebra' | 'table';
   /** عرض عمود التسميات بالبكسل — يتّسع للعبارات الطويلة دون كسرها. */
   labelWidth?: number;
+  /** خلفية عمود التسميات في شكل «جدول البيانات» — وإلا خلفية الحقول العامة فالمشتقّة من الحبر. */
+  fieldLabelBg?: string;
+  /** لون خلفية الحقول وحدودها — مفتاحا تبويب «الألوان» القديمان، يسريان على الجدول أيضاً. */
+  fieldBgColor?: string;
+  fieldBorderColor?: string;
+  /** حشوة الصف العمودية بالبكسل — تعلو كثافة الأسطر حين تُضبط. */
+  fieldRowPadding?: number;
+  /**
+   * حقول تُطبع ولو كانت فارغة — سطرٌ للكتابة اليدوية.
+   *
+   * القاعدة العامة أن الحقل الفارغ لا يُطبع كي لا يُقرأ نقصاً في البيانات، لكن
+   * «الملاحظات» بالذات تقليدها الورقي معكوس: تُترك مساحة يكتب فيها المستلم بيده.
+   * فافتراضها هنا أن تُطبع فارغة، ومن لا يريدها أطفأها من قائمة الحقول.
+   */
+  printEmptyFields?: string[];
 
   // ── Signatures, stamp, notes, footer ──
   signatureTitles?: string[];
@@ -459,8 +474,13 @@ export const FormalVoucherSheet: React.FC<{
     // التفقيط لا يُطبع مرتين: إن كان تحت المبلغ فلا يعود حقلاً، وإن أُطفئ فلا يُطبع.
     .filter((key) => (key === 'amountWords' ? showTafqeet && !tafqeetUnderAmount : true))
     // An empty field on a printed voucher is a blank line with a label and nothing
-    // after it, which reads as missing data rather than as absent data.
-    .filter((key) => String(values[key] || '').trim().length > 0)
+    // after it, which reads as missing data rather than as absent data — except the
+    // fields explicitly asked to print blank as a hand-writing space.
+    .filter(
+      (key) =>
+        String(values[key] || '').trim().length > 0 ||
+        (config.printEmptyFields || ['notes']).includes(key)
+    )
     .map((key) => ({ ...fieldByKey.get(key)!, value: values[key] }));
 
   /**
@@ -768,40 +788,98 @@ export const FormalVoucherSheet: React.FC<{
           والأشكال الثلاثة ليست زينة: «الخطوط» أهدأ للسندات القصيرة، و«الشبكة» تُلزم
           كل قيمة بخانة مغلقة حين يُدقَّق السند ورقياً، و«المتناوب» يفيد حين تكثر
           الحقول فيصعب تتبّع الصف الواحد بالعين. */}
-      <dl className={fieldStyle === 'lines' ? `mt-3 ${d.gap}` : 'mt-3'}>
-        {rows.map((row, i) => (
-          <div
-            key={row.key}
-            className={`grid gap-3 ${d.row} ${fieldStyle === 'grid' ? 'px-2' : ''} ${
-              fieldStyle === 'zebra' ? 'px-2' : ''
-            }`}
-            style={{
-              gridTemplateColumns: isThermal ? '1fr' : `${labelWidth}px 1fr`,
-              borderBottom: `1px solid ${softRule}`,
-              borderInline: fieldStyle === 'grid' ? `1px solid ${softRule}` : undefined,
-              borderTop: fieldStyle === 'grid' && i === 0 ? `1px solid ${softRule}` : undefined,
-              backgroundColor: fieldStyle === 'zebra' && i % 2 === 1 ? tint(ink, 0.04) : undefined,
-            }}
-          >
-            {/* لون التسميات من القالب؛ وبدونه تُخفَّف بالشفافية كما كانت. */}
-            <dt
-              className={`font-bold ${
-                config.labelColor || pickStyle(['fieldLabel', `fieldLabel:${row.key}`]).color
-                  ? ''
-                  : 'opacity-65'
+      <dl
+        className={fieldStyle === 'lines' ? `mt-3 ${d.gap}` : 'mt-3'}
+        style={
+          fieldStyle === 'table'
+            ? {
+                border: `1.5px solid ${config.fieldBorderColor || rule}`,
+                borderRadius: 6,
+                overflow: 'hidden',
+              }
+            : undefined
+        }
+      >
+        {rows.map((row, i) => {
+          const labelText =
+            (config.fieldLabels?.[row.key] || '').trim() || (isEn ? row.labelEn : row.label);
+          const labelStyle = styleOf(['fieldLabel', `fieldLabel:${row.key}`], t.label, config.labelColor);
+          const valueStyle = styleOf(['fieldValue', `fieldValue:${row.key}`], t.base);
+          const mutedLabel = !(
+            config.labelColor || pickStyle(['fieldLabel', `fieldLabel:${row.key}`]).color
+          );
+          /* الحقل المطبوع فارغاً عمداً يُظهر خطاً منقّطاً — مساحة كتابة لا نسياناً. */
+          const blank = String(row.value || '').trim().length === 0;
+          const padY = config.fieldRowPadding;
+
+          if (fieldStyle === 'table') {
+            /* جدول بيانات مغلق: خانة تسمية مصبوغة وخانة قيمة، بفواصل كاملة —
+               الشكل الذي تُدقَّق به السندات الورقية خانةً خانة. */
+            return (
+              <div
+                key={row.key}
+                className="grid"
+                style={{
+                  gridTemplateColumns: isThermal ? '1fr' : `${labelWidth}px 1fr`,
+                  borderTop: i > 0 ? `1px solid ${config.fieldBorderColor || softRule}` : undefined,
+                }}
+              >
+                <dt
+                  className={`font-bold ${mutedLabel ? 'opacity-80' : ''}`}
+                  style={{
+                    ...labelStyle,
+                    paddingTop: padY ?? 8,
+                    paddingBottom: padY ?? 8,
+                    paddingInline: 10,
+                    backgroundColor: config.fieldLabelBg || config.fieldBgColor || tint(ink, 0.05),
+                    borderInlineEnd: isThermal
+                      ? undefined
+                      : `1px solid ${config.fieldBorderColor || softRule}`,
+                  }}
+                >
+                  {labelText}
+                </dt>
+                <dd
+                  className="font-semibold break-words flex items-center"
+                  style={{
+                    ...valueStyle,
+                    paddingTop: padY ?? 8,
+                    paddingBottom: padY ?? 8,
+                    paddingInline: 10,
+                  }}
+                >
+                  {blank ? <BlankLine /> : row.value}
+                </dd>
+              </div>
+            );
+          }
+
+          return (
+            <div
+              key={row.key}
+              className={`grid gap-3 ${padY !== undefined ? '' : d.row} ${
+                fieldStyle === 'grid' || fieldStyle === 'zebra' ? 'px-2' : ''
               }`}
-              style={styleOf(['fieldLabel', `fieldLabel:${row.key}`], t.label, config.labelColor)}
+              style={{
+                gridTemplateColumns: isThermal ? '1fr' : `${labelWidth}px 1fr`,
+                borderBottom: `1px solid ${softRule}`,
+                borderInline: fieldStyle === 'grid' ? `1px solid ${softRule}` : undefined,
+                borderTop: fieldStyle === 'grid' && i === 0 ? `1px solid ${softRule}` : undefined,
+                backgroundColor: fieldStyle === 'zebra' && i % 2 === 1 ? tint(ink, 0.04) : undefined,
+                paddingTop: padY,
+                paddingBottom: padY,
+              }}
             >
-              {(config.fieldLabels?.[row.key] || '').trim() || (isEn ? row.labelEn : row.label)}
-            </dt>
-            <dd
-              className="font-semibold break-words"
-              style={styleOf(['fieldValue', `fieldValue:${row.key}`], t.base)}
-            >
-              {row.value}
-            </dd>
-          </div>
-        ))}
+              {/* لون التسميات من القالب؛ وبدونه تُخفَّف بالشفافية كما كانت. */}
+              <dt className={`font-bold ${mutedLabel ? 'opacity-65' : ''}`} style={labelStyle}>
+                {labelText}
+              </dt>
+              <dd className="font-semibold break-words" style={valueStyle}>
+                {blank ? <BlankLine /> : row.value}
+              </dd>
+            </div>
+          );
+        })}
       </dl>
 
       {/*
@@ -1028,6 +1106,15 @@ export const FormalVoucherSheet: React.FC<{
     </div>
   );
 };
+
+/** خط منقّط خفيف حيث يُطبع حقل فارغ عمداً — مساحة للكتابة اليدوية. */
+const BlankLine: React.FC = () => (
+  <span
+    aria-hidden="true"
+    className="block w-full opacity-30"
+    style={{ borderBottom: '1px dashed currentColor', height: '1em' }}
+  />
+);
 
 /** قيم سطر الاتصال مفصولةً بنقاط — تُرسم في الترويسة أو في التذييل سواء. */
 const ContactParts: React.FC<{ parts: string[] }> = ({ parts }) => (

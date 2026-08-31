@@ -2149,9 +2149,10 @@ export const PrintSettingsPage: React.FC = () => {
                           </label>
                           <Select
                             size="xs"
-                            value={currentConfig.fieldStyle || 'lines'}
-                            onChange={(v) => updateCurrentConfig('fieldStyle', v || 'lines')}
+                            value={currentConfig.fieldStyle || 'table'}
+                            onChange={(v) => updateCurrentConfig('fieldStyle', v || 'table')}
                             data={[
+                              { value: 'table', label: isAr ? 'جدول بيانات مغلق' : 'Data table' },
                               { value: 'lines', label: isAr ? 'خطوط فاصلة' : 'Hairlines' },
                               { value: 'grid', label: isAr ? 'شبكة مغلقة' : 'Closed grid' },
                               { value: 'zebra', label: isAr ? 'أسطر متناوبة' : 'Zebra' },
@@ -2175,6 +2176,52 @@ export const PrintSettingsPage: React.FC = () => {
                           />
                         </div>
                       </div>
+
+                      {/* ── خصائص الجدول ── */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'خلفية عمود التسميات' : 'Label Column Background'}
+                          </label>
+                          <ColorInput
+                            value={currentConfig.fieldLabelBg || ''}
+                            onChange={(v) => updateCurrentConfig('fieldLabelBg', v)}
+                            size="xs"
+                            format="hex"
+                            placeholder={isAr ? 'تلقائي من لون الهوية' : 'Auto from ink'}
+                            disabled={(currentConfig.fieldStyle || 'table') !== 'table'}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr
+                              ? `ارتفاع صف الجدول: ${currentConfig.fieldRowPadding ?? 8}px`
+                              : `Row Padding: ${currentConfig.fieldRowPadding ?? 8}px`}
+                          </label>
+                          <Slider
+                            size="xs"
+                            color="orange"
+                            min={2}
+                            max={24}
+                            value={currentConfig.fieldRowPadding ?? 8}
+                            onChange={(v) => updateCurrentConfig('fieldRowPadding', v)}
+                          />
+                        </div>
+                      </div>
+
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={
+                          isAr
+                            ? 'طباعة حقل الملاحظات ولو فارغاً (سطر للكتابة اليدوية)'
+                            : 'Print the notes field even when empty (hand-writing line)'
+                        }
+                        checked={(currentConfig.printEmptyFields ?? ['notes']).includes('notes')}
+                        onChange={(e) =>
+                          updateCurrentConfig('printEmptyFields', e.currentTarget.checked ? ['notes'] : [])
+                        }
+                      />
 
                       <div>
                         <label className="text-[10px] font-bold text-slate-700 block mb-1.5">
