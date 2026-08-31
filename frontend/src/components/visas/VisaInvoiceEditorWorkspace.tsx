@@ -1907,7 +1907,16 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
                       label={isAr ? 'نوع السداد' : 'Payment Term'}
                       value={paymentType}
                       onChange={(val) => {
-                        setPaymentType(val || 'نقدي');
+                        const nextVal = val || 'نقدي';
+                        setPaymentType(nextVal);
+                        if (nextVal === 'آجل' || nextVal === 'CREDIT') {
+                          setErrors((prev) => {
+                            const next = { ...prev };
+                            delete next.receivingCashbox;
+                            delete next.paymentMethod;
+                            return next;
+                          });
+                        }
                         markDirty();
                       }}
                       options={[
@@ -1918,42 +1927,47 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
                     />
                   </div>
 
-                  {/* Receiving Method */}
-                  <div id="field-payment-method">
-                    <SearchableCombobox
-                      label={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
-                      required={paymentType === 'نقدي' || paymentType === 'CASH'}
-                      value={paymentMethod}
-                      onChange={(val) => {
-                        const nextMethod = val || 'CASH_HAND';
-                        setPaymentMethod(nextMethod);
-                        const matched = paymentMethodsList.find((pm: any) => pm.value === nextMethod);
-                        if (matched?.targetAccountId && matched.targetAccountId !== 'EMPLOYEE_ASSIGNED') {
-                          setReceivingCashbox(matched.targetAccountId);
-                        } else if (nextMethod === 'CASH_HAND' && employeeName) {
-                          applyEmployeeCashbox(employeeName, availableCashboxes);
-                        }
-                        markDirty();
-                      }}
-                      options={paymentMethodsList}
-                      clearable={false}
-                    />
-                  </div>
+                  {/* Receiving Method & Receiving Cashbox (only if cash) */}
+                  {(paymentType === 'نقدي' || paymentType === 'CASH') && (
+                    <>
+                      {/* Receiving Method */}
+                      <div id="field-payment-method">
+                        <SearchableCombobox
+                          label={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
+                          required
+                          value={paymentMethod}
+                          onChange={(val) => {
+                            const nextMethod = val || 'CASH_HAND';
+                            setPaymentMethod(nextMethod);
+                            const matched = paymentMethodsList.find((pm: any) => pm.value === nextMethod);
+                            if (matched?.targetAccountId && matched.targetAccountId !== 'EMPLOYEE_ASSIGNED') {
+                              setReceivingCashbox(matched.targetAccountId);
+                            } else if (nextMethod === 'CASH_HAND' && employeeName) {
+                              applyEmployeeCashbox(employeeName, availableCashboxes);
+                            }
+                            markDirty();
+                          }}
+                          options={paymentMethodsList}
+                          clearable={false}
+                        />
+                      </div>
 
-                  {/* Receiving Cashbox (Validated & Populated with Full Account Label) */}
-                  <div id="field-receiving-cashbox">
-                    <SearchableCombobox
-                      label={isAr ? 'صندوق استلام قيمة البيع' : 'Receiving Cashbox'}
-                      required={paymentType === 'نقدي' || paymentType === 'CASH'}
-                      value={receivingCashbox}
-                      onChange={(val) => {
-                        setReceivingCashbox(val);
-                        markDirty();
-                      }}
-                      options={cashboxOptions}
-                      error={errors.receivingCashbox}
-                    />
-                  </div>
+                      {/* Receiving Cashbox (Validated & Populated with Full Account Label) */}
+                      <div id="field-receiving-cashbox">
+                        <SearchableCombobox
+                          label={isAr ? 'صندوق استلام قيمة البيع' : 'Receiving Cashbox'}
+                          required
+                          value={receivingCashbox}
+                          onChange={(val) => {
+                            setReceivingCashbox(val);
+                            markDirty();
+                          }}
+                          options={cashboxOptions}
+                          error={errors.receivingCashbox}
+                        />
+                      </div>
+                    </>
+                  )}
 
                   {/* Paying Cashbox */}
                   <div id="field-paying-cashbox">

@@ -1793,7 +1793,16 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                       label={isAr ? 'نوع البيع' : 'Payment Term'}
                       value={paymentType}
                       onChange={(val) => {
-                        setPaymentType(val || 'نقدي');
+                        const nextVal = val || 'نقدي';
+                        setPaymentType(nextVal);
+                        if (nextVal === 'آجل' || nextVal === 'CREDIT') {
+                          setErrors((prev) => {
+                            const next = { ...prev };
+                            delete next.receivingCashbox;
+                            delete next.paymentMethod;
+                            return next;
+                          });
+                        }
                         markDirty();
                       }}
                       options={[
@@ -1803,48 +1812,52 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                       clearable={false}
                     />
                     </div>
-                    <div id="field-payment-method">
-                    <SearchableCombobox
-                      label={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
-                      required={paymentType === 'نقدي' || paymentType === 'CASH'}
-                      value={paymentMethod}
-                      onChange={(val) => {
-                        const nextMethod = val || 'CASH_HAND';
-                        setPaymentMethod(nextMethod);
-                        const matched = paymentMethodsList.find((pm: any) => pm.value === nextMethod);
-                        if (matched?.targetAccountId && matched.targetAccountId !== 'EMPLOYEE_ASSIGNED' && matched.targetAccountId !== 'RECEIVABLE') {
-                          setReceivingCashbox(matched.targetAccountId);
-                          setPayingCashbox(matched.targetAccountId);
-                        } else if (pageSettings.linkCashboxToEmployee && employeeName) {
-                          applyEmployeeCashbox(employeeName, accountsList.length ? accountsList : availableCashboxes);
-                        }
-                        markDirty();
-                      }}
-                      options={paymentMethodsList}
-                      clearable={false}
-                    />
-                    </div>
-                    <div id="field-receiving-cashbox">
-                      <SearchableCombobox
-                        label={isAr ? 'صندوق استلام قيمة البيع' : 'Receiving Cashbox'}
-                        required={paymentType === 'نقدي' || paymentType === 'CASH'}
-                        value={receivingCashbox}
-                        onChange={(val) => {
-                          setReceivingCashbox(val);
-                          setPayingCashbox(val);
-                          markDirty();
-                        }}
-                        options={formattedCashboxesData}
-                        error={errors.receivingCashbox}
-                      />
-                      {pageSettings.linkCashboxToEmployee && autoMatchedCashboxName && (
-                        <p className="mt-1 text-[11px] text-emerald-700 font-medium">
-                          {isAr
-                            ? `تلقائي من صندوق الموظف: ${autoMatchedCashboxName}`
-                            : `Auto from employee cashbox: ${autoMatchedCashboxName}`}
-                        </p>
-                      )}
-                    </div>
+                    {(paymentType === 'نقدي' || paymentType === 'CASH') && (
+                      <>
+                        <div id="field-payment-method">
+                          <SearchableCombobox
+                            label={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
+                            required
+                            value={paymentMethod}
+                            onChange={(val) => {
+                              const nextMethod = val || 'CASH_HAND';
+                              setPaymentMethod(nextMethod);
+                              const matched = paymentMethodsList.find((pm: any) => pm.value === nextMethod);
+                              if (matched?.targetAccountId && matched.targetAccountId !== 'EMPLOYEE_ASSIGNED' && matched.targetAccountId !== 'RECEIVABLE') {
+                                setReceivingCashbox(matched.targetAccountId);
+                                setPayingCashbox(matched.targetAccountId);
+                              } else if (pageSettings.linkCashboxToEmployee && employeeName) {
+                                applyEmployeeCashbox(employeeName, accountsList.length ? accountsList : availableCashboxes);
+                              }
+                              markDirty();
+                            }}
+                            options={paymentMethodsList}
+                            clearable={false}
+                          />
+                        </div>
+                        <div id="field-receiving-cashbox">
+                          <SearchableCombobox
+                            label={isAr ? 'صندوق استلام قيمة البيع' : 'Receiving Cashbox'}
+                            required
+                            value={receivingCashbox}
+                            onChange={(val) => {
+                              setReceivingCashbox(val);
+                              setPayingCashbox(val);
+                              markDirty();
+                            }}
+                            options={formattedCashboxesData}
+                            error={errors.receivingCashbox}
+                          />
+                          {pageSettings.linkCashboxToEmployee && autoMatchedCashboxName && (
+                            <p className="mt-1 text-[11px] text-emerald-700 font-medium">
+                              {isAr
+                                ? `تلقائي من صندوق الموظف: ${autoMatchedCashboxName}`
+                                : `Auto from employee cashbox: ${autoMatchedCashboxName}`}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
                     </div>
 
                     {/* ── Attachments: only for methods that produce a document ── */}
