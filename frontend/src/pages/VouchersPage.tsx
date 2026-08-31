@@ -378,53 +378,81 @@ export const VouchersPage: React.FC = () => {
   }, [fetchAllData]);
 
   /**
-   * Cross-tab & cross-window real-time sync.
-   * When a voucher is created/deleted/updated in one tab, all other open tabs
-   * of the same origin receive the broadcast and silently refresh their data.
-   * Additionally, switching back to an idle tab triggers a refetch so stale
-   * data never lingers.
+   * Cross-device & cross-tab real-time sync.
+   *
+   * Three layers ensure changes propagate everywhere:
+   * 1. BroadcastChannel  → instant for same-browser tabs
+   * 2. Polling (12s)      → works across ALL devices/browsers/users
+   * 3. visibilitychange   → immediate refetch when switching back to an idle tab
    */
   const channelRef = React.useRef<BroadcastChannel | null>(null);
-  const lastChangeRef = React.useRef<number>(Date.now());
+  const lastFetchRef = React.useRef<number>(Date.now());
+  const pollingRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    // BroadcastChannel: listen for changes from other tabs
+    // ── 1. BroadcastChannel: instant same-browser sync ──
     try {
       const ch = new BroadcastChannel('qayd-vouchers-sync');
       ch.onmessage = (ev) => {
         if (ev.data?.type === 'vouchers-changed') {
-          lastChangeRef.current = Date.now();
+          lastFetchRef.current = Date.now();
           fetchAllData(true);
         }
       };
       channelRef.current = ch;
     } catch {
-      // BroadcastChannel not supported — fall back to storage event
+      // BroadcastChannel not supported — polling will cover it
     }
 
     // Fallback: storage event (works cross-tab even without BroadcastChannel)
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'qayd-vouchers-changed') {
-        lastChangeRef.current = Date.now();
+        lastFetchRef.current = Date.now();
         fetchAllData(true);
       }
     };
     window.addEventListener('storage', onStorage);
 
-    // Visibility: refetch when user switches back to this tab after >10s
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        const elapsed = Date.now() - lastChangeRef.current;
-        if (elapsed > 10_000) {
-          lastChangeRef.current = Date.now();
+    // ── 2. Polling: cross-device sync every 12 seconds ──
+    // Only polls when the tab is visible to avoid wasting resources.
+    const startPolling = () => {
+      if (pollingRef.current) return;
+      pollingRef.current = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          lastFetchRef.current = Date.now();
           fetchAllData(true);
         }
+      }, 12_000);
+    };
+    const stopPolling = () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+
+    // Start polling immediately if tab is visible
+    if (document.visibilityState === 'visible') startPolling();
+
+    // ── 3. Visibility: refetch + restart/stop polling ──
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        // Refetch immediately when coming back
+        const elapsed = Date.now() - lastFetchRef.current;
+        if (elapsed > 5_000) {
+          lastFetchRef.current = Date.now();
+          fetchAllData(true);
+        }
+        startPolling();
+      } else {
+        stopPolling();
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       channelRef.current?.close();
+      stopPolling();
       window.removeEventListener('storage', onStorage);
       document.removeEventListener('visibilitychange', onVisibility);
     };
@@ -1206,8 +1234,8 @@ export const VouchersPage: React.FC = () => {
                       if (first) {
                         setVoucherToPrint({
                           voucherNumber: first.voucherNumber, type: first.type, date: first.date,
-                          amount: first.amount, currency: first.currency, accountName: first.accountName,
-                          accountCode: first.accountCode, cashboxName: first.cashboxName,
+                          amount: first.amount, currency: first.currency,                           accountName: first.accountName,
+                          accountCode: first.accountCode, accountEmail: first.accountEmail || first.email, cashboxName: first.cashboxName,
                           reference: first.reference, description: first.description, user: first.userName,
                           splitAccounts: first.splitAccounts, splitDescription: first.splitDescription,
                           customCategory: first.customCategory,
@@ -1623,6 +1651,7 @@ export const VouchersPage: React.FC = () => {
                                   currency: row.currency,
                                   accountName: row.accountName,
                                   accountCode: row.accountCode,
+                                  accountEmail: row.accountEmail || row.email,
                                   cashboxName: row.cashboxName,
                                   reference: row.reference,
                                   description: row.description,
@@ -1673,6 +1702,7 @@ export const VouchersPage: React.FC = () => {
                                     currency: row.currency,
                                     accountName: row.accountName,
                                     accountCode: row.accountCode,
+                                    accountEmail: row.accountEmail || row.email,
                                     cashboxName: row.cashboxName,
                                     reference: row.reference,
                                     description: row.description,
@@ -1891,6 +1921,7 @@ export const VouchersPage: React.FC = () => {
                     currency: selectedVoucher.currency,
                     accountName: selectedVoucher.accountName,
                     accountCode: selectedVoucher.accountCode,
+                    accountEmail: selectedVoucher.accountEmail || selectedVoucher.email,
                     cashboxName: selectedVoucher.cashboxName,
                     reference: selectedVoucher.reference,
                     description: selectedVoucher.description,
@@ -1904,7 +1935,7 @@ export const VouchersPage: React.FC = () => {
                 className="flex-1 h-[38px] rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
               >
                 <Printer size={14} className="text-orange-400" />
-                <span>{isAr ? 'معاينة وطباعة السند' : 'Print Voucher'}</span>
+                <span>{isAr ? 'طباعة / PDF' : 'Print / PDF'}</span>
               </button>
             </div>
           </div>

@@ -285,6 +285,7 @@ export const PaymentVouchersPage: React.FC = () => {
                 amount: selectedVoucher.amount,
                 currency: 'IQD',
                 accountName: selectedVoucher.account?.nameAr || selectedVoucher.accountName || 'حساب المستفيد',
+                accountEmail: selectedVoucher.account?.email || selectedVoucher.email,
                 cashboxName: cashboxesAndBanks.find((cb) => cb.id === selectedVoucher.cashboxOrBankAccountId)?.nameAr,
                 reference: selectedVoucher.reference,
                 description: selectedVoucher.description,

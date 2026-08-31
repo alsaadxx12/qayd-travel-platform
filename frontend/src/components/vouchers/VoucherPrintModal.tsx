@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Badge, Loader, Group, SegmentedControl } from '@mantine/core';
+import { Modal, Loader, TextInput } from '@mantine/core';
 import {
   IconPrinter,
   IconReceipt,
@@ -19,6 +19,8 @@ import {
   IconMail,
   IconPhone,
   IconTag,
+  IconDownload,
+  IconX,
 } from '@tabler/icons-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
@@ -40,6 +42,7 @@ export interface VoucherPrintItem {
   accountName: string;
   accountCode?: string;
   accountPhone?: string;
+  accountEmail?: string;
   cashboxName?: string;
   reference?: string;
   description?: string;
@@ -754,11 +757,17 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   );
 };
 
-// ── Interactive Voucher Print Modal ──
+// ── Language + PDF / Email (no on-screen preview) ──
 export interface VoucherPrintModalProps {
   opened: boolean;
   onClose: () => void;
   voucher: VoucherPrintItem | null;
+}
+
+function waitFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
 }
 
 export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
@@ -773,9 +782,16 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   const [customAccounts, setCustomAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState('');
+
+  useEffect(() => {
+    if (language === 'en' || language === 'ar') setPrintLang(language);
+  }, [language]);
 
   useEffect(() => {
     if (!opened || !voucher) return;
+    setRecipientEmail((voucher.accountEmail || '').trim());
     setLoading(true);
     const docType = voucher.type === 'RECEIPT' ? 'receipt_voucher' : 'payment_voucher';
     Promise.all([
@@ -797,13 +813,6 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
       .finally(() => setLoading(false));
   }, [opened, voucher]);
 
-  /**
-   * The counter-party's statement barcode, fetched alongside the template.
-   *
-   * Kept separate from the config fetch so a missing or un-issued barcode can never
-   * stop the voucher from printing — the worst case is a receipt without a code,
-   * which is exactly what was printed before this existed.
-   */
   useEffect(() => {
     if (!opened || !voucher) {
       setQrDataUrl(null);
@@ -829,174 +838,284 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
 
   if (!voucher) return null;
 
-  const handlePrint = () => {
-    window.print();
+  const isReceipt = voucher.type === 'RECEIPT';
+  const isEn = printLang === 'en';
+  const voucherLabel = isReceipt
+    ? (isEn ? 'Receipt Voucher' : 'سند القبض')
+    : (isEn ? 'Payment Voucher' : 'سند الدفع');
+
+  const buildPdf = async (): Promise<{ base64: string; filename: string }> => {
+    await waitFrame();
+    await new Promise((r) => setTimeout(r, 120));
+
+    const element = document.getElementById('printable-voucher-sheet');
+    if (!element) {
+      throw new Error(isEn ? 'Print sheet is not ready' : 'ورقة الطباعة غير جاهزة');
+    }
+
+    const origMinHeight = element.style.minHeight;
+    element.style.minHeight = 'auto';
+
+    const canvas = await html2canvas(element, {
+      scale: 3,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: element.scrollWidth,
+    });
+
+    element.style.minHeight = origMinHeight;
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 5;
+    const usableWidth = pageWidth - margin * 2;
+    const usableHeight = pageHeight - margin * 2;
+    const imgHeight = (canvas.height * usableWidth) / canvas.width;
+
+    if (imgHeight <= usableHeight) {
+      pdf.addImage(imgData, 'PNG', margin, margin, usableWidth, imgHeight);
+    } else {
+      const scaleFactor = usableHeight / imgHeight;
+      const finalWidth = usableWidth * scaleFactor;
+      const xOffset = margin + (usableWidth - finalWidth) / 2;
+      pdf.addImage(imgData, 'PNG', xOffset, margin, finalWidth, usableHeight);
+    }
+
+    const filename = `voucher_${voucher.voucherNumber || 'doc'}_${printLang}.pdf`;
+    const dataUri = pdf.output('datauristring') as string;
+    const base64 = dataUri.split(',')[1] || '';
+    if (!base64) throw new Error(isEn ? 'Could not build the PDF' : 'تعذر توليد ملف PDF');
+    return { base64, filename };
   };
 
-  const handleExportPdf = async () => {
-    const element = document.getElementById('printable-voucher-sheet');
-    if (!element) return;
+  const handleDownloadPdf = async () => {
     setExporting(true);
     try {
-      // Temporarily shrink the element to its natural content height so that
-      // html2canvas does not capture the full A4 minHeight padding.
-      const origMinHeight = element.style.minHeight;
-      element.style.minHeight = 'auto';
-
-      const canvas = await html2canvas(element, {
-        scale: 3, // Higher scale for crisp Arabic text
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        // Force the element width to a fixed pixel size that maps cleanly to A4
-        windowWidth: element.scrollWidth,
-      });
-
-      // Restore original style
-      element.style.minHeight = origMinHeight;
-
-      const imgData = canvas.toDataURL('image/png'); // PNG is sharper for text
-
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      const pageWidth = 210;
-      const pageHeight = 297;
-      const margin = 5; // 5mm margins
-      const usableWidth = pageWidth - margin * 2;
-      const usableHeight = pageHeight - margin * 2;
-
-      // Scale the image to fit A4 width with margins
-      const imgHeight = (canvas.height * usableWidth) / canvas.width;
-
-      if (imgHeight <= usableHeight) {
-        // Content fits in one page — center vertically
-        pdf.addImage(imgData, 'PNG', margin, margin, usableWidth, imgHeight);
-      } else {
-        // Content is too tall — scale down to fit one page
-        const scaleFactor = usableHeight / imgHeight;
-        const finalWidth = usableWidth * scaleFactor;
-        const finalHeight = usableHeight;
-        const xOffset = margin + (usableWidth - finalWidth) / 2;
-        pdf.addImage(imgData, 'PNG', xOffset, margin, finalWidth, finalHeight);
-      }
-
-      const filename = `voucher_${voucher.voucherNumber || 'doc'}_${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(filename);
+      const { base64, filename } = await buildPdf();
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       showSuccessNotification(
-        printLang === 'en' ? 'Downloaded' : 'تم التحميل',
-        printLang === 'en' ? 'Voucher PDF exported successfully' : 'تم تصدير وحفظ السند المالي بصيغة PDF فورياً'
+        isEn ? 'Downloaded' : 'تم التحميل',
+        isEn ? 'Voucher PDF generated' : 'تم توليد وصل السند بصيغة PDF',
       );
+      onClose();
     } catch (err: any) {
       console.error('Voucher PDF export failed:', err);
-      handlePrint();
+      showErrorNotification(
+        isEn ? 'Export failed' : 'تعذر التصدير',
+        err?.message || (isEn ? 'Could not generate the PDF' : 'تعذر توليد ملف PDF'),
+      );
     } finally {
       setExporting(false);
     }
   };
 
-  const isReceipt = voucher.type === 'RECEIPT';
+  const handleSendEmail = async () => {
+    const email = recipientEmail.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showErrorNotification(
+        isEn ? 'Email required' : 'البريد مطلوب',
+        isEn ? 'Enter a valid recipient email' : 'أدخل بريداً إلكترونياً صحيحاً للمستلم',
+      );
+      return;
+    }
+
+    setSending(true);
+    try {
+      const { base64, filename } = await buildPdf();
+      const subject = isEn
+        ? `${voucherLabel} ${voucher.voucherNumber}`
+        : `${voucherLabel} ${voucher.voucherNumber}`;
+      await apiRequest('/api/email/send', {
+        method: 'POST',
+        timeoutMs: 60_000,
+        body: JSON.stringify({
+          to: email,
+          subject,
+          htmlContent: isEn
+            ? `<p>Please find attached the ${voucherLabel.toLowerCase()} <strong>${voucher.voucherNumber}</strong> as a PDF file.</p>`
+            : `<p dir="rtl">مرفق ${voucherLabel} رقم <strong>${voucher.voucherNumber}</strong> بصيغة PDF.</p>`,
+          attachment: [{ name: filename.replace(/[^\x20-\x7E]/g, '_') || 'voucher.pdf', content: base64 }],
+        }),
+      });
+      showSuccessNotification(
+        isEn ? 'Sent' : 'تم الإرسال',
+        isEn ? `PDF sent to ${email}` : `تم إرسال PDF إلى ${email}`,
+      );
+      onClose();
+    } catch (err: any) {
+      console.error('Voucher email failed:', err);
+      showErrorNotification(
+        isEn ? 'Send failed' : 'فشل الإرسال',
+        err?.message || (isEn ? 'Could not send the email' : 'تعذر إرسال البريد الإلكتروني'),
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const busy = exporting || sending || loading;
 
   return (
     <Modal
       opened={opened}
       onClose={onClose}
-      size="xl"
-      title={
-        <div className="flex items-center gap-2 text-slate-900 font-extrabold text-sm">
-          <IconReceipt size={18} className="text-blue-600" />
-          <span>
-            {printLang === 'en'
-              ? `Preview & Export Voucher [${voucher.voucherNumber}]`
-              : `معاينة وتصدير ${isReceipt ? 'سند القبض' : 'سند الدفع'} [${voucher.voucherNumber}]`}
-          </span>
-        </div>
-      }
-      styles={{ body: { padding: '1rem' } }}
+      size="md"
+      centered
+      radius="lg"
+      withCloseButton={false}
+      styles={{
+        content: {
+          background: 'linear-gradient(to bottom, #ffffff, #f8fafc)',
+          border: '1px solid #e2e8f0',
+        },
+        body: { padding: 0 },
+      }}
     >
-      <style>{`
-        @media print {
-          @page { size: A4 portrait; margin: 4mm !important; }
-          body, html { background: #ffffff !important; color: #000000 !important; margin: 0 !important; padding: 0 !important; }
-          .no-print, header, nav, aside, footer, button, .mantine-Modal-header, .mantine-Modal-close, .mantine-Overlay-root { display: none !important; }
-          .mantine-Modal-content { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; width: 100% !important; background: transparent !important; }
-          #printable-voucher-sheet { width: 100% !important; max-width: 210mm !important; margin: 0 auto !important; box-shadow: none !important; border: none !important; }
-        }
-      `}</style>
-
-      {loading ? (
-        <div className="flex flex-col items-center justify-center p-12 space-y-3">
-          <Loader color="blue" size="md" />
-          <span className="text-xs font-bold text-slate-600">
-            {printLang === 'en' ? 'Fetching approved template...' : 'جارٍ استجلاب قالب السند المعتمد...'}
-          </span>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200 no-print">
-            <div className="flex items-center gap-2">
-              <Badge color="blue" size="md" variant="filled">
-                {isReceipt ? (printLang === 'en' ? 'Receipt Voucher' : 'سند قبض معتمد ✓') : (printLang === 'en' ? 'Payment Voucher' : 'سند صرف ودفع معتمد ✓')}
-              </Badge>
-              <span className="text-xs font-bold text-slate-700">
-                {voucher.accountName}
-              </span>
+      <div className="p-4 space-y-4 text-slate-900 font-sans" dir={isEn ? 'ltr' : 'rtl'}>
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white flex items-center justify-center shadow-md shadow-sky-500/20">
+              <IconReceipt size={22} />
             </div>
-
-            <Group gap="xs">
-              <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-0.5">
-                <IconLanguage size={15} className="text-blue-600" />
-                <SegmentedControl
-                  size="xs"
-                  value={printLang}
-                  onChange={(v) => setPrintLang(v as 'ar' | 'en')}
-                  data={[
-                    { label: 'عربي', value: 'ar' },
-                    { label: 'English', value: 'en' },
-                  ]}
-                  styles={{ root: { backgroundColor: 'transparent' } }}
-                />
-              </div>
-              <Button
-                size="xs"
-                color="blue"
-                leftSection={<IconFileTypePdf size={15} />}
-                onClick={handleExportPdf}
-                loading={exporting}
-                className="font-bold shadow-xs"
-              >
-                {printLang === 'en' ? 'Export PDF' : 'تصدير PDF'}
-              </Button>
-              <Button
-                size="xs"
-                variant="light"
-                color="gray"
-                leftSection={<IconPrinter size={15} />}
-                onClick={handlePrint}
-                className="font-bold"
-              >
-                {printLang === 'en' ? 'Print' : 'طباعة 🖨️'}
-              </Button>
-              <Button size="xs" variant="subtle" color="gray" onClick={onClose}>
-                {printLang === 'en' ? 'Close' : 'إغلاق'}
-              </Button>
-            </Group>
+            <div>
+              <h3 className="font-extrabold text-base text-slate-900 leading-tight">
+                {isEn ? 'Generate voucher PDF' : 'توليد وصل السند'}
+              </h3>
+              <p className="text-xs font-bold text-slate-500 mt-0.5">
+                {voucherLabel} — {voucher.voucherNumber}
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <IconX size={16} />
+          </button>
+        </div>
 
-          <div className="bg-slate-100/60 p-2 rounded-xl border border-slate-200 overflow-x-auto flex justify-center print:bg-white print:p-0 print:border-none shadow-inner">
-            <PrintableVoucherSheet
-              voucher={voucher}
-              config={config}
-              qrDataUrl={qrDataUrl}
-              lang={printLang}
-              customAccounts={customAccounts}
-            />
+        <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between text-xs">
+          <div className="space-y-0.5 min-w-0">
+            <span className="text-[10.5px] font-bold text-slate-400 block">
+              {isEn ? 'Account' : 'الحساب'}
+            </span>
+            <span className="font-extrabold text-slate-900 truncate block">{voucher.accountName}</span>
+          </div>
+          <div className="text-end font-mono text-[11px] font-black text-slate-800" dir="ltr">
+            {Number(voucher.amount || 0).toLocaleString()} {voucher.currency || 'IQD'}
           </div>
         </div>
-      )}
+
+        <div className="bg-slate-100/90 p-1.5 rounded-2xl flex items-center justify-between border border-slate-200">
+          <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5 px-2">
+            <IconLanguage size={16} className="text-[#F45A0A]" />
+            {isEn ? 'Document language:' : 'لغة الوصل:'}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPrintLang('ar')}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                printLang === 'ar' ? 'bg-[#F45A0A] text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              العربية
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrintLang('en')}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                printLang === 'en' ? 'bg-[#F45A0A] text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              English
+            </button>
+          </div>
+        </div>
+
+        <TextInput
+          size="sm"
+          label={isEn ? 'Recipient email' : 'بريد المستلم'}
+          placeholder="name@example.com"
+          value={recipientEmail}
+          onChange={(e) => setRecipientEmail(e.currentTarget.value)}
+          disabled={busy}
+          dir="ltr"
+          styles={{ label: { fontWeight: 800, fontSize: 12, marginBottom: 6 } }}
+        />
+
+        <div className="space-y-2.5 pt-1">
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={busy}
+            className="w-full h-12 rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-extrabold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            {exporting || loading ? (
+              <>
+                <Loader size={18} color="white" />
+                <span>{isEn ? 'Generating PDF…' : 'جاري توليد PDF…'}</span>
+              </>
+            ) : (
+              <>
+                <IconDownload size={18} />
+                <span>{isEn ? 'Generate & download PDF' : 'توليد وتحميل PDF'}</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSendEmail}
+            disabled={busy}
+            className="w-full h-12 rounded-2xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-950 font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            {sending ? (
+              <>
+                <Loader size={18} color="blue" />
+                <span>{isEn ? 'Sending…' : 'جاري الإرسال…'}</span>
+              </>
+            ) : (
+              <>
+                <IconMail size={18} className="text-sky-600" />
+                <span>{isEn ? 'Send PDF by email' : 'إرسال PDF عبر البريد'}</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          left: '-9999px',
+          top: 0,
+          width: '210mm',
+          pointerEvents: 'none',
+          opacity: 0,
+        }}
+      >
+        <PrintableVoucherSheet
+          voucher={voucher}
+          config={config}
+          qrDataUrl={qrDataUrl}
+          lang={printLang}
+          customAccounts={customAccounts}
+        />
+      </div>
     </Modal>
   );
 };
