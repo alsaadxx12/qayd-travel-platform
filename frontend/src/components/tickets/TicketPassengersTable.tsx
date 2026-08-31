@@ -738,7 +738,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
       {/* ── CARD HEADER ── */}
       <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 flex-wrap gap-2.5">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center shrink-0 p-1 relative">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center shrink-0 relative">
             <Lottie src={flightTicketAnimation} loop={true} autoplay={true} className="w-full h-full object-contain" />
           </div>
           <div>

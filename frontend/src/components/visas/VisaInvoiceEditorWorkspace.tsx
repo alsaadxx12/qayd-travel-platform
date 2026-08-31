@@ -2025,7 +2025,7 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
                 {/* Header */}
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center shrink-0 p-1 relative">
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center shrink-0 relative">
                       <Lottie src={visaAnimation} loop={true} autoplay={true} className="w-full h-full object-contain" />
                     </div>
                     <div>
