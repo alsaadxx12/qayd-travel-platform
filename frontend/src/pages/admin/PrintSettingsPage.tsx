@@ -359,6 +359,10 @@ export const PrintSettingsPage: React.FC = () => {
           ...(active.fontSizes || {}),
           [fontKey]: value,
         };
+      } else if (field.startsWith('fieldLabels.')) {
+        // «fieldLabels.party» — تسمية حقل واحد بعينه.
+        const labelKey = field.split('.')[1];
+        active.fieldLabels = { ...(active.fieldLabels || {}), [labelKey]: value };
       } else if (field.startsWith('textStyles.')) {
         // «textStyles.docTitle.color» — نمط نصٍّ بعينه فوق الضبط العام.
         const [, el, prop] = field.split('.');
@@ -1600,6 +1604,8 @@ export const PrintSettingsPage: React.FC = () => {
                               ]}
                               allowDeselect={false}
                               searchable
+                              maxDropdownHeight={420}
+                              nothingFoundMessage={isAr ? 'لا نتيجة' : 'Nothing found'}
                             />
 
                             <div>
@@ -2187,13 +2193,17 @@ export const PrintSettingsPage: React.FC = () => {
                                   checked={visible}
                                   onChange={(e) => toggleField(key, e.currentTarget.checked)}
                                 />
-                                <span
-                                  className={`text-[10px] font-bold flex-1 truncate ${
-                                    visible ? 'text-slate-800' : 'text-slate-400 line-through'
-                                  }`}
-                                >
-                                  {isAr ? field.label : field.labelEn}
-                                </span>
+                                {/* التسمية نفسها قابلة للتحرير — ما يُكتب هنا
+                                    يُطبع مكان التسمية الافتراضية، والفارغ يعيدها. */}
+                                <TextInput
+                                  size="xs"
+                                  variant="unstyled"
+                                  className={`flex-1 ${visible ? '' : 'opacity-40'}`}
+                                  styles={{ input: { fontSize: 10, fontWeight: 700 } }}
+                                  value={currentConfig.fieldLabels?.[key] ?? ''}
+                                  onChange={(e) => updateCurrentConfig(`fieldLabels.${key}`, e.target.value)}
+                                  placeholder={isAr ? field.label : field.labelEn}
+                                />
                                 <button
                                   type="button"
                                   disabled={i === 0}

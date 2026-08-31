@@ -114,6 +114,13 @@ export interface VoucherSheetConfig {
   // ── Fields: which appear, how, and in what order ──
   fieldOrder?: string[];
   hiddenFields?: string[];
+  /**
+   * تسميات الحقول كما يريدها صاحب النظام — تعلو التسميات الافتراضية.
+   *
+   * المفتاح مفتاح الحقل والقيمة نصّ التسمية؛ والفارغ يعني «التسمية الافتراضية».
+   * تُطبَّق في اللغتين سواء: من كتب تسميته بنفسه فهي تسميته.
+   */
+  fieldLabels?: Record<string, string>;
   fieldStyle?: 'lines' | 'grid' | 'zebra';
   /** عرض عمود التسميات بالبكسل — يتّسع للعبارات الطويلة دون كسرها. */
   labelWidth?: number;
@@ -223,7 +230,9 @@ export const VOUCHER_FIELDS: Array<{ key: string; label: string; labelEn: string
   { key: 'reason', label: 'وذلك عن', labelEn: 'Being for' },
   { key: 'split', label: 'تقسيم المبلغ', labelEn: 'Allocation' },
   { key: 'paymentMethod', label: 'طريقة الاستلام', labelEn: 'Method' },
-  { key: 'cashbox', label: 'الصندوق / الحساب المالي', labelEn: 'Cashbox' },
+  /* «الصندوق / الحساب المالي» أُزيل بطلب صاحب النظام — معلومة داخلية لا يحتاجها
+     الطرف المقابل على وصله. حذفه من هذه القائمة يكفي: أي fieldOrder محفوظ قديماً
+     ما زال يذكره يُرشَّح تلقائياً لأن الصف لا يُرسم إلا لمفتاح معروف هنا. */
   { key: 'reference', label: 'المرجع', labelEn: 'Reference' },
   { key: 'notes', label: 'ملاحظات', labelEn: 'Notes' },
 ];
@@ -441,7 +450,6 @@ export const FormalVoucherSheet: React.FC<{
             .join('  ·  ')
         : voucher.splitDescription || '',
     paymentMethod: voucher.customCategory || '',
-    cashbox: voucher.cashboxName || '',
     reference: voucher.reference || '',
     notes: voucher.costCenter || '',
   };
@@ -784,7 +792,7 @@ export const FormalVoucherSheet: React.FC<{
               }`}
               style={styleOf(['fieldLabel', `fieldLabel:${row.key}`], t.label, config.labelColor)}
             >
-              {isEn ? row.labelEn : row.label}
+              {(config.fieldLabels?.[row.key] || '').trim() || (isEn ? row.labelEn : row.label)}
             </dt>
             <dd
               className="font-semibold break-words"
