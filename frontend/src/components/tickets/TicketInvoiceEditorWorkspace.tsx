@@ -1526,8 +1526,10 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
             </button>
           </Tooltip>
 
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-50/90 border border-orange-200/80 p-0.5 flex items-center justify-center font-bold shrink-0 overflow-hidden shadow-2xs">
-            <Lottie src={flightTicketAnimation} loop={true} autoplay={true} className="w-full h-full" />
+          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-inner flex items-center justify-center font-bold shrink-0 overflow-hidden relative">
+            <div className="w-16 h-16 flex items-center justify-center shrink-0 scale-145 transform-gpu pointer-events-none">
+              <Lottie src={flightTicketAnimation} loop={true} autoplay={true} className="w-full h-full" />
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
