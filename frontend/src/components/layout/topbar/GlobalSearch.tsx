@@ -724,28 +724,7 @@ export const GlobalSearch: React.FC = () => {
               </div>
             </div>
 
-            {/* 2. Category Filter Pills Bar */}
-            <div className="flex flex-wrap items-center gap-2 px-5 py-2.5 bg-slate-50/70 border-b border-slate-100 shrink-0">
-              {categories.map((cat) => {
-                const isActive = selectedCategory === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat.id)}
-                    className={`px-3.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center shrink-0 select-none ${
-                      isActive
-                        ? 'bg-[#F45A0A] text-white shadow-xs'
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-[#FFF3E8] hover:text-[#F45A0A] hover:border-[#FFD8B2]'
-                    }`}
-                  >
-                    <span>{isAr ? cat.labelAr : cat.labelEn}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* 3. Recent Searches Bar (Optional when no query) */}
+            {/* 2. Recent Searches Bar (Optional when no query) */}
             {!query && recentQueries.length > 0 && (
               <div className="px-5 py-1.5 border-b border-slate-100 flex items-center gap-2 text-xs text-slate-500 bg-white shrink-0 overflow-x-auto">
                 <Clock size={13} className="text-slate-400 shrink-0" />
@@ -765,18 +744,9 @@ export const GlobalSearch: React.FC = () => {
               </div>
             )}
 
-            {/* 4. Middle Body: Two Columns (Banner on Left + Search Results on Right) */}
+            {/* 3. Middle Body: Two Columns (Results on the Right, Image Banner on the Left) */}
             <div className="flex-1 flex min-h-0 overflow-hidden p-3.5 gap-3.5 bg-slate-50/40">
-              {/* Left Column: Image Banner Card */}
-              <div className="hidden md:block w-[290px] lg:w-[310px] h-full shrink-0 rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs relative bg-white">
-                <img
-                  src="/images/command-palette-banner.png"
-                  alt="Fly4all Command Center"
-                  className="w-full h-full object-cover select-none pointer-events-none"
-                />
-              </div>
-
-              {/* Right Column: Results List */}
+              {/* Right Side in RTL: Results List */}
               <div ref={listRef} className="flex-1 overflow-y-auto space-y-2 pe-1">
                 {filteredResults.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center py-10 text-center space-y-2">
@@ -800,7 +770,7 @@ export const GlobalSearch: React.FC = () => {
                         key={item.id}
                         onClick={() => executeItem(item)}
                         onMouseEnter={() => setSelectedIndex(idx)}
-                        className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
+                        className={`flex items-center justify-between p-2.5 sm:p-3 rounded-2xl border transition-all cursor-pointer ${
                           isSelected
                             ? 'bg-[#FFF6EF] border-[#FDBA74] shadow-xs'
                             : 'bg-white border-slate-200/80 hover:border-orange-200 hover:bg-slate-50/70'
@@ -809,7 +779,7 @@ export const GlobalSearch: React.FC = () => {
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           {/* Brand Icon Box */}
                           <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
                               isSelected
                                 ? 'bg-white border border-[#FFD8B2] text-[#F45A0A] shadow-2xs'
                                 : 'bg-orange-50/80 border border-orange-100 text-[#F45A0A]'
@@ -818,28 +788,21 @@ export const GlobalSearch: React.FC = () => {
                             {item.icon}
                           </div>
 
-                          {/* Title, Subtitle & Badge */}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-black text-[13.5px] text-slate-900 truncate">
-                                {isAr ? item.titleAr : item.titleEn}
+                          {/* Title & Badge (Clean Single Line) */}
+                          <div className="min-w-0 flex-1 flex items-center gap-2.5 flex-wrap">
+                            <span className="font-black text-[13.5px] text-slate-900 truncate">
+                              {isAr ? item.titleAr : item.titleEn}
+                            </span>
+                            {item.badge && (
+                              <span
+                                className={`text-[10.5px] px-2 py-0.5 rounded-md font-bold shrink-0 ${
+                                  isSelected
+                                    ? 'bg-orange-100/90 text-[#C2410C] border border-orange-200'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}
+                              >
+                                {item.badge}
                               </span>
-                              {item.badge && (
-                                <span
-                                  className={`text-[10.5px] px-2 py-0.5 rounded-md font-bold ${
-                                    isSelected
-                                      ? 'bg-orange-100/90 text-[#C2410C] border border-orange-200'
-                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
-                                  }`}
-                                >
-                                  {item.badge}
-                                </span>
-                              )}
-                            </div>
-                            {(item.subAr || item.subEn) && (
-                              <p className="text-slate-500 text-[11.5px] font-medium mt-0.5 line-clamp-1">
-                                {isAr ? item.subAr : item.subEn}
-                              </p>
                             )}
                           </div>
                         </div>
@@ -860,6 +823,15 @@ export const GlobalSearch: React.FC = () => {
                     );
                   })
                 )}
+              </div>
+
+              {/* Left Side in RTL: Image Banner Card */}
+              <div className="hidden md:block w-[290px] lg:w-[320px] h-full shrink-0 rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs relative bg-white">
+                <img
+                  src="/images/command-palette-banner.png"
+                  alt="Fly4all Command Center"
+                  className="w-full h-full object-cover select-none pointer-events-none"
+                />
               </div>
             </div>
 
