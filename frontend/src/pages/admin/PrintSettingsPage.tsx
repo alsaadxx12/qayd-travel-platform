@@ -1568,16 +1568,52 @@ export const PrintSettingsPage: React.FC = () => {
                             <label className="text-[10px] font-black text-slate-800 block">
                               {isAr ? 'تخصيص نص بعينه' : 'Style One Text'}
                             </label>
+                            {/* القائمة مبوّبة: نصوص الورقة العامة، ثم تسمية كل
+                                حقل وقيمته على حدة — فتخضع بيانات كل حقل بعينه
+                                للتخصيص، والأخص يغلب الأعم خاصيةً بخاصية. */}
                             <Select
                               size="xs"
                               value={selectedTextEl}
                               onChange={(v) => setSelectedTextEl(v || 'docTitle')}
-                              data={VOUCHER_TEXT_ELEMENTS.map((el) => ({
-                                value: el.key,
-                                label: isAr ? el.label : el.labelEn,
-                              }))}
+                              data={[
+                                {
+                                  group: isAr ? 'نصوص الورقة' : 'Sheet texts',
+                                  items: VOUCHER_TEXT_ELEMENTS.map((el) => ({
+                                    value: el.key,
+                                    label: isAr ? el.label : el.labelEn,
+                                  })),
+                                },
+                                {
+                                  group: isAr ? 'قيمة حقل بعينه' : 'A single field value',
+                                  items: VOUCHER_FIELDS.map((f) => ({
+                                    value: `fieldValue:${f.key}`,
+                                    label: isAr ? `قيمة: ${f.label}` : `Value: ${f.labelEn}`,
+                                  })),
+                                },
+                                {
+                                  group: isAr ? 'تسمية حقل بعينه' : 'A single field label',
+                                  items: VOUCHER_FIELDS.map((f) => ({
+                                    value: `fieldLabel:${f.key}`,
+                                    label: isAr ? `تسمية: ${f.label}` : `Label: ${f.labelEn}`,
+                                  })),
+                                },
+                              ]}
                               allowDeselect={false}
+                              searchable
                             />
+
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                                {isAr ? 'لون هذا النص' : 'This Text Color'}
+                              </label>
+                              <ColorInput
+                                value={currentConfig.textStyles?.[selectedTextEl]?.color || ''}
+                                onChange={(v) => updateCurrentConfig(`textStyles.${selectedTextEl}.color`, v)}
+                                size="xs"
+                                format="hex"
+                                placeholder={isAr ? 'تلقائي' : 'Auto'}
+                              />
+                            </div>
 
                             <div>
                               <div className="flex justify-between text-[10px] font-bold text-slate-700 mb-1">

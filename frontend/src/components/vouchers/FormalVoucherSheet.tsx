@@ -346,12 +346,31 @@ export const FormalVoucherSheet: React.FC<{
    * والمقاس المخصَّص يمرّ في معامل التكبير الشامل مثل بقية المقاسات.
    */
   const ts = config.textStyles || {};
+  /**
+   * سلسلة مفاتيح لا مفتاح واحد: العام أولاً ثم الأخص، والخاصية المضبوطة في الأخص
+   * تغلب — هكذا يضبط المستخدم «قيم الحقول» جملةً ثم يفرد «تقسيم المبلغ» وحده
+   * بلون آخر دون أن يفقد بقية الضبط العام.
+   */
+  const pickStyle = (key: string | string[]): VoucherTextStyle => {
+    const keys = Array.isArray(key) ? key : [key];
+    const merged: VoucherTextStyle = {};
+    for (const k of keys) {
+      const layer = ts[k];
+      if (!layer) continue;
+      for (const prop of ['color', 'size', 'weight', 'align', 'italic'] as const) {
+        if (layer[prop] !== undefined && layer[prop] !== '' && layer[prop] !== 0) {
+          (merged as any)[prop] = layer[prop];
+        }
+      }
+    }
+    return merged;
+  };
   const styleOf = (
-    key: string,
+    key: string | string[],
     fallbackSize: number,
     fallbackColor?: string
   ): React.CSSProperties => {
-    const s = ts[key] || {};
+    const s = pickStyle(key);
     return {
       fontSize: s.size ? sz(s.size) : fallbackSize,
       color: s.color || fallbackColor || undefined,
@@ -758,12 +777,19 @@ export const FormalVoucherSheet: React.FC<{
           >
             {/* لون التسميات من القالب؛ وبدونه تُخفَّف بالشفافية كما كانت. */}
             <dt
-              className={`font-bold ${config.labelColor || ts.fieldLabel?.color ? '' : 'opacity-65'}`}
-              style={styleOf('fieldLabel', t.label, config.labelColor)}
+              className={`font-bold ${
+                config.labelColor || pickStyle(['fieldLabel', `fieldLabel:${row.key}`]).color
+                  ? ''
+                  : 'opacity-65'
+              }`}
+              style={styleOf(['fieldLabel', `fieldLabel:${row.key}`], t.label, config.labelColor)}
             >
               {isEn ? row.labelEn : row.label}
             </dt>
-            <dd className="font-semibold break-words" style={styleOf('fieldValue', t.base)}>
+            <dd
+              className="font-semibold break-words"
+              style={styleOf(['fieldValue', `fieldValue:${row.key}`], t.base)}
+            >
               {row.value}
             </dd>
           </div>
