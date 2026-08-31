@@ -816,7 +816,7 @@ export const GlobalSearch: React.FC = () => {
               </div>
 
               {/* Left Side in RTL: Image Banner Card */}
-              <div className="hidden md:block w-[350px] lg:w-[390px] h-full shrink-0 rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs relative bg-white">
+              <div className="hidden md:block w-[440px] lg:w-[480px] h-full shrink-0 rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs relative bg-white">
                 <img
                   src="/images/command-palette-banner.png"
                   alt="Fly4all Command Center"
