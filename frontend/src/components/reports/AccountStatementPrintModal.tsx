@@ -404,9 +404,8 @@ export const PrintableAccountStatementSheet: React.FC<{
               <span>{accountName}</span>
             </div>
             <div className="text-[10.5px] text-slate-700 font-semibold space-y-0.5 leading-snug">
-              <div>Address: {accountAddress || config.address || '-'}</div>
-              <div>Mobile: {accountPhone || config.phone || '-'}</div>
-              <div>Email: {accountEmail || config.email || '-'}</div>
+              {accountAddress && <div>Address: {accountAddress}</div>}
+              {accountEmail && <div>Email: {accountEmail}</div>}
             </div>
             <div className="text-[10px] text-slate-500 font-bold mt-2">
               Date : {printDateStr}

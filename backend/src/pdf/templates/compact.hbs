@@ -330,9 +330,8 @@
               {{/if}}
               <div class="client-name"><span class="to-label">TO:</span> {{accountName}}</div>
               <div class="client-details">
-                Address: {{#if accountAddress}}{{accountAddress}}{{else}}-{{/if}}<br>
-                Mobile: {{#if accountPhone}}{{accountPhone}}{{else}}-{{/if}}<br>
-                Email: {{#if accountEmail}}{{accountEmail}}{{else}}-{{/if}}
+                {{#if accountAddress}}Address: {{accountAddress}}<br>{{/if}}
+                {{#if accountEmail}}Email: {{accountEmail}}{{/if}}
               </div>
               <div class="print-date-line">Date : {{printDate}}</div>
             </div>
