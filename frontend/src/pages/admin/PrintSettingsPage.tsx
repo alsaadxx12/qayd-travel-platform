@@ -1267,6 +1267,38 @@ export const PrintSettingsPage: React.FC = () => {
                       />
                     </div>
 
+                    {/*
+                      وصف الشركة — حقلٌ كان ينقص تماماً.
+
+                      النصّ كان يُطبع تحت اسم الشركة في كل سند، ولم يكن له حقل في أي
+                      شاشة؛ فمن أراد تغييره أو حذفه لم يجد إليه سبيلاً. وإظهاره من
+                      عدمه مفتاحٌ في تبويب «التخطيط».
+                    */}
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'وصف الشركة تحت الاسم (عربي)' : 'Company Tagline (Arabic)'}
+                      </label>
+                      <TextInput
+                        size="xs"
+                        value={currentConfig.subtitle || ''}
+                        onChange={(e) => updateCurrentConfig('subtitle', e.target.value)}
+                        placeholder={isAr ? 'اتركه فارغاً لعدم طباعة أي وصف' : 'Leave empty to print no tagline'}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'وصف الشركة تحت الاسم (إنجليزي)' : 'Company Tagline (English)'}
+                      </label>
+                      <TextInput
+                        size="xs"
+                        value={currentConfig.subtitleEn || ''}
+                        onChange={(e) => updateCurrentConfig('subtitleEn', e.target.value)}
+                        placeholder="Leave empty to print no tagline"
+                        dir="ltr"
+                      />
+                    </div>
+
                     <div>
                       <label className="text-[11px] font-bold text-slate-700 block mb-1">
                         {isAr ? 'العنوان' : 'Address'}
@@ -1679,21 +1711,71 @@ export const PrintSettingsPage: React.FC = () => {
                       </div>
                       <div>
                         <label className="text-[10px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'محاذاة الترويسة' : 'Header Alignment'}
+                          {isAr ? 'موضع الشعار' : 'Logo Position'}
                         </label>
                         <Select
                           size="xs"
                           value={currentConfig.logoPosition || 'start'}
                           onChange={(v) => updateCurrentConfig('logoPosition', v || 'start')}
                           data={[
-                            { value: 'start', label: isAr ? 'موزّعة على الطرفين' : 'Spread' },
+                            { value: 'start', label: isAr ? 'في بداية السطر (يمين)' : 'Start of the row' },
+                            { value: 'end', label: isAr ? 'في نهاية السطر (يسار)' : 'End of the row' },
+                            { value: 'center', label: isAr ? 'في الوسط فوق الاسم' : 'Centered, above the name' },
+                          ]}
+                          allowDeselect={false}
+                          disabled={!currentConfig.logoUrl}
+                        />
+                        {!currentConfig.logoUrl && (
+                          <p className="text-[9px] text-slate-500 mt-1 font-medium">
+                            {isAr ? 'لا يوجد شعار مرفوع بعد.' : 'No logo uploaded yet.'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ── موضع الاسم وسطر الاتصال ── */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'موضع اسم الشركة' : 'Company Name Position'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.headerTextAlign || 'opposite'}
+                          onChange={(v) => updateCurrentConfig('headerTextAlign', v || 'opposite')}
+                          data={[
+                            { value: 'opposite', label: isAr ? 'في الطرف المقابل للشعار' : 'Opposite the logo' },
+                            { value: 'beside', label: isAr ? 'ملاصقاً للشعار' : 'Beside the logo' },
+                            { value: 'center', label: isAr ? 'في وسط المساحة' : 'Centered' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'موضع سطر بيانات الاتصال' : 'Contact Line Position'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.contactAlign || 'start'}
+                          onChange={(v) => updateCurrentConfig('contactAlign', v || 'start')}
+                          data={[
+                            { value: 'start', label: isAr ? 'من البداية' : 'From the start' },
                             { value: 'center', label: isAr ? 'في الوسط' : 'Centered' },
-                            { value: 'end', label: isAr ? 'إلى الطرف' : 'To the side' },
+                            { value: 'end', label: isAr ? 'من النهاية' : 'From the end' },
                           ]}
                           allowDeselect={false}
                         />
                       </div>
                     </div>
+
+                    <Switch
+                      size="xs"
+                      color="orange"
+                      label={isAr ? 'إظهار وصف الشركة تحت الاسم' : 'Show Company Tagline Under the Name'}
+                      checked={currentConfig.showSubtitle === true}
+                      onChange={(e) => updateCurrentConfig('showSubtitle', e.currentTarget.checked)}
+                    />
 
                     <div className="space-y-2">
                       <Switch

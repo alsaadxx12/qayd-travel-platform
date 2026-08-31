@@ -101,8 +101,16 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const DEFAULT_VOUCHER_CONFIG = {
   companyName: 'رودا 10 للبرمجيات والحلول المحاسبية',
   companyNameEn: 'RODA 10 Software & Accounting Solutions',
-  subtitle: 'شركة البرمجيات والحلول المالية المتقدمة',
-  subtitleEn: 'Advanced Software & Accounting Solutions',
+  /**
+   * الوصف تحت اسم الشركة — فارغ ومُطفأ.
+   *
+   * كان نصّاً افتراضياً يُطبع على كل سند ولا حقل له في أي شاشة، فيراه صاحب الشركة
+   * على ورقته الرسمية ولا يجد ما يحذفه به. والحقل موجود الآن في تبويب «الشركة»
+   * ومفتاحه في «التخطيط»، فمن أراده كتبه وفعّله.
+   */
+  showSubtitle: false,
+  subtitle: '',
+  subtitleEn: '',
   commercialReg: 'س.ت: 90182471 / بغداد',
   taxNumber: 'الرقم الضريبي: 300012345600003',
   phone: '7714569870',
@@ -162,6 +170,8 @@ export const DEFAULT_VOUCHER_CONFIG = {
   copiesPerPage: 1 as 1 | 2,
   voucherHeaderStyle: 'rule' as 'band' | 'rule' | 'plain' | 'frame',
   logoPosition: 'start' as 'start' | 'center' | 'end',
+  headerTextAlign: 'opposite' as 'opposite' | 'beside' | 'center',
+  contactAlign: 'start' as 'start' | 'center' | 'end',
   showAddress: true,
   showPhone: true,
   showEmail: true,

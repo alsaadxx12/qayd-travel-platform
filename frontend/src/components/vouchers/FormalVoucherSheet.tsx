@@ -38,7 +38,25 @@ export interface VoucherSheetConfig {
 
   // ── Header & logo ──
   voucherHeaderStyle?: 'band' | 'rule' | 'plain' | 'frame';
+  /**
+   * جهة الشعار في الترويسة — البداية أو النهاية أو سطرٌ مستقلّ فوق الاسم.
+   *
+   * كان هذا المفتاح يضبط توزيع الصفّ كلّه لا موضع الشعار، فلم يكن في النظام سبيل
+   * إلى نقل الشعار وحده إلى الجهة الأخرى: كان يُرسم أولاً دائماً. والآن يضبط ترتيب
+   * الشعار، ومحاذاة الاسم مفتاحٌ مستقلّ إلى جانبه.
+   */
   logoPosition?: 'start' | 'center' | 'end';
+  /**
+   * موضع اسم الشركة — منسوباً إلى الشعار لا إلى حافة الورقة.
+   *
+   * «مقابل الشعار» و«ملاصق له» يبقيان صحيحين مهما نُقل الشعار، بينما «يمين/يسار»
+   * المطلقان ينقلبان معناهما عند نقله: من اختار الاسم في الطرف المقابل ثم نقل
+   * الشعار إلى الجهة الأخرى كان يجد الاثنين ملتصقين. والقيمتان المطلقتان مقبولتان
+   * أيضاً لأن تصاميم حُفظت بهما قبل هذا التمييز.
+   */
+  headerTextAlign?: 'opposite' | 'beside' | 'center' | 'start' | 'end';
+  /** محاذاة سطر العنوان والهاتف والبريد أسفل الترويسة. */
+  contactAlign?: 'start' | 'center' | 'end';
   logoUrl?: string;
   /**
    * أسماء الحقول هنا هي نفسها المحفوظة في تصميم الطباعة — لا مرادفات لها.
@@ -53,6 +71,15 @@ export interface VoucherSheetConfig {
   logoBorderRadius?: number;
   companyName?: string;
   companyNameEn?: string;
+  /**
+   * وصف الشركة تحت اسمها — مُطفأ ما لم يُطلب صراحةً.
+   *
+   * كان يُطبع نصّ افتراضي («شركة البرمجيات والحلول المالية المتقدمة») ولا حقل له في
+   * أي شاشة، فلا سبيل إلى تغييره ولا إلى إزالته. والافتراض الآن ألّا يُطبع: سطرٌ لا
+   * يملك المستخدم أمره أسوأ من سطرٍ ناقص، والترويسة تكتفي باسم الشركة ما لم يختر
+   * صاحبها غير ذلك.
+   */
+  showSubtitle?: boolean;
   subtitle?: string;
   subtitleEn?: string;
   showAddress?: boolean;
@@ -328,12 +355,17 @@ export const FormalVoucherSheet: React.FC<{
           ]
   ).filter((title) => String(title || '').trim().length > 0);
 
-  const align =
-    config.logoPosition === 'center'
-      ? 'justify-center text-center'
-      : config.logoPosition === 'end'
-        ? 'justify-end'
-        : 'justify-between';
+  const hasLogo = Boolean(config.logoUrl);
+  const logoPosition = config.logoPosition || 'start';
+
+  /**
+   * محاذاة الاسم: ما يختاره المستخدم، وإلّا ما كانت عليه الورقة قبل وجود المفتاح.
+   *
+   * الترويسة كانت `justify-between`: شعارٌ في طرف واسمٌ في الطرف المقابل حين يوجد
+   * شعار، واسمٌ في البداية حين لا يوجد — وهو ما يعطيه «مقابل الشعار» بالضبط في
+   * الحالتين، فلا تتبدّل ترويسة أحدٍ لمجرّد أن المفتاح صار موجوداً.
+   */
+  const nameAlign = config.headerTextAlign || 'opposite';
 
   /**
    * سطر بيانات الاتصال لا يُوزَّع على الطرفين — يتبع الترويسة دون أن يتمدّد.
@@ -343,12 +375,24 @@ export const FormalVoucherSheet: React.FC<{
    * لا كسطر واحد. والتوزيع منطقي لصفّ الهوية (شعار في طرف واسم في طرف)، وغير منطقي
    * لقائمة متتابعة.
    */
-  const contactAlign =
-    config.logoPosition === 'center'
+  const contactJustify =
+    config.contactAlign === 'center'
       ? 'justify-center text-center'
-      : config.logoPosition === 'end'
+      : config.contactAlign === 'end'
         ? 'justify-end'
         : 'justify-start';
+
+  const textAlignClass = (() => {
+    if (nameAlign === 'center') return 'text-center';
+    // القيمتان المطلقتان تُطاعان كما هما — تصاميم حُفظت بهما قبل أن يصير الموضع منسوباً.
+    if (nameAlign === 'start') return 'text-start';
+    if (nameAlign === 'end') return 'text-end';
+    // بلا شعار لا مقابل ولا ملاصق: الاسم من بداية السطر.
+    if (!hasLogo) return 'text-start';
+    const besideLogo = nameAlign === 'beside';
+    const sitsAtStart = logoPosition === 'end' ? besideLogo === false : besideLogo === true;
+    return sitsAtStart ? 'text-start' : 'text-end';
+  })();
 
   const headerStyle = config.voucherHeaderStyle || 'rule';
   const onBand = headerStyle === 'band';
@@ -402,35 +446,37 @@ export const FormalVoucherSheet: React.FC<{
           (الشعار والاسم والوصف)، وتحته سطر واحد يجمع العنوان والهاتف والبريد
           والسجل مفصولةً بنقاط — أهدأ للعين، ويحترم مفاتيح الإظهار كما هي.
         */}
-        <div className={`flex items-center gap-3 ${align}`}>
-          {config.logoUrl && (
-            <img
-              src={config.logoUrl}
-              alt=""
-              className="shrink-0"
-              style={{
-                height: config.logoHeight || 44,
-                maxWidth: config.logoWidth || 180,
-                objectFit: 'contain',
-                borderRadius: config.logoBorderRadius || 0,
-              }}
-            />
-          )}
-          <div className="min-w-0">
-            <div className="font-black leading-tight truncate" style={{ fontSize: t.company }}>
-              {(isEn ? config.companyNameEn : config.companyName) || config.companyName || ''}
-            </div>
-            {(isEn ? config.subtitleEn : config.subtitle) && (
-              <div className="opacity-80 truncate" style={{ fontSize: t.subtitle }}>
-                {isEn ? config.subtitleEn : config.subtitle}
+        {/*
+          الشعار والاسم عنصران مستقلّان يُرتَّبان، لا عنصر واحد ثابت الترتيب.
+
+          الشعار في «الوسط» يأخذ سطراً لنفسه فوق الاسم — لا يُحشر في صفّ الاسم، لأن
+          توسيط عنصرين في صفّ واحد يترك الاسم مزاحاً عن مركز الورقة بمقدار نصف عرض
+          الشعار، وهو انزياح تراه العين ولا تعرف سببه.
+        */}
+        {logoPosition === 'center' ? (
+          <>
+            {hasLogo && (
+              <div className="flex justify-center mb-2">
+                <HeaderLogo config={config} />
               </div>
             )}
+            <div className={`min-w-0 ${textAlignClass}`}>
+              <HeaderTitle config={config} isEn={isEn} size={t.company} subSize={t.subtitle} />
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center gap-3">
+            {hasLogo && logoPosition === 'start' && <HeaderLogo config={config} />}
+            <div className={`min-w-0 flex-1 ${textAlignClass}`}>
+              <HeaderTitle config={config} isEn={isEn} size={t.company} subSize={t.subtitle} />
+            </div>
+            {hasLogo && logoPosition === 'end' && <HeaderLogo config={config} />}
           </div>
-        </div>
+        )}
 
         {contactLine.length > 0 && (
           <div
-            className={`mt-1.5 opacity-75 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${contactAlign}`}
+            className={`mt-1.5 opacity-75 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${contactJustify}`}
             style={{ fontSize: t.label }}
           >
             {contactLine.map((part, i) => (
@@ -690,12 +736,16 @@ export const FormalVoucherSheet: React.FC<{
       )}
 
       {config.footerText && (
-        <footer
-          className={`mt-6 pt-2 border-t opacity-60 ${footerAlign}`}
-          style={{ borderColor: softRule, fontSize: t.label }}
-        >
-          {config.footerText}
-        </footer>
+        <>
+          {/* الفاصل الذي يتمدّد — بحدٍّ أدنى لا يلتصق عنده التذييل بما فوقه. */}
+          <div className="grow" style={{ minHeight: 24 }} aria-hidden="true" />
+          <footer
+            className={`pt-2 border-t opacity-60 shrink-0 ${footerAlign}`}
+            style={{ borderColor: softRule, fontSize: t.label }}
+          >
+            {config.footerText}
+          </footer>
+        </>
       )}
     </>
   );
@@ -710,7 +760,7 @@ export const FormalVoucherSheet: React.FC<{
   return (
     <div
       dir={isEn ? 'ltr' : 'rtl'}
-      className="bg-white text-slate-900 relative mx-auto"
+      className="bg-white text-slate-900 relative mx-auto flex flex-col"
       style={{
         width: paper.width,
         minHeight: paper.minHeight || undefined,
@@ -743,23 +793,71 @@ export const FormalVoucherSheet: React.FC<{
         </div>
       )}
 
-      <div className="relative" style={{ zIndex: 1 }}>
+      {/*
+        الورقة عمودٌ يملأ ارتفاعها، والتذييل في قاعه.
+
+        كان التذييل يلي آخر عنصر قبله بمسافة ثابتة، فيقع في منتصف الورقة حين يكون
+        السند قصيراً وعند حافتها حين يطول — أي يتحرّك بحسب عدد الحقول المعبّأة، وهو
+        آخر ما ينبغي أن يتحرّك في مستند رسمي. الآن كل نسخة عمودٌ مرن، والفاصل قبل
+        التذييل هو ما يتمدّد، فيثبت التذييل في أسفل الورقة دائماً.
+
+        وعلى ورق الحرارة لا ارتفاع للورقة أصلاً (لفّة مستمرة)، فلا شيء يتمدّد
+        والتذييل يتبع آخر سطر — وهو الصواب هناك.
+      */}
+      <div className="relative flex-1 flex flex-col" style={{ zIndex: 1 }}>
         {twoUp ? (
           <>
-            {body(copyLabels[0])}
+            <div className="flex-1 flex flex-col">{body(copyLabels[0])}</div>
             {/* خط القصّ — نقطي وواضح، فالنسختان تُفصلان بمقصّ لا بالتخمين. */}
             <div
-              className="my-6 border-t border-dashed"
+              className="my-6 border-t border-dashed shrink-0"
               style={{ borderColor: rule }}
               aria-hidden="true"
             />
-            {body(copyLabels[1])}
+            <div className="flex-1 flex flex-col">{body(copyLabels[1])}</div>
           </>
         ) : (
           body()
         )}
       </div>
     </div>
+  );
+};
+
+/** الشعار بمقاساته من القالب — مرسوماً في أي من مواضع الترويسة الثلاثة. */
+const HeaderLogo: React.FC<{ config: VoucherSheetConfig }> = ({ config }) => (
+  <img
+    src={config.logoUrl}
+    alt=""
+    className="shrink-0"
+    style={{
+      height: config.logoHeight || 44,
+      maxWidth: config.logoWidth || 180,
+      objectFit: 'contain',
+      borderRadius: config.logoBorderRadius || 0,
+    }}
+  />
+);
+
+/** اسم الشركة، ووصفها تحته إن طُلب صراحةً. */
+const HeaderTitle: React.FC<{
+  config: VoucherSheetConfig;
+  isEn: boolean;
+  size: number;
+  subSize: number;
+}> = ({ config, isEn, size, subSize }) => {
+  const subtitle = isEn ? config.subtitleEn : config.subtitle;
+  return (
+    <>
+      <div className="font-black leading-tight truncate" style={{ fontSize: size }}>
+        {(isEn ? config.companyNameEn : config.companyName) || config.companyName || ''}
+      </div>
+      {config.showSubtitle === true && subtitle && (
+        <div className="opacity-80 truncate" style={{ fontSize: subSize }}>
+          {subtitle}
+        </div>
+      )}
+    </>
   );
 };
 
