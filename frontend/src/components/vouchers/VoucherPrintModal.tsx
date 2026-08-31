@@ -975,7 +975,8 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
 
     const loadTemplate = async () => {
       for (const key of [docType, legacyDocType]) {
-        const res = await fetchPrintTemplate(key).catch(() => null);
+        // طازجاً حتماً: ما سيُطبع ورقاً يجب أن يعكس آخر حفظ ولو جرى في تبويب آخر.
+        const res = await fetchPrintTemplate(key, { fresh: true }).catch(() => null);
         if (res && res.config) return res;
       }
       return null;

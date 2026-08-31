@@ -14,9 +14,17 @@ export async function fetchAllPrintTemplates() {
   return apiRequest<Record<string, any>>('/print-templates');
 }
 
-export async function fetchPrintTemplate(docType: string) {
+/**
+ * `fresh: true` يتجاوز ذاكرة الواجهة كلياً.
+ *
+ * تُطلب عند فتح نافذة الطباعة وعند فتح شاشة الإعدادات: المستند الذي سيُطبع ورقاً
+ * يجب أن يعكس آخر حفظ حتماً — ولو جرى الحفظ في تبويب متصفح آخر لا تصل إليه
+ * عمليات إسقاط الذاكرة. طلبٌ إضافي واحد عند فتح النافذة ثمن زهيد لصحّة مطبوعة.
+ */
+export async function fetchPrintTemplate(docType: string, opts?: { fresh?: boolean }) {
   return apiRequest<{ id?: string; name?: string; docType: string; isDefault?: boolean; config: any }>(
-    `/print-templates/${docType}`
+    `/print-templates/${docType}`,
+    opts?.fresh ? ({ noCache: true } as any) : undefined
   );
 }
 

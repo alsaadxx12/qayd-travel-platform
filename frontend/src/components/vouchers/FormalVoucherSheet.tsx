@@ -169,6 +169,14 @@ export interface VoucherSheetConfig {
    * أشرطة منفصلة ليحافظ على التراتب نفسه.
    */
   fontScale?: number;
+  /**
+   * نمط كل نص على حدة — المفتاح من VOUCHER_TEXT_ELEMENTS.
+   *
+   * كل خاصية اختيارية، وما لم يُضبط يبقى على مظهره الموروث (ألوان القالب العامة
+   * والمقاسات والأوزان الافتراضية). فالقاعدة: الضبط العام أولاً، وهذا فوقه لمن
+   * أراد لعنوان السند لوناً ولرقم المبلغ وزناً ولعبارة الشكر ميلاً.
+   */
+  textStyles?: Record<string, VoucherTextStyle>;
   fontSizes?: {
     companyTitle?: number;
     subtitle?: number;
@@ -180,6 +188,33 @@ export interface VoucherSheetConfig {
   showQrCode?: boolean;
   qrSize?: number;
 }
+
+/** ما يُضبط لنصٍّ بعينه: لونه ومقاسه ووزنه ومحاذاته وميله. */
+export interface VoucherTextStyle {
+  color?: string;
+  size?: number;
+  weight?: 'normal' | 'semibold' | 'bold' | 'black';
+  align?: 'start' | 'center' | 'end';
+  italic?: boolean;
+}
+
+/** كل نص في الورقة يمكن تخصيصه — بالترتيب الذي يلقاه القارئ من أعلى الورقة. */
+export const VOUCHER_TEXT_ELEMENTS: Array<{ key: string; label: string; labelEn: string }> = [
+  { key: 'company', label: 'اسم الشركة', labelEn: 'Company name' },
+  { key: 'subtitle', label: 'وصف الشركة', labelEn: 'Company tagline' },
+  { key: 'docTitle', label: 'عنوان السند (سند قبض)', labelEn: 'Document title' },
+  { key: 'meta', label: 'رقم السند والتاريخ والوقت', labelEn: 'Number & date' },
+  { key: 'amount', label: 'رقم المبلغ', labelEn: 'Amount figure' },
+  { key: 'tafqeet', label: 'التفقيط (المبلغ كتابةً)', labelEn: 'Amount in words' },
+  { key: 'fieldLabel', label: 'تسميات الحقول', labelEn: 'Field labels' },
+  { key: 'fieldValue', label: 'قيم الحقول', labelEn: 'Field values' },
+  { key: 'thankYou', label: 'عبارة الشكر', labelEn: 'Thank-you line' },
+  { key: 'signature', label: 'مسميات التواقيع', labelEn: 'Signature titles' },
+  { key: 'notes', label: 'الشرط القانوني', labelEn: 'Legal note' },
+  { key: 'footer', label: 'التذييل وبيانات الاتصال', labelEn: 'Footer & contact' },
+];
+
+const WEIGHTS: Record<string, number> = { normal: 500, semibold: 600, bold: 700, black: 900 };
 
 /** Every field the voucher can show, in the order an accountant reads them. */
 export const VOUCHER_FIELDS: Array<{ key: string; label: string; labelEn: string }> = [
@@ -301,6 +336,29 @@ export const FormalVoucherSheet: React.FC<{
     subtitle: sz(fs.subtitle || d.label),
     docTitle: cap(sz(fs.docTitle || 21), 15),
     amount: cap(sz(fs.amount || 30), 15),
+  };
+
+  /**
+   * نمط النص الواحد فوق مظهره الموروث.
+   *
+   * يُبنى كائن style لا أكثر: الخاصية غير المضبوطة تبقى undefined فتحكمها فئات
+   * التنسيق الافتراضية كما كانت — فلا يتغيّر شكل أي سند محفوظ لم يخصّص شيئاً.
+   * والمقاس المخصَّص يمرّ في معامل التكبير الشامل مثل بقية المقاسات.
+   */
+  const ts = config.textStyles || {};
+  const styleOf = (
+    key: string,
+    fallbackSize: number,
+    fallbackColor?: string
+  ): React.CSSProperties => {
+    const s = ts[key] || {};
+    return {
+      fontSize: s.size ? sz(s.size) : fallbackSize,
+      color: s.color || fallbackColor || undefined,
+      fontWeight: s.weight ? WEIGHTS[s.weight] : undefined,
+      textAlign: s.align ? (s.align as React.CSSProperties['textAlign']) : undefined,
+      fontStyle: s.italic ? 'italic' : undefined,
+    };
   };
 
   const rule = config.borderColor || tint(ink, 0.22);
@@ -504,14 +562,24 @@ export const FormalVoucherSheet: React.FC<{
               </div>
             )}
             <div className={`min-w-0 ${textAlignClass}`}>
-              <HeaderTitle config={config} isEn={isEn} size={t.company} subSize={t.subtitle} />
+              <HeaderTitle
+                config={config}
+                isEn={isEn}
+                nameStyle={styleOf('company', t.company)}
+                subStyle={styleOf('subtitle', t.subtitle)}
+              />
             </div>
           </>
         ) : (
           <div className="flex items-center gap-3">
             {hasLogo && logoPosition === 'start' && <HeaderLogo config={config} />}
             <div className={`min-w-0 flex-1 ${textAlignClass}`}>
-              <HeaderTitle config={config} isEn={isEn} size={t.company} subSize={t.subtitle} />
+              <HeaderTitle
+                config={config}
+                isEn={isEn}
+                nameStyle={styleOf('company', t.company)}
+                subStyle={styleOf('subtitle', t.subtitle)}
+              />
             </div>
             {hasLogo && logoPosition === 'end' && <HeaderLogo config={config} />}
           </div>
@@ -541,7 +609,7 @@ export const FormalVoucherSheet: React.FC<{
         <div className="shrink-0">
           <h1
             className="font-black tracking-tight whitespace-nowrap"
-            style={{ fontSize: t.docTitle, color: ink }}
+            style={styleOf('docTitle', t.docTitle, ink)}
           >
             {isEn
               ? isReceipt ? 'RECEIPT VOUCHER' : 'PAYMENT VOUCHER'
@@ -572,7 +640,7 @@ export const FormalVoucherSheet: React.FC<{
               <div
                 key={m.label}
                 className="flex items-center gap-2 px-2.5 py-1"
-                style={{ fontSize: t.label, borderTop: i > 0 ? `1px solid ${softRule}` : undefined }}
+                style={{ ...styleOf('meta', t.label), borderTop: i > 0 ? `1px solid ${softRule}` : undefined }}
               >
                 <span className="opacity-60 whitespace-nowrap">{m.label}</span>
                 <span
@@ -585,7 +653,10 @@ export const FormalVoucherSheet: React.FC<{
             ))}
           </div>
         ) : (
-          <div className="flex items-center gap-4 flex-wrap justify-end" style={{ fontSize: t.label }}>
+          <div
+            className="flex items-center gap-4 flex-wrap justify-end"
+            style={styleOf('meta', t.label)}
+          >
             {metaItems.map((m) => (
               <span key={m.label} className="whitespace-nowrap">
                 <span className="opacity-60">{m.label}: </span>
@@ -627,7 +698,7 @@ export const FormalVoucherSheet: React.FC<{
             </div>
             <div
               className="font-mono font-black tabular-nums lining-nums"
-              style={{ fontSize: t.amount, color: amountColor, whiteSpace: 'nowrap' }}
+              style={{ ...styleOf('amount', t.amount, amountColor), whiteSpace: 'nowrap' }}
               dir="ltr"
             >
               {amountText}
@@ -640,7 +711,7 @@ export const FormalVoucherSheet: React.FC<{
             </span>
             <span
               className="font-mono font-black tabular-nums lining-nums"
-              style={{ fontSize: t.amount, color: amountColor, whiteSpace: 'nowrap' }}
+              style={{ ...styleOf('amount', t.amount, amountColor), whiteSpace: 'nowrap' }}
               dir="ltr"
             >
               {amountText}
@@ -656,7 +727,7 @@ export const FormalVoucherSheet: React.FC<{
             style={{ borderColor: softRule, fontSize: t.label }}
           >
             <span className="opacity-60 shrink-0">{isEn ? 'In words' : 'وقدره كتابةً'}</span>
-            <span className="font-bold break-words" style={{ color: tafqeetColor }}>
+            <span className="font-bold break-words" style={styleOf('tafqeet', t.label, tafqeetColor)}>
               {tafqeetText}
             </span>
           </div>
@@ -687,12 +758,14 @@ export const FormalVoucherSheet: React.FC<{
           >
             {/* لون التسميات من القالب؛ وبدونه تُخفَّف بالشفافية كما كانت. */}
             <dt
-              className={`font-bold ${config.labelColor ? '' : 'opacity-65'}`}
-              style={{ fontSize: t.label, color: config.labelColor || undefined }}
+              className={`font-bold ${config.labelColor || ts.fieldLabel?.color ? '' : 'opacity-65'}`}
+              style={styleOf('fieldLabel', t.label, config.labelColor)}
             >
               {isEn ? row.labelEn : row.label}
             </dt>
-            <dd className="font-semibold break-words">{row.value}</dd>
+            <dd className="font-semibold break-words" style={styleOf('fieldValue', t.base)}>
+              {row.value}
+            </dd>
           </div>
         ))}
       </dl>
@@ -707,8 +780,12 @@ export const FormalVoucherSheet: React.FC<{
       */}
       {config.notesText && (
         <div
-          className="mt-3 rounded-md px-2.5 py-2 opacity-80"
-          style={{ border: `1px solid ${softRule}`, backgroundColor: tint(ink, 0.03), fontSize: t.label }}
+          className={`mt-3 rounded-md px-2.5 py-2 ${ts.notes?.color ? '' : 'opacity-80'}`}
+          style={{
+            ...styleOf('notes', t.label),
+            border: `1px solid ${softRule}`,
+            backgroundColor: tint(ink, 0.03),
+          }}
         >
           {config.notesText}
         </div>
@@ -726,7 +803,10 @@ export const FormalVoucherSheet: React.FC<{
       <div className="grow" style={{ minHeight: 16 }} aria-hidden="true" />
 
       {config.thankYouText && (
-        <p className="mt-4 text-center opacity-70 shrink-0" style={{ fontSize: t.label }}>
+        <p
+          className={`mt-4 text-center shrink-0 ${ts.thankYou?.color ? '' : 'opacity-70'}`}
+          style={styleOf('thankYou', t.label)}
+        >
           {config.thankYouText}
         </p>
       )}
@@ -758,8 +838,12 @@ export const FormalVoucherSheet: React.FC<{
               config.signatureStyle === 'box' ? (
                 <div key={i} className="rounded-md overflow-hidden" style={{ border: `1px solid ${rule}` }}>
                   <div
-                    className="px-2 py-1 font-bold text-center opacity-75"
-                    style={{ fontSize: t.label, backgroundColor: tint(ink, 0.05), borderBottom: `1px solid ${softRule}` }}
+                    className={`px-2 py-1 font-bold text-center ${ts.signature?.color ? '' : 'opacity-75'}`}
+                    style={{
+                      ...styleOf('signature', t.label),
+                      backgroundColor: tint(ink, 0.05),
+                      borderBottom: `1px solid ${softRule}`,
+                    }}
                   >
                     {title}
                   </div>
@@ -769,7 +853,10 @@ export const FormalVoucherSheet: React.FC<{
                 <div key={i} className="text-center">
                   <div style={{ height: sigHeight }} />
                   <div className="border-t" style={{ borderColor: rule }} />
-                  <div className="mt-1 font-bold opacity-75" style={{ fontSize: t.label }}>
+                  <div
+                    className={`mt-1 font-bold ${ts.signature?.color ? '' : 'opacity-75'}`}
+                    style={styleOf('signature', t.label)}
+                  >
                     {title}
                   </div>
                 </div>
@@ -816,8 +903,10 @@ export const FormalVoucherSheet: React.FC<{
       */}
       {(config.footerText || (contactInFooter && contactLine.length > 0)) && (
         <footer
-          className={`mt-6 pt-2 border-t shrink-0 ${footerAlign} ${config.footerTextColor ? '' : 'opacity-60'}`}
-          style={{ borderColor: softRule, fontSize: t.label, color: config.footerTextColor || undefined }}
+          className={`mt-6 pt-2 border-t shrink-0 ${footerAlign} ${
+            config.footerTextColor || ts.footer?.color ? '' : 'opacity-60'
+          }`}
+          style={{ ...styleOf('footer', t.label, config.footerTextColor), borderColor: softRule }}
         >
           {contactInFooter && contactLine.length > 0 && (
             <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
@@ -933,21 +1022,24 @@ const HeaderLogo: React.FC<{ config: VoucherSheetConfig }> = ({ config }) => (
   />
 );
 
-/** اسم الشركة، ووصفها تحته إن طُلب صراحةً. */
+/** اسم الشركة، ووصفها تحته إن طُلب صراحةً — كلٌّ بنمطه من القالب. */
 const HeaderTitle: React.FC<{
   config: VoucherSheetConfig;
   isEn: boolean;
-  size: number;
-  subSize: number;
-}> = ({ config, isEn, size, subSize }) => {
+  nameStyle: React.CSSProperties;
+  subStyle: React.CSSProperties;
+}> = ({ config, isEn, nameStyle, subStyle }) => {
   const subtitle = isEn ? config.subtitleEn : config.subtitle;
   return (
     <>
-      <div className="font-black leading-tight truncate" style={{ fontSize: size }}>
+      <div className="font-black leading-tight truncate" style={nameStyle}>
         {(isEn ? config.companyNameEn : config.companyName) || config.companyName || ''}
       </div>
       {config.showSubtitle === true && subtitle && (
-        <div className="opacity-80 truncate" style={{ fontSize: subSize }}>
+        <div
+          className={`truncate ${(subStyle as any).color ? '' : 'opacity-80'}`}
+          style={subStyle}
+        >
           {subtitle}
         </div>
       )}

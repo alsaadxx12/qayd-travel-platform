@@ -125,6 +125,7 @@ function schedulePersist() {
 export function invalidateApiCache(prefix?: string) {
   if (!prefix) {
     apiCache.clear();
+    schedulePersist();
     return;
   }
   for (const key of apiCache.keys()) {
@@ -132,6 +133,8 @@ export function invalidateApiCache(prefix?: string) {
       apiCache.delete(key);
     }
   }
+  // الإسقاط يجب أن يصل إلى sessionStorage أيضاً، وإلا عاد المحذوف عند أول تحديث للصفحة.
+  schedulePersist();
 }
 
 /** Full wipe — use on sign-in, sign-out and branch switching. */
@@ -154,6 +157,12 @@ function invalidateAfterMutation(mutatedPath: string) {
       apiCache.delete(key);
     }
   }
+  /**
+   * وبلا هذا السطر كان الحذف يبقى في ذاكرة التبويب وحدها: النسخة المخزَّنة في
+   * sessionStorage تبقى كما هي، فيُحيا منها المحذوف عند أول إعادة تحميل — وهكذا
+   * كان مَن يحفظ تصميم الطباعة ثم يعيد تحميل صفحة السندات يطبع بالتصميم القديم.
+   */
+  schedulePersist();
 }
 
 // Warm the cache from the previous page load before the first request goes out.

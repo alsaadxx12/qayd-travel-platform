@@ -38,7 +38,7 @@ import {
   DEFAULT_PAYMENT_VOUCHER_CONFIG,
   type VoucherPrintItem,
 } from '../../components/vouchers/VoucherPrintModal';
-import { VOUCHER_FIELDS } from '../../components/vouchers/FormalVoucherSheet';
+import { VOUCHER_FIELDS, VOUCHER_TEXT_ELEMENTS } from '../../components/vouchers/FormalVoucherSheet';
 
 // Sample mock data for live statement preview
 const MOCK_STATEMENT_ROWS: StatementMovementItem[] = [
@@ -112,7 +112,7 @@ const canonicalDocType = (tabKey: string) => CANONICAL_DOC_TYPE[tabKey] || tabKe
 async function resolveTemplateConfig(tabKey: string): Promise<any | null> {
   const keys = [canonicalDocType(tabKey), tabKey].filter((k, i, a) => a.indexOf(k) === i);
   for (const key of keys) {
-    const res = await fetchPrintTemplate(key).catch(() => null);
+    const res = await fetchPrintTemplate(key, { fresh: true }).catch(() => null);
     if (res && res.config) return res.config;
   }
   return null;
@@ -156,6 +156,8 @@ export const PrintSettingsPage: React.FC = () => {
 
   const [activeDocTab, setActiveDocTab] = useState<string | null>('statement');
   const [printTab, setPrintTab] = useState<'colors' | 'info' | 'fonts' | 'toggles' | 'layout'>('colors');
+  /** النص المختار في محرّر «تخصيص نص بعينه» في تبويب الخطوط. */
+  const [selectedTextEl, setSelectedTextEl] = useState('docTitle');
 
   // Multi-doc configs state mapped by docType
   const [configs, setConfigs] = useState<Record<string, any>>({
@@ -356,6 +358,13 @@ export const PrintSettingsPage: React.FC = () => {
         active.fontSizes = {
           ...(active.fontSizes || {}),
           [fontKey]: value,
+        };
+      } else if (field.startsWith('textStyles.')) {
+        // «textStyles.docTitle.color» — نمط نصٍّ بعينه فوق الضبط العام.
+        const [, el, prop] = field.split('.');
+        active.textStyles = {
+          ...(active.textStyles || {}),
+          [el]: { ...((active.textStyles || {})[el] || {}), [prop]: value },
         };
       } else {
         active[field] = value;
@@ -1029,6 +1038,32 @@ export const PrintSettingsPage: React.FC = () => {
                           />
                         </div>
 
+                        {/* ── لون كل نص على حدة ──
+                            فوق الألوان العامة أعلاه: من أراد لعنوان السند لوناً
+                            ولرقم المبلغ آخر ولعبارة الشكر ثالثاً، فمن هنا. الحقل
+                            الفارغ يعني «اتبع الضبط العام». */}
+                        <div className="pt-2 border-t border-slate-100">
+                          <label className="text-[10px] font-black text-slate-800 block mb-1.5">
+                            {isAr ? 'لون كل نص على حدة' : 'Per-Text Colors'}
+                          </label>
+                          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
+                            {VOUCHER_TEXT_ELEMENTS.map((el) => (
+                              <div key={el.key}>
+                                <label className="text-[9px] font-bold text-slate-600 block mb-0.5">
+                                  {isAr ? el.label : el.labelEn}
+                                </label>
+                                <ColorInput
+                                  value={currentConfig.textStyles?.[el.key]?.color || ''}
+                                  onChange={(v) => updateCurrentConfig(`textStyles.${el.key}.color`, v)}
+                                  size="xs"
+                                  format="hex"
+                                  placeholder={isAr ? 'تلقائي' : 'Auto'}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <label className="text-[10px] font-bold text-slate-700 block mb-1">
@@ -1523,6 +1558,108 @@ export const PrintSettingsPage: React.FC = () => {
                               value={currentConfig.fontSizes?.label || 10}
                               onChange={(v) => updateCurrentConfig('fontSizes.label', v)}
                             />
+                          </div>
+
+                          {/* ── تخصيص نص بعينه ──
+                              اختر النص ثم اضبط مقاسه ووزنه ومحاذاته وميله — كل
+                              خاصية غير مضبوطة تبقى على مظهرها الموروث، ولون النص
+                              نفسه في تبويب «الألوان». */}
+                          <div className="pt-2 border-t border-slate-100 space-y-2">
+                            <label className="text-[10px] font-black text-slate-800 block">
+                              {isAr ? 'تخصيص نص بعينه' : 'Style One Text'}
+                            </label>
+                            <Select
+                              size="xs"
+                              value={selectedTextEl}
+                              onChange={(v) => setSelectedTextEl(v || 'docTitle')}
+                              data={VOUCHER_TEXT_ELEMENTS.map((el) => ({
+                                value: el.key,
+                                label: isAr ? el.label : el.labelEn,
+                              }))}
+                              allowDeselect={false}
+                            />
+
+                            <div>
+                              <div className="flex justify-between text-[10px] font-bold text-slate-700 mb-1">
+                                <span>{isAr ? 'حجم الخط:' : 'Size:'}</span>
+                                <span className="font-mono">
+                                  {currentConfig.textStyles?.[selectedTextEl]?.size
+                                    ? `${currentConfig.textStyles[selectedTextEl].size}px`
+                                    : isAr ? 'تلقائي' : 'auto'}
+                                </span>
+                              </div>
+                              <Slider
+                                size="xs"
+                                color="orange"
+                                min={7}
+                                max={48}
+                                value={currentConfig.textStyles?.[selectedTextEl]?.size || 0}
+                                onChange={(v) => updateCurrentConfig(`textStyles.${selectedTextEl}.size`, v)}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                                  {isAr ? 'وزن الخط' : 'Weight'}
+                                </label>
+                                <Select
+                                  size="xs"
+                                  value={currentConfig.textStyles?.[selectedTextEl]?.weight || ''}
+                                  onChange={(v) => updateCurrentConfig(`textStyles.${selectedTextEl}.weight`, v || undefined)}
+                                  data={[
+                                    { value: '', label: isAr ? 'تلقائي' : 'Auto' },
+                                    { value: 'normal', label: isAr ? 'عادي' : 'Normal' },
+                                    { value: 'semibold', label: isAr ? 'متوسط' : 'Semibold' },
+                                    { value: 'bold', label: isAr ? 'عريض (بولد)' : 'Bold' },
+                                    { value: 'black', label: isAr ? 'أسود ثقيل' : 'Black' },
+                                  ]}
+                                  allowDeselect={false}
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                                  {isAr ? 'المحاذاة' : 'Alignment'}
+                                </label>
+                                <Select
+                                  size="xs"
+                                  value={currentConfig.textStyles?.[selectedTextEl]?.align || ''}
+                                  onChange={(v) => updateCurrentConfig(`textStyles.${selectedTextEl}.align`, v || undefined)}
+                                  data={[
+                                    { value: '', label: isAr ? 'تلقائي' : 'Auto' },
+                                    { value: 'start', label: isAr ? 'بداية' : 'Start' },
+                                    { value: 'center', label: isAr ? 'وسط' : 'Center' },
+                                    { value: 'end', label: isAr ? 'نهاية' : 'End' },
+                                  ]}
+                                  allowDeselect={false}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-4">
+                              <Switch
+                                size="xs"
+                                color="orange"
+                                label={isAr ? 'مائل' : 'Italic'}
+                                checked={currentConfig.textStyles?.[selectedTextEl]?.italic === true}
+                                onChange={(e) =>
+                                  updateCurrentConfig(`textStyles.${selectedTextEl}.italic`, e.currentTarget.checked)
+                                }
+                              />
+                              <Button
+                                size="compact-xs"
+                                variant="light"
+                                color="gray"
+                                className="font-bold"
+                                onClick={() => {
+                                  const next = { ...(currentConfig.textStyles || {}) };
+                                  delete next[selectedTextEl];
+                                  updateCurrentConfig('textStyles', next);
+                                }}
+                              >
+                                {isAr ? 'إعادة هذا النص للتلقائي' : 'Reset this text'}
+                              </Button>
+                            </div>
                           </div>
                         </>
                       )}
