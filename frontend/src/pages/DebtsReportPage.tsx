@@ -20,8 +20,16 @@ import {
   IconDotsVertical,
   IconChevronDown,
   IconRoute,
+  IconFileTypePdf,
+  IconDownload,
+  IconArchive,
+  IconFileZip,
+  IconFiles,
 } from '@tabler/icons-react';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas-pro';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { useAiPageContext } from '../hooks/useAiPageContext';
 
@@ -394,6 +402,215 @@ export const DebtsReportPage: React.FC = () => {
     }
   };
 
+  // Helper to generate a single account PDF Blob (standalone, styled, bilingual support)
+  const generateAccountPdfBlob = async (
+    targetAcc: AccountDebtRow,
+    stmt: any,
+  ): Promise<Blob> => {
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.width = '794px'; // Standard A4 width in pixels at 96 DPI
+    container.style.background = '#ffffff';
+    container.style.padding = '24px';
+    container.style.fontFamily = "'IBM Plex Sans Arabic', 'Cairo', system-ui, sans-serif";
+    container.style.direction = 'rtl';
+    container.style.color = '#0f172a';
+
+    const isUsd = targetAcc.accountCurrency === 'USD' || (includeUSD && !includeIQD) || Math.abs(targetAcc.endingBalanceUSD) > 0.01;
+    const curSymbol = isUsd ? '$' : 'د.ع';
+
+    container.innerHTML = `
+      <div style="border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h1 style="margin: 0; font-size: 19px; font-weight: 800; color: #0f172a;">شركة السعدي للسفر والسياحة</h1>
+          <p style="margin: 3px 0 0 0; font-size: 11px; color: #64748b;">كشف حساب مالي رسمي تفصيلي</p>
+        </div>
+        <div style="text-align: left; font-size: 11px; color: #475569;">
+          <div><strong>تاريخ الطباعة:</strong> ${new Date().toLocaleDateString('ar-EG')}</div>
+          <div><strong>الفترة:</strong> من ${batchStartDate || 'البداية'} إلى ${batchEndDate || 'اليوم'}</div>
+        </div>
+      </div>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div style="font-size: 14px; font-weight: 800; color: #0f172a;">${targetAcc.nameAr}</div>
+          <div style="font-size: 11px; font-family: monospace; color: #64748b; margin-top: 2px;">رقم الحساب: <strong>${targetAcc.code}</strong></div>
+        </div>
+        <div style="text-align: left;">
+          <div style="font-size: 11px; color: #64748b;">نوع الحساب / الدين</div>
+          <div style="font-size: 12px; font-weight: 800; color: #0369a1;">${targetAcc.debtLabel || 'حساب مالي'}</div>
+        </div>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px;">
+        <thead>
+          <tr style="background: #0f172a; color: #ffffff;">
+            <th style="padding: 7px 10px; text-align: center; width: 35px;">#</th>
+            <th style="padding: 7px 10px; text-align: right; width: 85px;">تاريخ الحركة</th>
+            <th style="padding: 7px 10px; text-align: right; width: 90px;">رقم المستند</th>
+            <th style="padding: 7px 10px; text-align: right; width: 75px;">النوع</th>
+            <th style="padding: 7px 10px; text-align: right;">البيان والتوضيح</th>
+            <th style="padding: 7px 10px; text-align: left; width: 85px;">مدين (${curSymbol})</th>
+            <th style="padding: 7px 10px; text-align: left; width: 85px;">دائن (${curSymbol})</th>
+            <th style="padding: 7px 10px; text-align: left; width: 90px;">الرصيد (${curSymbol})</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(includeOpening || includePrevious) && stmt.previousBalance !== 0 ? `
+            <tr style="background: #fffbeb; font-weight: bold; border-bottom: 1px solid #fde68a;">
+              <td style="padding: 6px 10px; text-align: center;">•</td>
+              <td style="padding: 6px 10px;">${batchStartDate || '—'}</td>
+              <td style="padding: 6px 10px; font-family: monospace;">—</td>
+              <td style="padding: 6px 10px;">رصيد سابق</td>
+              <td style="padding: 6px 10px;">الرصيد المدوّر السابق للفترة</td>
+              <td style="padding: 6px 10px; text-align: left; font-family: monospace;">${stmt.previousBalance > 0 ? stmt.previousBalance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
+              <td style="padding: 6px 10px; text-align: left; font-family: monospace;">${stmt.previousBalance < 0 ? Math.abs(stmt.previousBalance).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
+              <td style="padding: 6px 10px; text-align: left; font-family: monospace;">${stmt.previousBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          ` : ''}
+          ${stmt.lines.length === 0 ? `
+            <tr>
+              <td colspan="8" style="padding: 24px; text-align: center; color: #94a3b8;">لا توجد حركات تفصيلية مسجلة خلال الفترة المحددة.</td>
+            </tr>
+          ` : stmt.lines.map((l: any, idx: number) => `
+            <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 6px 10px; text-align: center; font-family: monospace; color: #64748b;">${idx + 1}</td>
+              <td style="padding: 6px 10px;">${l.date ? new Date(l.date).toLocaleDateString('ar-EG') : '—'}</td>
+              <td style="padding: 6px 10px; font-family: monospace; font-weight: bold;">${l.entryNumber || l.voucherNumber || '—'}</td>
+              <td style="padding: 6px 10px;">${l.docType || 'قيد'}</td>
+              <td style="padding: 6px 10px;">${l.description || 'حركة حساب'}</td>
+              <td style="padding: 6px 10px; text-align: left; font-family: monospace; font-weight: bold; color: #065f46;">${l.debit > 0 ? l.debit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
+              <td style="padding: 6px 10px; text-align: left; font-family: monospace; font-weight: bold; color: #9f1239;">${l.credit > 0 ? l.credit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
+              <td style="padding: 6px 10px; text-align: left; font-family: monospace; font-weight: 800;">${l.runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div style="background: #f1f5f9; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; font-weight: bold; margin-bottom: 14px;">
+        <div>إجمالي الحركات: <span style="font-family: monospace;">${stmt.lines.length}</span></div>
+        <div>مجموع المدين: <span style="color: #065f46; font-family: monospace;">${curSymbol} ${stmt.totalDebit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
+        <div>مجموع الدائن: <span style="color: #9f1239; font-family: monospace;">${curSymbol} ${stmt.totalCredit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
+        <div style="font-size: 12.5px; font-weight: 800; color: #0f172a;">الرصيد الصافي: <span style="color: ${stmt.closingBalance >= 0 ? '#065f46' : '#9f1239'}; font-family: monospace;">${curSymbol} ${Math.abs(stmt.closingBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })} ${stmt.closingBalance >= 0 ? '(لنا)' : '(علينا)'}</span></div>
+      </div>
+
+      <div style="border-top: 1px dashed #cbd5e1; padding-top: 8px; text-align: center; font-size: 9.5px; color: #94a3b8;">
+        هذا الكشف صادر آلياً من نظام قيد المحاسبي المعتمد • قسم الحسابات والمالية
+      </div>
+    `;
+
+    document.body.appendChild(container);
+
+    try {
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      return pdf.output('blob');
+    } finally {
+      document.body.removeChild(container);
+    }
+  };
+
+  // Bulk ZIP PDF Export Handler (A separate PDF file for each account packed into a ZIP)
+  const handleExportBatchZipPDF = async () => {
+    const targetAccounts = getSelectedAccountsForBatch();
+    if (targetAccounts.length === 0) {
+      showErrorNotification('تنبيه', 'يرجى اختيار حساب واحد على الأقل لتصدير الكشوفات.');
+      return;
+    }
+
+    setIsGeneratingBatch(true);
+    setExportProgress(5);
+    setExportStatusText('جاري بدء إنشاء ملفات PDF الفردية لكل حساب...');
+
+    try {
+      const zip = new JSZip();
+      let processedCount = 0;
+
+      for (let i = 0; i < targetAccounts.length; i++) {
+        const acc = targetAccounts[i];
+        const percent = Math.min(85, 5 + Math.round(((i + 1) / targetAccounts.length) * 80));
+        setExportProgress(percent);
+        setExportStatusText(`جاري توليد ملف PDF لحساب (${i + 1} من ${targetAccounts.length}): ${acc.nameAr}...`);
+
+        const stmt = await generateAccountStatementData(acc);
+        if (skipZeroBalanceAccounts && Math.abs(stmt.closingBalance) < 0.01) {
+          continue;
+        }
+        if (hideZeroMovements && stmt.lines.length === 0 && Math.abs(stmt.closingBalance) < 0.01) {
+          continue;
+        }
+
+        const pdfBlob = await generateAccountPdfBlob(acc, stmt);
+        const safeName = acc.nameAr.replace(/[/\\?%*:|"<>]/g, '_').trim();
+        const fileName = `كشف_حساب_${safeName}_${acc.code}.pdf`;
+        zip.file(fileName, pdfBlob);
+        processedCount++;
+      }
+
+      if (processedCount === 0) {
+        showErrorNotification('تنبيه', 'لم يتم العثور على أي حركات أو أرصدة للحسابات المختارة وفق شروط التصفية.');
+        setIsGeneratingBatch(false);
+        return;
+      }
+
+      setExportProgress(90);
+      setExportStatusText('جاري ضغط الملفات وتجهيز أرشيف ZIP...');
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const downloadUrl = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `كشوفات_الحسابات_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+
+      setExportProgress(100);
+      setExportStatusText('تم تجهيز وتحميل ملف ZIP بنجاح! 🚀');
+
+      setTimeout(() => {
+        setIsGeneratingBatch(false);
+        setIsBatchModalOpen(false);
+        showSuccessNotification('تم التصدير بنجاح', `تم تصدير وتنزيل (${processedCount}) ملف PDF في أرشيف ZIP بنجاح.`);
+      }, 600);
+    } catch (err: any) {
+      console.error(err);
+      showErrorNotification('خطأ في التصدير', 'حدث خطأ أثناء إنشاء ملفات PDF وضغطها.');
+      setIsGeneratingBatch(false);
+    }
+  };
+
   // Bulk PDF Export Handler with Progress Bar & Silent iframe Print (No popup window!)
   const handleExportBatchPDF = async () => {
     const targetAccounts = getSelectedAccountsForBatch();
@@ -445,10 +662,10 @@ export const DebtsReportPage: React.FC = () => {
         const acc = targetAccounts[index];
         const stmt = await generateAccountStatementData(acc);
         if (skipZeroBalanceAccounts && Math.abs(stmt.closingBalance) < 0.01) {
-          return;
+          continue;
         }
         if (hideZeroMovements && stmt.lines.length === 0 && Math.abs(stmt.closingBalance) < 0.01) {
-          return;
+          continue;
         }
 
         htmlContent += `
@@ -586,7 +803,7 @@ export const DebtsReportPage: React.FC = () => {
           }, 800);
         }, 500);
       }
-      } catch {
+    } catch {
       showErrorNotification('خطأ في التصدير', 'حدث خطأ أثناء تجهيز ملف PDF.');
       setIsGeneratingBatch(false);
     }
@@ -851,61 +1068,103 @@ export const DebtsReportPage: React.FC = () => {
     return cols;
   }, [pageShowIQD, pageShowUSD, handleOpenAmountTrace, handleOpenStatement]);
 
-  // Render Dynamic Actions Dropdown Menu when 1 or more accounts are selected via Checkbox
+  // Render Dynamic Actions when 1 or more accounts are selected via Checkbox
   const renderSelectedActions = (selectedIds: string[], _clearSelection: () => void) => {
     return (
-      <Menu position="bottom-end" shadow="md" width={220} withinPortal={false}>
-        <Menu.Target>
-          <Button
-            size="xs"
-            color="emerald"
-            variant="filled"
-            leftSection={<IconChevronDown size={14} />}
-            rightSection={<IconDotsVertical size={16} />}
-            className="font-bold text-xs h-8 px-3.5 shadow-2xs rounded-lg"
-          >
-            إجراءات ({selectedIds.length})
-          </Button>
-        </Menu.Target>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          size="xs"
+          color="orange"
+          variant="filled"
+          leftSection={<IconFileZip size={15} />}
+          onClick={() => {
+            setBatchTarget('CUSTOM');
+            setCustomSelectedAccIds(selectedIds);
+            handleExportBatchZipPDF();
+          }}
+          loading={isGeneratingBatch}
+          className="font-bold text-xs h-8 px-3.5 shadow-2xs rounded-lg cursor-pointer"
+        >
+          تصدير ملف لكل حساب (ZIP) ({selectedIds.length})
+        </Button>
 
-        <Menu.Dropdown p="xs" className="space-y-1">
-          <Menu.Item
-            leftSection={<IconFileText size={15} className="text-emerald-600" />}
-            onClick={() => {
-              setBatchTarget('CUSTOM');
-              setCustomSelectedAccIds(selectedIds);
-              setIsBatchModalOpen(true);
-            }}
-            className="font-bold text-xs"
-          >
-            سحب كشوفات الحسابات المحددة ({selectedIds.length})
-          </Menu.Item>
+        <Button
+          size="xs"
+          color="blue"
+          variant="light"
+          leftSection={<IconFiles size={15} />}
+          onClick={() => {
+            setBatchTarget('CUSTOM');
+            setCustomSelectedAccIds(selectedIds);
+            handleExportBatchPDF();
+          }}
+          loading={isGeneratingBatch}
+          className="font-bold text-xs h-8 px-3 rounded-lg cursor-pointer"
+        >
+          كشف موحد مدمج (PDF)
+        </Button>
 
-          <Menu.Item
-            leftSection={<IconMail size={15} className="text-indigo-600" />}
-            onClick={() => handleOpenEmailModal(selectedIds)}
-            className="font-bold text-xs"
-          >
-            إرسال عبر الإيميل
-          </Menu.Item>
+        <Button
+          size="xs"
+          color="emerald"
+          variant="light"
+          leftSection={<IconFileSpreadsheet size={15} />}
+          onClick={() => {
+            setBatchTarget('CUSTOM');
+            setCustomSelectedAccIds(selectedIds);
+            handleExportBatchExcel();
+          }}
+          loading={isGeneratingBatch}
+          className="font-bold text-xs h-8 px-3 rounded-lg cursor-pointer"
+        >
+          تصدير Excel
+        </Button>
 
-          <Menu.Item
-            leftSection={<IconFileSpreadsheet size={15} className="text-emerald-600" />}
-            onClick={handleExportExcel}
-            className="font-bold text-xs"
-          >
-            تصدير Excel
-          </Menu.Item>
+        <Menu position="bottom-end" shadow="md" width={220} withinPortal={false}>
+          <Menu.Target>
+            <Button
+              size="xs"
+              color="gray"
+              variant="outline"
+              leftSection={<IconDotsVertical size={14} />}
+              rightSection={<IconChevronDown size={13} />}
+              className="font-bold text-xs h-8 px-2.5 rounded-lg border-slate-300 bg-white"
+            >
+              خيارات إضافية
+            </Button>
+          </Menu.Target>
 
-          <Menu.Item
-            leftSection={<IconPrinter size={15} className="text-blue-600" />}
-            onClick={() => window.print()}
-            className="font-bold text-xs"
-          >
-            طباعة التقرير
-          </Menu.Item>
-        </Menu.Dropdown>
-      </Menu>
+          <Menu.Dropdown p="xs" className="space-y-1">
+            <Menu.Item
+              leftSection={<IconFileText size={15} className="text-orange-600" />}
+              onClick={() => {
+                setBatchTarget('CUSTOM');
+                setCustomSelectedAccIds(selectedIds);
+                setIsBatchModalOpen(true);
+              }}
+              className="font-bold text-xs"
+            >
+              تخصيص الفترة والخيارات المجمعة...
+            </Menu.Item>
+
+            <Menu.Item
+              leftSection={<IconMail size={15} className="text-indigo-600" />}
+              onClick={() => handleOpenEmailModal(selectedIds)}
+              className="font-bold text-xs"
+            >
+              إرسال عبر الإيميل
+            </Menu.Item>
+
+            <Menu.Item
+              leftSection={<IconPrinter size={15} className="text-slate-600" />}
+              onClick={() => window.print()}
+              className="font-bold text-xs"
+            >
+              طباعة الجدول المالي
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
+      </div>
     );
   };
 
@@ -1389,7 +1648,7 @@ export const DebtsReportPage: React.FC = () => {
           <Divider />
 
           {/* Section 4: Action Buttons */}
-          <div className="flex items-center justify-between gap-3 pt-2">
+          <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
             <Button
               variant="outline"
               color="gray"
@@ -1399,9 +1658,33 @@ export const DebtsReportPage: React.FC = () => {
               إلغاء
             </Button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="filled"
+                color="orange"
+                size="sm"
+                leftSection={<IconFileZip size={16} />}
+                onClick={handleExportBatchZipPDF}
+                loading={isGeneratingBatch}
+                className="font-bold shadow-xs cursor-pointer"
+              >
+                تصدير ملف PDF لكل حساب (ZIP) 📦
+              </Button>
+
+              <Button
+                variant="filled"
+                color="blue"
+                size="sm"
+                leftSection={<IconFiles size={16} />}
+                onClick={handleExportBatchPDF}
+                loading={isGeneratingBatch}
+                className="font-bold shadow-xs cursor-pointer"
+              >
+                كشف PDF موحد مدمج / طباعة
+              </Button>
+
+              <Button
+                variant="light"
                 color="emerald"
                 size="sm"
                 leftSection={<IconFileSpreadsheet size={16} />}
@@ -1410,18 +1693,6 @@ export const DebtsReportPage: React.FC = () => {
                 className="font-bold shadow-xs cursor-pointer"
               >
                 تصدير Excel مجمع
-              </Button>
-
-              <Button
-                variant="filled"
-                color="blue"
-                size="sm"
-                leftSection={<IconPrinter size={16} />}
-                onClick={handleExportBatchPDF}
-                loading={isGeneratingBatch}
-                className="font-bold shadow-xs cursor-pointer"
-              >
-                تصدير PDF / طباعة مجمعة
               </Button>
             </div>
           </div>

@@ -119,6 +119,7 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
   hideHeaderCard = false,
   hideFooter = false,
   hideSelectionBanner = false,
+  hideSelectionCheckbox = false,
   customFooterSummary,
   renderTableSummaryRow,
   onRowContextMenu,
@@ -685,6 +686,31 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
           <table className="w-full text-xs text-right border-collapse font-sans">
             <thead>
               <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 align-middle h-11">
+                {/* Selection Checkbox Column Header */}
+                {!hideSelectionCheckbox && (
+                  <th className="w-10 text-center align-middle px-2 py-2.5 border-l border-slate-200/80">
+                    <div className="flex items-center justify-center">
+                      <Checkbox
+                        size="xs"
+                        color="orange"
+                        checked={paginatedData.length > 0 && paginatedData.every(r => selectedRowIds.has(r.id))}
+                        indeterminate={paginatedData.some(r => selectedRowIds.has(r.id)) && !paginatedData.every(r => selectedRowIds.has(r.id))}
+                        onChange={(e) => {
+                          const next = new Set(selectedRowIds);
+                          if (e.currentTarget.checked) {
+                            paginatedData.forEach(r => next.add(r.id));
+                          } else {
+                            paginatedData.forEach(r => next.delete(r.id));
+                          }
+                          setSelectedRowIds(next);
+                        }}
+                        className="cursor-pointer"
+                        title={isAr ? 'تحديد الكل في هذه الصفحة' : 'Select all on this page'}
+                      />
+                    </div>
+                  </th>
+                )}
+
                 {/* Index / Serial Column */}
                 <th className="w-12 text-center font-mono align-middle font-bold text-slate-500 text-[11px] px-2 py-2.5">
                   #
@@ -740,13 +766,13 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={visibleColumns.length + (actionMenuItems.length > 0 ? 2 : 1)} className="py-20 text-center text-slate-400 font-bold text-xs">
+                  <td colSpan={visibleColumns.length + (actionMenuItems.length > 0 ? 1 : 0) + 1 + (!hideSelectionCheckbox ? 1 : 0)} className="py-20 text-center text-slate-400 font-bold text-xs">
                     {isAr ? 'جاري تحميل البيانات المحاسبية...' : 'Loading accounting data...'}
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={visibleColumns.length + (actionMenuItems.length > 0 ? 2 : 1)} className="py-20 text-center">
+                  <td colSpan={visibleColumns.length + (actionMenuItems.length > 0 ? 1 : 0) + 1 + (!hideSelectionCheckbox ? 1 : 0)} className="py-20 text-center">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100 text-[#F45A0A] flex items-center justify-center shadow-2xs">
                         <IconReceipt size={22} />
@@ -796,6 +822,29 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
                         }`}
                         style={{ height: 48 }}
                       >
+                        {/* Selection Checkbox Cell */}
+                        {!hideSelectionCheckbox && (
+                          <td className="w-10 text-center align-middle px-2 py-2 border-l border-slate-100/80">
+                            <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                size="xs"
+                                color="orange"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  const next = new Set(selectedRowIds);
+                                  if (e.currentTarget.checked) {
+                                    next.add(row.id);
+                                  } else {
+                                    next.delete(row.id);
+                                  }
+                                  setSelectedRowIds(next);
+                                }}
+                                className="cursor-pointer"
+                              />
+                            </div>
+                          </td>
+                        )}
+
                         {/* Single Clean Index / Serial Number & Expand Column */}
                         <td className="w-12 text-center align-middle font-mono text-[11px] text-slate-500 font-bold px-2 py-2">
                           <div className="flex items-center justify-center gap-1">
@@ -874,7 +923,7 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
                       {/* Expand Detail Row */}
                       {isExpanded && renderDetailRow && (
                         <tr key={`${row.id || rIdx}-detail`} className="bg-slate-50">
-                          <td colSpan={visibleColumns.length + (actionMenuItems.length > 0 ? 2 : 1)} className="p-4 border-t border-slate-200">
+                          <td colSpan={visibleColumns.length + (actionMenuItems.length > 0 ? 1 : 0) + 1 + (!hideSelectionCheckbox ? 1 : 0)} className="p-4 border-t border-slate-200">
                             {renderDetailRow(row)}
                           </td>
                         </tr>
