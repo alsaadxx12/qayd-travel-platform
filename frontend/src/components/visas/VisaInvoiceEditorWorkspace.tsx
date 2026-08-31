@@ -1969,20 +1969,6 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
                     </>
                   )}
 
-                  {/* Paying Cashbox */}
-                  <div id="field-paying-cashbox">
-                    <SearchableCombobox
-                      label={isAr ? 'صندوق دفع تكلفة الشراء' : 'Cost Paying Cashbox'}
-                      value={payingCashbox}
-                      onChange={(val) => {
-                        setPayingCashbox(val);
-                        markDirty();
-                      }}
-                      options={cashboxOptions}
-                    />
-                  </div>
-
-
                   {/* Issuing Employee */}
                   <div id="field-employee">
                     <SearchableCombobox
