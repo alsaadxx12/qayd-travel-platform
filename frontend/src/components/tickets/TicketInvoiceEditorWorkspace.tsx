@@ -56,6 +56,8 @@ import { formatCurrency, getCurrencySymbol, getCurrencyLabel } from '../../utils
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
+import { Lottie } from 'lottie-react';
+import flightTicketAnimation from '../../assets/animations/flight-ticket.json';
 import {
   TicketPageSettings,
   DEFAULT_TICKET_PAGE_SETTINGS,
@@ -1524,8 +1526,8 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
             </button>
           </Tooltip>
 
-          <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
-            <Plane size={17} />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-orange-50/90 border border-orange-200/80 p-0.5 flex items-center justify-center font-bold shrink-0 overflow-hidden shadow-2xs">
+            <Lottie src={flightTicketAnimation} loop={true} autoplay={true} className="w-full h-full" />
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">

@@ -35,6 +35,8 @@ import { formatCurrency, getCurrencySymbol, getCurrencyLabel, parseCurrencyInput
 import { prepareTicketParseFormData } from '../../utils/pdfTextExtractor';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { API_BASE_URL } from '../../api/client';
+import { Lottie } from 'lottie-react';
+import flightTicketAnimation from '../../assets/animations/flight-ticket.json';
 
 export interface PassengerLine {
   id: string;
@@ -735,13 +737,16 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
     <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs overflow-hidden font-sans space-y-3 p-3.5 sm:p-5" dir={direction}>
       {/* ── CARD HEADER ── */}
       <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 flex-wrap gap-2.5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-[#F45A0A] text-white font-bold text-sm flex items-center justify-center shrink-0">
-            2
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-orange-50/90 border border-orange-200/80 p-0.5 shadow-2xs flex items-center justify-center shrink-0 overflow-hidden">
+            <Lottie src={flightTicketAnimation} loop={true} autoplay={true} className="w-full h-full" />
           </div>
           <div>
-            <h3 className="font-bold text-[16px] sm:text-[17px] text-[#111827] leading-tight">
-              {isAr ? 'المسافرون والتسعير بالدفعات' : 'Passengers & Pricing Batches'}
+            <h3 className="font-bold text-[16px] sm:text-[17px] text-[#111827] leading-tight flex items-center gap-2">
+              <span>{isAr ? 'المسافرون والتسعير بالدفعات' : 'Passengers & Pricing Batches'}</span>
+              <span className="text-[10px] font-black text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                {isAr ? 'خطوة 2' : 'Step 2'}
+              </span>
             </h3>
             <span className="text-[11.5px] sm:text-[12px] text-[#6B7280] font-normal block sm:inline">
               {statusString} {remainingString ? (isAr ? `| متبقي للتسعير: ${remainingString}` : `| Remaining to price: ${remainingString}`) : (isAr ? '| اكتمل تسعير جميع المسافرين ✓' : '| All passengers priced ✓')}
