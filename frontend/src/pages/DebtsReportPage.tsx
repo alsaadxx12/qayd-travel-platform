@@ -30,6 +30,8 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
+import { PrintableAccountStatementSheet, StatementMovementItem } from '../components/reports/AccountStatementPrintModal';
+import { fetchPrintTemplate } from '../api/printTemplates';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { useAiPageContext } from '../hooks/useAiPageContext';
 
@@ -102,6 +104,27 @@ export const DebtsReportPage: React.FC = () => {
   const [emailSubject, setEmailSubject] = useState('كشف حساب تفصيلي — نظام المحاسبة والذمم');
   const [emailBody, setEmailBody] = useState('مرحباً، تجدون برفقه كشف الحساب التفصيلي للذمم المالية للفترة المحددة.');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  const [printConfig, setPrintConfig] = useState<any>(null);
+  const [batchRenderState, setBatchRenderState] = useState<{
+    accountName: string;
+    accountCode: string;
+    accountId: string;
+    startDate: string;
+    endDate: string;
+    rows: StatementMovementItem[];
+    totals: { totalDebit: number; totalCredit: number; finalBalance: number; openingBalance?: number; previousBalance?: number };
+  } | null>(null);
+
+  useEffect(() => {
+    fetchPrintTemplate('statement')
+      .then((res) => {
+        if (res?.config) {
+          setPrintConfig(res.config);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const [debtContextMenu, setDebtContextMenu] = useState<{
     x: number;
@@ -402,128 +425,7 @@ export const DebtsReportPage: React.FC = () => {
     }
   };
 
-  // Helper to generate a single account styled HTML Document for standalone download / zip
-  const generateAccountStatementHtml = (
-    targetAcc: AccountDebtRow,
-    stmt: any,
-  ): string => {
-    const isUsd = targetAcc.accountCurrency === 'USD' || (includeUSD && !includeIQD) || Math.abs(targetAcc.endingBalanceUSD) > 0.01;
-    const curSymbol = isUsd ? '$' : 'د.ع';
-
-    return `<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-  <meta charset="UTF-8" />
-  <title>كشف حساب — ${targetAcc.nameAr}</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
-    body { font-family: 'Cairo', system-ui, sans-serif; background: #ffffff; color: #0f172a; margin: 0; padding: 24px; font-size: 12px; line-height: 1.4; }
-    .header { border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
-    .header h1 { margin: 0; font-size: 20px; font-weight: 900; color: #0f172a; }
-    .header p { margin: 3px 0 0 0; font-size: 11px; color: #64748b; }
-    .meta { text-align: left; font-size: 11px; color: #475569; }
-    .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
-    .card .title { font-size: 14px; font-weight: 800; color: #0f172a; }
-    .card .sub { font-size: 11px; color: #64748b; font-family: monospace; margin-top: 2px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
-    th { background: #0f172a; color: #ffffff; padding: 8px 10px; text-align: right; }
-    td { border-bottom: 1px solid #e2e8f0; padding: 7px 10px; }
-    tr:nth-child(even) { background: #f8fafc; }
-    .text-left { text-align: left; }
-    .font-mono { font-family: monospace; font-weight: bold; }
-    .summary { background: #f1f5f9; border-radius: 8px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 12px; margin-bottom: 16px; }
-    .badge-green { color: #047857; background: #dcfce7; padding: 3px 8px; border-radius: 6px; }
-    .badge-red { color: #b91c1c; background: #fee2e2; padding: 3px 8px; border-radius: 6px; }
-    .footer { border-top: 1px dashed #cbd5e1; padding-top: 8px; text-align: center; font-size: 10px; color: #94a3b8; }
-    @media print {
-      body { padding: 0; }
-      @page { size: A4; margin: 10mm; }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div>
-      <h1>شركة السعدي للسفر والسياحة</h1>
-      <p>كشف حساب مالي تفصيلي رسمي</p>
-    </div>
-    <div class="meta">
-      <div><strong>تاريخ الإصدار:</strong> ${new Date().toLocaleDateString('ar-EG')}</div>
-      <div><strong>الفترة:</strong> من ${batchStartDate || 'البداية'} إلى ${batchEndDate || 'اليوم'}</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div>
-      <div class="title">${targetAcc.nameAr}</div>
-      <div class="sub">رقم الحساب: <strong>${targetAcc.code}</strong></div>
-    </div>
-    <div style="text-align: left;">
-      <div style="font-size: 11px; color: #64748b;">نوع الحساب / الدين</div>
-      <div style="font-size: 12px; font-weight: 800; color: #0369a1;">${targetAcc.debtLabel || 'حساب مالي'}</div>
-    </div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 35px; text-align: center;">#</th>
-        <th style="width: 85px;">تاريخ الحركة</th>
-        <th style="width: 90px;">رقم المستند</th>
-        <th style="width: 75px;">النوع</th>
-        <th>البيان والتوضيح</th>
-        <th style="width: 90px; text-align: left;">مدين (${curSymbol})</th>
-        <th style="width: 90px; text-align: left;">دائن (${curSymbol})</th>
-        <th style="width: 95px; text-align: left;">الرصيد (${curSymbol})</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${(includeOpening || includePrevious) && stmt.previousBalance !== 0 ? `
-        <tr style="background: #fffbeb; font-weight: bold;">
-          <td style="text-align: center;">•</td>
-          <td>${batchStartDate || '—'}</td>
-          <td class="font-mono">—</td>
-          <td>رصيد سابق</td>
-          <td>الرصيد المدوّر السابق للفترة</td>
-          <td class="text-left font-mono">${stmt.previousBalance > 0 ? stmt.previousBalance.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
-          <td class="text-left font-mono">${stmt.previousBalance < 0 ? Math.abs(stmt.previousBalance).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
-          <td class="text-left font-mono">${stmt.previousBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-        </tr>
-      ` : ''}
-      ${stmt.lines.length === 0 ? `
-        <tr>
-          <td colspan="8" style="text-align: center; color: #94a3b8; padding: 24px;">لا توجد حركات تفصيلية مسجلة خلال الفترة المحددة.</td>
-        </tr>
-      ` : stmt.lines.map((l: any, idx: number) => `
-        <tr>
-          <td style="text-align: center; color: #64748b;" class="font-mono">${idx + 1}</td>
-          <td>${l.date ? new Date(l.date).toLocaleDateString('ar-EG') : '—'}</td>
-          <td class="font-mono">${l.entryNumber || l.voucherNumber || '—'}</td>
-          <td>${l.docType || 'قيد'}</td>
-          <td>${l.description || 'حركة حساب'}</td>
-          <td class="text-left font-mono" style="color: #065f46;">${l.debit > 0 ? l.debit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
-          <td class="text-left font-mono" style="color: #9f1239;">${l.credit > 0 ? l.credit.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}</td>
-          <td class="text-left font-mono">${l.runningBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
-
-  <div class="summary">
-    <div>إجمالي الحركات: <span class="font-mono">${stmt.lines.length}</span></div>
-    <div>مجموع المدين: <span style="color: #065f46;" class="font-mono">${curSymbol} ${stmt.totalDebit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
-    <div>مجموع الدائن: <span style="color: #9f1239;" class="font-mono">${curSymbol} ${stmt.totalCredit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></div>
-    <div>الرصيد الصافي: <span class="${stmt.closingBalance >= 0 ? 'badge-green' : 'badge-red'} font-mono">${curSymbol} ${Math.abs(stmt.closingBalance).toLocaleString('en-US', { minimumFractionDigits: 2 })} (${stmt.closingBalance >= 0 ? 'لنا' : 'علينا'})</span></div>
-  </div>
-
-  <div class="footer">
-    هذا الكشف صادر آلياً من نظام قيد المحاسبي المعتمد • قسم الحسابات والمالية
-  </div>
-</body>
-</html>`;
-  };
-
-  // Bulk ZIP Export Handler (A separate standalone file for each account packed into a ZIP)
+  // Bulk PDF Export Handler: Generates real official PDF files using the approved Account Statement template!
   const handleExportBatchZipPDF = async () => {
     const targetAccounts = getSelectedAccountsForBatch();
     if (targetAccounts.length === 0) {
@@ -532,8 +434,8 @@ export const DebtsReportPage: React.FC = () => {
     }
 
     setIsGeneratingBatch(true);
-    setExportProgress(10);
-    setExportStatusText('جاري سحب حركات الحسابات وتجهيز الكشوفات...');
+    setExportProgress(5);
+    setExportStatusText('جاري بدء إنشاء ملفات PDF الرسمية...');
 
     try {
       const zip = new JSZip();
@@ -541,22 +443,102 @@ export const DebtsReportPage: React.FC = () => {
 
       for (let i = 0; i < targetAccounts.length; i++) {
         const acc = targetAccounts[i];
-        const percent = Math.min(85, 10 + Math.round(((i + 1) / targetAccounts.length) * 75));
+        const percent = Math.min(90, 5 + Math.round(((i + 1) / targetAccounts.length) * 85));
         setExportProgress(percent);
-        setExportStatusText(`جاري سحب كشف حساب (${i + 1} من ${targetAccounts.length}): ${acc.nameAr}...`);
+        setExportStatusText(`جاري إنشاء كشف PDF للحساب (${i + 1} من ${targetAccounts.length}): ${acc.nameAr}...`);
 
-        const stmt = await generateAccountStatementData(acc);
-        if (skipZeroBalanceAccounts && Math.abs(stmt.closingBalance) < 0.01) {
+        const stmt = await getAccountStatement(acc.id, batchStartDate, batchEndDate);
+        const rawLines: StatementMovementItem[] = (stmt.lines || []).map((line, idx) => ({
+          rowNumber: idx + 1,
+          date: line.date,
+          docRef: line.entryNumber || line.reference || '—',
+          docLabel: line.voucherType || 'قيد يومية',
+          statement: line.description || 'حركة حساب',
+          debit: Number(line.debit || 0),
+          credit: Number(line.credit || 0),
+          runningBalance: Number(line.runningBalance || 0),
+          currency: acc.accountCurrency || 'IQD',
+        }));
+
+        const previousBalance = Number(stmt.openingBalance || 0);
+        const closingBalance = includeOpening || includePrevious
+          ? Number(stmt.closingBalance || 0)
+          : rawLines.reduce((sum, line) => sum + line.debit - line.credit, 0);
+
+        if (skipZeroBalanceAccounts && Math.abs(closingBalance) < 0.01) {
           continue;
         }
-        if (hideZeroMovements && stmt.lines.length === 0 && Math.abs(stmt.closingBalance) < 0.01) {
+        if (hideZeroMovements && rawLines.length === 0 && Math.abs(closingBalance) < 0.01) {
           continue;
         }
 
-        const htmlContent = generateAccountStatementHtml(acc, stmt);
+        const totals = {
+          totalDebit: rawLines.reduce((sum, line) => sum + line.debit, 0),
+          totalCredit: rawLines.reduce((sum, line) => sum + line.credit, 0),
+          finalBalance: closingBalance,
+          openingBalance: previousBalance,
+          previousBalance: previousBalance,
+        };
+
+        // Render sheet in DOM mount
+        setBatchRenderState({
+          accountName: acc.nameAr,
+          accountCode: acc.code,
+          accountId: acc.id,
+          startDate: batchStartDate || 'البداية',
+          endDate: batchEndDate || new Date().toISOString().split('T')[0],
+          rows: rawLines,
+          totals,
+        });
+
+        // Small tick to ensure React commits DOM updates
+        await new Promise((r) => setTimeout(r, 70));
+
+        const element = document.getElementById('batch-printable-sheet') || document.getElementById('printable-statement-sheet');
+        if (!element) {
+          continue;
+        }
+
+        const canvas = await html2canvas(element, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4',
+        });
+
+        const imgWidth = 210;
+        const pageHeight = 297;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+
         const safeName = acc.nameAr.replace(/[/\\?%*:|"<>]/g, '_').trim();
-        zip.file(`كشف_حساب_${safeName}_${acc.code}.html`, htmlContent);
-        processedCount++;
+        const pdfBlob = pdf.output('blob');
+
+        if (targetAccounts.length === 1) {
+          pdf.save(`كشف_حساب_${safeName}_${acc.code}.pdf`);
+          processedCount++;
+        } else {
+          zip.file(`كشف_حساب_${safeName}_${acc.code}.pdf`, pdfBlob);
+          processedCount++;
+        }
       }
 
       if (processedCount === 0) {
@@ -564,31 +546,35 @@ export const DebtsReportPage: React.FC = () => {
         return;
       }
 
-      setExportProgress(90);
-      setExportStatusText('جاري تجميع وضغط الملفات في أرشيف ZIP...');
+      if (targetAccounts.length > 1) {
+        setExportProgress(95);
+        setExportStatusText('جاري ضغط ملفات PDF وتجهيز ملف ZIP...');
 
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const downloadUrl = URL.createObjectURL(zipBlob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `كشوفات_الحسابات_${new Date().toISOString().split('T')[0]}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(downloadUrl);
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const downloadUrl = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `كشوفات_الحسابات_PDF_${new Date().toISOString().split('T')[0]}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+      }
 
       setExportProgress(100);
-      setExportStatusText('تم تجهيز وتحميل ملف ZIP بنجاح! 🚀');
+      setExportStatusText('تم تجهيز وتحميل ملفات PDF بنجاح! 🚀');
 
       setTimeout(() => {
         setIsBatchModalOpen(false);
-        showSuccessNotification('تم التصدير بنجاح', `تم تصدير وتنزيل (${processedCount}) كشف حساب في أرشيف ZIP بنجاح.`);
+        setBatchRenderState(null);
+        showSuccessNotification('تم التصدير بنجاح', `تم تصدير (${processedCount}) كشف حساب بصيغة PDF الرسمية بنجاح.`);
       }, 500);
     } catch (err: any) {
-      console.error(err);
-      showErrorNotification('خطأ في التصدير', 'حدث خطأ أثناء سحب الكشوفات وإنشاء ملف ZIP.');
+      console.error('Batch export failed:', err);
+      showErrorNotification('خطأ في التصدير', 'حدث خطأ أثناء إنشاء ملفات PDF.');
     } finally {
       setIsGeneratingBatch(false);
+      setBatchRenderState(null);
     }
   };
 
@@ -1742,6 +1728,35 @@ export const DebtsReportPage: React.FC = () => {
           </div>
         </Stack>
       </Modal>
+
+      {/* ── Hidden Mount for Official Statement Template PDF Generation ── */}
+      {batchRenderState && (
+        <div
+          id="batch-render-wrapper"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            zIndex: -9999,
+            opacity: 1,
+            pointerEvents: 'none',
+            width: '780px',
+            backgroundColor: '#ffffff',
+          }}
+        >
+          <PrintableAccountStatementSheet
+            accountName={batchRenderState.accountName}
+            accountCode={batchRenderState.accountCode}
+            accountId={batchRenderState.accountId}
+            startDate={batchRenderState.startDate}
+            endDate={batchRenderState.endDate}
+            rows={batchRenderState.rows}
+            totals={batchRenderState.totals}
+            config={printConfig}
+            lang="ar"
+          />
+        </div>
+      )}
     </div>
   );
 };
