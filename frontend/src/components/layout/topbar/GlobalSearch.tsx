@@ -59,14 +59,6 @@ export const GlobalSearch: React.FC = () => {
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
-  const [recentQueries, setRecentQueries] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('__global_recent_searches');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
 
   const navigate = useNavigate();
   const { language, direction } = useLanguageStore();
@@ -569,19 +561,8 @@ export const GlobalSearch: React.FC = () => {
       .slice(0, 50);
   }, [allItems, actionItems, screenItems, query]);
 
-  // Save recent search on execution
+  // Execute selected search item
   const executeItem = (item: SearchItem) => {
-    if (query.trim()) {
-      setRecentQueries((prev) => {
-        const updated = [query.trim(), ...prev.filter((x) => x !== query.trim())].slice(0, 5);
-        try {
-          localStorage.setItem('__global_recent_searches', JSON.stringify(updated));
-        } catch {
-          // Ignore
-        }
-        return updated;
-      });
-    }
     item.action();
   };
 
@@ -716,27 +697,7 @@ export const GlobalSearch: React.FC = () => {
               </div>
             </div>
 
-            {/* 2. Recent Searches Bar (Optional when no query) */}
-            {!query && recentQueries.length > 0 && (
-              <div className="px-5 py-1.5 border-b border-slate-100 flex items-center gap-2 text-xs text-slate-500 bg-white shrink-0 overflow-x-auto">
-                <Clock size={13} className="text-slate-400 shrink-0" />
-                <span className="font-bold text-[11px]">{isAr ? 'عمليات البحث الأخيرة:' : 'Recent:'}</span>
-                <div className="flex items-center gap-1.5">
-                  {recentQueries.map((rq, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setQuery(rq)}
-                      className="px-2 py-0.5 bg-slate-50 hover:bg-[#FFF3E8] hover:text-[#F45A0A] hover:border-[#FFD8B2] border border-slate-200 rounded text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer"
-                    >
-                      {rq}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 3. Middle Body: Two Columns (Results on the Right, Image Banner on the Left) */}
+            {/* 2. Middle Body: Two Columns (Results on the Right, Image Banner on the Left) */}
             <div className="flex-1 flex min-h-0 overflow-hidden p-3.5 gap-3.5 bg-slate-50/40">
               {/* Right Side in RTL: Results List */}
               <div ref={listRef} className="flex-1 overflow-y-auto space-y-2 pe-1">
