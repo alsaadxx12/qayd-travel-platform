@@ -21,6 +21,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
 import { fetchPrintTemplate, savePrintTemplate } from '../../api/printTemplates';
 import { downloadStatementPdf } from '../../api/statementPdf';
+import { generateChromiumPdf, serializeElementForChromium } from '../../utils/chromiumPdf';
 import { branchesApi, type Branch } from '../../api/branches';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -94,12 +95,12 @@ const MOCK_RECEIPT_VOUCHER: VoucherPrintItem = {
   currency: 'IQD',
   accountName: 'شركة النور للتجارة العامة',
   cashboxName: 'مصرف الرافدين - 123456789',
-  reference: 'INV-2025-0456',
   description: 'تسديد جزء من قيمة الفاتورة رقم INV-2025-0456',
+  customCategory: 'فلأي',
+  splitAccounts: [{ accountName: 'فلأي', amount: 250000, currency: 'IQD' }],
   user: 'أحمد المحاسب',
 };
 
-// Sample mock data for live payment voucher preview
 const MOCK_PAYMENT_VOUCHER: VoucherPrintItem = {
   id: 'pv-demo',
   voucherNumber: 'PV-2025-000045',
@@ -110,8 +111,8 @@ const MOCK_PAYMENT_VOUCHER: VoucherPrintItem = {
   currency: 'IQD',
   accountName: 'شركة الخطوط الجوية العراقية',
   cashboxName: 'مصرف الرافدين - 123456789',
-  reference: 'BILL-88912',
   description: 'سداد دفعة حساب مستحقات تذاكر طيران الخطوط لشهر حزيران',
+  splitAccounts: [{ accountName: 'تذاكر', amount: 450000, currency: 'IQD' }],
   user: 'علي جعفر',
 };
 
@@ -388,10 +389,33 @@ export const PrintSettingsPage: React.FC = () => {
         return;
       }
 
-      const previewId =
-        currentDocKey === 'expense_report' ? 'printable-statement-sheet' : 'printable-voucher-sheet';
+      if (currentDocKey === 'receipt_voucher' || currentDocKey === 'payment_voucher') {
+        const element = document.getElementById('printable-voucher-sheet');
+        if (!element) {
+          throw new Error(isAr ? 'معاينة السند غير جاهزة' : 'Voucher preview is not ready');
+        }
+        const html = serializeElementForChromium(element);
+        const { blob, filename } = await generateChromiumPdf({
+          html,
+          lang: isAr ? 'ar' : 'en',
+          filename: `test_template_${currentDocKey}.pdf`,
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        showSuccessNotification(
+          isAr ? 'تم تصدير PDF التجريبي' : 'Test PDF Exported',
+          isAr ? 'تم تنزيل عينة السند عبر محرك الطباعة الرسمي' : 'Voucher sample exported with the official print engine',
+        );
+        return;
+      }
 
-      const element = document.getElementById(previewId);
+      const element = document.getElementById('printable-statement-sheet');
       if (!element) return;
 
       const canvas = await html2canvas(element, {
@@ -1364,7 +1388,7 @@ export const PrintSettingsPage: React.FC = () => {
                         ...currentConfig,
                         logoUrl: activeLogoUrl || currentConfig?.logoUrl || '',
                       }}
-                      lang="ar"
+                      lang={isAr ? 'ar' : 'en'}
                     />
                   ) : currentDocKey === 'payment_voucher' ? (
                     <PrintableVoucherSheet
@@ -1373,7 +1397,7 @@ export const PrintSettingsPage: React.FC = () => {
                         ...currentConfig,
                         logoUrl: activeLogoUrl || currentConfig?.logoUrl || '',
                       }}
-                      lang="ar"
+                      lang={isAr ? 'ar' : 'en'}
                     />
                   ) : (
                     <PrintableAccountStatementSheet

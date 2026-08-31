@@ -210,7 +210,16 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   const cardTitleAr = isReceipt ? 'بيانات سند القبض' : 'بيانات سند الصرف والدفع';
   const cardTitleEn = isReceipt ? 'Receipt Voucher Details' : 'Payment Voucher Details';
 
-  const partyName = voucher.accountName || voucher.accountCode || (isEn ? 'Client / Entity' : 'العميل / الطرف المستفيد');
+  const partyNameRaw = voucher.accountName || (isEn ? 'Client / Entity' : 'العميل / الطرف المستفيد');
+  const codePrefix = String(voucher.accountCode || '').trim();
+  const partyName = (() => {
+    let n = String(partyNameRaw).trim();
+    if (codePrefix && n.startsWith(codePrefix)) {
+      n = n.slice(codePrefix.length).replace(/^\s*[-–—:]\s*/, '').trim();
+    }
+    n = n.replace(/^\d{3,}\s*[-–—:]\s*/, '').trim();
+    return n || String(partyNameRaw).trim();
+  })();
   const partyLabelAr = isReceipt ? 'استلمنا من السيد/السادة :' : 'ادفعوا للسيد/السادة :';
   const partyLabelEn = isReceipt ? 'Received From:' : 'Paid To:';
 
@@ -379,13 +388,6 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                   <span className="text-slate-600 font-bold">{isEn ? 'Issue Time :' : 'وقت الإصدار :'}</span>
                   <span className="font-mono font-bold text-slate-800" dir="ltr">{timeFormatted}</span>
                 </div>
-
-                {/* الصفحة */}
-                <div className="flex items-center gap-1.5 border-r border-slate-300 pr-3">
-                  <IconFileDescription size={13} className="text-slate-400" />
-                  <span className="text-slate-600 font-bold">{isEn ? 'Page :' : 'الصفحة :'}</span>
-                  <span className="font-mono font-bold text-slate-800" dir="ltr">1 / 1</span>
-                </div>
               </div>
             </div>
           ) : (
@@ -416,14 +418,6 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                     <span>{isEn ? 'Issue Time :' : 'وقت الإصدار :'}</span>
                   </span>
                   <span className="font-mono font-bold text-slate-800" dir="ltr">{timeFormatted}</span>
-                </div>
-
-                <div className="flex items-center justify-between pt-0.5">
-                  <span className="text-slate-600 flex items-center gap-1 font-bold">
-                    <IconFileDescription size={12} className="text-slate-400" />
-                    <span>{isEn ? 'Page :' : 'الصفحة :'}</span>
-                  </span>
-                  <span className="font-mono font-bold text-slate-800" dir="ltr">1 / 1</span>
                 </div>
               </div>
 
@@ -509,8 +503,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                 className="flex-1 rounded-xl p-2.5 px-4 font-black text-sm text-slate-900 border text-center"
                 style={{ backgroundColor: fieldBgColor, borderColor: fieldBorderColor }}
               >
-                {voucher.accountCode ? `${voucher.accountCode} - ` : ''}
-                {voucher.accountName || 'شركة النور للتجارة العامة'}
+                {partyName || 'شركة النور للتجارة العامة'}
               </div>
             </div>
 
@@ -530,8 +523,8 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               >
                 {/* المبلغ في الوسط تماماً 100% بدون أي انزياح */}
                 <div
-                  className="font-mono font-black text-xl tracking-wider text-center"
-                  style={{ color: amountTextColor }}
+                  className="font-mono font-black text-xl text-center"
+                  style={{ color: amountTextColor, letterSpacing: 0 }}
                 >
                   {amountFormatted}
                 </div>
@@ -595,32 +588,23 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </span>
 
               <div
-                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-800 border flex items-center justify-center gap-2 overflow-hidden flex-wrap"
+                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-800 border text-center"
                 style={{
                   backgroundColor: fieldBgColor,
                   borderColor: fieldBorderColor,
+                  letterSpacing: 0,
                 }}
               >
-                {splitAccountsList ? (
-                  splitAccountsList.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 shadow-2xs font-mono font-bold text-xs flex items-center gap-1.5"
-                    >
-                      {item.amount && (
-                        <span className="text-blue-600 font-black">
-                          {Number(item.amount).toLocaleString('en-US')} {item.currency || currencyCode}
-                        </span>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="flex items-center gap-2 font-mono text-slate-800 font-bold text-xs">
-                    <span className="px-2.5 py-0.5 rounded-lg bg-white border border-slate-200 text-blue-700 font-black">
-                      {splitDisplayVal}
-                    </span>
-                  </div>
-                )}
+                {splitAccountsList
+                  ? splitAccountsList
+                      .map((item) =>
+                        item.amount
+                          ? `${Number(item.amount).toLocaleString('en-US')} ${item.currency || currencyCode}`
+                          : '',
+                      )
+                      .filter(Boolean)
+                      .join('  ·  ') || splitDisplayVal
+                  : splitDisplayVal}
               </div>
             </div>
 
@@ -632,7 +616,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
               </span>
 
               <div
-                className="flex-1 rounded-xl p-2.5 px-4 font-bold text-xs text-slate-700 border min-h-[42px] leading-relaxed text-center"
+                className="flex-1 rounded-xl p-3 px-4 font-bold text-xs text-slate-700 border min-h-[88px] leading-relaxed text-center"
                 style={{
                   backgroundColor: fieldBgColor,
                   borderColor: fieldBorderColor,
@@ -668,7 +652,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                   <IconCoins size={13} style={{ color: primaryColor }} />
                   <span>{isEn ? 'Total Amount :' : 'إجمالي المبلغ :'}</span>
                 </span>
-                <div className="font-mono font-black text-base tracking-tight" style={{ color: summaryTotalColor }}>
+                <div className="font-mono font-black text-base" style={{ color: summaryTotalColor, letterSpacing: 0 }}>
                   {amountFormatted} {currencyCode}
                 </div>
               </div>
