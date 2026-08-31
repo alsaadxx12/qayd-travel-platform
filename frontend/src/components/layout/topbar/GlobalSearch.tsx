@@ -25,6 +25,8 @@ import { useLanguageStore } from '../../../store/useLanguageStore';
 import { accountsApi } from '../../../api/accounts';
 import { partnersApi } from '../../../api/partners';
 import { ticketsApi } from '../../../api/tickets';
+import { Lottie } from 'lottie-react';
+import searchAnalysisAnimation from '../../../assets/animations/search-analysis.json';
 
 interface SearchItem {
   id: string;
@@ -815,13 +817,23 @@ export const GlobalSearch: React.FC = () => {
                 )}
               </div>
 
-              {/* Left Side in RTL: Image Banner Card */}
-              <div className="hidden md:block w-[440px] lg:w-[480px] h-full shrink-0 rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs relative bg-white">
-                <img
-                  src="/images/command-palette-banner.png"
-                  alt="Fly4all Command Center"
-                  className="w-full h-full object-cover select-none pointer-events-none"
-                />
+              {/* Left Side in RTL: Animated Business Analysis Banner Card */}
+              <div className="hidden md:flex flex-col items-center justify-center w-[400px] lg:w-[440px] h-full shrink-0 rounded-2xl overflow-hidden border border-slate-200/90 shadow-2xs relative bg-white p-5 text-center">
+                <div className="w-full flex-1 flex items-center justify-center min-h-0 overflow-hidden">
+                  <div className="w-full h-full max-h-[340px] flex items-center justify-center scale-105">
+                    <Lottie src={searchAnalysisAnimation} loop={true} autoplay={true} className="w-full h-full" />
+                  </div>
+                </div>
+                <div className="space-y-1 mt-2 shrink-0">
+                  <h4 className="text-[15px] font-black text-slate-900 leading-tight">
+                    {isAr ? 'البحث الذكي في النظام' : 'Smart System Search'}
+                  </h4>
+                  <p className="text-[11.5px] text-slate-500 font-medium leading-relaxed max-w-[260px] mx-auto">
+                    {isAr
+                      ? 'الوصول الفوري لكافة الفواتير، التذاكر، الفيز، الحسابات والشركاء'
+                      : 'Instant access to all tickets, visas, accounts, and partners'}
+                  </p>
+                </div>
               </div>
             </div>
 
