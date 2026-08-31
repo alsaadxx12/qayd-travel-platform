@@ -33,9 +33,7 @@ import {
 } from '@tabler/icons-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas-pro';
-import { PrintableAccountStatementSheet, StatementMovementItem } from '../components/reports/AccountStatementPrintModal';
+import { generateStatementPdf, downloadStatementPdf, StatementPdfPayload } from '../api/statementPdf';
 import { fetchPrintTemplate } from '../api/printTemplates';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { useAiPageContext } from '../hooks/useAiPageContext';
@@ -123,15 +121,6 @@ export const DebtsReportPage: React.FC = () => {
 
   const [printConfig, setPrintConfig] = useState<any>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
-  const [batchRenderState, setBatchRenderState] = useState<{
-    accountName: string;
-    accountCode: string;
-    accountId: string;
-    startDate: string;
-    endDate: string;
-    rows: StatementMovementItem[];
-    totals: { totalDebit: number; totalCredit: number; finalBalance: number; openingBalance?: number; previousBalance?: number };
-  } | null>(null);
 
   useEffect(() => {
     fetchPrintTemplate('statement')
@@ -454,7 +443,7 @@ export const DebtsReportPage: React.FC = () => {
     setIsExportChoiceModalOpen(true);
   };
 
-  // Bulk PDF Export Handler: Generates real official PDF files using the approved Account Statement template!
+  // Bulk PDF Export Handler: Generates real official vector PDF files via server Chromium engine!
   const handleExportBatchZipPDF = async (overrideSelectedIds?: string[]) => {
     const idsToUse = overrideSelectedIds && overrideSelectedIds.length > 0
       ? overrideSelectedIds
@@ -492,11 +481,11 @@ export const DebtsReportPage: React.FC = () => {
         setExportStatusText(`جاري إنشاء كشف PDF للحساب (${i + 1} من ${targetAccounts.length}): ${acc.nameAr}...`);
 
         const stmt = await getAccountStatement(acc.id, batchStartDate, batchEndDate);
-        const rawLines: StatementMovementItem[] = (stmt.lines || []).map((line, idx) => ({
+        const rawLines = (stmt.lines || []).map((line, idx) => ({
           rowNumber: idx + 1,
           date: line.date,
-          docRef: line.entryNumber || line.reference || '—',
-          docLabel: line.voucherType || 'قيد يومية',
+          docRef: line.entryNumber || line.voucherNumber || line.reference || '—',
+          docLabel: line.voucherType === 'RECEIPT' ? 'سند قبض' : line.voucherType === 'PAYMENT' ? 'سند صرف' : 'قيد يومية',
           statement: line.description || 'حركة حساب',
           debit: Number(line.debit || 0),
           credit: Number(line.credit || 0),
@@ -524,63 +513,26 @@ export const DebtsReportPage: React.FC = () => {
           previousBalance: previousBalance,
         };
 
-        // Render sheet in DOM mount
-        setBatchRenderState({
+        const payload: StatementPdfPayload = {
+          accountId: acc.id,
           accountName: acc.nameAr,
           accountCode: acc.code,
-          accountId: acc.id,
-          startDate: batchStartDate || 'البداية',
+          accountPhone: (acc as any).phone || (acc as any).customer?.phone || (acc as any).supplier?.phone,
+          accountEmail: (acc as any).email || (acc as any).contactEmail || (acc as any).customer?.email || (acc as any).supplier?.email,
+          accountAddress: (acc as any).address || (acc as any).customer?.address || (acc as any).supplier?.address,
+          startDate: batchStartDate || '2026-01-01',
           endDate: batchEndDate || new Date().toISOString().split('T')[0],
           rows: rawLines,
           totals,
-        });
-
-        // Small tick to ensure React commits DOM updates
-        await new Promise((r) => setTimeout(r, 70));
-
-        const element = document.getElementById('batch-printable-sheet') || document.getElementById('printable-statement-sheet');
-        if (!element) {
-          continue;
-        }
-
-        const canvas = await html2canvas(element, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-        });
-
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const pdf = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: 'a4',
-        });
-
-        const imgWidth = 210;
-        const pageHeight = 297;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        let heightLeft = imgHeight;
-        let position = 0;
-
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-
-        while (heightLeft > 0) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
-          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-        }
-
-        const safeName = acc.nameAr.replace(/[/\\?%*:|"<>]/g, '_').trim();
-        const pdfBlob = pdf.output('blob');
+          lang: 'ar',
+        };
 
         if (targetAccounts.length === 1) {
-          pdf.save(`كشف_حساب_${safeName}_${acc.code}.pdf`);
+          await downloadStatementPdf(payload);
           processedCount++;
         } else {
-          zip.file(`كشف_حساب_${safeName}_${acc.code}.pdf`, pdfBlob);
+          const { blob, filename } = await generateStatementPdf(payload);
+          zip.file(filename, blob);
           processedCount++;
         }
       }
@@ -610,15 +562,13 @@ export const DebtsReportPage: React.FC = () => {
 
       setTimeout(() => {
         setIsBatchModalOpen(false);
-        setBatchRenderState(null);
         showSuccessNotification('تم التصدير بنجاح', `تم تصدير (${processedCount}) كشف حساب بصيغة PDF الرسمية بنجاح.`);
       }, 500);
     } catch (err: any) {
       console.error('Batch export failed:', err);
-      showErrorNotification('خطأ في التصدير', 'حدث خطأ أثناء إنشاء ملفات PDF.');
+      showErrorNotification('خطأ في التصدير', err.message || 'حدث خطأ أثناء إنشاء ملفات PDF.');
     } finally {
       setIsGeneratingBatch(false);
-      setBatchRenderState(null);
     }
   };
 
@@ -1933,35 +1883,6 @@ export const DebtsReportPage: React.FC = () => {
           </div>
         </div>
       </Modal>
-
-      {/* ── Hidden Mount for Official Statement Template PDF Generation ── */}
-      {batchRenderState && (
-        <div
-          id="batch-render-wrapper"
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            zIndex: -9999,
-            opacity: 1,
-            pointerEvents: 'none',
-            width: '780px',
-            backgroundColor: '#ffffff',
-          }}
-        >
-          <PrintableAccountStatementSheet
-            accountName={batchRenderState.accountName}
-            accountCode={batchRenderState.accountCode}
-            accountId={batchRenderState.accountId}
-            startDate={batchRenderState.startDate}
-            endDate={batchRenderState.endDate}
-            rows={batchRenderState.rows}
-            totals={batchRenderState.totals}
-            config={printConfig}
-            lang="ar"
-          />
-        </div>
-      )}
     </div>
   );
 };
