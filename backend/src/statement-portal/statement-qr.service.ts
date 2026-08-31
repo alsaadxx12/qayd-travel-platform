@@ -53,8 +53,8 @@ export class StatementQrService {
       return await QRCode.toDataURL(url, {
         errorCorrectionLevel: 'M',
         margin: 1,
-        width: 320,
-        color: { dark: '#0f172a', light: '#ffffff' },
+        width: 500,
+        color: { dark: '#000000', light: '#ffffff' },
       });
     } catch (err: any) {
       // A missing picture must never take down the page that was going to show it.

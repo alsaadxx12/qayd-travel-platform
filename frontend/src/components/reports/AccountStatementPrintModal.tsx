@@ -179,7 +179,7 @@ const DEFAULT_STATEMENT_CONFIG = {
   showWatermark: true,
   showQrCode: true,
   qrPosition: 'custom',
-  qrSize: 48,
+  qrSize: 68,
   qrPosX: 24,
   qrPosY: 870,
   qrColor: '#059669',
@@ -358,10 +358,11 @@ export const PrintableAccountStatementSheet: React.FC<{
     <div
       id="printable-statement-sheet"
       dir="ltr"
-      className="bg-white text-slate-900 w-[780px] min-h-[980px] p-6 text-left flex flex-col justify-between border border-slate-300 shadow-xs relative mx-auto"
+      className="bg-white text-slate-900 w-[780px] min-h-[1100px] p-6 pb-6 text-left flex flex-col justify-between border border-slate-300 shadow-xs relative mx-auto box-border"
       style={{
         direction: 'ltr',
         textAlign: 'left',
+        minHeight: '1100px',
         fontFamily: `'${selectedFontFamily}', 'Tajawal', Arial, sans-serif`,
         fontSize: '10.5px',
       }}
@@ -387,7 +388,8 @@ export const PrintableAccountStatementSheet: React.FC<{
         </div>
       )}
 
-      <div className="space-y-4 relative z-10">
+      {/* Upper Content Area */}
+      <div className="space-y-4 relative z-10 flex-1 flex flex-col justify-start">
         {/* Top Header Card */}
         <div className="flex justify-between items-start gap-4 pb-2 border-b border-slate-200">
           {/* Left Column: Logo & TO Info */}
@@ -572,32 +574,32 @@ export const PrintableAccountStatementSheet: React.FC<{
         </table>
       </div>
 
-      {/* Footer Bar */}
+      {/* Footer Bar: Fixed firmly at the very bottom of the page */}
       <div
-        className="border-t border-slate-300 pt-2.5 mt-6 flex justify-between items-center text-slate-700 font-semibold relative z-10"
+        className="border-t-2 border-slate-300 pt-3 mt-auto flex justify-between items-center text-slate-700 font-semibold relative z-10 w-full shrink-0"
         style={{ fontSize: `${footerFontSize}px` }}
       >
         <div className="flex items-center gap-2.5">
-          <div className="w-1 h-10 rounded-xs shrink-0" style={{ backgroundColor: titleAccentColor }}></div>
+          <div className="w-1.5 h-12 rounded-xs shrink-0" style={{ backgroundColor: titleAccentColor }}></div>
           <div className="space-y-0.5">
-            <div><strong className="text-slate-800">Mobile:</strong> {config.phone || '07700003377 - 07800003901'}</div>
-            <div><strong className="text-slate-800">Email:</strong> {config.email || 'Support@Fly4all.com'}</div>
-            <div><strong className="text-slate-800">Address:</strong> {config.address || 'Iraq - Baghdad'}</div>
+            <div><strong className="text-slate-900">Mobile:</strong> {config.phone || '07700003377 - 07800003901'}</div>
+            <div><strong className="text-slate-900">Email:</strong> {config.email || 'Support@Fly4all.com'}</div>
+            <div><strong className="text-slate-900">Address:</strong> {config.address || 'Iraq - Baghdad'}</div>
           </div>
         </div>
 
-        {/* The account's real barcode — guaranteed to be present */}
+        {/* The account's real barcode — large, high resolution, easy to scan on mobile */}
         {config.showQrCode !== false && qrDataUrl && (
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex flex-col items-center gap-1 shrink-0 bg-white p-1 rounded-lg border border-slate-200/90 shadow-2xs">
             <img
               src={qrDataUrl}
               alt="Statement Barcode"
               crossOrigin="anonymous"
-              style={{ width: `${config.qrSize || 52}px`, height: `${config.qrSize || 52}px` }}
+              style={{ width: `${Math.max(68, Number(config.qrSize) || 68)}px`, height: `${Math.max(68, Number(config.qrSize) || 68)}px` }}
               className="object-contain"
             />
             {config.qrShowLabel !== false && (
-              <span className="text-[6.5px] font-bold text-slate-500 whitespace-nowrap">
+              <span className="text-[7.5px] font-black text-slate-700 whitespace-nowrap">
                 {lang === 'en' ? 'Scan for statement' : 'امسح لعرض كشفك'}
               </span>
             )}
