@@ -4,7 +4,7 @@ import {
   Bug,
   Lightbulb,
   HelpCircle,
-  Upload,
+  ClipboardPaste,
   Send,
   Check,
   X,
@@ -96,6 +96,7 @@ export const FeedbackFloatingDrawer: React.FC = () => {
   const [submittedRef, setSubmittedRef] = useState<string>('');
   const [showTechInfo, setShowTechInfo] = useState(false);
   const [errors, setErrors] = useState<{ title?: string; description?: string; screenshot?: string }>({});
+  const [isDraggingShot, setIsDraggingShot] = useState(false);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const descInputRef = useRef<HTMLTextAreaElement>(null);
@@ -172,14 +173,13 @@ export const FeedbackFloatingDrawer: React.FC = () => {
     },
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const applyScreenshotFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
       setErrors((prev) => ({
         ...prev,
-        screenshot: isAr ? 'نوع الملف غير مدعوم. يرجى اختيار صورة PNG أو JPG.' : 'Unsupported file type. Please select a PNG or JPG image.',
+        screenshot: isAr
+          ? 'نوع الملف غير مدعوم. يرجى لصق أو اختيار صورة PNG أو JPG.'
+          : 'Unsupported file type. Paste or select a PNG or JPG image.',
       }));
       return;
     }
@@ -187,13 +187,16 @@ export const FeedbackFloatingDrawer: React.FC = () => {
     if (file.size > 5 * 1024 * 1024) {
       setErrors((prev) => ({
         ...prev,
-        screenshot: isAr ? 'حجم الصورة كبير جداً. الحد الأقصى المسموح به هو 5 ميغابايت.' : 'Image size is too large. Maximum allowed size is 5MB.',
+        screenshot: isAr
+          ? 'حجم الصورة كبير جداً. الحد الأقصى المسموح به هو 5 ميغابايت.'
+          : 'Image size is too large. Maximum allowed size is 5MB.',
       }));
       return;
     }
 
+    const pastedName = isAr ? 'لقطة-شاشة.png' : 'screenshot.png';
     setErrors((prev) => ({ ...prev, screenshot: undefined }));
-    setScreenshotName(file.name);
+    setScreenshotName(file.name && file.name !== 'image.png' ? file.name : pastedName);
     setScreenshotSize((file.size / 1024).toFixed(1) + ' KB');
 
     const reader = new FileReader();
@@ -202,6 +205,36 @@ export const FeedbackFloatingDrawer: React.FC = () => {
     };
     reader.readAsDataURL(file);
   };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) applyScreenshotFile(file);
+  };
+
+  const takeImageFromClipboard = (clipboardData: DataTransfer | null): boolean => {
+    if (!clipboardData) return false;
+    const items = Array.from(clipboardData.items || []);
+    const imageItem = items.find((item) => item.type.startsWith('image/'));
+    if (!imageItem) return false;
+    const file = imageItem.getAsFile();
+    if (!file) return false;
+    applyScreenshotFile(file);
+    return true;
+  };
+
+  // Ctrl+V / Cmd+V anywhere while the drawer is open attaches a clipboard screenshot.
+  useEffect(() => {
+    if (!opened || submitted) return;
+
+    const onPaste = (e: ClipboardEvent) => {
+      if (takeImageFromClipboard(e.clipboardData)) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [opened, submitted, isAr]);
 
   const validateForm = (): boolean => {
     const errs: { title?: string; description?: string } = {};
@@ -254,6 +287,7 @@ export const FeedbackFloatingDrawer: React.FC = () => {
       setScreenshotBase64(null);
       setScreenshotName('');
       setScreenshotSize('');
+      setIsDraggingShot(false);
       setType('BUG');
       setSeverity('MEDIUM');
       setErrors({});
@@ -575,14 +609,36 @@ export const FeedbackFloatingDrawer: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full min-h-[76px] p-3.5 border-[1.5px] border-dashed border-[#D7DCE3] hover:border-[#F45A0A] bg-[#FAFAFA] hover:bg-white rounded-[10px] flex items-center justify-center gap-3 transition-colors cursor-pointer group"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingShot(true);
+                    }}
+                    onDragLeave={() => setIsDraggingShot(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingShot(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) applyScreenshotFile(file);
+                    }}
+                    onPaste={(e) => {
+                      if (takeImageFromClipboard(e.clipboardData)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    className={`w-full min-h-[76px] p-3.5 border-[1.5px] border-dashed rounded-[10px] flex items-center justify-center gap-3 transition-colors cursor-pointer group ${
+                      isDraggingShot
+                        ? 'border-[#F45A0A] bg-orange-50'
+                        : 'border-[#D7DCE3] hover:border-[#F45A0A] bg-[#FAFAFA] hover:bg-white'
+                    }`}
                   >
                     <div className="w-10 h-10 rounded-full bg-slate-100 group-hover:bg-orange-50 text-slate-500 group-hover:text-[#F45A0A] flex items-center justify-center shrink-0 transition-colors">
-                      <Upload size={18} />
+                      <ClipboardPaste size={18} />
                     </div>
                     <div className="text-start">
                       <span className="font-semibold text-[13px] text-[#374151] group-hover:text-[#F45A0A] block transition-colors">
-                        {isAr ? 'اسحب لقطة الشاشة هنا أو اختر ملفًا' : 'Drag screenshot here or browse file'}
+                        {isAr
+                          ? 'الصق لقطة الشاشة (Ctrl+V) أو اسحبها أو اختر ملفاً'
+                          : 'Paste screenshot (Ctrl+V), drag, or browse a file'}
                       </span>
                       <span className="text-[11.5px] text-[#9CA3AF] block mt-0.5">
                         {isAr ? 'PNG أو JPG — الحد الأقصى 5 ميغابايت' : 'PNG or JPG — Max 5MB'}

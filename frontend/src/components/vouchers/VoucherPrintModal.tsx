@@ -126,6 +126,8 @@ export interface PrintableVoucherSheetProps {
    * printed rather than a square that leads nowhere.
    */
   qrDataUrl?: string | null;
+  /** Custom allocation accounts from system settings — used to resolve display names. */
+  customAccounts?: Array<{ nameAr: string; targetAccountId: string; targetAccountName?: string }>;
 }
 
 export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
@@ -133,6 +135,7 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
   config: userConfig,
   lang = 'ar',
   qrDataUrl,
+  customAccounts,
 }) => {
   const isEn = lang === 'en';
   const isReceipt = voucher.type === 'RECEIPT';
@@ -175,22 +178,36 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
     ? voucher.splitAccounts
     : null;
 
-  // Dynamic split label: show the actual split account name(s) instead of the static "تقسيم القبض"
+  /**
+   * Resolve custom display name (الاسم التعريفي) from system settings.
+   * Falls back to account name, then generic label.
+   */
+  const resolveCustomDisplayName = (split: { accountName?: string; accountCode?: string; amount?: number }) => {
+    if (customAccounts && customAccounts.length > 0) {
+      // Match by accountId → targetAccountId, or by name substring
+      const match = customAccounts.find(
+        (ca) =>
+          (split as any).accountId && ca.targetAccountId === (split as any).accountId ||
+          (ca.targetAccountName && split.accountName && ca.targetAccountName.includes(split.accountName)) ||
+          (split.accountName && ca.targetAccountName && split.accountName.includes(ca.targetAccountName?.split(' - ').pop() || ''))
+      );
+      if (match) return match.nameAr;
+    }
+    return split.accountName || '';
+  };
+
+  // Dynamic split label: show the custom display name (الاسم التعريفي) instead of the account name
   const splitLabelAr = (() => {
     if (splitAccountsList && splitAccountsList.length > 0) {
-      if (splitAccountsList.length === 1) {
-        return `${splitAccountsList[0].accountName || (isReceipt ? 'تقسيم القبض' : 'تقسيم الصرف')} :`;
-      }
-      return `${splitAccountsList.map((s: any) => s.accountName).filter(Boolean).join(' ، ')} :`;
+      const names = splitAccountsList.map((s: any) => resolveCustomDisplayName(s)).filter(Boolean);
+      if (names.length > 0) return `${names.join(' ، ')} :`;
     }
     return isReceipt ? 'تقسيم القبض :' : 'تقسيم الصرف :';
   })();
   const splitLabelEn = (() => {
     if (splitAccountsList && splitAccountsList.length > 0) {
-      if (splitAccountsList.length === 1) {
-        return `${splitAccountsList[0].accountName || (isReceipt ? 'Split Receipt' : 'Split Payment')}:`;
-      }
-      return `${splitAccountsList.map((s: any) => s.accountName).filter(Boolean).join(', ')}:`;
+      const names = splitAccountsList.map((s: any) => resolveCustomDisplayName(s)).filter(Boolean);
+      if (names.length > 0) return `${names.join(', ')}:`;
     }
     return isReceipt ? 'Split Receipt:' : 'Split Payment:';
   })();
@@ -543,10 +560,9 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
                       key={idx}
                       className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 shadow-2xs font-mono font-bold text-xs flex items-center gap-1.5"
                     >
-                      <span className="text-slate-800">{item.accountName}</span>
                       {item.amount && (
                         <span className="text-blue-600 font-black">
-                          ({Number(item.amount).toLocaleString('en-US')} {item.currency || currencyCode})
+                          {Number(item.amount).toLocaleString('en-US')} {item.currency || currencyCode}
                         </span>
                       )}
                     </div>
@@ -754,6 +770,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   const [printLang, setPrintLang] = useState<'ar' | 'en'>(language === 'en' ? 'en' : 'ar');
   const [config, setConfig] = useState<any>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [customAccounts, setCustomAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -761,13 +778,18 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
     if (!opened || !voucher) return;
     setLoading(true);
     const docType = voucher.type === 'RECEIPT' ? 'receipt_voucher' : 'payment_voucher';
-    fetchPrintTemplate(docType)
-      .then((res) => {
-        if (res && res.config) {
-          setConfig(res.config);
+    Promise.all([
+      fetchPrintTemplate(docType).catch(() => null),
+      fetchPrintTemplate('custom_voucher_accounts').catch(() => null),
+    ])
+      .then(([templateRes, customAccsRes]) => {
+        if (templateRes && templateRes.config) {
+          setConfig(templateRes.config);
         } else {
           setConfig(voucher.type === 'RECEIPT' ? DEFAULT_VOUCHER_CONFIG : DEFAULT_PAYMENT_VOUCHER_CONFIG);
         }
+        const accs = (customAccsRes?.config?.accounts || []).filter((a: any) => a.isActive !== false);
+        setCustomAccounts(accs);
       })
       .catch(() => {
         setConfig(voucher.type === 'RECEIPT' ? DEFAULT_VOUCHER_CONFIG : DEFAULT_PAYMENT_VOUCHER_CONFIG);
@@ -954,6 +976,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
               config={config}
               qrDataUrl={qrDataUrl}
               lang={printLang}
+              customAccounts={customAccounts}
             />
           </div>
         </div>
