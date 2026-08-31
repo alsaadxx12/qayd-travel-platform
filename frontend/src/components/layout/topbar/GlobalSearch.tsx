@@ -667,7 +667,7 @@ export const GlobalSearch: React.FC = () => {
 
           {/* Dialog Container */}
           <div
-            className="relative w-full max-w-[940px] h-[610px] max-h-[92vh] bg-white rounded-3xl border border-slate-200/90 shadow-2xl flex flex-col z-10 animate-dropdown-pop overflow-hidden"
+            className="relative w-full max-w-[980px] lg:max-w-[1040px] h-[610px] max-h-[92vh] bg-white rounded-3xl border border-slate-200/90 shadow-2xl flex flex-col z-10 animate-dropdown-pop overflow-hidden"
           >
             {/* 1. Header with Clean Search Input */}
             <div className="relative flex items-center px-5 py-3.5 border-b border-slate-100 bg-white shrink-0">
@@ -816,7 +816,7 @@ export const GlobalSearch: React.FC = () => {
               </div>
 
               {/* Left Side in RTL: Image Banner Card */}
-              <div className="hidden md:block w-[290px] lg:w-[320px] h-full shrink-0 rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs relative bg-white">
+              <div className="hidden md:block w-[350px] lg:w-[390px] h-full shrink-0 rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs relative bg-white">
                 <img
                   src="/images/command-palette-banner.png"
                   alt="Fly4all Command Center"
