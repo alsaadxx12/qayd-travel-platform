@@ -236,6 +236,9 @@ export class StatementPortalService {
       portalConfigured: this.qr.isConfigured(),
       qrDataUrl: await this.qr.dataUrl(row.token),
       holderName: party.nameAr,
+      accountId: (row as any).accountId || null,
+      customerId: (row as any).customerId || null,
+      supplierId: (row as any).supplierId || null,
       // The staff screen must be able to say WHY a customer cannot get in.
       canVerify: Boolean(this.digitsOf(party.phone).length >= 4),
       phoneHint: this.phoneHint(party.phone),
@@ -298,6 +301,7 @@ export class StatementPortalService {
           };
         return {
           ...(await this.describeIssued(row, party)),
+          accountId: row.accountId,
           customerId: row.customerId,
           supplierId: row.supplierId,
           lockedUntil: row.lockedUntil,

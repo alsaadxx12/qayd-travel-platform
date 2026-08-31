@@ -78,21 +78,48 @@ export class StatementQrService {
     accountId?: string | null,
     accountCode?: string | null,
   ): Promise<string | null> {
-    let resolvedId = accountId || null;
-    if (!resolvedId && accountCode) {
-      const account = await this.prisma.account.findFirst({
-        where: { companyId, code: String(accountCode) },
-        select: { id: true },
-      });
-      resolvedId = account?.id || null;
+    const code = accountCode ? String(accountCode).trim() : '';
+    let resolvedAccountIds: string[] = accountId ? [String(accountId)] : [];
+
+    if (code) {
+      const [account, customer, supplier] = await Promise.all([
+        this.prisma.account.findFirst({
+          where: { companyId, code },
+          select: { id: true },
+        }),
+        this.prisma.customer.findFirst({
+          where: { companyId, code },
+          select: { id: true, accountId: true },
+        }),
+        this.prisma.supplier.findFirst({
+          where: { companyId, code },
+          select: { id: true, accountId: true },
+        }),
+      ]);
+      if (account?.id) resolvedAccountIds.push(account.id);
+      if (customer?.accountId) resolvedAccountIds.push(customer.accountId);
+      if (customer?.id) resolvedAccountIds.push(customer.id);
+      if (supplier?.accountId) resolvedAccountIds.push(supplier.accountId);
+      if (supplier?.id) resolvedAccountIds.push(supplier.id);
     }
-    if (!resolvedId) return null;
+
+    resolvedAccountIds = Array.from(new Set(resolvedAccountIds.filter(Boolean)));
+    if (!resolvedAccountIds.length) return null;
 
     const row = await this.prisma.statementAccessToken.findFirst({
-      where: { companyId, accountId: resolvedId, revokedAt: null },
+      where: {
+        companyId,
+        revokedAt: null,
+        OR: [
+          { accountId: { in: resolvedAccountIds } },
+          { customerId: { in: resolvedAccountIds } },
+          { supplierId: { in: resolvedAccountIds } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       select: { token: true, expiresAt: true },
     });
+
     if (!row) return null;
     if (row.expiresAt && row.expiresAt.getTime() < Date.now()) return null;
 

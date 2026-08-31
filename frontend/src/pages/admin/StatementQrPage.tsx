@@ -112,8 +112,10 @@ export const StatementQrPage: React.FC = () => {
   const issuedBy = useMemo(() => {
     const map = new Map<string, QrToken>();
     for (const t of tokens) {
-      const key = t.customerId || t.supplierId || t.accountId;
-      if (key) map.set(key, t);
+      if (t.accountId) map.set(t.accountId, t);
+      if (t.customerId) map.set(t.customerId, t);
+      if (t.supplierId) map.set(t.supplierId, t);
+      if (t.id) map.set(t.id, t);
     }
     return map;
   }, [tokens]);

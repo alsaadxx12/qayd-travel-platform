@@ -14,16 +14,7 @@ import { useParams } from 'react-router-dom';
  * «من أين جاء هذا الرقم؟» — are answered in that order, the first without scrolling.
  */
 
-/**
- * Resolved here rather than imported from `api/client`, so this page does not drag the
- * staff app's cache, auth and telemetry machinery into the bundle a customer downloads
- * on mobile data. The values match `API_BASE_URL` exactly — and note it already ends
- * with `/api`, so paths below must not repeat it.
- */
-const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.DEV ? '/api' : 'https://qayd-api-r04m.onrender.com/api');
+import { API_BASE_URL } from '../../api/client';
 
 interface PortalIntro {
   companyName: string;
@@ -89,7 +80,7 @@ export const StatementPortalPage: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/portal/statement/${encodeURIComponent(token)}`);
+        const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}`);
         if (!res.ok) throw new Error('هذا الباركود غير صالح أو تم إبطاله.');
         const json = await res.json();
         if (!cancelled) setIntro(json);
@@ -107,7 +98,7 @@ export const StatementPortalPage: React.FC = () => {
     setVerifying(true);
     setVerifyError('');
     try {
-      const res = await fetch(`${API_BASE}/portal/statement/${encodeURIComponent(token)}/verify`, {
+      const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ last4: digits }),
@@ -142,7 +133,7 @@ export const StatementPortalPage: React.FC = () => {
   const downloadStatement = useCallback(async () => {
     if (!session) return;
     const res = await fetch(
-      `${API_BASE}/portal/statement/${encodeURIComponent(token)}/download`,
+      `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/download`,
       { headers: { 'x-portal-session': session } },
     );
     if (!res.ok) throw new Error('تعذّر تحضير ملف الكشف.');
@@ -175,7 +166,7 @@ export const StatementPortalPage: React.FC = () => {
         /* fall through to the on-screen statement */
       }
       try {
-        const res = await fetch(`${API_BASE}/portal/statement/${encodeURIComponent(token)}/data`, {
+        const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/data`, {
           headers: { 'x-portal-session': session },
         });
         const json = await res.json();
@@ -267,7 +258,7 @@ export const StatementPortalPage: React.FC = () => {
                   setVerifying(true);
                   setVerifyError('');
                   try {
-                    const res = await fetch(`${API_BASE}/portal/statement/${encodeURIComponent(token)}/verify`, {
+                    const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/verify`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ last4: '' }),
