@@ -624,7 +624,7 @@ export const GlobalSearch: React.FC = () => {
     { id: 'VISA', labelAr: 'التأشيرات والفيز', labelEn: 'Visas' },
     { id: 'PARTNER', labelAr: 'العملاء والموردين', labelEn: 'Partners' },
     { id: 'ACCOUNT', labelAr: 'دليل الحسابات', labelEn: 'Accounts' },
-    { id: 'PAGE', labelAr: 'الشاشات', labelEn: 'Pages' },
+    { id: 'PAGE', labelAr: 'الشاشات', labelEn: 'Screens' },
   ];
 
   return (
@@ -666,22 +666,22 @@ export const GlobalSearch: React.FC = () => {
         </button>
       </div>
 
-      {/* ── SPOTLIGHT MODAL (CLEAN & RAZOR SHARP) ── */}
+      {/* ── SPOTLIGHT MODAL (DUAL COLUMN WITH LUXURY BANNER & RAZOR SHARP CARDS) ── */}
       {open && (
-        <div className="fixed inset-0 z-[10000] flex items-start justify-center pt-[7vh] sm:pt-[9vh] p-3 sm:p-4 font-sans select-none spotlight-clean-scroll" dir={direction}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 font-sans select-none spotlight-clean-scroll" dir={direction}>
           {/* Frosted Backdrop */}
           <div
             className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-150"
             onClick={() => setOpen(false)}
           />
 
-          {/* Dialog Container - FIXED 560px HEIGHT with Sharp Rendering */}
+          {/* Dialog Container */}
           <div
-            className="relative w-full max-w-[740px] h-[560px] bg-white rounded-2xl border border-slate-200 shadow-2xl flex flex-col z-10 animate-dropdown-pop overflow-hidden"
+            className="relative w-full max-w-[940px] h-[610px] max-h-[92vh] bg-white rounded-3xl border border-slate-200/90 shadow-2xl flex flex-col z-10 animate-dropdown-pop overflow-hidden"
           >
             {/* 1. Header with Clean Search Input */}
-            <div className="relative flex items-center px-4.5 py-3.5 border-b border-slate-100 bg-white shrink-0">
-              <Search size={18} className="text-[#F45A0A] shrink-0 me-3" />
+            <div className="relative flex items-center px-5 py-3.5 border-b border-slate-100 bg-white shrink-0">
+              <Search size={20} className="text-[#F45A0A] shrink-0 me-3" />
               <input
                 ref={inputRef}
                 type="search"
@@ -694,7 +694,7 @@ export const GlobalSearch: React.FC = () => {
                     ? 'اكتب للبحث (تذكرة، ريفاوند، تعديل، كروب، فيزا، عميل، حساب)...'
                     : 'Search tickets, refunds, reissues, groups, visas, partners...'
                 }
-                className="w-full bg-transparent text-[15px] font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-normal outline-none border-none"
+                className="w-full bg-transparent text-[15px] font-bold text-slate-900 placeholder:text-slate-400 outline-none border-none"
               />
               {query && (
                 <button
@@ -703,18 +703,29 @@ export const GlobalSearch: React.FC = () => {
                   aria-label={isAr ? 'مسح نص البحث' : 'Clear search'}
                   className="w-6 h-6 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer shrink-0"
                 >
-                  <X size={14} />
+                  <X size={15} />
                 </button>
               )}
-              <div className="ms-2 hidden sm:flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 text-[10px] font-bold font-mono text-slate-400 bg-slate-100 border border-slate-200 rounded">
+              <div className="ms-2 hidden sm:flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="px-2 py-0.5 text-[11px] font-bold font-mono text-slate-500 hover:text-slate-800 bg-slate-100 border border-slate-200 rounded-md transition-colors cursor-pointer"
+                >
                   ESC
-                </kbd>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
               </div>
             </div>
 
-            {/* 2. Category Filter Pills Bar (Clean Single Line Bar without numbers) */}
-            <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 bg-slate-50/80 border-b border-slate-100 shrink-0">
+            {/* 2. Category Filter Pills Bar */}
+            <div className="flex flex-wrap items-center gap-2 px-5 py-2.5 bg-slate-50/70 border-b border-slate-100 shrink-0">
               {categories.map((cat) => {
                 const isActive = selectedCategory === cat.id;
                 return (
@@ -722,7 +733,7 @@ export const GlobalSearch: React.FC = () => {
                     key={cat.id}
                     type="button"
                     onClick={() => setSelectedCategory(cat.id)}
-                    className={`px-3 py-1 rounded-lg text-[11.5px] font-bold transition-all cursor-pointer flex items-center shrink-0 select-none ${
+                    className={`px-3.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center shrink-0 select-none ${
                       isActive
                         ? 'bg-[#F45A0A] text-white shadow-xs'
                         : 'bg-white text-slate-600 border border-slate-200 hover:bg-[#FFF3E8] hover:text-[#F45A0A] hover:border-[#FFD8B2]'
@@ -734,10 +745,9 @@ export const GlobalSearch: React.FC = () => {
               })}
             </div>
 
-
-            {/* 3. Recent Searches Bar */}
+            {/* 3. Recent Searches Bar (Optional when no query) */}
             {!query && recentQueries.length > 0 && (
-              <div className="px-4 py-1.5 border-b border-slate-100 flex items-center gap-2 text-xs text-slate-500 bg-white shrink-0 overflow-x-auto">
+              <div className="px-5 py-1.5 border-b border-slate-100 flex items-center gap-2 text-xs text-slate-500 bg-white shrink-0 overflow-x-auto">
                 <Clock size={13} className="text-slate-400 shrink-0" />
                 <span className="font-bold text-[11px]">{isAr ? 'عمليات البحث الأخيرة:' : 'Recent:'}</span>
                 <div className="flex items-center gap-1.5">
@@ -755,106 +765,130 @@ export const GlobalSearch: React.FC = () => {
               </div>
             )}
 
-            {/* 4. Results List Container (Brand Warm Orange Focus Highlight) */}
-            <div ref={listRef} className="flex-1 overflow-y-auto p-2.5 space-y-1 bg-white">
-              {filteredResults.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center py-10 text-center space-y-2">
-                  <div className="w-12 h-12 rounded-xl bg-[#FFF3E8] text-[#F45A0A] border border-[#FFD8B2] flex items-center justify-center mx-auto shadow-2xs">
-                    <Search size={22} />
-                  </div>
-                  <p className="text-sm font-bold text-slate-800">
-                    {isAr ? 'لم يتم العثور على أي نتائج مطابقة' : 'No matching results found'}
-                  </p>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                    {isAr
-                      ? 'جرّب البحث باسم الحساب، التذكرة، ريفاوند، تعديل، كروب، فيزا، أو اسم العميل.'
-                      : 'Try searching by ticket, refund, change, group, visa, client name, or account.'}
-                  </p>
-                </div>
-              ) : (
-                filteredResults.map((item, idx) => {
-                  const isSelected = idx === selectedIndex;
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => executeItem(item)}
-                      onMouseEnter={() => setSelectedIndex(idx)}
-                      className={`flex items-center justify-between px-3 py-2 rounded-xl transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#FFF3E8] border border-[#FFDCC0] text-slate-950 shadow-2xs'
-                          : 'hover:bg-slate-50 text-slate-700 border border-transparent'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {/* Brand Icon Box */}
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                            isSelected
-                              ? 'bg-[#F45A0A] text-white shadow-2xs'
-                              : 'bg-[#FFF3E8] border border-[#FFD8B2] text-[#F45A0A]'
-                          }`}
-                        >
-                          {item.icon}
-                        </div>
-
-                        {/* Title & Subtitle */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-[13px] text-slate-900 truncate">
-                              {isAr ? item.titleAr : item.titleEn}
-                            </span>
-                            {item.badge && (
-                              <span
-                                className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
-                                  isSelected
-                                    ? 'bg-white text-[#F45A0A] border border-[#FFD8B2]'
-                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
-                                }`}
-                              >
-                                {item.badge}
-                              </span>
-                            )}
-                          </div>
-
-                        </div>
-                      </div>
-
-                      {/* Jump / Enter Indicator */}
-                      <div className="flex items-center gap-1.5 shrink-0 ms-3">
-                        {isSelected && (
-                          <span className="text-[10.5px] font-bold text-white bg-[#F45A0A] px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs">
-                            <span>{isAr ? 'فتح' : 'Open'}</span>
-                            <CornerDownLeft size={11} />
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* 5. Clean Footer */}
-            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded-mono font-bold text-slate-600">↑</kbd>
-                  <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded-mono font-bold text-slate-600">↓</kbd>
-                  <span>{isAr ? 'للتنقل' : 'Navigate'}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded-mono font-bold text-slate-600">↵</kbd>
-                  <span>{isAr ? 'للاختيار' : 'Select'}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded-mono font-bold text-slate-600">ESC</kbd>
-                  <span>{isAr ? 'للإغلاق' : 'Close'}</span>
-                </span>
+            {/* 4. Middle Body: Two Columns (Banner on Left + Search Results on Right) */}
+            <div className="flex-1 flex min-h-0 overflow-hidden p-3.5 gap-3.5 bg-slate-50/40">
+              {/* Left Column: Image Banner Card */}
+              <div className="hidden md:block w-[290px] lg:w-[310px] h-full shrink-0 rounded-2xl overflow-hidden border border-slate-200/80 shadow-xs relative bg-white">
+                <img
+                  src="/images/command-palette-banner.png"
+                  alt="Fly4all Command Center"
+                  className="w-full h-full object-cover select-none pointer-events-none"
+                />
               </div>
 
-              <div className="flex items-center gap-1.5 text-slate-400 font-medium">
-                <Sparkles size={13} className="text-[#F45A0A]" />
-                <span className="font-bold text-slate-600">{isAr ? 'البحث السريع' : 'Spotlight Search'}</span>
+              {/* Right Column: Results List */}
+              <div ref={listRef} className="flex-1 overflow-y-auto space-y-2 pe-1">
+                {filteredResults.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center py-10 text-center space-y-2">
+                    <div className="w-14 h-14 rounded-2xl bg-[#FFF3E8] text-[#F45A0A] border border-[#FFD8B2] flex items-center justify-center mx-auto shadow-2xs">
+                      <Search size={24} />
+                    </div>
+                    <p className="text-sm font-black text-slate-900">
+                      {isAr ? 'لم يتم العثور على أي نتائج مطابقة' : 'No matching results found'}
+                    </p>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                      {isAr
+                        ? 'جرّب البحث باسم الحساب، التذكرة، ريفاوند، تعديل، كروب، فيزا، أو اسم العميل.'
+                        : 'Try searching by ticket, refund, change, group, visa, client name, or account.'}
+                    </p>
+                  </div>
+                ) : (
+                  filteredResults.map((item, idx) => {
+                    const isSelected = idx === selectedIndex;
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => executeItem(item)}
+                        onMouseEnter={() => setSelectedIndex(idx)}
+                        className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#FFF6EF] border-[#FDBA74] shadow-xs'
+                            : 'bg-white border-slate-200/80 hover:border-orange-200 hover:bg-slate-50/70'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {/* Brand Icon Box */}
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                              isSelected
+                                ? 'bg-white border border-[#FFD8B2] text-[#F45A0A] shadow-2xs'
+                                : 'bg-orange-50/80 border border-orange-100 text-[#F45A0A]'
+                            }`}
+                          >
+                            {item.icon}
+                          </div>
+
+                          {/* Title, Subtitle & Badge */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-[13.5px] text-slate-900 truncate">
+                                {isAr ? item.titleAr : item.titleEn}
+                              </span>
+                              {item.badge && (
+                                <span
+                                  className={`text-[10.5px] px-2 py-0.5 rounded-md font-bold ${
+                                    isSelected
+                                      ? 'bg-orange-100/90 text-[#C2410C] border border-orange-200'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  }`}
+                                >
+                                  {item.badge}
+                                </span>
+                              )}
+                            </div>
+                            {(item.subAr || item.subEn) && (
+                              <p className="text-slate-500 text-[11.5px] font-medium mt-0.5 line-clamp-1">
+                                {isAr ? item.subAr : item.subEn}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Open Action Button */}
+                        <div className="flex items-center gap-1.5 shrink-0 ms-3">
+                          {isSelected && (
+                            <button
+                              type="button"
+                              className="text-xs font-black text-white bg-[#F45A0A] hover:bg-[#DD4F05] px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95"
+                            >
+                              <span>{isAr ? 'فتح' : 'Open'}</span>
+                              <CornerDownLeft size={12} strokeWidth={2.5} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* 5. Clean Modern Footer Bar */}
+            <div className="px-5 py-3 bg-white border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 shrink-0">
+              <div className="flex items-center gap-2 font-bold text-slate-700">
+                <Sparkles size={15} className="text-[#F45A0A]" />
+                <span className="font-black text-slate-800">{isAr ? 'البحث السريع' : 'Spotlight Search'}</span>
+                <kbd className="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-md font-mono text-[11px] text-slate-600 font-bold shadow-2xs">
+                  Ctrl + K
+                </kbd>
+              </div>
+
+              <div className="flex items-center gap-3 text-[11.5px] font-semibold text-slate-500">
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-slate-700">↑</kbd>
+                  <kbd className="px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-slate-700">↓</kbd>
+                  <span>{isAr ? 'للتنقل' : 'Navigate'}</span>
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-slate-700">Enter</kbd>
+                  <span>{isAr ? 'للاختيار' : 'Select'}</span>
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded font-mono font-bold text-slate-700">ESC</kbd>
+                  <span>{isAr ? 'للإغلاق' : 'Close'}</span>
+                </span>
               </div>
             </div>
 
