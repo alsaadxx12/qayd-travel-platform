@@ -61,15 +61,14 @@ export const StatementPortalPage: React.FC = () => {
 
   const [intro, setIntro] = useState<PortalIntro | null>(null);
   const [introError, setIntroError] = useState<string>('');
-  const [digits, setDigits] = useState<string>('');
   const [verifyError, setVerifyError] = useState<string>('');
   const [verifying, setVerifying] = useState(false);
-  // Held in memory only: no localStorage, so a shared phone does not keep the door open.
   const [session, setSession] = useState<string>('');
   const [data, setData] = useState<StatementData | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [downloaded, setDownloaded] = useState<'pdf' | 'html' | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [otp, setOtp] = useState<string[]>(['', '', '', '']);
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     document.documentElement.setAttribute('dir', 'rtl');
@@ -93,47 +92,96 @@ export const StatementPortalPage: React.FC = () => {
     };
   }, [token]);
 
-  const submitDigits = useCallback(async () => {
-    if (digits.length !== 4 || verifying) return;
+  const handleOtpChange = (index: number, val: string) => {
+    setVerifyError('');
+    const cleaned = val.replace(/\D/g, '');
+    if (!cleaned) {
+      const next = [...otp];
+      next[index] = '';
+      setOtp(next);
+      return;
+    }
+
+    if (cleaned.length > 1) {
+      // Pasted code (e.g. "9278")
+      const chars = cleaned.slice(0, 4).split('');
+      const next = ['', '', '', ''];
+      chars.forEach((ch, i) => {
+        if (i < 4) next[i] = ch;
+      });
+      setOtp(next);
+      if (chars.length === 4) {
+        submitDigits(next.join(''));
+      } else {
+        const nextFocus = Math.min(chars.length, 3);
+        otpRefs.current[nextFocus]?.focus();
+      }
+      return;
+    }
+
+    const next = [...otp];
+    next[index] = cleaned[cleaned.length - 1];
+    setOtp(next);
+
+    if (index < 3) {
+      otpRefs.current[index + 1]?.focus();
+    } else if (index === 3) {
+      const full = next.join('');
+      if (full.length === 4) {
+        submitDigits(full);
+      }
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      if (!otp[index] && index > 0) {
+        const next = [...otp];
+        next[index - 1] = '';
+        setOtp(next);
+        otpRefs.current[index - 1]?.focus();
+      } else {
+        const next = [...otp];
+        next[index] = '';
+        setOtp(next);
+      }
+    } else if (e.key === 'ArrowRight' && index < 3) {
+      otpRefs.current[index + 1]?.focus();
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      otpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const submitDigits = useCallback(async (code: string) => {
+    if (code.length !== 4 || verifying) return;
     setVerifying(true);
     setVerifyError('');
     try {
       const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ last4: digits }),
+        body: JSON.stringify({ last4: code }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || 'الأرقام غير صحيحة.');
       setSession(json.session);
     } catch (err: any) {
       setVerifyError(err?.message || 'الأرقام غير صحيحة.');
-      setDigits('');
-      inputRef.current?.focus();
+      setOtp(['', '', '', '']);
+      otpRefs.current[0]?.focus();
     } finally {
       setVerifying(false);
     }
-  }, [digits, token, verifying]);
-
-  // Four digits is the whole answer, so submitting on the fourth keystroke saves the
-  // customer a tap without ever guessing at an incomplete entry.
-  useEffect(() => {
-    if (digits.length === 4 && !session) void submitDigits();
-  }, [digits, session, submitDigits]);
+  }, [token, verifying]);
 
   /**
-   * The four digits are the last step the customer should have to take: as soon as
-   * they are right, the statement downloads itself. The on-screen statement is not
-   * the destination — it is what remains on the page afterwards, so a phone that
-   * blocks the download still shows everything.
-   *
-   * The file is fetched rather than linked because the session travels in a header,
-   * which a plain <a href> cannot carry.
+   * The statement download: session is passed both in header and query string
+   * for 100% preflight/CORS resilience.
    */
   const downloadStatement = useCallback(async () => {
     if (!session) return;
     const res = await fetch(
-      `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/download`,
+      `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/download?session=${encodeURIComponent(session)}`,
       { headers: { 'x-portal-session': session } },
     );
     if (!res.ok) throw new Error('تعذّر تحضير ملف الكشف.');
@@ -147,8 +195,6 @@ export const StatementPortalPage: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    // Revoked on a delay: revoking immediately can cancel the save on some mobile
-    // browsers, which start reading the blob after the click returns.
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     setDownloaded(kind);
   }, [session, token]);
@@ -158,17 +204,16 @@ export const StatementPortalPage: React.FC = () => {
     let cancelled = false;
     setLoadingData(true);
     (async () => {
-      // The download is attempted first and its failure is not fatal — the page
-      // below is a complete statement in its own right.
       try {
         await downloadStatement();
       } catch {
         /* fall through to the on-screen statement */
       }
       try {
-        const res = await fetch(`${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/data`, {
-          headers: { 'x-portal-session': session },
-        });
+        const res = await fetch(
+          `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/data?session=${encodeURIComponent(session)}`,
+          { headers: { 'x-portal-session': session } },
+        );
         const json = await res.json();
         if (!res.ok) throw new Error(json?.message || 'تعذّر تحميل الكشف.');
         if (!cancelled) setData(json);
@@ -217,38 +262,43 @@ export const StatementPortalPage: React.FC = () => {
   if (!data) {
     return (
       <Shell companyName={intro.companyName}>
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm font-semibold text-slate-500">كشف حساب</p>
-          <h1 className="mt-1 text-xl font-black text-slate-900">{intro.holderName}</h1>
+        <div className="rounded-3xl border border-slate-200/90 bg-white p-7 text-center shadow-lg">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-[#F45A0A]">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+
+          <p className="mt-3 text-xs font-black uppercase tracking-wider text-slate-400">كشف حساب إلكتروني</p>
+          <h1 className="mt-1 text-2xl font-black text-slate-900">{intro.holderName}</h1>
 
           {intro.phoneHint ? (
-            <>
-              <label htmlFor="last4" className="mt-6 block text-sm font-bold text-slate-800">
-                للتأكد من أنك صاحب الحساب، أدخل آخر أربعة أرقام من هاتفك
+            <div className="mt-6">
+              <label className="block text-sm font-bold text-slate-700">
+                أدخل آخر 4 أرقام من رقم الهاتف المسجّل للتحقق
               </label>
-              <p className="mt-1 font-mono text-sm tracking-widest text-slate-500" dir="ltr">
-                {intro.phoneHint}
-              </p>
 
-              <input
-                id="last4"
-                ref={inputRef}
-                autoFocus
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={4}
-                value={digits}
-                onChange={(e) => {
-                  setVerifyError('');
-                  setDigits(e.target.value.replace(/\D/g, '').slice(0, 4));
-                }}
-                disabled={verifying}
-                aria-describedby={verifyError ? 'last4-error' : undefined}
-                className="mt-3 h-16 w-full rounded-2xl border-2 border-slate-300 bg-white text-center font-mono text-3xl font-black tracking-[0.5em] text-slate-900 focus:border-[#F45A0A] focus:outline-none disabled:opacity-60"
-                dir="ltr"
-              />
-            </>
+              {/* 4 Connected/Separated OTP Digit Boxes */}
+              <div className="mt-5 flex items-center justify-center gap-3" dir="ltr">
+                {[0, 1, 2, 3].map((idx) => (
+                  <input
+                    key={idx}
+                    ref={(el) => {
+                      otpRefs.current[idx] = el;
+                    }}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={1}
+                    value={otp[idx]}
+                    onChange={(e) => handleOtpChange(idx, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                    disabled={verifying}
+                    className="h-16 w-14 rounded-2xl border-2 border-slate-300 bg-slate-50/50 text-center font-mono text-2xl font-black text-slate-900 shadow-xs transition focus:border-[#F45A0A] focus:bg-white focus:shadow-md focus:shadow-orange-500/10 focus:outline-none disabled:opacity-60"
+                  />
+                ))}
+              </div>
+            </div>
           ) : (
             <div className="mt-6">
               <button
@@ -272,20 +322,20 @@ export const StatementPortalPage: React.FC = () => {
                     setVerifying(false);
                   }
                 }}
-                className="h-13 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-sm shadow-md transition cursor-pointer flex items-center justify-center gap-2"
+                className="h-13 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-sm shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
               >
                 {verifying ? 'جارٍ فتح الكشف…' : 'عرض وتحميل كشف الحساب 📄'}
               </button>
             </div>
           )}
 
-          {verifying && <p className="mt-3 text-sm font-bold text-slate-500">جارٍ التحقق…</p>}
+          {verifying && <p className="mt-4 text-xs font-bold text-slate-500">جارٍ التحقق من الهوية…</p>}
           {verifyError && (
-            <p id="last4-error" role="alert" className="mt-3 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-800">
+            <p id="last4-error" role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-800 border border-rose-200">
               {verifyError}
             </p>
           )}
-          {loadingData && <p className="mt-3 text-sm font-bold text-slate-500">جارٍ تحميل الكشف…</p>}
+          {loadingData && <p className="mt-4 text-xs font-bold text-slate-500">جارٍ تحميل بيانات الكشف المالي…</p>}
         </div>
       </Shell>
     );

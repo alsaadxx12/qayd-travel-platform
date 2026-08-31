@@ -41,11 +41,13 @@ export class StatementPortalController {
    */
   @Get(':token/download')
   async download(
-    @Headers('x-portal-session') session: string,
+    @Headers('x-portal-session') headerSession: string,
+    @Query('session') querySession: string,
     @Res() res: any,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
+    const session = headerSession || querySession;
     const file = await this.portal.statementFile(String(session || ''), startDate, endDate);
     const encoded = encodeURIComponent(file.filename);
 
@@ -57,7 +59,7 @@ export class StatementPortalController {
     res.setHeader('Content-Length', String(file.buffer.length));
     // Read by the page so it can tell the visitor what it just handed them.
     res.setHeader('X-Statement-Kind', file.kind);
-    res.setHeader('Access-Control-Expose-Headers', 'X-Statement-Kind');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Statement-Kind,Content-Disposition');
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).send(file.buffer);
   }
@@ -65,10 +67,12 @@ export class StatementPortalController {
   @Get(':token/data')
   @ApiOperation({ summary: 'الكشف الكامل. يتطلب جلسة صادرة عن التحقق أعلاه.' })
   async statement(
-    @Headers('x-portal-session') session: string,
+    @Headers('x-portal-session') headerSession: string,
+    @Query('session') querySession: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
+    const session = headerSession || querySession;
     // The token in the path is ignored here on purpose: the session already names the
     // one account this visitor may read, and honouring the path as well would let a
     // valid session be pointed at a different token's account.
