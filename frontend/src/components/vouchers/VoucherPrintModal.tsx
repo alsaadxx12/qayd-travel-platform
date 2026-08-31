@@ -838,34 +838,50 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
     if (!element) return;
     setExporting(true);
     try {
+      // Temporarily shrink the element to its natural content height so that
+      // html2canvas does not capture the full A4 minHeight padding.
+      const origMinHeight = element.style.minHeight;
+      element.style.minHeight = 'auto';
+
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 3, // Higher scale for crisp Arabic text
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
+        // Force the element width to a fixed pixel size that maps cleanly to A4
+        windowWidth: element.scrollWidth,
       });
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      // Restore original style
+      element.style.minHeight = origMinHeight;
+
+      const imgData = canvas.toDataURL('image/png'); // PNG is sharper for text
+
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4',
       });
 
-      const imgWidth = 210;
+      const pageWidth = 210;
       const pageHeight = 297;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
+      const margin = 5; // 5mm margins
+      const usableWidth = pageWidth - margin * 2;
+      const usableHeight = pageHeight - margin * 2;
 
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      // Scale the image to fit A4 width with margins
+      const imgHeight = (canvas.height * usableWidth) / canvas.width;
 
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      if (imgHeight <= usableHeight) {
+        // Content fits in one page — center vertically
+        pdf.addImage(imgData, 'PNG', margin, margin, usableWidth, imgHeight);
+      } else {
+        // Content is too tall — scale down to fit one page
+        const scaleFactor = usableHeight / imgHeight;
+        const finalWidth = usableWidth * scaleFactor;
+        const finalHeight = usableHeight;
+        const xOffset = margin + (usableWidth - finalWidth) / 2;
+        pdf.addImage(imgData, 'PNG', xOffset, margin, finalWidth, finalHeight);
       }
 
       const filename = `voucher_${voucher.voucherNumber || 'doc'}_${new Date().toISOString().split('T')[0]}.pdf`;
