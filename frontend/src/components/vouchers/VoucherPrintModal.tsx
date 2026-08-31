@@ -190,10 +190,17 @@ export const DEFAULT_VOUCHER_CONFIG = {
      المبلغ، وفواصل جدول الحقول، وعرض عمود التسميات، وخانة التوقيع. */
   metaStyle: 'inline' as 'inline' | 'box',
   amountStyle: 'rule' as 'rule' | 'panel' | 'accent',
+  amountAlign: 'center' as 'center' | 'edge',
   tafqeetPlacement: 'underAmount' as 'underAmount' | 'field',
   fieldStyle: 'lines' as 'lines' | 'grid' | 'zebra',
   labelWidth: 150,
   signatureStyle: 'line' as 'line' | 'box',
+  signatureHeight: 44,
+  contactPlacement: 'footer' as 'header' | 'footer',
+  fontScale: 100,
+  textColor: '#0f172a',
+  labelColor: '',
+  footerTextColor: '',
 };
 
 export const DEFAULT_PAYMENT_VOUCHER_CONFIG = {

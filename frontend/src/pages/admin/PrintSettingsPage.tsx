@@ -989,6 +989,46 @@ export const PrintSettingsPage: React.FC = () => {
                           </div>
                         </div>
 
+                        {/* ألوان النصوص العامة — المتن والتسميات والتذييل. */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'لون نصوص السند (المتن)' : 'Body Text Color'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.textColor || '#0f172a'}
+                              onChange={(v) => updateCurrentConfig('textColor', v)}
+                              size="xs"
+                              format="hex"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'لون تسميات الحقول' : 'Field Labels Color'}
+                            </label>
+                            <ColorInput
+                              value={currentConfig.labelColor || ''}
+                              onChange={(v) => updateCurrentConfig('labelColor', v)}
+                              size="xs"
+                              format="hex"
+                              placeholder={isAr ? 'تلقائي من لون المتن' : 'Auto from body color'}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'لون نص التذييل وبيانات الاتصال' : 'Footer & Contact Text Color'}
+                          </label>
+                          <ColorInput
+                            value={currentConfig.footerTextColor || ''}
+                            onChange={(v) => updateCurrentConfig('footerTextColor', v)}
+                            size="xs"
+                            format="hex"
+                            placeholder={isAr ? 'تلقائي من لون المتن' : 'Auto from body color'}
+                          />
+                        </div>
+
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <label className="text-[10px] font-bold text-slate-700 block mb-1">
@@ -1416,6 +1456,27 @@ export const PrintSettingsPage: React.FC = () => {
                       {/* حجم المبلغ ونصّ الجسم — يقرؤهما السند وحده، فلا يُعرضان لغيره. */}
                       {isVoucherDoc && (
                         <>
+                          <div className="pt-2 border-t border-slate-100">
+                            <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                              <span>{isAr ? 'تكبير جميع النصوص:' : 'Scale All Text:'}</span>
+                              <span className="font-mono">{currentConfig.fontScale || 100}%</span>
+                            </div>
+                            <Slider
+                              min={80}
+                              max={160}
+                              step={5}
+                              size="xs"
+                              color="orange"
+                              value={currentConfig.fontScale || 100}
+                              onChange={(v) => updateCurrentConfig('fontScale', v)}
+                            />
+                            <p className="text-[9px] text-slate-500 mt-1 font-medium">
+                              {isAr
+                                ? 'يكبّر كل نصوص الورقة معاً بنسبة واحدة، مع بقاء الأحجام أدناه للضبط الفردي.'
+                                : 'Scales every text on the sheet together; the sliders below still fine-tune each size.'}
+                            </p>
+                          </div>
+
                           <div>
                             <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
                               <span>{isAr ? 'حجم المبلغ الرئيسي:' : 'Amount Size:'}</span>
@@ -1843,6 +1904,39 @@ export const PrintSettingsPage: React.FC = () => {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'محاذاة المبلغ في خانته' : 'Amount Alignment'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.amountAlign || 'center'}
+                          onChange={(v) => updateCurrentConfig('amountAlign', v || 'center')}
+                          data={[
+                            { value: 'center', label: isAr ? 'في وسط الخانة' : 'Centered' },
+                            { value: 'edge', label: isAr ? 'في الطرف مقابل التسمية' : 'At the edge' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'موضع بيانات الاتصال' : 'Contact Info Placement'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.contactPlacement || 'footer'}
+                          onChange={(v) => updateCurrentConfig('contactPlacement', v || 'footer')}
+                          data={[
+                            { value: 'footer', label: isAr ? 'في التذييل أسفل الورقة' : 'In the footer' },
+                            { value: 'header', label: isAr ? 'تحت الترويسة' : 'Under the header' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                    </div>
+
                     <div>
                       <label className="text-[10px] font-bold text-slate-700 block mb-1">
                         {isAr ? 'موضع التفقيط (المبلغ كتابةً)' : 'Amount in Words Placement'}
@@ -1974,6 +2068,46 @@ export const PrintSettingsPage: React.FC = () => {
                           allowDeselect={false}
                           disabled={currentConfig.showSignatures === false}
                         />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr
+                              ? `ارتفاع حقل التوقيع: ${currentConfig.signatureHeight || 44}px`
+                              : `Signature Height: ${currentConfig.signatureHeight || 44}px`}
+                          </label>
+                          <Slider
+                            size="xs"
+                            color="orange"
+                            min={30}
+                            max={110}
+                            value={currentConfig.signatureHeight || 44}
+                            onChange={(v) => updateCurrentConfig('signatureHeight', v)}
+                            disabled={currentConfig.showSignatures === false}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr
+                              ? `حجم رمز الكشف: ${currentConfig.qrSize || (currentConfig.signatureHeight || 44) + 22}px`
+                              : `QR Size: ${currentConfig.qrSize || (currentConfig.signatureHeight || 44) + 22}px`}
+                          </label>
+                          <Slider
+                            size="xs"
+                            color="orange"
+                            min={48}
+                            max={150}
+                            value={currentConfig.qrSize || (currentConfig.signatureHeight || 44) + 22}
+                            onChange={(v) => updateCurrentConfig('qrSize', v)}
+                            disabled={currentConfig.showQrCode === false}
+                          />
+                          <p className="text-[9px] text-slate-500 mt-1 font-medium">
+                            {isAr
+                              ? 'ما لم يُضبط، يتبع الرمز ارتفاع التوقيع تلقائياً.'
+                              : 'Unless set, the code follows the signature height.'}
+                          </p>
+                        </div>
                       </div>
 
                       <div>

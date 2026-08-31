@@ -100,6 +100,13 @@ export interface VoucherSheetConfig {
 
   // ── The amount ──
   amountStyle?: 'rule' | 'panel' | 'accent';
+  /**
+   * محاذاة المبلغ داخل خانته: في الوسط (الافتراضي) أو في الطرف مقابل تسميته.
+   *
+   * التوسيط يجعل المبلغ — أهم رقم على الورقة — على محور الصفحة نفسه حيث تقع عين
+   * القارئ أولاً، بدل أن يعتمد موقعه على اتجاه اللغة.
+   */
+  amountAlign?: 'center' | 'edge';
   showTafqeet?: boolean;
   /** موضع التفقيط: تحت المبلغ مباشرةً (الأتقن محاسبياً) أو كحقل ضمن الجدول. */
   tafqeetPlacement?: 'underAmount' | 'field';
@@ -118,6 +125,8 @@ export interface VoucherSheetConfig {
   receiverSignTitle?: string;
   showSignatures?: boolean;
   signatureStyle?: 'line' | 'box';
+  /** ارتفاع مساحة التوقيع بالبكسل — المساحة البيضاء التي يوقَّع فيها فعلاً. */
+  signatureHeight?: number;
   showStamp?: boolean;
   stampPosition?: 'start' | 'center' | 'end';
   stampText?: string;
@@ -133,12 +142,33 @@ export interface VoucherSheetConfig {
   watermarkAngle?: number;
   watermarkSize?: number;
 
+  /**
+   * أين يُطبع سطر العنوان والهاتف والبريد: تحت الترويسة أو في التذييل.
+   *
+   * في التذييل تخفّ الترويسة إلى الهوية وحدها (شعار واسم)، وتنزل بيانات الاتصال
+   * إلى أسفل الورقة فوق سطر الحقوق — وهو تقليد المطبوعات الرسمية.
+   */
+  contactPlacement?: 'header' | 'footer';
+
   // ── Ink & type ──
   primaryColor?: string;
   borderColor?: string;
+  /** لون النصوص الأساسية (قيم الحقول والمتن). */
+  textColor?: string;
+  /** لون تسميات الحقول («استلمنا من…»، «وذلك عن…»). */
+  labelColor?: string;
+  /** لون نص التذييل وبيانات الاتصال فيه. */
+  footerTextColor?: string;
   amountTextColor?: string;
   tafqeetTextColor?: string;
   fontFamily?: string;
+  /**
+   * تكبير كل نصوص الورقة دفعة واحدة — نسبة مئوية و100 هي الأصل.
+   *
+   * يضرب كل مقاس محسوب، فتكبر الورقة كلها متناسبةً بدل أن يطارد المستخدم ستة
+   * أشرطة منفصلة ليحافظ على التراتب نفسه.
+   */
+  fontScale?: number;
   fontSizes?: {
     companyTitle?: number;
     subtitle?: number;
@@ -261,13 +291,16 @@ export const FormalVoucherSheet: React.FC<{
    */
   const fs = config.fontSizes || {};
   const cap = (value: number, thermalMax: number) => (isThermal ? Math.min(value, thermalMax) : value);
+  /** معامل التكبير الشامل — يُطبَّق بعد اختيار المقاس وقبل سقف الحرارة. */
+  const scale = Math.min(2, Math.max(0.6, (config.fontScale || 100) / 100));
+  const sz = (v: number) => Math.round(v * scale * 10) / 10;
   const t = {
-    base: fs.body || d.base,
-    label: fs.label || d.label,
-    company: cap(fs.companyTitle || 17, 13),
-    subtitle: fs.subtitle || d.label,
-    docTitle: cap(fs.docTitle || 21, 15),
-    amount: cap(fs.amount || 30, 15),
+    base: sz(fs.body || d.base),
+    label: sz(fs.label || d.label),
+    company: cap(sz(fs.companyTitle || 17), 13),
+    subtitle: sz(fs.subtitle || d.label),
+    docTitle: cap(sz(fs.docTitle || 21), 15),
+    amount: cap(sz(fs.amount || 30), 15),
   };
 
   const rule = config.borderColor || tint(ink, 0.22);
@@ -275,7 +308,15 @@ export const FormalVoucherSheet: React.FC<{
   const amountColor = config.amountTextColor || ink;
   const tafqeetColor = config.tafqeetTextColor || ink;
   const labelWidth = config.labelWidth || 150;
-  const qrSize = config.qrSize || 62;
+  const sigHeight = config.signatureHeight || 44;
+  /**
+   * رمز الكشف بحجم خانة التوقيع ما لم يُضبط بنفسه.
+   *
+   * الخانتان تقعان في صفٍّ واحد، وفرق الحجم بينهما كان يجعل الرمز يبدو ملحقاً لا
+   * ركناً. ربطُ افتراضه بارتفاع التوقيع يُبقيهما متساويين حتى لو رفع المستخدم
+   * ارتفاع التوقيع ونسي الرمز.
+   */
+  const qrSize = config.qrSize || sigHeight + 22;
 
   const hidden = new Set(config.hiddenFields || []);
   const order = config.fieldOrder?.length ? config.fieldOrder : VOUCHER_FIELDS.map((f) => f.key);
@@ -375,6 +416,8 @@ export const FormalVoucherSheet: React.FC<{
    * لا كسطر واحد. والتوزيع منطقي لصفّ الهوية (شعار في طرف واسم في طرف)، وغير منطقي
    * لقائمة متتابعة.
    */
+  const contactInFooter = (config.contactPlacement || 'footer') === 'footer';
+
   const contactJustify =
     config.contactAlign === 'center'
       ? 'justify-center text-center'
@@ -474,17 +517,12 @@ export const FormalVoucherSheet: React.FC<{
           </div>
         )}
 
-        {contactLine.length > 0 && (
+        {contactInFooter || contactLine.length === 0 ? null : (
           <div
             className={`mt-1.5 opacity-75 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${contactJustify}`}
             style={{ fontSize: t.label }}
           >
-            {contactLine.map((part, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && <span aria-hidden="true" className="opacity-50">·</span>}
-                <span dir={/[A-Za-z0-9@+]/.test(part[0] || '') ? 'ltr' : undefined}>{part}</span>
-              </React.Fragment>
-            ))}
+            <ContactParts parts={contactLine} />
           </div>
         )}
       </header>
@@ -579,22 +617,42 @@ export const FormalVoucherSheet: React.FC<{
               : { borderColor: rule }
         }
       >
-        <div className="flex items-baseline justify-between gap-4">
-          <span className="font-bold opacity-70" style={{ fontSize: t.label }}>
-            {isEn ? 'Amount' : 'المبلغ'}
-          </span>
-          <span
-            className="font-mono font-black tabular-nums lining-nums"
-            style={{ fontSize: t.amount, color: amountColor, whiteSpace: 'nowrap' }}
-            dir="ltr"
-          >
-            {amountText}
-          </span>
-        </div>
+        {/* المبلغ في وسط خانته (الافتراضي): على محور الصفحة حيث تقع العين أولاً،
+            والتسمية فوقه صغيرة. و«الطرف» يُبقي الشكل القديم: تسمية في جهة ورقم في
+            الجهة المقابلة. */}
+        {(config.amountAlign || 'center') === 'center' ? (
+          <div className="text-center">
+            <div className="font-bold opacity-70" style={{ fontSize: t.label }}>
+              {isEn ? 'Amount' : 'المبلغ'}
+            </div>
+            <div
+              className="font-mono font-black tabular-nums lining-nums"
+              style={{ fontSize: t.amount, color: amountColor, whiteSpace: 'nowrap' }}
+              dir="ltr"
+            >
+              {amountText}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="font-bold opacity-70" style={{ fontSize: t.label }}>
+              {isEn ? 'Amount' : 'المبلغ'}
+            </span>
+            <span
+              className="font-mono font-black tabular-nums lining-nums"
+              style={{ fontSize: t.amount, color: amountColor, whiteSpace: 'nowrap' }}
+              dir="ltr"
+            >
+              {amountText}
+            </span>
+          </div>
+        )}
 
         {tafqeetUnderAmount && tafqeetText && (
           <div
-            className="mt-1.5 pt-1.5 flex items-baseline gap-2 border-t"
+            className={`mt-1.5 pt-1.5 flex items-baseline gap-2 border-t ${
+              (config.amountAlign || 'center') === 'center' ? 'justify-center flex-wrap text-center' : ''
+            }`}
             style={{ borderColor: softRule, fontSize: t.label }}
           >
             <span className="opacity-60 shrink-0">{isEn ? 'In words' : 'وقدره كتابةً'}</span>
@@ -627,7 +685,11 @@ export const FormalVoucherSheet: React.FC<{
               backgroundColor: fieldStyle === 'zebra' && i % 2 === 1 ? tint(ink, 0.04) : undefined,
             }}
           >
-            <dt className="font-bold opacity-65" style={{ fontSize: t.label }}>
+            {/* لون التسميات من القالب؛ وبدونه تُخفَّف بالشفافية كما كانت. */}
+            <dt
+              className={`font-bold ${config.labelColor ? '' : 'opacity-65'}`}
+              style={{ fontSize: t.label, color: config.labelColor || undefined }}
+            >
               {isEn ? row.labelEn : row.label}
             </dt>
             <dd className="font-semibold break-words">{row.value}</dd>
@@ -701,11 +763,11 @@ export const FormalVoucherSheet: React.FC<{
                   >
                     {title}
                   </div>
-                  <div className="h-12" />
+                  <div style={{ height: sigHeight }} />
                 </div>
               ) : (
                 <div key={i} className="text-center">
-                  <div className="h-10" />
+                  <div style={{ height: sigHeight }} />
                   <div className="border-t" style={{ borderColor: rule }} />
                   <div className="mt-1 font-bold opacity-75" style={{ fontSize: t.label }}>
                     {title}
@@ -746,12 +808,23 @@ export const FormalVoucherSheet: React.FC<{
         </div>
       )}
 
-      {config.footerText && (
+      {/*
+        التذييل: بيانات الاتصال أولاً (إن نزلت إليه) ثم سطر الحقوق.
+
+        نزولُها إلى هنا يخفّف الترويسة إلى الهوية وحدها — شعار واسم — وهو تقليد
+        المطبوعات الرسمية. ويُرسم التذييل ما دام فيه أحدهما، لا نصُّ الحقوق وحده.
+      */}
+      {(config.footerText || (contactInFooter && contactLine.length > 0)) && (
         <footer
-          className={`mt-6 pt-2 border-t opacity-60 shrink-0 ${footerAlign}`}
-          style={{ borderColor: softRule, fontSize: t.label }}
+          className={`mt-6 pt-2 border-t shrink-0 ${footerAlign} ${config.footerTextColor ? '' : 'opacity-60'}`}
+          style={{ borderColor: softRule, fontSize: t.label, color: config.footerTextColor || undefined }}
         >
-          {config.footerText}
+          {contactInFooter && contactLine.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">
+              <ContactParts parts={contactLine} />
+            </div>
+          )}
+          {config.footerText && <div className={contactInFooter && contactLine.length > 0 ? 'mt-1' : ''}>{config.footerText}</div>}
         </footer>
       )}
     </>
@@ -767,7 +840,7 @@ export const FormalVoucherSheet: React.FC<{
   return (
     <div
       dir={isEn ? 'ltr' : 'rtl'}
-      className="bg-white text-slate-900 relative mx-auto flex flex-col"
+      className="bg-white relative mx-auto flex flex-col"
       style={{
         width: paper.width,
         minHeight: paper.minHeight || undefined,
@@ -775,6 +848,8 @@ export const FormalVoucherSheet: React.FC<{
         fontFamily: `'${config.fontFamily || 'IBM Plex Sans Arabic'}', 'Tajawal', Arial, sans-serif`,
         fontSize: `${t.base}px`,
         lineHeight: 1.7,
+        // لون المتن كله من القالب — العناوين والمبلغ والتسميات تكسوه بألوانها فوقه.
+        color: config.textColor || '#0f172a',
       }}
     >
       {/* The watermark sits under the content at an opacity that survives printing
@@ -830,6 +905,18 @@ export const FormalVoucherSheet: React.FC<{
     </div>
   );
 };
+
+/** قيم سطر الاتصال مفصولةً بنقاط — تُرسم في الترويسة أو في التذييل سواء. */
+const ContactParts: React.FC<{ parts: string[] }> = ({ parts }) => (
+  <>
+    {parts.map((part, i) => (
+      <React.Fragment key={i}>
+        {i > 0 && <span aria-hidden="true" className="opacity-50">·</span>}
+        <span dir={/[A-Za-z0-9@+]/.test(part[0] || '') ? 'ltr' : undefined}>{part}</span>
+      </React.Fragment>
+    ))}
+  </>
+);
 
 /** الشعار بمقاساته من القالب — مرسوماً في أي من مواضع الترويسة الثلاثة. */
 const HeaderLogo: React.FC<{ config: VoucherSheetConfig }> = ({ config }) => (
