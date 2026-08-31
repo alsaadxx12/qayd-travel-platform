@@ -34,6 +34,8 @@ export interface StatementPdfPayload {
     previousBalance?: number;
   };
   lang?: 'ar' | 'en';
+  /** Live print-template overrides (settings page). Server otherwise uses the saved DB template. */
+  settings?: Record<string, unknown>;
 }
 
 function mapPassengerType(raw?: string): 'ADT' | 'CHD' | 'INF' {
@@ -131,6 +133,7 @@ export async function generateStatementPdf(
         lang: payload.lang || 'ar',
         rows: toServerRows(payload.rows),
         totals: payload.totals,
+        ...(payload.settings ? { settings: payload.settings } : {}),
       }),
       signal: controller.signal,
     });

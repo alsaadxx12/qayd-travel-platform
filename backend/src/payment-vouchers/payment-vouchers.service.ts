@@ -339,14 +339,67 @@ export class PaymentVouchersService {
     };
   }
 
+  /**
+   * Generates or validates a unique voucherNumber and jvNumber for the company.
+   * If the requested voucherNumber already exists, it auto-resolves by incrementing
+   * the numeric sequence to avoid unique-constraint collisions.
+   */
+  private async resolveUniqueVoucherNumbers(
+    companyId: string,
+    requestedVoucherNumber?: string,
+  ): Promise<{ voucherNumber: string; jvNumber: string }> {
+    const year = new Date().getFullYear();
+    let voucherNumber = (requestedVoucherNumber || '').trim();
+
+    if (!voucherNumber) {
+      const count = await this.prisma.paymentVoucher.count({ where: { companyId } });
+      voucherNumber = `PV-${year}-${String(count + 1).padStart(4, '0')}`;
+    }
+
+    // Check if voucherNumber exists in payment_vouchers
+    let existingVoucher = await this.prisma.paymentVoucher.findUnique({
+      where: { companyId_voucherNumber: { companyId, voucherNumber } },
+    });
+
+    if (existingVoucher) {
+      // Auto-increment to find next available sequence
+      const prefixMatch = voucherNumber.match(/^(.*?)(\d+)$/);
+      if (prefixMatch) {
+        const prefix = prefixMatch[1];
+        let num = parseInt(prefixMatch[2], 10);
+        const padLen = prefixMatch[2].length;
+        while (existingVoucher) {
+          num++;
+          voucherNumber = `${prefix}${String(num).padStart(padLen, '0')}`;
+          existingVoucher = await this.prisma.paymentVoucher.findUnique({
+            where: { companyId_voucherNumber: { companyId, voucherNumber } },
+          });
+        }
+      } else {
+        voucherNumber = `${voucherNumber}-${Date.now().toString().slice(-4)}`;
+      }
+    }
+
+    let jvNumber = `JV-${voucherNumber}`;
+    let existingJv = await this.prisma.journalEntry.findUnique({
+      where: { companyId_entryNumber: { companyId, entryNumber: jvNumber } },
+    });
+    if (existingJv) {
+      jvNumber = `JV-${voucherNumber}-${Date.now().toString().slice(-4)}`;
+    }
+
+    return { voucherNumber, jvNumber };
+  }
+
   async create(companyId: string, userId: string, dto: CreatePaymentVoucherDto) {
     const amount = Number(dto.amount);
     if (!amount || amount <= 0) {
       throw new BadRequestException('مبلغ سند الدفع يجب أن يكون أكبر من الصفر');
     }
-    const currency = this.normalizeCurrency(dto.currency);
-    const exchangeRate = this.resolveRate(currency, dto.exchangeRate);
-    const baseAmount = amount * exchangeRate;
+    const currency = dto.currency === 'USD' ? 'USD' : 'IQD';
+    const exchangeRate = Number(dto.exchangeRate) || 1;
+    const baseAmount = currency === this.BASE_CURRENCY ? amount : amount * exchangeRate;
+
     const note = this.cleanDescription(dto.description);
     const partyName = await this.validateReferences(
       companyId,
@@ -355,21 +408,16 @@ export class PaymentVouchersService {
       dto.supplierId,
     );
 
-    const legs = this.resolveLegs(dto.splitAccounts, baseAmount, exchangeRate, dto.accountId);
+    const legs = normalizeVoucherSplits(dto.splitAccounts, baseAmount, dto.accountId);
     const accountNames = await this.validateSplitAccounts(companyId, legs, [
       dto.cashboxOrBankAccountId,
       dto.accountId,
     ]);
 
-    const year = new Date().getFullYear();
-    let voucherNumber: string;
-    if (dto.voucherNumber && dto.voucherNumber.trim()) {
-      voucherNumber = dto.voucherNumber.trim();
-    } else {
-      const count = await this.prisma.paymentVoucher.count({ where: { companyId } });
-      voucherNumber = `PV-${year}-${String(count + 1).padStart(4, '0')}`;
-    }
-    const jvNumber = `JV-${voucherNumber}`;
+    const { voucherNumber, jvNumber } = await this.resolveUniqueVoucherNumbers(
+      companyId,
+      dto.voucherNumber,
+    );
 
     // The ledger holds base-currency figures, so the lines describe themselves in
     // that currency and name the original amount and rate alongside it.
@@ -388,67 +436,80 @@ export class PaymentVouchersService {
       exchangeRate,
     };
 
-    return this.prisma.$transaction(async (tx) => {
-      const journalEntry = await tx.journalEntry.create({
-        data: {
-          entryNumber: jvNumber,
-          date: dto.date ? new Date(dto.date) : new Date(),
-          reference: dto.reference || voucherNumber,
-          description: buildEntryDescription(legs, ctx),
-          status: 'POSTED',
-          totalDebit: new Prisma.Decimal(baseAmount),
-          totalCredit: new Prisma.Decimal(baseAmount),
-          companyId,
-          createdById: userId,
-          postedById: userId,
-          lines: {
-            create: buildVoucherLines(legs, ctx).map((line) => ({
-              accountId: line.accountId,
-              debit: new Prisma.Decimal(line.debit),
-              credit: new Prisma.Decimal(line.credit),
-              description: line.description,
-            })),
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const journalEntry = await tx.journalEntry.create({
+          data: {
+            entryNumber: jvNumber,
+            date: dto.date ? new Date(dto.date) : new Date(),
+            reference: dto.reference || voucherNumber,
+            description: buildEntryDescription(legs, ctx),
+            status: 'POSTED',
+            totalDebit: new Prisma.Decimal(baseAmount),
+            totalCredit: new Prisma.Decimal(baseAmount),
+            companyId,
+            createdById: userId,
+            postedById: userId,
+            lines: {
+              create: buildVoucherLines(legs, ctx).map((line) => ({
+                accountId: line.accountId,
+                debit: new Prisma.Decimal(line.debit),
+                credit: new Prisma.Decimal(line.credit),
+                description: line.description,
+              })),
+            },
           },
-        },
+        });
+
+        const voucher = await tx.paymentVoucher.create({
+          data: {
+            voucherNumber,
+            date: dto.date ? new Date(dto.date) : new Date(),
+            amount: new Prisma.Decimal(amount),
+            currency,
+            exchangeRate: new Prisma.Decimal(exchangeRate),
+            accountId: dto.accountId,
+            cashboxOrBankAccountId: dto.cashboxOrBankAccountId,
+            supplierId: dto.supplierId || null,
+            reference: dto.reference || null,
+            description: note,
+            status: 'POSTED',
+            journalEntryId: journalEntry.id,
+            companyId,
+            createdById: userId,
+          },
+        });
+
+        await this.applyBalanceDeltas(
+          tx,
+          this.postingDeltas(legs, dto.cashboxOrBankAccountId, baseAmount),
+        );
+
+        await tx.auditLog.create({
+          data: {
+            action: 'CREATE_PAYMENT_VOUCHER',
+            entity: 'PaymentVoucher',
+            entityId: voucher.id,
+            details: JSON.stringify({ voucherNumber, amount, supplierId: dto.supplierId }),
+            userId,
+            companyId,
+          },
+        });
+
+        return voucher;
       });
-
-      const voucher = await tx.paymentVoucher.create({
-        data: {
-          voucherNumber,
-          date: dto.date ? new Date(dto.date) : new Date(),
-          amount: new Prisma.Decimal(amount),
-          currency,
-          exchangeRate: new Prisma.Decimal(exchangeRate),
-          accountId: dto.accountId,
-          cashboxOrBankAccountId: dto.cashboxOrBankAccountId,
-          supplierId: dto.supplierId || null,
-          reference: dto.reference || null,
-          description: note,
-          status: 'POSTED',
-          journalEntryId: journalEntry.id,
-          companyId,
-          createdById: userId,
-        },
-      });
-
-      await this.applyBalanceDeltas(
-        tx,
-        this.postingDeltas(legs, dto.cashboxOrBankAccountId, baseAmount),
-      );
-
-      await tx.auditLog.create({
-        data: {
-          action: 'CREATE_PAYMENT_VOUCHER',
-          entity: 'PaymentVoucher',
-          entityId: voucher.id,
-          details: JSON.stringify({ voucherNumber, amount, supplierId: dto.supplierId }),
-          userId,
-          companyId,
-        },
-      });
-
-      return voucher;
-    });
+    } catch (err: any) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) {
+        throw err;
+      }
+      if (err?.code === 'P2002') {
+        throw new BadRequestException('رقم السند أو رقم القيد مستخدم مسبقاً في النظام. يرجى تجربة رقم سند آخر.');
+      }
+      if (err?.code === 'P2003') {
+        throw new BadRequestException('أحد الحسابات أو الكيانات المحددة غير موجود في قاعدة البيانات.');
+      }
+      throw new BadRequestException(err?.message || 'تعذّر إنشاء سند الصرف في النظام.');
+    }
   }
 
   async remove(id: string, companyId: string) {

@@ -357,13 +357,13 @@ export const PrintableAccountStatementSheet: React.FC<{
     <div
       id="printable-statement-sheet"
       dir="ltr"
-      className="bg-white text-slate-900 w-[780px] min-h-[1100px] p-6 pb-6 text-left flex flex-col justify-between border border-slate-300 shadow-xs relative mx-auto box-border"
+      className="bg-white text-slate-900 w-[210mm] min-h-[297mm] p-6 pb-6 text-left flex flex-col justify-between border border-slate-300 shadow-xs relative mx-auto box-border"
       style={{
         direction: 'ltr',
         textAlign: 'left',
-        minHeight: '1100px',
+        minHeight: '297mm',
         fontFamily: `'${selectedFontFamily}', 'Tajawal', Arial, sans-serif`,
-        fontSize: '10.5px',
+        fontSize: '11px',
       }}
     >
       {/* Watermark overlay - SVG text with proper Arabic ligature/shaping */}
@@ -688,7 +688,8 @@ export const printElementHD = (elementId: string, lang: LangKey = 'ar') => {
             height: 100% !important;
             font-smooth: always !important;
             -webkit-font-smoothing: antialiased !important;
-            text-rendering: optimizeLegibility !important;
+            -moz-osx-font-smoothing: grayscale !important;
+            text-rendering: geometricPrecision !important;
           }
           #printable-statement-sheet {
             position: relative !important;
@@ -859,8 +860,8 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
       showSuccessNotification(
         printLang === 'en' ? 'Downloaded' : 'تم التحميل',
         printLang === 'en'
-          ? 'Account statement PDF exported with print-quality text'
-          : 'تم تصدير كشف الحساب بنص حاد عبر محرك الطباعة'
+          ? 'Official account statement PDF (vector print engine)'
+          : 'تم تصدير كشف الحساب الرسمي عبر محرك الطباعة'
       );
     } catch (err: any) {
       console.error('PDF export failed:', err);
@@ -1070,14 +1071,13 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
 
   const exportDirectPdfFile = async () => {
     await downloadStatementPdf(chromiumPdfPayload());
-    showSuccessNotification('تم التحميل', 'تم تصدير كشف الحساب بنص حاد عبر محرك الطباعة');
+    showSuccessNotification('تم التحميل', 'تم تصدير كشف الحساب الرسمي عبر محرك الطباعة');
     onClose();
   };
 
   const handleDownloadPdfDirect = async () => {
     setDownloading(true);
     try {
-      // Direct client-side high-resolution PDF download (Instant file save in 1 second)
       await exportDirectPdfFile();
     } catch (e) {
       console.error(e);

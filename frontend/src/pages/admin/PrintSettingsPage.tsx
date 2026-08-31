@@ -20,6 +20,7 @@ import {
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
 import { fetchPrintTemplate, savePrintTemplate } from '../../api/printTemplates';
+import { downloadStatementPdf } from '../../api/statementPdf';
 import { branchesApi, type Branch } from '../../api/branches';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -361,17 +362,38 @@ export const PrintSettingsPage: React.FC = () => {
     }
   };
 
-  // Instant Client PDF test export for the active preview
+  // Official Chromium PDF for the statement tab. Other docs still use a client raster
+  // until they have the same server print pipeline.
   const handleExportTestPdf = async () => {
-    const previewId = currentDocKey === 'statement' || currentDocKey === 'expense_report'
-      ? 'printable-statement-sheet'
-      : 'printable-voucher-sheet';
-
-    const element = document.getElementById(previewId);
-    if (!element) return;
-
     setIsExportingTestPdf(true);
     try {
+      if (currentDocKey === 'statement') {
+        await downloadStatementPdf({
+          accountName: isAr ? 'شركة النور للتجارة العامة' : 'Al-Noor Trading Co.',
+          accountCode: '1201',
+          accountPhone: '+964 770 000 0000',
+          accountEmail: 'accounts@example.com',
+          accountAddress: isAr ? 'بغداد — الكرادة' : 'Baghdad — Karrada',
+          startDate: '2026-08-01',
+          endDate: '2026-08-31',
+          rows: MOCK_STATEMENT_ROWS,
+          totals: MOCK_STATEMENT_TOTALS,
+          lang: isAr ? 'ar' : 'en',
+          settings: currentConfig,
+        });
+        showSuccessNotification(
+          isAr ? 'تم تصدير PDF التجريبي' : 'Test PDF Exported',
+          isAr ? 'تم تنزيل العينة عبر محرك الطباعة الرسمي (نص متجه)' : 'Sample exported with the official print engine',
+        );
+        return;
+      }
+
+      const previewId =
+        currentDocKey === 'expense_report' ? 'printable-statement-sheet' : 'printable-voucher-sheet';
+
+      const element = document.getElementById(previewId);
+      if (!element) return;
+
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
@@ -405,11 +427,14 @@ export const PrintSettingsPage: React.FC = () => {
       pdf.save(`test_template_${currentDocKey}_${Date.now()}.pdf`);
       showSuccessNotification(
         isAr ? 'تم تصدير PDF التجريبي' : 'Test PDF Exported',
-        isAr ? 'تم تنزيل عينة المعاينة بصيغة PDF فورياً بجودة عالية' : 'Sample PDF exported instantly'
+        isAr ? 'تم تنزيل عينة المعاينة بصيغة PDF' : 'Sample PDF exported',
       );
     } catch (err: any) {
       console.error('Test export failed:', err);
-      showErrorNotification(isAr ? 'خطأ في التصدير' : 'Export Failed', err.message);
+      showErrorNotification(
+        isAr ? 'خطأ في التصدير' : 'Export Failed',
+        err?.message || (isAr ? 'تعذر توليد ملف PDF' : 'Could not generate the PDF'),
+      );
     } finally {
       setIsExportingTestPdf(false);
     }

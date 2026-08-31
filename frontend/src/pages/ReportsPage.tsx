@@ -55,13 +55,10 @@ import { showSuccessNotification, showErrorNotification } from '../utils/notific
 import {
   AccountStatementPrintModal,
   AccountStatementQuickExportModal,
-  PrintableAccountStatementSheet,
-  printElementHD,
 } from '../components/reports/AccountStatementPrintModal';
 import { FinancialVoucherForm } from '../components/vouchers/FinancialVoucherForm';
 import { TicketInvoiceEditorWorkspace } from '../components/tickets/TicketInvoiceEditorWorkspace';
 import { ticketsApi } from '../api/tickets';
-import { fetchPrintTemplate } from '../api/printTemplates';
 import { useLanguageStore } from '../store/useLanguageStore';
 
 // Helper: format date as YYYY-MM-DD
@@ -204,28 +201,6 @@ export const ReportsPage: React.FC = () => {
   const [editVoucherId, setEditVoucherId] = useState<string | undefined>(undefined);
   const [ticketModalOpened, setTicketModalOpened] = useState(false);
   const [editingTicketData, setEditingTicketData] = useState<any | null>(null);
-  const [statementConfig, setStatementConfig] = useState<any>(null);
-
-  useEffect(() => {
-    fetchPrintTemplate('statement')
-      .then((res) => {
-        if (res && res.config) setStatementConfig(res.config);
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleExportPDFDirect = async () => {
-    if (!statementConfig) {
-      try {
-        const res = await fetchPrintTemplate('statement');
-        if (res && res.config) setStatementConfig(res.config);
-      } catch (e) {}
-    }
-    setTimeout(() => {
-      printElementHD('printable-statement-sheet');
-    }, 200);
-  };
-
   // ── Sidebar Toggle Filters ──
   const [activeFilters, setActiveFilters] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -2151,29 +2126,6 @@ export const ReportsPage: React.FC = () => {
               previousBalance: 0,
             }}
           />
-
-          {/* Offscreen Sheet Container for Direct PDF/HD Print (Hidden from UI) */}
-          <div style={{ position: 'fixed', left: '-9999px', top: '-9999px', width: '780px', pointerEvents: 'none', opacity: 0 }} aria-hidden="true">
-            <PrintableAccountStatementSheet
-              accountName={isAr ? selectedAccount.nameAr : (selectedAccount.nameEn || selectedAccount.nameAr)}
-              accountCode={selectedAccount.code}
-              accountPhone={selectedAccount.phone}
-              accountEmail={selectedAccount.email}
-              accountAddress={selectedAccount.address}
-              startDate={rangeStartDay}
-              endDate={rangeEndDay}
-              rows={printRows}
-              totals={{
-                totalDebit,
-                totalCredit,
-                finalBalance: closingBalance,
-                openingBalance: openingBalIQD,
-                previousBalance: 0,
-              }}
-              config={statementConfig}
-              lang={language as any}
-            />
-          </div>
         </>
       )}
 

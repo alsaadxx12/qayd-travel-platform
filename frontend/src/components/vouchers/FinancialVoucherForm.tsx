@@ -1075,6 +1075,40 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       return;
     }
 
+    if (!isReceiptOrPaymentBalanced) {
+      if (!oppositeAccountId) {
+        showErrorNotification('تنبيه', isReceipt ? 'يرجى اختيار الحساب المقابل (الطرف الدائن)' : 'يرجى اختيار الحساب المقابل (الطرف المدين)');
+        return;
+      }
+      if (!cashboxAccountId) {
+        showErrorNotification('تنبيه', 'يرجى اختيار حساب الصندوق أو البنك');
+        return;
+      }
+      if (numAmount <= 0) {
+        showErrorNotification('تنبيه', 'يرجى إدخال مبلغ السند أكبر من الصفر');
+        return;
+      }
+    }
+
+    if (isOverAllocated) {
+      showErrorNotification(
+        'تنبيه التقسيم',
+        `مجموع المبالغ المخصصة (${totalCustomSplitsAmount.toLocaleString('en-US')}) يتجاوز مبلغ السند الإجمالي (${numAmount.toLocaleString('en-US')}).`
+      );
+      return;
+    }
+
+    const unassignedSplit = splitAllocations.find(
+      (s) => parseCleanNumber(s.amount) > 0 && !s.accountId
+    );
+    if (unassignedSplit) {
+      showErrorNotification(
+        'تنبيه التقسيم',
+        `سطر التقسيم بمبلغ (${parseCleanNumber(unassignedSplit.amount).toLocaleString('en-US')}) غير محدد له حساب محاسبي. يرجى اختيار الحساب أو مسح المبلغ.`
+      );
+      return;
+    }
+
     let endpoint = isReceipt ? '/api/receipt-vouchers' : '/api/payment-vouchers';
     let method = 'POST';
 

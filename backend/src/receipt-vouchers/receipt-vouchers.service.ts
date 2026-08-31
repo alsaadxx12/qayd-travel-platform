@@ -308,6 +308,58 @@ export class ReceiptVouchersService {
     };
   }
 
+  /**
+   * Generates or validates a unique voucherNumber and jvNumber for the company.
+   * If the requested voucherNumber already exists, it auto-resolves by incrementing
+   * the numeric sequence to avoid unique-constraint collisions.
+   */
+  private async resolveUniqueVoucherNumbers(
+    companyId: string,
+    requestedVoucherNumber?: string,
+  ): Promise<{ voucherNumber: string; jvNumber: string }> {
+    const year = new Date().getFullYear();
+    let voucherNumber = (requestedVoucherNumber || '').trim();
+
+    if (!voucherNumber) {
+      const count = await this.prisma.receiptVoucher.count({ where: { companyId } });
+      voucherNumber = `RV-${year}-${String(count + 1).padStart(4, '0')}`;
+    }
+
+    // Check if voucherNumber exists in receipt_vouchers
+    let existingVoucher = await this.prisma.receiptVoucher.findUnique({
+      where: { companyId_voucherNumber: { companyId, voucherNumber } },
+    });
+
+    if (existingVoucher) {
+      // Auto-increment to find next available sequence
+      const prefixMatch = voucherNumber.match(/^(.*?)(\d+)$/);
+      if (prefixMatch) {
+        const prefix = prefixMatch[1];
+        let num = parseInt(prefixMatch[2], 10);
+        const padLen = prefixMatch[2].length;
+        while (existingVoucher) {
+          num++;
+          voucherNumber = `${prefix}${String(num).padStart(padLen, '0')}`;
+          existingVoucher = await this.prisma.receiptVoucher.findUnique({
+            where: { companyId_voucherNumber: { companyId, voucherNumber } },
+          });
+        }
+      } else {
+        voucherNumber = `${voucherNumber}-${Date.now().toString().slice(-4)}`;
+      }
+    }
+
+    let jvNumber = `JV-${voucherNumber}`;
+    let existingJv = await this.prisma.journalEntry.findUnique({
+      where: { companyId_entryNumber: { companyId, entryNumber: jvNumber } },
+    });
+    if (existingJv) {
+      jvNumber = `JV-${voucherNumber}-${Date.now().toString().slice(-4)}`;
+    }
+
+    return { voucherNumber, jvNumber };
+  }
+
   async create(companyId: string, userId: string, dto: CreateReceiptVoucherDto) {
     const amount = Number(dto.amount);
     if (!amount || amount <= 0) {
@@ -331,15 +383,10 @@ export class ReceiptVouchersService {
       dto.accountId,
     ]);
 
-    const year = new Date().getFullYear();
-    let voucherNumber: string;
-    if (dto.voucherNumber && dto.voucherNumber.trim()) {
-      voucherNumber = dto.voucherNumber.trim();
-    } else {
-      const count = await this.prisma.receiptVoucher.count({ where: { companyId } });
-      voucherNumber = `RV-${year}-${String(count + 1).padStart(4, '0')}`;
-    }
-    const jvNumber = `JV-${voucherNumber}`;
+    const { voucherNumber, jvNumber } = await this.resolveUniqueVoucherNumbers(
+      companyId,
+      dto.voucherNumber,
+    );
 
     const currency = dto.currency === 'USD' ? 'USD' : 'IQD';
     const exchangeRate = Number(dto.exchangeRate) || 1;
@@ -357,71 +404,84 @@ export class ReceiptVouchersService {
       note,
     };
 
-    return this.prisma.$transaction(async (tx) => {
-      const journalEntry = await tx.journalEntry.create({
-        data: {
-          entryNumber: jvNumber,
-          date: dto.date ? new Date(dto.date) : new Date(),
-          reference: dto.reference || voucherNumber,
-          description: buildEntryDescription(legs, ctx),
-          status: 'POSTED',
-          totalDebit: new Prisma.Decimal(amount),
-          totalCredit: new Prisma.Decimal(amount),
-          currency,
-          exchangeRate: new Prisma.Decimal(exchangeRate),
-          companyId,
-          createdById: userId,
-          postedById: userId,
-          lines: {
-            create: buildVoucherLines(legs, ctx).map((line) => ({
-              accountId: line.accountId,
-              debit: new Prisma.Decimal(line.debit),
-              credit: new Prisma.Decimal(line.credit),
-              description: line.description,
-            })),
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const journalEntry = await tx.journalEntry.create({
+          data: {
+            entryNumber: jvNumber,
+            date: dto.date ? new Date(dto.date) : new Date(),
+            reference: dto.reference || voucherNumber,
+            description: buildEntryDescription(legs, ctx),
+            status: 'POSTED',
+            totalDebit: new Prisma.Decimal(amount),
+            totalCredit: new Prisma.Decimal(amount),
+            currency,
+            exchangeRate: new Prisma.Decimal(exchangeRate),
+            companyId,
+            createdById: userId,
+            postedById: userId,
+            lines: {
+              create: buildVoucherLines(legs, ctx).map((line) => ({
+                accountId: line.accountId,
+                debit: new Prisma.Decimal(line.debit),
+                credit: new Prisma.Decimal(line.credit),
+                description: line.description,
+              })),
+            },
           },
-        },
+        });
+
+        const voucher = await tx.receiptVoucher.create({
+          data: {
+            voucherNumber,
+            date: dto.date ? new Date(dto.date) : new Date(),
+            amount: new Prisma.Decimal(amount),
+            currency,
+            exchangeRate: new Prisma.Decimal(exchangeRate),
+            accountId: dto.accountId,
+            cashboxOrBankAccountId: dto.cashboxOrBankAccountId,
+            customerId: dto.customerId || null,
+            reference: dto.reference || null,
+            description: note,
+            status: 'POSTED',
+            journalEntryId: journalEntry.id,
+            companyId,
+            createdById: userId,
+          } as any,
+        });
+
+        // One decrement per credited account, so a split moves each account's balance
+        // by its own share rather than dumping the whole amount on one of them.
+        await this.applyBalanceDeltas(
+          tx,
+          this.postingDeltas(legs, dto.cashboxOrBankAccountId, amount),
+        );
+
+        await tx.auditLog.create({
+          data: {
+            action: 'CREATE_RECEIPT_VOUCHER',
+            entity: 'ReceiptVoucher',
+            entityId: voucher.id,
+            details: JSON.stringify({ voucherNumber, amount, customerId: dto.customerId }),
+            userId,
+            companyId,
+          },
+        });
+
+        return voucher;
       });
-
-      const voucher = await tx.receiptVoucher.create({
-        data: {
-          voucherNumber,
-          date: dto.date ? new Date(dto.date) : new Date(),
-          amount: new Prisma.Decimal(amount),
-          currency,
-          exchangeRate: new Prisma.Decimal(exchangeRate),
-          accountId: dto.accountId,
-          cashboxOrBankAccountId: dto.cashboxOrBankAccountId,
-          customerId: dto.customerId || null,
-          reference: dto.reference || null,
-          description: note,
-          status: 'POSTED',
-          journalEntryId: journalEntry.id,
-          companyId,
-          createdById: userId,
-        } as any,
-      });
-
-      // One decrement per credited account, so a split moves each account's balance
-      // by its own share rather than dumping the whole amount on one of them.
-      await this.applyBalanceDeltas(
-        tx,
-        this.postingDeltas(legs, dto.cashboxOrBankAccountId, amount),
-      );
-
-      await tx.auditLog.create({
-        data: {
-          action: 'CREATE_RECEIPT_VOUCHER',
-          entity: 'ReceiptVoucher',
-          entityId: voucher.id,
-          details: JSON.stringify({ voucherNumber, amount, customerId: dto.customerId }),
-          userId,
-          companyId,
-        },
-      });
-
-      return voucher;
-    });
+    } catch (err: any) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) {
+        throw err;
+      }
+      if (err?.code === 'P2002') {
+        throw new BadRequestException('رقم السند أو رقم القيد مستخدم مسبقاً في النظام. يرجى تجربة رقم سند آخر.');
+      }
+      if (err?.code === 'P2003') {
+        throw new BadRequestException('أحد الحسابات أو الكيانات المحددة غير موجود في قاعدة البيانات.');
+      }
+      throw new BadRequestException(err?.message || 'تعذّر إنشاء سند القبض في النظام.');
+    }
   }
 
   /**
