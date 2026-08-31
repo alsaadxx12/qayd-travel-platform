@@ -9,7 +9,7 @@ import { AccountingGrid, AccountingColumnDef } from '../components/common/Accoun
 import { AccountingDateRangePicker } from '../components/common/date/AccountingDateRangePicker';
 import { AnimatedNumber } from '../components/common/AnimatedNumber';
 import { DebtAmountTraceModal } from '../components/reports/DebtAmountTraceModal';
-import { Paper, TextInput, Button, Badge, Switch, Modal, Radio, Group, Stack, Divider, Progress, Textarea, Menu } from '@mantine/core';
+import { Paper, TextInput, Button, Badge, Switch, Modal, Radio, Group, Stack, Divider, Progress, Textarea, Menu, Loader } from '@mantine/core';
 import {
   IconSearch,
   IconFileText,
@@ -25,6 +25,10 @@ import {
   IconArchive,
   IconFileZip,
   IconFiles,
+  IconX,
+  IconCheck,
+  IconAlertCircle,
+  IconAlertTriangle,
 } from '@tabler/icons-react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
@@ -105,6 +109,15 @@ export const DebtsReportPage: React.FC = () => {
   const [emailBody, setEmailBody] = useState('مرحباً، تجدون برفقه كشف الحساب التفصيلي للذمم المالية للفترة المحددة.');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isExportChoiceModalOpen, setIsExportChoiceModalOpen] = useState(false);
+  const [isTrackingEmailSending, setIsTrackingEmailSending] = useState(false);
+  const [emailSendStatus, setEmailSendStatus] = useState<'sending' | 'completed' | 'failed'>('sending');
+  const [emailStats, setEmailStats] = useState<{ sent: number; pending: number; failed: number; skipped: number; total: number }>({
+    sent: 0,
+    pending: 0,
+    failed: 0,
+    skipped: 0,
+    total: 0,
+  });
 
   const [printConfig, setPrintConfig] = useState<any>(null);
   const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(new Set());
@@ -823,43 +836,86 @@ export const DebtsReportPage: React.FC = () => {
     setIsEmailModalOpen(true);
   };
 
-  // Handler for Email Submit
-  const handleSendEmailSubmit = async () => {
-    if (!emailRecipient || !emailRecipient.trim()) {
-      showErrorNotification('تنبيه', 'يرجى إدخال عنوان البريد الإلكتروني للمستلم.');
+  // Real-time Email Sending & Tracking Handler
+  const handleStartBatchEmailSending = async (targetAccountIds: string[]) => {
+    const targetAccounts = debtRows.filter((r) => targetAccountIds.includes(r.id));
+    if (targetAccounts.length === 0) {
+      showErrorNotification('تنبيه', 'يرجى اختيار حساب واحد على الأقل لإرسال الكشوفات.');
       return;
     }
 
-    setIsSendingEmail(true);
-    try {
-      const selectedAccs = debtRows.filter(r => selectedEmailAccountIds.includes(r.id));
-      const targetAcc = selectedAccs[0] || { nameAr: 'كشف الذمم المالي', endingBalanceUSD: 0, endingBalanceIQD: 0 };
-      const cur = targetAcc.endingBalanceUSD ? 'USD' : 'IQD';
-      const bal = targetAcc.endingBalanceUSD || targetAcc.endingBalanceIQD || 0;
+    setIsTrackingEmailSending(true);
+    setEmailSendStatus('sending');
+    setEmailStats({
+      sent: 0,
+      pending: targetAccounts.length,
+      failed: 0,
+      skipped: 0,
+      total: targetAccounts.length,
+    });
 
-      await apiRequest('/api/email/send-statement', {
-        method: 'POST',
-        body: JSON.stringify({
-          recipientEmail: emailRecipient.trim(),
-          recipientName: targetAcc.nameAr,
-          accountName: targetAcc.nameAr,
-          currency: cur,
-          currentBalance: bal,
-          subject: emailSubject,
-          customMessage: emailBody,
-          allowWithoutAttachment: true,
-          fromDate: batchStartDate ? new Date(batchStartDate).toLocaleDateString('ar-EG') : undefined,
-          toDate: batchEndDate ? new Date(batchEndDate).toLocaleDateString('ar-EG') : undefined,
-        }),
+    let sentCount = 0;
+    let failedCount = 0;
+    let skippedCount = 0;
+
+    for (let i = 0; i < targetAccounts.length; i++) {
+      const acc = targetAccounts[i];
+      const recipientEmail = (acc as any).email || (acc as any).contactEmail || (acc as any).customer?.email || (acc as any).supplier?.email;
+
+      if (!recipientEmail || !recipientEmail.trim() || !recipientEmail.includes('@')) {
+        skippedCount++;
+        setEmailStats((prev) => ({
+          ...prev,
+          pending: Math.max(0, prev.total - (sentCount + failedCount + skippedCount)),
+          skipped: skippedCount,
+        }));
+        continue;
+      }
+
+      try {
+        const cur = acc.endingBalanceUSD ? 'USD' : 'IQD';
+        const bal = acc.endingBalanceUSD || acc.endingBalanceIQD || 0;
+
+        await apiRequest('/api/email/send-statement', {
+          method: 'POST',
+          body: JSON.stringify({
+            recipientEmail: recipientEmail.trim(),
+            recipientName: acc.nameAr,
+            accountName: acc.nameAr,
+            currency: cur,
+            currentBalance: bal,
+            subject: `كشف حساب مالي — ${acc.nameAr}`,
+            customMessage: 'مرحباً، تجدون برفقه كشف الحساب المالي التفصيلي للفترة المحددة.',
+            allowWithoutAttachment: true,
+            fromDate: batchStartDate ? new Date(batchStartDate).toLocaleDateString('ar-EG') : undefined,
+            toDate: batchEndDate ? new Date(batchEndDate).toLocaleDateString('ar-EG') : undefined,
+          }),
+        });
+
+        sentCount++;
+      } catch (err) {
+        console.error(`Failed to send email to ${acc.nameAr}:`, err);
+        failedCount++;
+      }
+
+      setEmailStats({
+        sent: sentCount,
+        failed: failedCount,
+        skipped: skippedCount,
+        pending: Math.max(0, targetAccounts.length - (sentCount + failedCount + skippedCount)),
+        total: targetAccounts.length,
       });
+    }
 
-      showSuccessNotification('تم إرسال البريد الإلكتروني بنجاح', `تم إرسال كشف الحساب عبر Brevo بنجاح إلى: ${emailRecipient}`);
-      setIsEmailModalOpen(false);
-      setEmailRecipient('');
-    } catch (err: any) {
-      showErrorNotification('خطأ في الإرسال', err.message || 'حدث خطأ أثناء إرسال البريد الإلكتروني عبر Brevo.');
-    } finally {
-      setIsSendingEmail(false);
+    if (sentCount > 0) {
+      setEmailSendStatus('completed');
+      showSuccessNotification('تم الإرسال', `تم إرسال كشوفات الحساب بنجاح لـ (${sentCount}) حساب.`);
+    } else if (failedCount > 0) {
+      setEmailSendStatus('failed');
+      showErrorNotification('فشل الإرسال', 'تعذر إرسال كشوفات الحسابات عبر Brevo.');
+    } else {
+      setEmailSendStatus('completed');
+      showErrorNotification('تنبيه', 'لم يتم العثور على عناوين بريد إلكتروني مسجلة في بيانات الحسابات المحددة.');
     }
   };
 
@@ -1430,82 +1486,240 @@ export const DebtsReportPage: React.FC = () => {
         }}
       />
 
-      {/* ── Modal for Choosing Export vs Email (نافذة الاختيار بين تصدير PDF أو إرسال إيميل) ── */}
+      {/* ── Modal for Choosing Export vs Email / Real-time Email Tracking ── */}
       <Modal
         opened={isExportChoiceModalOpen}
-        onClose={() => setIsExportChoiceModalOpen(false)}
-        title={
-          <div className="flex items-center gap-2 font-black text-slate-900 text-sm sm:text-base">
-            <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center font-bold">
-              <IconFileTypePdf size={18} />
-            </div>
-            <span>خيارات تصدير وإرسال كشوفات الحسابات</span>
-          </div>
-        }
+        onClose={() => {
+          setIsExportChoiceModalOpen(false);
+          setIsTrackingEmailSending(false);
+        }}
         size="md"
         centered
         radius="lg"
-        padding="lg"
+        withCloseButton={false}
+        styles={{
+          content: {
+            borderRadius: 20,
+            border: '1px solid #e2e8f0',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+          },
+        }}
       >
-        <div className="space-y-4">
-          {/* Selected accounts summary */}
-          <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-700">عدد الحسابات المحددة للعملية:</span>
-            <Badge color="orange" size="md" variant="filled" className="font-bold">
-              {selectedAccountIds.size} حساب
-            </Badge>
+        {isTrackingEmailSending ? (
+          /* ── Real-time Progress Tracking View (Matching Screenshot 2 Exactly) ── */
+          <div className="p-4 space-y-4 text-slate-900 font-sans" dir="rtl">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-1">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 leading-tight">
+                  إرسال كشوفات الحساب
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5" dir="ltr">
+                  الفترة: {batchStartDate || '2026-01-01'} إلى {batchEndDate || '2026-12-31'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTrackingEmailSending(false);
+                  setIsExportChoiceModalOpen(false);
+                }}
+                className="w-7 h-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <IconX size={18} />
+              </button>
+            </div>
+
+            {/* Progress bar and counter */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-600">
+                <span>{emailStats.sent + emailStats.failed + emailStats.skipped} / {emailStats.total}</span>
+                <span className={emailSendStatus === 'completed' ? 'text-emerald-700' : emailSendStatus === 'failed' ? 'text-rose-700' : 'text-orange-600'}>
+                  {emailSendStatus === 'completed'
+                    ? 'اكتمل'
+                    : emailSendStatus === 'failed'
+                      ? 'فشل الإرسال'
+                      : 'جاري الإرسال...'}
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-500 ${emailSendStatus === 'failed' ? 'bg-rose-500' : emailSendStatus === 'completed' ? 'bg-emerald-500' : 'bg-[#F45A0A]'}`}
+                  style={{ width: `${Math.round(((emailStats.sent + emailStats.failed + emailStats.skipped) / Math.max(1, emailStats.total)) * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Status Details Card */}
+            <div className="bg-slate-50/70 border border-slate-200/90 rounded-xl p-4 space-y-4">
+              {/* Status Title */}
+              <div className="flex items-center justify-end gap-1.5">
+                {emailSendStatus === 'completed' && (
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-extrabold text-sm">
+                    <span>اكتمل الإرسال بنجاح</span>
+                    <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <IconCheck size={14} />
+                    </div>
+                  </div>
+                )}
+                {emailSendStatus === 'sending' && (
+                  <div className="flex items-center gap-2 text-orange-600 font-bold text-sm">
+                    <span>جاري إرسال كشوفات الحساب عبر Brevo...</span>
+                    <Loader size={14} color="orange" />
+                  </div>
+                )}
+                {emailSendStatus === 'failed' && (
+                  <div className="flex items-center gap-1.5 text-rose-700 font-extrabold text-sm">
+                    <span>فشل الإرسال</span>
+                    <IconAlertCircle size={16} className="text-rose-600" />
+                  </div>
+                )}
+              </div>
+
+              {/* 4 Stats Columns */}
+              <div className="grid grid-cols-4 gap-2 text-center pt-1 border-t border-slate-200/60">
+                <div>
+                  <span className="text-xs text-slate-500 font-medium block">أُرسلت</span>
+                  <span className="text-base font-extrabold text-emerald-600 block mt-1">{emailStats.sent}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-500 font-medium block">قيد الانتظار</span>
+                  <span className="text-base font-extrabold text-slate-700 block mt-1">{emailStats.pending}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-500 font-medium block">فشلت</span>
+                  <span className={`text-base font-extrabold block mt-1 ${emailStats.failed > 0 ? 'text-rose-600' : 'text-slate-700'}`}>
+                    {emailStats.failed}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-500 font-medium block">تم تخطيها</span>
+                  <span className="text-base font-extrabold text-slate-700 block mt-1">{emailStats.skipped}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Background note */}
+            <div className="flex items-center gap-1.5 text-slate-500 text-xs">
+              <IconAlertTriangle size={15} className="shrink-0 text-slate-400" />
+              <span>يستمر الإرسال في الخلفية — يمكنك الإغلاق والعودة لاحقاً.</span>
+            </div>
+
+            {/* Footer Action */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTrackingEmailSending(false);
+                  setIsExportChoiceModalOpen(false);
+                }}
+                className="px-6 py-1.5 border border-orange-500 text-orange-600 hover:bg-orange-50 active:scale-95 rounded-lg text-xs font-extrabold transition-all cursor-pointer bg-white"
+              >
+                إغلاق
+              </button>
+            </div>
           </div>
+        ) : (
+          /* ── Choice Modal View (Matching Screenshot 1 & Design System) ── */
+          <div className="p-4 space-y-4 text-slate-900 font-sans" dir="rtl">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-1">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 leading-tight">
+                  خيارات تصدير كشوفات الحساب
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5" dir="ltr">
+                  الفترة: {batchStartDate || '2026-01-01'} إلى {batchEndDate || '2026-12-31'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExportChoiceModalOpen(false)}
+                className="w-7 h-7 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <IconX size={18} />
+              </button>
+            </div>
 
-          <p className="text-xs text-slate-500 font-medium leading-relaxed m-0">
-            يرجى اختيار طريقة إخراج أو تسليم الكشوفات للحسابات المحددة:
-          </p>
+            {/* Summary Box */}
+            <div className="bg-slate-50/70 border border-slate-200/90 rounded-xl p-3 flex items-center justify-between text-xs">
+              <span className="text-slate-600 font-bold">عدد الحسابات المحددة للعملية:</span>
+              <span className="font-mono font-extrabold text-[#F45A0A] bg-orange-50 border border-orange-200 px-2.5 py-0.5 rounded-md">
+                {selectedAccountIds.size} حساب
+              </span>
+            </div>
 
-          {/* Option 1: PDF Export */}
-          <button
-            type="button"
-            onClick={() => {
-              setIsExportChoiceModalOpen(false);
-              handleExportBatchZipPDF(Array.from(selectedAccountIds));
-            }}
-            className="w-full text-right p-4 rounded-xl border-2 border-orange-200 bg-orange-50/50 hover:bg-orange-100/70 hover:border-[#F45A0A] transition-all cursor-pointer flex items-center gap-3.5 group shadow-2xs"
-          >
-            <div className="w-11 h-11 rounded-xl bg-[#F45A0A] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-              <IconFileTypePdf size={22} />
-            </div>
-            <div className="flex-1">
-              <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 mb-0.5">
-                تصدير وتحميل كشوفات PDF
-              </h4>
-              <p className="text-[11px] text-slate-500 leading-tight m-0">
-                {selectedAccountIds.size === 1
-                  ? 'تحميل كشف الحساب مباشرة بصيغة PDF الرسمية المعتمدة'
-                  : 'توليد ملف PDF مستقل لكل حساب وتنزيلها معاً في ملف ZIP واحد'}
-              </p>
-            </div>
-          </button>
+            <p className="text-xs text-slate-500 font-medium leading-relaxed m-0">
+              يرجى اختيار طريقة إخراج أو تسليم الكشوفات للحسابات المحددة:
+            </p>
 
-          {/* Option 2: Send via Email */}
-          <button
-            type="button"
-            onClick={() => {
-              setIsExportChoiceModalOpen(false);
-              handleOpenEmailModal(Array.from(selectedAccountIds));
-            }}
-            className="w-full text-right p-4 rounded-xl border-2 border-indigo-200 bg-indigo-50/40 hover:bg-indigo-100/70 hover:border-indigo-600 transition-all cursor-pointer flex items-center gap-3.5 group shadow-2xs"
-          >
-            <div className="w-11 h-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-              <IconMail size={22} />
+            {/* Option 1: PDF Export */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsExportChoiceModalOpen(false);
+                handleExportBatchZipPDF(Array.from(selectedAccountIds));
+              }}
+              className="w-full text-right p-4 rounded-xl border border-slate-200 bg-white hover:border-[#F45A0A] hover:bg-orange-50/20 transition-all cursor-pointer flex items-center justify-between group shadow-2xs"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F45A0A] border border-orange-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <IconFileTypePdf size={22} />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-[13.5px] text-slate-900">
+                    تصدير وتحميل كشوفات PDF
+                  </h4>
+                  <p className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5">
+                    {selectedAccountIds.size === 1
+                      ? 'تحميل كشف الحساب مباشرة بصيغة PDF الرسمية المعتمدة'
+                      : 'توليد ملف PDF مستقل لكل حساب وتنزيلها معاً في ملف ZIP واحد'}
+                  </p>
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-[#F45A0A] text-slate-400 group-hover:text-white flex items-center justify-center transition-colors">
+                <IconDownload size={15} />
+              </div>
+            </button>
+
+            {/* Option 2: Send via Email */}
+            <button
+              type="button"
+              onClick={() => {
+                handleStartBatchEmailSending(Array.from(selectedAccountIds));
+              }}
+              className="w-full text-right p-4 rounded-xl border border-slate-200 bg-white hover:border-indigo-500 hover:bg-indigo-50/20 transition-all cursor-pointer flex items-center justify-between group shadow-2xs"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <IconMail size={22} />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-[13.5px] text-slate-900">
+                    إرسال الكشوفات عبر البريد الإلكتروني
+                  </h4>
+                  <p className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5">
+                    إرسال كشوفات الحسابات المحددة مباشرة إلى البريد الإلكتروني للمستلم عبر Brevo
+                  </p>
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-indigo-600 text-slate-400 group-hover:text-white flex items-center justify-center transition-colors">
+                <IconMail size={15} />
+              </div>
+            </button>
+
+            {/* Footer Action */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setIsExportChoiceModalOpen(false)}
+                className="px-6 py-1.5 border border-orange-500 text-orange-600 hover:bg-orange-50 active:scale-95 rounded-lg text-xs font-extrabold transition-all cursor-pointer bg-white"
+              >
+                إغلاق
+              </button>
             </div>
-            <div className="flex-1">
-              <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 mb-0.5">
-                إرسال الكشوفات عبر البريد الإلكتروني
-              </h4>
-              <p className="text-[11px] text-slate-500 leading-tight m-0">
-                إرسال كشوفات الحسابات المحددة مباشرة إلى البريد الإلكتروني للمستلم عبر Brevo
-              </p>
-            </div>
-          </button>
-        </div>
+          </div>
+        )}
       </Modal>
 
       {/* ── Modal for Bulk Batch Account Statements Export ── */}
@@ -1715,71 +1929,7 @@ export const DebtsReportPage: React.FC = () => {
         </Stack>
       </Modal>
 
-      {/* ── Modal for Sending Account Statements via Email ── */}
-      <Modal
-        opened={isEmailModalOpen}
-        onClose={() => setIsEmailModalOpen(false)}
-        title={
-          <div className="flex items-center gap-2 font-black text-slate-900 text-base">
-            <IconMail className="text-indigo-600" size={20} />
-            <span>إرسال كشف الحساب عبر البريد الإلكتروني — Send Email</span>
-          </div>
-        }
-        size="md"
-        centered
-        radius="lg"
-        padding="lg"
-      >
-        <Stack gap="md">
-          <TextInput
-            label="عنوان البريد الإلكتروني للمستلم:"
-            placeholder="example@company.com"
-            value={emailRecipient}
-            onChange={(e) => setEmailRecipient(e.currentTarget.value)}
-            required
-            size="xs"
-            leftSection={<IconMail size={15} className="text-slate-400" />}
-          />
 
-          <TextInput
-            label="موضوع الرسالة (Subject):"
-            value={emailSubject}
-            onChange={(e) => setEmailSubject(e.currentTarget.value)}
-            size="xs"
-          />
-
-          <Textarea
-            label="ملاحظات وتوضيحات الرسالة:"
-            rows={3}
-            value={emailBody}
-            onChange={(e) => setEmailBody(e.currentTarget.value)}
-            size="xs"
-          />
-
-          <div className="flex items-center justify-between gap-3 pt-3 border-t">
-            <Button
-              variant="outline"
-              color="gray"
-              onClick={() => setIsEmailModalOpen(false)}
-              size="sm"
-            >
-              إلغاء
-            </Button>
-
-            <Button
-              variant="filled"
-              color="indigo"
-              size="sm"
-              leftSection={<IconMail size={16} />}
-              onClick={handleSendEmailSubmit}
-              loading={isSendingEmail}
-              className="font-bold shadow-xs cursor-pointer"
-            >
-              إرسال البريد الإلكتروني الآن
-            </Button>
-          </div>
-        </Stack>
-      </Modal>
 
       {/* ── Small Progress Popup Modal for Export Progress Tracking (نافذة تحميل صغيرة منبثقة) ── */}
       <Modal
