@@ -652,8 +652,19 @@ export const FormalVoucherSheet: React.FC<{
         </div>
       )}
 
+      {/*
+        هنا ينتهي متن السند ويبدأ ذيله — والفراغ بينهما هو الذي يتمدّد.
+
+        كانت التواقيع تلي آخر حقل مباشرةً ويتمدّد الفراغ بعدها، فيقع التذييل في قاع
+        الورقة والتواقيع معلّقة في منتصفها وبينهما بياض طويل بلا معنى. والصواب
+        محاسبياً أن عبارة الشكر والتواقيع والختم والتذييل كتلة ختامية واحدة ترسو
+        معاً في أسفل الورقة، والبياض — إن كان — فبين الحقول والذيل حيث يُقرأ فاصلاً
+        لا نسياناً.
+      */}
+      <div className="grow" style={{ minHeight: 16 }} aria-hidden="true" />
+
       {config.thankYouText && (
-        <p className="mt-4 text-center opacity-70" style={{ fontSize: t.label }}>
+        <p className="mt-4 text-center opacity-70 shrink-0" style={{ fontSize: t.label }}>
           {config.thankYouText}
         </p>
       )}
@@ -736,16 +747,12 @@ export const FormalVoucherSheet: React.FC<{
       )}
 
       {config.footerText && (
-        <>
-          {/* الفاصل الذي يتمدّد — بحدٍّ أدنى لا يلتصق عنده التذييل بما فوقه. */}
-          <div className="grow" style={{ minHeight: 24 }} aria-hidden="true" />
-          <footer
-            className={`pt-2 border-t opacity-60 shrink-0 ${footerAlign}`}
-            style={{ borderColor: softRule, fontSize: t.label }}
-          >
-            {config.footerText}
-          </footer>
-        </>
+        <footer
+          className={`mt-6 pt-2 border-t opacity-60 shrink-0 ${footerAlign}`}
+          style={{ borderColor: softRule, fontSize: t.label }}
+        >
+          {config.footerText}
+        </footer>
       )}
     </>
   );
