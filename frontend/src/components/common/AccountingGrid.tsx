@@ -686,15 +686,14 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
           <table className="w-full text-xs text-right border-collapse font-sans">
             <thead>
               <tr className="bg-slate-100/90 border-b border-slate-200 text-slate-700 align-middle h-11">
-                {/* Selection Checkbox Column Header */}
+                {/* Selection Switch Column Header */}
                 {!hideSelectionCheckbox && (
-                  <th className="w-10 text-center align-middle px-2 py-2.5 border-l border-slate-200/80">
+                  <th className="w-12 text-center align-middle px-2 py-2.5 border-l border-slate-200/80">
                     <div className="flex items-center justify-center">
-                      <Checkbox
+                      <Switch
                         size="xs"
                         color="orange"
                         checked={paginatedData.length > 0 && paginatedData.every(r => selectedRowIds.has(r.id))}
-                        indeterminate={paginatedData.some(r => selectedRowIds.has(r.id)) && !paginatedData.every(r => selectedRowIds.has(r.id))}
                         onChange={(e) => {
                           const next = new Set(selectedRowIds);
                           if (e.currentTarget.checked) {
@@ -705,7 +704,7 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
                           setSelectedRowIds(next);
                         }}
                         className="cursor-pointer"
-                        title={isAr ? 'تحديد الكل في هذه الصفحة' : 'Select all on this page'}
+                        title={isAr ? 'تحديد الكل في هذه الصفحة' : 'Toggle all on this page'}
                       />
                     </div>
                   </th>
@@ -822,11 +821,11 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
                         }`}
                         style={{ height: 48 }}
                       >
-                        {/* Selection Checkbox Cell */}
+                        {/* Selection Switch Cell */}
                         {!hideSelectionCheckbox && (
-                          <td className="w-10 text-center align-middle px-2 py-2 border-l border-slate-100/80">
+                          <td className="w-12 text-center align-middle px-2 py-2 border-l border-slate-100/80">
                             <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-                              <Checkbox
+                              <Switch
                                 size="xs"
                                 color="orange"
                                 checked={isSelected}
