@@ -515,25 +515,25 @@ export const StatementPortalPage: React.FC = () => {
             </div>
           )}
 
-          {/* Action Buttons: Direct Download + Print */}
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* Action Buttons: Side-by-Side on all screens */}
+          <div className="mt-4 grid grid-cols-2 gap-2.5">
             <button
               type="button"
               disabled={downloading}
               onClick={handleDownload}
-              className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-75"
+              className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 px-2 disabled:opacity-75"
             >
-              <IconDownload size={18} stroke={2.5} />
-              <span>{downloading ? 'جارٍ التحميل…' : 'تحميل كشف PDF الرسمي'}</span>
+              <IconDownload size={17} stroke={2.5} className="shrink-0" />
+              <span className="truncate">{downloading ? 'جارٍ التحميل…' : 'تحميل PDF'}</span>
             </button>
 
             <button
               type="button"
               onClick={() => window.print()}
-              className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black transition cursor-pointer flex items-center justify-center gap-2"
+              className="h-12 w-full rounded-2xl border-2 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5 sm:gap-2 px-2"
             >
-              <IconPrinter size={18} stroke={2} className="text-slate-600" />
-              <span>طباعة كشف الحساب</span>
+              <IconPrinter size={17} stroke={2} className="text-slate-600 shrink-0" />
+              <span className="truncate">طباعة الكشف</span>
             </button>
           </div>
         </div>
