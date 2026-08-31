@@ -423,15 +423,17 @@ export class StatementPortalService {
       this.partyOf(row),
       this.prisma.company.findUnique({
         where: { id: row.companyId },
-        select: { name: true },
+        select: { name: true, logo: true },
       }),
     ]);
 
+    const logoUrl = company?.logo || null;
     const locked = row.lockedUntil && row.lockedUntil.getTime() > Date.now();
     const digits = this.verificationPhone(party);
     const requiresPhone = digits.length >= 4;
     return {
       companyName: company?.name || '',
+      logoUrl,
       holderName: party?.nameAr || row.label || '',
       phoneHint: this.phoneHint(digits),
       requiresPhone,
@@ -601,13 +603,16 @@ export class StatementPortalService {
       this.reports.getAccountStatement(payload.companyId, payload.accountId, startDate, endDate),
       this.prisma.company.findUnique({
         where: { id: payload.companyId },
-        select: { name: true, phone: true, address: true },
+        select: { name: true, phone: true, address: true, logo: true },
       }),
       this.partyOf(row),
     ]);
 
+    const logoUrl = company?.logo || null;
+
     return {
-      company,
+      company: company ? { ...company, logoUrl } : null,
+      logoUrl,
       holderName: party?.nameAr || row.label || '',
       ...statement,
     };

@@ -14,6 +14,7 @@ import womanAccountingAnimation from '../../assets/animations/woman-accounting.j
 
 interface PortalIntro {
   companyName: string;
+  logoUrl: string | null;
   holderName: string;
   phoneHint: string | null;
   canVerify: boolean;
@@ -32,7 +33,8 @@ interface StatementLine {
 }
 
 interface StatementData {
-  company: { name: string; phone: string | null; address: string | null } | null;
+  company: { name: string; phone: string | null; address: string | null; logoUrl: string | null } | null;
+  logoUrl: string | null;
   holderName: string;
   account: { code: string; nameAr: string };
   openingBalance: number;
@@ -281,11 +283,24 @@ export const StatementPortalPage: React.FC = () => {
     );
   }
 
-  // ── 3. Challenge Screen: Strictly Fixed, No-Scroll, Mobile Keyboard Resilient ─
+  const effectiveLogo = intro?.logoUrl || null;
+
+  // ── 3. Challenge Screen: Fixed 100dvh, No-Scroll, Mobile Keyboard Resilient ──
   if (!data) {
     return (
       <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 p-4 overflow-hidden touch-none select-none">
-        <div className="w-full max-w-[340px] rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 text-center shadow-2xl shadow-slate-200/60">
+        <div className="w-full max-w-[340px] rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 text-center shadow-2xl shadow-slate-200/60 relative">
+          {/* Branch/Company Logo inside container if available */}
+          {effectiveLogo && (
+            <div className="mb-2 flex justify-center">
+              <img
+                src={effectiveLogo}
+                alt="Logo"
+                className="h-10 w-auto max-w-[120px] object-contain rounded-md"
+              />
+            </div>
+          )}
+
           {/* Lottie Animation: Man Analyzing Balance Sheet */}
           <div className="mx-auto w-32 h-32 sm:w-36 sm:h-36 -mt-1 flex items-center justify-center pointer-events-none">
             <Lottie
@@ -296,7 +311,7 @@ export const StatementPortalPage: React.FC = () => {
             />
           </div>
 
-          {/* Clean Single Account Holder Name */}
+          {/* Clean Single Account Holder Name (No Codes or Duplications) */}
           <h1 className="text-lg font-black text-slate-900 tracking-tight mt-0.5">{intro.holderName}</h1>
 
           {intro.phoneHint ? (
@@ -379,23 +394,27 @@ export const StatementPortalPage: React.FC = () => {
     );
   }
 
-  // ── 4. The Verified Statement Screen (With Woman Accounting Animation) ───────
+  const statementLogo = data.logoUrl || data.company?.logoUrl || null;
+
+  // ── 4. The Verified Statement Screen (Clean, Container-Only Logo, No Outside Header)
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 px-4 py-6 antialiased">
       <div className="mx-auto w-full max-w-lg space-y-4">
-        {data.company?.name && (
-          <div className="text-center">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-xs font-black text-slate-800">{data.company.name}</span>
+        {/* Main Hero Card with Woman Accounting Animation & Branch Logo */}
+        <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/50 relative">
+          {/* Branch Logo at Top of Container */}
+          {statementLogo && (
+            <div className="mb-2 flex justify-center">
+              <img
+                src={statementLogo}
+                alt="Branch Logo"
+                className="h-12 w-auto max-w-[140px] object-contain rounded-md"
+              />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Hero Card with Woman Accounting Animation */}
-        <div className="rounded-3xl border border-slate-200/90 bg-white p-6 shadow-xl shadow-slate-200/50">
           {/* Woman Doing Financial Accounting Animation */}
-          <div className="mx-auto w-36 h-36 -mt-2 mb-2 flex items-center justify-center pointer-events-none">
+          <div className="mx-auto w-36 h-36 -mt-1 mb-2 flex items-center justify-center pointer-events-none">
             <Lottie
               src={womanAccountingAnimation}
               loop={true}
@@ -566,25 +585,17 @@ export const StatementPortalPage: React.FC = () => {
           )}
         </div>
 
-        {/* Company Info & Support */}
-        {data.company && (
-          <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 text-center text-xs text-slate-500">
-            <p className="font-black text-slate-700">{data.company.name}</p>
-            {data.company.address && <p className="text-[11px] text-slate-400 mt-0.5">{data.company.address}</p>}
+        {/* Company Contact Info Inside Container */}
+        {data.company && (data.company.phone || data.company.address) && (
+          <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-3.5 text-center text-xs text-slate-500">
+            {data.company.address && <p className="text-[11px] text-slate-400">{data.company.address}</p>}
             {data.company.phone && (
-              <p className="mt-2 text-xs font-bold text-[#F45A0A] font-mono" dir="ltr">
+              <p className="mt-1 text-xs font-bold text-[#F45A0A] font-mono" dir="ltr">
                 📞 {data.company.phone}
               </p>
             )}
           </div>
         )}
-
-        <div className="text-center pt-2">
-          <p className="text-[11px] font-bold text-slate-400 flex items-center justify-center gap-1.5">
-            <span>🔒</span>
-            <span>هذا الكشف صادر وموثق إلكترونياً — نظام قيّد المحاسبي</span>
-          </p>
-        </div>
       </div>
     </div>
   );
