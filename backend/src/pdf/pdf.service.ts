@@ -495,6 +495,7 @@ export class PdfService implements OnModuleInit, OnModuleDestroy {
   async generateFromHtml(html: string): Promise<Buffer> {
     return this.onPage('generateFromHtml', async (page) => {
       try {
+        await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
         await page.setContent(html, {
           waitUntil: 'domcontentloaded',
           timeout: SET_CONTENT_TIMEOUT_MS,

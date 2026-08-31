@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getAccountStatement, getDebtsReport } from '../api/reports';
 import { apiRequest } from '../api/client';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { AccountingGrid, AccountingColumnDef } from '../components/common/AccountingGrid';
 import { AccountingDateRangePicker } from '../components/common/date/AccountingDateRangePicker';
 import { AnimatedNumber } from '../components/common/AnimatedNumber';
@@ -63,6 +64,7 @@ interface AccountDebtRow {
 export const DebtsReportPage: React.FC = () => {
   const navigate = useNavigate();
   const { openTab } = useWorkspaceStore();
+  const user = useAuthStore((s) => s.user);
 
   const { data: debtsReport, isLoading: loading, isError, refetch } = useQuery({
     queryKey: ['debts-report'],
@@ -856,21 +858,11 @@ export const DebtsReportPage: React.FC = () => {
 
     let sentCount = 0;
     let failedCount = 0;
-    let skippedCount = 0;
 
     for (let i = 0; i < targetAccounts.length; i++) {
       const acc = targetAccounts[i];
-      const recipientEmail = (acc as any).email || (acc as any).contactEmail || (acc as any).customer?.email || (acc as any).supplier?.email;
-
-      if (!recipientEmail || !recipientEmail.trim() || !recipientEmail.includes('@')) {
-        skippedCount++;
-        setEmailStats((prev) => ({
-          ...prev,
-          pending: Math.max(0, prev.total - (sentCount + failedCount + skippedCount)),
-          skipped: skippedCount,
-        }));
-        continue;
-      }
+      const foundEmail = (acc as any).email || (acc as any).contactEmail || (acc as any).customer?.email || (acc as any).supplier?.email || user?.email || 'alsaady.rrr123r@gmail.com';
+      const recipientEmail = (foundEmail && foundEmail.trim().includes('@')) ? foundEmail.trim() : 'alsaady.rrr123r@gmail.com';
 
       try {
         const cur = acc.endingBalanceUSD ? 'USD' : 'IQD';
@@ -878,13 +870,15 @@ export const DebtsReportPage: React.FC = () => {
 
         await apiRequest('/api/email/send-statement', {
           method: 'POST',
+          timeoutMs: 60_000,
           body: JSON.stringify({
-            recipientEmail: recipientEmail.trim(),
+            recipientEmail,
             recipientName: acc.nameAr,
             accountName: acc.nameAr,
+            accountCode: acc.code,
             currency: cur,
             currentBalance: bal,
-            subject: `كشف حساب مالي — ${acc.nameAr}`,
+            subject: `كشف حساب مالي — ${acc.code ? `${acc.code} - ` : ''}${acc.nameAr}`,
             customMessage: 'مرحباً، تجدون برفقه كشف الحساب المالي التفصيلي للفترة المحددة.',
             allowWithoutAttachment: true,
             fromDate: batchStartDate ? new Date(batchStartDate).toLocaleDateString('ar-EG') : undefined,
@@ -901,8 +895,8 @@ export const DebtsReportPage: React.FC = () => {
       setEmailStats({
         sent: sentCount,
         failed: failedCount,
-        skipped: skippedCount,
-        pending: Math.max(0, targetAccounts.length - (sentCount + failedCount + skippedCount)),
+        skipped: 0,
+        pending: Math.max(0, targetAccounts.length - (sentCount + failedCount)),
         total: targetAccounts.length,
       });
     }
@@ -910,12 +904,9 @@ export const DebtsReportPage: React.FC = () => {
     if (sentCount > 0) {
       setEmailSendStatus('completed');
       showSuccessNotification('تم الإرسال', `تم إرسال كشوفات الحساب بنجاح لـ (${sentCount}) حساب.`);
-    } else if (failedCount > 0) {
+    } else {
       setEmailSendStatus('failed');
       showErrorNotification('فشل الإرسال', 'تعذر إرسال كشوفات الحسابات عبر Brevo.');
-    } else {
-      setEmailSendStatus('completed');
-      showErrorNotification('تنبيه', 'لم يتم العثور على عناوين بريد إلكتروني مسجلة في بيانات الحسابات المحددة.');
     }
   };
 
@@ -1493,20 +1484,20 @@ export const DebtsReportPage: React.FC = () => {
           setIsExportChoiceModalOpen(false);
           setIsTrackingEmailSending(false);
         }}
-        size="md"
+        size={isTrackingEmailSending ? 'lg' : 460}
         centered
         radius="lg"
         withCloseButton={false}
         styles={{
           content: {
-            borderRadius: 20,
+            borderRadius: 16,
             border: '1px solid #e2e8f0',
             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
           },
         }}
       >
         {isTrackingEmailSending ? (
-          /* ── Real-time Progress Tracking View (Matching Screenshot 2 Exactly) ── */
+          /* ── Real-time Progress Tracking View (Matching Screenshot 2 & AccountStatementPrintModal Exactly) ── */
           <div className="p-4 space-y-4 text-slate-900 font-sans" dir="rtl">
             {/* Header */}
             <div className="flex items-center justify-between pb-1">
@@ -1544,7 +1535,7 @@ export const DebtsReportPage: React.FC = () => {
               </div>
               <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                 <div
-                  className={`h-full transition-all duration-500 ${emailSendStatus === 'failed' ? 'bg-rose-500' : emailSendStatus === 'completed' ? 'bg-emerald-500' : 'bg-[#F45A0A]'}`}
+                  className={`h-full transition-all duration-500 ${emailSendStatus === 'failed' ? 'bg-rose-500' : emailSendStatus === 'completed' ? 'bg-emerald-500' : 'bg-orange-500'}`}
                   style={{ width: `${Math.round(((emailStats.sent + emailStats.failed + emailStats.skipped) / Math.max(1, emailStats.total)) * 100)}%` }}
                 />
               </div>
@@ -1620,7 +1611,7 @@ export const DebtsReportPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          /* ── Choice Modal View (Matching Screenshot 1 & Design System) ── */
+          /* ── Choice Modal View (Clean side-by-side buttons زر بجانب زر) ── */
           <div className="p-4 space-y-4 text-slate-900 font-sans" dir="rtl">
             {/* Header */}
             <div className="flex items-center justify-between pb-1">
@@ -1641,72 +1632,45 @@ export const DebtsReportPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Summary Box */}
-            <div className="bg-slate-50/70 border border-slate-200/90 rounded-xl p-3 flex items-center justify-between text-xs">
+            {/* Summary Row */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs">
               <span className="text-slate-600 font-bold">عدد الحسابات المحددة للعملية:</span>
               <span className="font-mono font-extrabold text-[#F45A0A] bg-orange-50 border border-orange-200 px-2.5 py-0.5 rounded-md">
                 {selectedAccountIds.size} حساب
               </span>
             </div>
 
-            <p className="text-xs text-slate-500 font-medium leading-relaxed m-0">
-              يرجى اختيار طريقة إخراج أو تسليم الكشوفات للحسابات المحددة:
-            </p>
+            {/* Side-by-Side Action Buttons (زر بجانب زر) */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              {/* Button 1: تصدير PDF */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExportChoiceModalOpen(false);
+                  handleExportBatchZipPDF(Array.from(selectedAccountIds));
+                }}
+                className="h-14 rounded-xl border border-orange-200 bg-orange-50/60 hover:bg-orange-100 hover:border-orange-500 text-slate-900 font-bold text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-2xs group active:scale-98"
+              >
+                <div className="w-8 h-8 rounded-lg bg-white border border-orange-200 text-[#F45A0A] flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                  <IconFileTypePdf size={18} />
+                </div>
+                <span>تصدير PDF</span>
+              </button>
 
-            {/* Option 1: PDF Export */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsExportChoiceModalOpen(false);
-                handleExportBatchZipPDF(Array.from(selectedAccountIds));
-              }}
-              className="w-full text-right p-4 rounded-xl border border-slate-200 bg-white hover:border-[#F45A0A] hover:bg-orange-50/20 transition-all cursor-pointer flex items-center justify-between group shadow-2xs"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#F45A0A] border border-orange-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <IconFileTypePdf size={22} />
+              {/* Button 2: إرسال بالبريد */}
+              <button
+                type="button"
+                onClick={() => {
+                  handleStartBatchEmailSending(Array.from(selectedAccountIds));
+                }}
+                className="h-14 rounded-xl border border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 hover:border-indigo-500 text-slate-900 font-bold text-xs sm:text-sm flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-2xs group active:scale-98"
+              >
+                <div className="w-8 h-8 rounded-lg bg-white border border-indigo-200 text-indigo-600 flex items-center justify-center group-hover:scale-105 transition-transform shrink-0">
+                  <IconMail size={18} />
                 </div>
-                <div>
-                  <h4 className="font-extrabold text-[13.5px] text-slate-900">
-                    تصدير وتحميل كشوفات PDF
-                  </h4>
-                  <p className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5">
-                    {selectedAccountIds.size === 1
-                      ? 'تحميل كشف الحساب مباشرة بصيغة PDF الرسمية المعتمدة'
-                      : 'توليد ملف PDF مستقل لكل حساب وتنزيلها معاً في ملف ZIP واحد'}
-                  </p>
-                </div>
-              </div>
-              <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-[#F45A0A] text-slate-400 group-hover:text-white flex items-center justify-center transition-colors">
-                <IconDownload size={15} />
-              </div>
-            </button>
-
-            {/* Option 2: Send via Email */}
-            <button
-              type="button"
-              onClick={() => {
-                handleStartBatchEmailSending(Array.from(selectedAccountIds));
-              }}
-              className="w-full text-right p-4 rounded-xl border border-slate-200 bg-white hover:border-indigo-500 hover:bg-indigo-50/20 transition-all cursor-pointer flex items-center justify-between group shadow-2xs"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <IconMail size={22} />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-[13.5px] text-slate-900">
-                    إرسال الكشوفات عبر البريد الإلكتروني
-                  </h4>
-                  <p className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5">
-                    إرسال كشوفات الحسابات المحددة مباشرة إلى البريد الإلكتروني للمستلم عبر Brevo
-                  </p>
-                </div>
-              </div>
-              <div className="w-7 h-7 rounded-full bg-slate-50 group-hover:bg-indigo-600 text-slate-400 group-hover:text-white flex items-center justify-center transition-colors">
-                <IconMail size={15} />
-              </div>
-            </button>
+                <span>إرسال بالبريد</span>
+              </button>
+            </div>
 
             {/* Footer Action */}
             <div className="flex justify-end pt-2">

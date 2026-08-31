@@ -133,6 +133,7 @@ export interface TemplateSettings {
 export interface StatementPdfData {
   accountName: string;
   accountCode?: string;
+  accountId?: string;
   accountPhone?: string;
   accountEmail?: string;
   accountAddress?: string;

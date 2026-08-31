@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Badge, Loader, Group, SegmentedControl, TextInput, Textarea, Switch } from '@mantine/core';
 import { IconPrinter, IconFileText, IconCalculator, IconLanguage, IconFileTypePdf, IconDownload, IconBrandWhatsapp, IconMail, IconX, IconSend, IconPaperclip, IconCheck, IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas-pro';
 import QRCode from 'qrcode';
 import { fetchPrintTemplate } from '../../api/printTemplates';
-import { apiRequest, API_BASE_URL } from '../../api/client';
+import { apiRequest } from '../../api/client';
+import { downloadStatementPdf, statementPdfToBase64, type StatementPdfPayload } from '../../api/statementPdf';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 
@@ -835,55 +834,40 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
   const t = LABELS[printLang];
   const [exporting, setExporting] = useState(false);
 
+  const chromiumPdfPayload = (): StatementPdfPayload => ({
+    accountId,
+    accountName,
+    accountCode,
+    accountPhone,
+    accountEmail,
+    accountAddress,
+    startDate,
+    endDate,
+    rows,
+    totals,
+    lang: printLang,
+  });
+
   const handlePrint = () => {
     printElementHD('printable-statement-sheet', printLang);
   };
 
   const handleExportPdf = async () => {
-    const element = document.getElementById('printable-statement-sheet');
-    if (!element) return;
     setExporting(true);
     try {
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      const imgWidth = 210;
-      const pageHeight = 297;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      const filename = `statement_${accountCode || 'report'}_${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(filename);
+      await downloadStatementPdf(chromiumPdfPayload());
       showSuccessNotification(
         printLang === 'en' ? 'Downloaded' : 'تم التحميل',
-        printLang === 'en' ? 'Account statement PDF exported successfully' : 'تم تصدير وحفظ كشف الحساب بصيغة PDF فورياً'
+        printLang === 'en'
+          ? 'Account statement PDF exported with print-quality text'
+          : 'تم تصدير كشف الحساب بنص حاد عبر محرك الطباعة'
       );
     } catch (err: any) {
       console.error('PDF export failed:', err);
-      // Fallback to browser print
-      handlePrint();
+      showErrorNotification(
+        printLang === 'en' ? 'Export failed' : 'تعذر التصدير',
+        err?.message || (printLang === 'en' ? 'Could not generate the PDF' : 'تعذر توليد ملف PDF'),
+      );
     } finally {
       setExporting(false);
     }
@@ -1070,43 +1054,23 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
       });
   }, [opened]);
 
+  const chromiumPdfPayload = (): StatementPdfPayload => ({
+    accountId,
+    accountName,
+    accountCode,
+    accountPhone,
+    accountEmail,
+    accountAddress,
+    startDate,
+    endDate,
+    rows,
+    totals,
+    lang,
+  });
+
   const exportDirectPdfFile = async () => {
-    const printableElement = document.getElementById('printable-statement-sheet');
-    if (!printableElement) throw new Error('NO_ELEMENT');
-
-    const canvas = await html2canvas(printableElement, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-    });
-
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
-
-    const imgWidth = 210;
-    const pageHeight = 297;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    let heightLeft = imgHeight;
-    let position = 0;
-
-    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
-
-    const filename = `كشف_حساب_${accountCode || accountName}_${new Date().toISOString().split('T')[0]}.pdf`;
-    pdf.save(filename);
-    showSuccessNotification('تم التحميل', 'تم تصدير وحفظ كشف الحساب بصيغة PDF مباشرة');
+    await downloadStatementPdf(chromiumPdfPayload());
+    showSuccessNotification('تم التحميل', 'تم تصدير كشف الحساب بنص حاد عبر محرك الطباعة');
     onClose();
   };
 
@@ -1140,65 +1104,20 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
 
     try {
       const targetEmail = (accountEmail && accountEmail.trim()) ? accountEmail.trim() : 'alsaady.rrr123r@gmail.com';
-      let pdfBase64: string | undefined = undefined;
-
-      try {
-        const printableElement = document.getElementById('printable-statement-sheet');
-        if (printableElement) {
-          const canvas = await html2canvas(printableElement, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff',
-          });
-
-          const imgData = canvas.toDataURL('image/jpeg', 0.95);
-          const pdf = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4',
-          });
-
-          const imgWidth = 210;
-          const pageHeight = 297;
-          const imgHeight = (canvas.height * imgWidth) / canvas.width;
-          let heightLeft = imgHeight;
-          let position = 0;
-
-          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-
-          while (heightLeft > 0) {
-            position = heightLeft - imgHeight;
-            pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-            heightLeft -= pageHeight;
-          }
-
-          const dataUri = pdf.output('datauristring');
-          pdfBase64 = dataUri.split(',')[1] || dataUri;
-        }
-      } catch (pdfErr) {
-        console.error('Client PDF generation error for email:', pdfErr);
-        throw new Error('تعذر توليد ملف كشف الحساب. لن يُرسل البريد بدون المرفق.');
-      }
-
-      if (!pdfBase64) {
-        throw new Error('تعذر توليد ملف كشف الحساب. لن يُرسل البريد بدون المرفق.');
-      }
+      const pdfBase64 = await statementPdfToBase64(chromiumPdfPayload());
 
       await apiRequest('/api/email/send-statement', {
         method: 'POST',
+        timeoutMs: 60_000,
         body: JSON.stringify({
           recipientEmail: targetEmail,
           recipientName: accountName,
           accountName: accountName,
-          currency: 'IQD',
-          currentBalance: totals.finalBalance,
+          accountCode,
           fromDate: startDate,
           toDate: endDate,
           subject: `كشف حساب — ${accountCode ? `${accountCode} - ` : ''}${accountName}`,
-          pdfBase64: pdfBase64,
+          pdfBase64,
         }),
       });
 

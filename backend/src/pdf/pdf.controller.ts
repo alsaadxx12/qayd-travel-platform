@@ -124,13 +124,17 @@ export class PdfController {
    * Merges DB saved print template configuration with incoming settings.
    */
   @Post('statement')
+  @UseGuards(JwtAuthGuard)
   async generateStatement(
     @Body() body: StatementPdfData,
     @Req() req: any,
     @Res() res: any,
   ) {
     try {
-      const companyId = req.user?.companyId || (body as any).companyId || 'default';
+      const companyId = req.user?.companyId;
+      if (!companyId) {
+        throw new HttpException('تعذر تحديد الشركة لتوليد الكشف', HttpStatus.UNAUTHORIZED);
+      }
       const generated = await this.statementPdfService.generate(companyId, body);
       const encodedName = encodeURIComponent(generated.downloadName);
 

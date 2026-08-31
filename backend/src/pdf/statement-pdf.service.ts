@@ -49,7 +49,7 @@ export class StatementPdfService {
       try {
         qrDataUrl = await this.statementQr.forAccount(
           companyId,
-          (body as any).accountId,
+            (body as any).accountId || body.accountId,
           body.accountCode,
           body.accountName,
         );
