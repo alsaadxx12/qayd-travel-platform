@@ -7,6 +7,8 @@ import {
   IconArrowDownLeft,
   IconArrowUpRight,
   IconMinus,
+  IconChevronDown,
+  IconChevronUp,
 } from '@tabler/icons-react';
 import { API_BASE_URL } from '../../api/client';
 import manBalanceAnimation from '../../assets/animations/man-balance-sheet.json';
@@ -65,11 +67,12 @@ export const StatementPortalPage: React.FC = () => {
   const [data, setData] = useState<StatementData | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const [otp, setOtp] = useState<string[]>(['', '', '', '']);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Prevent background html scrolling on verification screen while allowing smooth internal center
+  // Prevent background html scrolling on verification screen
   useEffect(() => {
     document.documentElement.setAttribute('dir', 'rtl');
     document.title = 'كشف الحساب الإلكتروني';
@@ -189,42 +192,33 @@ export const StatementPortalPage: React.FC = () => {
     }
   };
 
-  const downloadStatement = useCallback(async () => {
-    if (!session || downloading) return;
+  // Direct, robust PDF download handler for mobile and desktop
+  const handleDownload = useCallback(() => {
+    if (!session) return;
     setDownloading(true);
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/download?session=${encodeURIComponent(session)}`,
-      );
-      if (!res.ok) throw new Error('تعذّر تحضير ملف الكشف.');
-
-      const kind = (res.headers.get('X-Statement-Kind') as 'pdf' | 'html') || 'pdf';
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const downloadUrl = `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/download?session=${encodeURIComponent(session)}`;
       const link = document.createElement('a');
-      link.href = url;
-      link.download = `statement_${intro?.holderName || 'account'}.${kind}`;
+      link.href = downloadUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.download = `statement_${intro?.holderName || 'account'}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
     } finally {
-      setDownloading(false);
+      setTimeout(() => setDownloading(false), 2000);
     }
-  }, [session, token, downloading, intro]);
+  }, [session, token, intro]);
 
+  // Load statement data on session creation
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
     setLoadingData(true);
     (async () => {
-      try {
-        await downloadStatement();
-      } catch {
-        /* fall through to display the on-screen statement */
-      }
       try {
         const res = await fetch(
           `${API_BASE_URL}/portal/statement/${encodeURIComponent(token)}/data?session=${encodeURIComponent(session)}`,
@@ -244,7 +238,7 @@ export const StatementPortalPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [session, token, downloadStatement]);
+  }, [session, token]);
 
   const balance = data?.closingBalance ?? 0;
   const isSettled = Math.abs(balance) < 0.01;
@@ -253,7 +247,7 @@ export const StatementPortalPage: React.FC = () => {
   // ── 1. Error State (Fixed) ────────────────────────────────────────────────
   if (introError) {
     return (
-      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden">
+      <div className="fixed inset-0 h-screen w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden select-none">
         <div className="max-w-sm w-full rounded-3xl border border-rose-200 bg-white p-7 text-center shadow-xl">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
             <svg className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -270,7 +264,7 @@ export const StatementPortalPage: React.FC = () => {
   // ── 2. Initial Loading State (Fixed) ──────────────────────────────────────
   if (!intro) {
     return (
-      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden">
+      <div className="fixed inset-0 h-screen w-screen flex items-center justify-center bg-slate-100 p-4 overflow-hidden select-none">
         <div className="max-w-sm w-full rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-lg animate-pulse">
           <div className="mx-auto h-20 w-20 rounded-full bg-slate-100 mb-3" />
           <div className="h-4 w-36 bg-slate-200 rounded-xl mx-auto mb-2" />
@@ -282,25 +276,25 @@ export const StatementPortalPage: React.FC = () => {
 
   const effectiveLogo = intro?.logoUrl || null;
 
-  // ── 3. Challenge Screen: Enlarged Container, Prominent Logo, Keyboard-Resilient
+  // ── 3. Challenge Screen: Stable Centered, No-Jump on Keyboard ──────────────
   if (!data) {
     return (
-      <div className="fixed inset-0 h-[100dvh] w-screen flex items-center justify-center bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 p-4 sm:p-6 overflow-y-auto overscroll-none select-none">
-        <div className="my-auto w-full max-w-[440px] sm:max-w-[460px] rounded-[32px] border border-slate-200/90 bg-white p-7 sm:p-9 text-center shadow-2xl shadow-slate-200/70 relative">
+      <div className="fixed inset-0 h-screen w-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 p-4 select-none overflow-hidden">
+        <div className="w-full max-w-[420px] rounded-[32px] border border-slate-200/90 bg-white p-6 sm:p-8 text-center shadow-2xl shadow-slate-200/70 relative">
           
           {/* Company/Branch Logo inside container */}
           {effectiveLogo && (
-            <div className="mb-3 flex justify-center">
+            <div className="mb-2 flex justify-center">
               <img
                 src={effectiveLogo}
                 alt="شعار الشركة"
-                className="h-14 sm:h-16 w-auto max-w-[190px] object-contain drop-shadow-xs"
+                className="h-12 sm:h-14 w-auto max-w-[180px] object-contain drop-shadow-xs"
               />
             </div>
           )}
 
           {/* Lottie Animation: Man Analyzing Balance Sheet */}
-          <div className="mx-auto w-36 h-36 sm:w-44 sm:h-44 -mt-1 flex items-center justify-center pointer-events-none">
+          <div className="mx-auto w-32 h-32 sm:w-40 sm:h-40 -mt-1 flex items-center justify-center pointer-events-none">
             <Lottie
               src={manBalanceAnimation}
               loop={true}
@@ -310,18 +304,18 @@ export const StatementPortalPage: React.FC = () => {
           </div>
 
           {/* Clean Single Account Holder Name */}
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1">
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5">
             {intro.holderName}
           </h1>
 
           {intro.phoneHint ? (
-            <div className="mt-4">
-              <label className="block text-sm font-bold text-slate-600">
+            <div className="mt-3.5">
+              <label className="block text-xs sm:text-sm font-bold text-slate-600">
                 أدخل آخر 4 أرقام من هاتفك
               </label>
 
               {/* 4 Large Connected/Separated OTP Digit Boxes */}
-              <div className="mt-3.5 flex items-center justify-center gap-3 sm:gap-3.5" dir="ltr">
+              <div className="mt-3 flex items-center justify-center gap-2.5 sm:gap-3" dir="ltr">
                 {[0, 1, 2, 3].map((idx) => (
                   <input
                     key={idx}
@@ -336,13 +330,13 @@ export const StatementPortalPage: React.FC = () => {
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(idx, e)}
                     disabled={verifying}
-                    className="h-15 w-13 sm:h-18 sm:w-16 rounded-2xl border-2 border-slate-200 bg-slate-50/80 text-center font-mono text-2xl sm:text-3xl font-black text-slate-900 shadow-xs transition-all duration-150 focus:border-[#F45A0A] focus:bg-white focus:shadow-md focus:shadow-orange-500/15 focus:scale-105 focus:outline-none disabled:opacity-60"
+                    className="h-14 w-12 sm:h-16 sm:w-14 rounded-2xl border-2 border-slate-200 bg-slate-50/80 text-center font-mono text-2xl sm:text-3xl font-black text-slate-900 shadow-xs transition-all duration-150 focus:border-[#F45A0A] focus:bg-white focus:shadow-md focus:shadow-orange-500/15 focus:scale-105 focus:outline-none disabled:opacity-60"
                   />
                 ))}
               </div>
             </div>
           ) : (
-            <div className="mt-4">
+            <div className="mt-3.5">
               <button
                 type="button"
                 disabled={verifying}
@@ -364,7 +358,7 @@ export const StatementPortalPage: React.FC = () => {
                     setVerifying(false);
                   }
                 }}
-                className="h-13 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-sm shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+                className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-xs sm:text-sm shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
               >
                 {verifying ? 'جارٍ الفتح…' : 'عرض كشف الحساب 📄'}
               </button>
@@ -372,20 +366,20 @@ export const StatementPortalPage: React.FC = () => {
           )}
 
           {verifying && (
-            <div className="mt-3 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 animate-pulse">
+            <div className="mt-2.5 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-500 animate-pulse">
               <div className="h-1.5 w-1.5 rounded-full bg-[#F45A0A] animate-ping" />
               <span>جارٍ التحقق…</span>
             </div>
           )}
 
           {verifyError && (
-            <p id="last4-error" role="alert" className="mt-3 rounded-xl bg-rose-50 p-2.5 text-xs font-bold text-rose-700 border border-rose-200">
+            <p id="last4-error" role="alert" className="mt-2.5 rounded-xl bg-rose-50 p-2 text-xs font-bold text-rose-700 border border-rose-200">
               {verifyError}
             </p>
           )}
 
           {loadingData && (
-            <div className="mt-3 text-xs font-bold text-slate-500">
+            <div className="mt-2.5 text-xs font-bold text-slate-500">
               <span>جارٍ تحميل البيانات…</span>
             </div>
           )}
@@ -396,16 +390,17 @@ export const StatementPortalPage: React.FC = () => {
 
   const statementLogo = data.logoUrl || data.company?.logoUrl || null;
 
-  // ── 4. The Verified Statement Screen (Clean, Container-Only Logo, No Outside Header)
+  // ── 4. The Verified Statement Screen: Modern, Clean & Expandable ────────────
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-orange-50/20 to-slate-100 px-4 py-6 antialiased">
       <div className="mx-auto w-full max-w-lg space-y-4">
-        {/* Main Hero Card with Woman Accounting Animation & Company Logo */}
-        <div className="rounded-[32px] border border-slate-200/90 bg-white p-6 sm:p-7 shadow-xl shadow-slate-200/50 relative">
+        
+        {/* Main Hero Card */}
+        <div className="rounded-[32px] border border-slate-200/90 bg-white p-6 sm:p-7 shadow-xl shadow-slate-200/50 relative overflow-hidden">
           
-          {/* Company/Branch Logo at Top of Container */}
+          {/* Company/Branch Logo */}
           {statementLogo && (
-            <div className="mb-3 flex justify-center">
+            <div className="mb-2 flex justify-center">
               <img
                 src={statementLogo}
                 alt="شعار الشركة"
@@ -415,7 +410,7 @@ export const StatementPortalPage: React.FC = () => {
           )}
 
           {/* Woman Doing Financial Accounting Animation */}
-          <div className="mx-auto w-40 h-40 -mt-1 mb-2 flex items-center justify-center pointer-events-none">
+          <div className="mx-auto w-36 h-36 sm:w-40 sm:h-40 -mt-1 mb-1 flex items-center justify-center pointer-events-none">
             <Lottie
               src={womanAccountingAnimation}
               loop={true}
@@ -424,44 +419,47 @@ export const StatementPortalPage: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
-            <div>
-              <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block">كشف حساب العميل</span>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">{data.holderName}</h1>
-            </div>
+          {/* Holder Name & Balance Status Header */}
+          <div className="text-center pt-2 border-t border-slate-100">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              {data.holderName}
+            </h1>
 
             {/* Dynamic Arrow Badge for Credit / Debit */}
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs font-black border ${
-                isSettled
-                  ? 'bg-slate-50 text-slate-700 border-slate-200'
-                  : isCredit
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-rose-50 text-rose-700 border-rose-200'
-              }`}
-            >
-              {isSettled ? (
-                <>
-                  <IconMinus size={15} className="text-slate-500" />
-                  <span>خالص الرصيد</span>
-                </>
-              ) : isCredit ? (
-                <>
-                  <IconArrowDownLeft size={16} className="text-emerald-600" />
-                  <span>الرصيد لك (دائن)</span>
-                </>
-              ) : (
-                <>
-                  <IconArrowUpRight size={16} className="text-rose-600" />
-                  <span>المطلوب منك (مدين)</span>
-                </>
-              )}
+            <div className="mt-2 flex justify-center">
+              <div
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-black border ${
+                  isSettled
+                    ? 'bg-slate-50 text-slate-700 border-slate-200'
+                    : isCredit
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                }`}
+              >
+                {isSettled ? (
+                  <>
+                    <IconMinus size={15} className="text-slate-500" />
+                    <span>خالص الرصيد ⚖️</span>
+                  </>
+                ) : isCredit ? (
+                  <>
+                    <IconArrowDownLeft size={16} className="text-emerald-600" />
+                    <span>الرصيد لك (دائن)</span>
+                  </>
+                ) : (
+                  <>
+                    <IconArrowUpRight size={16} className="text-rose-600" />
+                    <span>المطلوب منك (مدين)</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="mt-5 pt-4 border-t border-slate-100 text-center bg-slate-50/60 rounded-2xl p-4">
-            <span className="text-xs font-bold text-slate-500">صافي الرصيد الحالي المستحق</span>
-            <div className="mt-1 flex items-baseline justify-center gap-2" dir="ltr">
+          {/* Prominent Net Balance Display (الرصيد الصافي فقط) */}
+          <div className="mt-4 pt-4 border-t border-slate-100 text-center bg-slate-50/70 rounded-2xl p-4">
+            <span className="text-xs font-bold text-slate-500 block mb-1">صافي الرصيد الحالي المستحق</span>
+            <div className="flex items-baseline justify-center gap-2" dir="ltr">
               <span
                 className={`font-mono text-4xl sm:text-5xl font-black tabular-nums tracking-tight ${
                   isSettled ? 'text-slate-800' : isCredit ? 'text-emerald-600' : 'text-rose-600'
@@ -473,31 +471,57 @@ export const StatementPortalPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Stats Grid */}
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 text-center">
-              <p className="text-[11px] font-bold text-slate-500">إجمالي المدين (عليك)</p>
-              <p className="mt-1 font-mono text-base sm:text-lg font-black tabular-nums text-slate-900" dir="ltr">
-                {money(data.totalDebit)} <span className="text-xs font-bold text-slate-500">IQD</span>
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5 text-center">
-              <p className="text-[11px] font-bold text-slate-500">إجمالي الدائن (لك)</p>
-              <p className="mt-1 font-mono text-base sm:text-lg font-black tabular-nums text-slate-900" dir="ltr">
-                {money(data.totalCredit)} <span className="text-xs font-bold text-slate-500">IQD</span>
-              </p>
-            </div>
+          {/* Expand / Collapse Details Button */}
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowDetails((prev) => !prev)}
+              className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200/80 text-xs font-bold text-slate-600 transition flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>{showDetails ? 'إخفاء التفاصيل المالية' : 'عرض التفاصيل المالية'}</span>
+              {showDetails ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+            </button>
           </div>
 
-          {/* Action Buttons with Standard System Tabler Icons */}
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* Collapsible Details Section (إجماليات المدين والدائن ومعلومات الحساب) */}
+          {showDetails && (
+            <div className="mt-3 pt-3 border-t border-slate-100 space-y-3 animate-fadeIn">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-center">
+                  <p className="text-[11px] font-bold text-slate-500">إجمالي المدين (عليك)</p>
+                  <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
+                    {money(data.totalDebit)} <span className="text-xs font-bold text-slate-500">IQD</span>
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-3 text-center">
+                  <p className="text-[11px] font-bold text-slate-500">إجمالي الدائن (لك)</p>
+                  <p className="mt-1 font-mono text-base font-black tabular-nums text-slate-900" dir="ltr">
+                    {money(data.totalCredit)} <span className="text-xs font-bold text-slate-500">IQD</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Company Info */}
+              {data.company && (data.company.phone || data.company.address) && (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 text-center text-xs text-slate-500">
+                  {data.company.address && <p className="text-[11px] text-slate-400">{data.company.address}</p>}
+                  {data.company.phone && (
+                    <p className="mt-0.5 text-xs font-bold text-[#F45A0A] font-mono" dir="ltr">
+                      📞 {data.company.phone}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action Buttons: Direct Download + Print */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <button
               type="button"
               disabled={downloading}
-              onClick={() => {
-                void downloadStatement();
-              }}
-              className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+              onClick={handleDownload}
+              className="h-12 w-full rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black shadow-md shadow-orange-500/20 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-75"
             >
               <IconDownload size={18} stroke={2.5} />
               <span>{downloading ? 'جارٍ التحميل…' : 'تحميل كشف PDF الرسمي'}</span>
@@ -585,18 +609,6 @@ export const StatementPortalPage: React.FC = () => {
             </div>
           )}
         </div>
-
-        {/* Company Contact Info Inside Container */}
-        {data.company && (data.company.phone || data.company.address) && (
-          <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-3.5 text-center text-xs text-slate-500">
-            {data.company.address && <p className="text-[11px] text-slate-400">{data.company.address}</p>}
-            {data.company.phone && (
-              <p className="mt-1 text-xs font-bold text-[#F45A0A] font-mono" dir="ltr">
-                📞 {data.company.phone}
-              </p>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
