@@ -16,6 +16,9 @@ import {
   IconPhoto,
   IconUpload,
   IconSparkles,
+  IconLayoutBoard,
+  IconArrowUp,
+  IconArrowDown,
 } from '@tabler/icons-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas-pro';
@@ -35,6 +38,7 @@ import {
   DEFAULT_PAYMENT_VOUCHER_CONFIG,
   type VoucherPrintItem,
 } from '../../components/vouchers/VoucherPrintModal';
+import { VOUCHER_FIELDS } from '../../components/vouchers/FormalVoucherSheet';
 
 // Sample mock data for live statement preview
 const MOCK_STATEMENT_ROWS: StatementMovementItem[] = [
@@ -84,6 +88,36 @@ const MOCK_STATEMENT_TOTALS = {
   previousBalance: 0,
 };
 
+/**
+ * أسماء تبويبات هذه الصفحة ليست هي أسماء المستندات في قاعدة البيانات.
+ *
+ * التبويب هنا اسمه `receipt_voucher`، بينما نافذة طباعة السند وصفحة «قوالب الطباعة»
+ * تتعاملان مع `receipt`. وهذه الخريطة هي الجسر الوحيد بينهما: كل قراءة وكل كتابة
+ * تمرّ منها، فلا يبقى في الكود مكانان يقرّران أين يُحفظ تصميم السند.
+ */
+const CANONICAL_DOC_TYPE: Record<string, string> = {
+  receipt_voucher: 'receipt',
+  payment_voucher: 'payment',
+};
+
+/** المفتاح الذي تقرأ منه بقية أنحاء النظام هذا المستند. */
+const canonicalDocType = (tabKey: string) => CANONICAL_DOC_TYPE[tabKey] || tabKey;
+
+/**
+ * التصميم المحفوظ لمستندٍ ما، من المفتاح المرجعي ثم من الاسم القديم.
+ *
+ * الترتيب مقصود: من ضبط تصميمه حديثاً من أي شاشة فتصميمه في المفتاح المرجعي، ومن
+ * لم يضبط شيئاً منذ زمن فتصميمه في الاسم القديم — وكلاهما يصل.
+ */
+async function resolveTemplateConfig(tabKey: string): Promise<any | null> {
+  const keys = [canonicalDocType(tabKey), tabKey].filter((k, i, a) => a.indexOf(k) === i);
+  for (const key of keys) {
+    const res = await fetchPrintTemplate(key).catch(() => null);
+    if (res && res.config) return res.config;
+  }
+  return null;
+}
+
 // Sample mock data for live receipt voucher preview (matching reference image)
 const MOCK_RECEIPT_VOUCHER: VoucherPrintItem = {
   id: 'rv-demo',
@@ -121,7 +155,7 @@ export const PrintSettingsPage: React.FC = () => {
   const isAr = language === 'ar';
 
   const [activeDocTab, setActiveDocTab] = useState<string | null>('statement');
-  const [printTab, setPrintTab] = useState<'colors' | 'info' | 'fonts' | 'toggles'>('colors');
+  const [printTab, setPrintTab] = useState<'colors' | 'info' | 'fonts' | 'toggles' | 'layout'>('colors');
 
   // Multi-doc configs state mapped by docType
   const [configs, setConfigs] = useState<Record<string, any>>({
@@ -286,12 +320,23 @@ export const PrintSettingsPage: React.FC = () => {
   useEffect(() => {
     const docTypes = ['statement', 'receipt_voucher', 'payment_voucher', 'expense_report'];
     docTypes.forEach((dt) => {
-      fetchPrintTemplate(dt)
-        .then((res) => {
-          if (res && res.config) {
+      /**
+       * تُقرأ السندات من المفتاح الذي تقرأ منه نافذة الطباعة نفسها.
+       *
+       * كان في النظام مخزنان لتصميم سند واحد: هذه الصفحة تكتب في `receipt_voucher`،
+       * وصفحة «قوالب الطباعة» تكتب في `receipt`، ونافذة الطباعة تقرأ `receipt`
+       * أولاً. فمن ضبط ألوانه هنا ثم فتح سنداً وجد تصميماً آخر تماماً، ولا رسالة
+       * خطأ في أي مكان — لأن كل طرف كان يعمل بصورة صحيحة على مخزن مختلف.
+       *
+       * فصار `receipt` / `payment` هو المرجع، ويُجرَّب الاسم القديم بعده كي لا يضيع
+       * ما حُفظ تحته سابقاً.
+       */
+      resolveTemplateConfig(dt)
+        .then((cfg) => {
+          if (cfg) {
             setConfigs((prev) => ({
               ...prev,
-              [dt]: { ...prev[dt], ...res.config },
+              [dt]: { ...prev[dt], ...cfg },
             }));
           }
         })
@@ -322,14 +367,74 @@ export const PrintSettingsPage: React.FC = () => {
     });
   };
 
+  /**
+   * تبويب «التخطيط» يخصّ السندات وحدها.
+   *
+   * حجم الورق والكثافة وترتيب الحقول والتواقيع كلّها مفاتيح يقرؤها سند القبض والدفع؛
+   * وكشف الحساب وتقرير المصاريف لهما بنية أخرى لا تستعملها. وإظهار تبويب لا يفعل
+   * شيئاً أسوأ من إخفائه، فيُخفى — ويعود التبويب إلى «الألوان» إن كان مفتوحاً حين
+   * ينتقل المستخدم إلى مستند لا تخطيط له.
+   */
+  const isVoucherDoc = currentDocKey === 'receipt_voucher' || currentDocKey === 'payment_voucher';
+
+  useEffect(() => {
+    if (!isVoucherDoc && printTab === 'layout') setPrintTab('colors');
+  }, [isVoucherDoc, printTab]);
+
+  /** ترتيب الحقول كما هو محفوظ، مكمَّلاً بأي حقل جديد أُضيف بعد آخر حفظ. */
+  const orderedFieldKeys: string[] = useMemo(() => {
+    const saved: string[] = Array.isArray(currentConfig.fieldOrder) ? currentConfig.fieldOrder : [];
+    const known = VOUCHER_FIELDS.map((f) => f.key);
+    const kept = saved.filter((k) => known.includes(k));
+    return [...kept, ...known.filter((k) => !kept.includes(k))];
+  }, [currentConfig.fieldOrder]);
+
+  const hiddenFieldKeys: string[] = Array.isArray(currentConfig.hiddenFields)
+    ? currentConfig.hiddenFields
+    : [];
+
+  const moveField = (key: string, delta: number) => {
+    const next = [...orderedFieldKeys];
+    const from = next.indexOf(key);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= next.length) return;
+    [next[from], next[to]] = [next[to], next[from]];
+    updateCurrentConfig('fieldOrder', next);
+  };
+
+  const toggleField = (key: string, visible: boolean) => {
+    const next = visible
+      ? hiddenFieldKeys.filter((k) => k !== key)
+      : [...hiddenFieldKeys.filter((k) => k !== key), key];
+    updateCurrentConfig('hiddenFields', next);
+  };
+
+  /**
+   * مسميات التواقيع قائمة لا حقلان.
+   *
+   * كان في الإعدادات حقلان ثابتان («الدافع» و«المستلم») بينما الورقة ترسم عموداً لكل
+   * عنوان في `signatureTitles` — فمن أراد توقيعاً ثالثاً للمدير أو المدقّق لم يكن
+   * لديه أي سبيل إلى ذلك. والحقلان القديمان باقيان في تبويب «خيارات» كما هما، فلا
+   * يفقد أحد ما ضبطه.
+   */
+  const signatureTitles: string[] = Array.isArray(currentConfig.signatureTitles)
+    ? currentConfig.signatureTitles
+    : [];
+
+  const updateSignatureTitle = (index: number, value: string) => {
+    const next = [...signatureTitles];
+    next[index] = value;
+    updateCurrentConfig('signatureTitles', next);
+  };
+
   const handleSaveCurrentConfig = async () => {
     setIsSaving(true);
     try {
       let baseConfig = currentConfig;
       try {
-        const latest = await fetchPrintTemplate(currentDocKey);
-        if (latest && latest.config) {
-          baseConfig = { ...latest.config, ...currentConfig };
+        const latest = await resolveTemplateConfig(currentDocKey);
+        if (latest) {
+          baseConfig = { ...latest, ...currentConfig };
         }
       } catch {}
 
@@ -338,7 +443,19 @@ export const PrintSettingsPage: React.FC = () => {
         logoUrl: activeLogoUrl || baseConfig.logoUrl || '',
       };
 
-      await savePrintTemplate(currentDocKey, toSave);
+      /**
+       * يُكتب في المفتاح المرجعي، ويُنسخ إلى الاسم القديم.
+       *
+       * المرجعي هو ما تقرؤه نافذة الطباعة فعلاً، فبه وحده يظهر أثر الحفظ على السند.
+       * والنسخة إلى الاسم القديم ليست ترفاً: أي شاشة أو تقرير لم يُحدَّث بعد وما زال
+       * يقرأ `receipt_voucher` سيجد تصميماً مطابقاً لا تصميماً متجمّداً عند آخر مرة
+       * حُفظ فيها بالطريقة القديمة — ولا يُبطَل الحفظ كلّه إن تعذّرت هذه النسخة.
+       */
+      const canonical = canonicalDocType(currentDocKey);
+      await savePrintTemplate(canonical, toSave);
+      if (canonical !== currentDocKey) {
+        await savePrintTemplate(currentDocKey, toSave).catch(() => {});
+      }
 
       const titles: Record<string, string> = {
         statement: isAr ? 'كشف الحساب' : 'Account Statement',
@@ -590,7 +707,7 @@ export const PrintSettingsPage: React.FC = () => {
               <div className="lg:col-span-4 space-y-3.5 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                 {/* Modern Pill Tab Selector */}
                 <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="grid grid-cols-4 gap-1">
+                  <div className={`grid gap-1 ${isVoucherDoc ? 'grid-cols-5' : 'grid-cols-4'}`}>
                     <button
                       type="button"
                       onClick={() => setPrintTab('colors')}
@@ -639,6 +756,20 @@ export const PrintSettingsPage: React.FC = () => {
                       <IconAdjustments size={14} />
                       <span>{isAr ? 'خيارات' : 'Options'}</span>
                     </button>
+                    {isVoucherDoc && (
+                      <button
+                        type="button"
+                        onClick={() => setPrintTab('layout')}
+                        className={`flex items-center justify-center gap-1.5 py-2 px-1 rounded-lg text-[11px] font-black transition-all cursor-pointer ${
+                          printTab === 'layout'
+                            ? 'bg-[#F45A0A] text-white shadow-xs scale-[1.02]'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                      >
+                        <IconLayoutBoard size={14} />
+                        <span>{isAr ? 'التخطيط' : 'Layout'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1249,6 +1380,59 @@ export const PrintSettingsPage: React.FC = () => {
                           onChange={(v) => updateCurrentConfig('fontSizes.docTitle', v)}
                         />
                       </div>
+
+                      {/* حجم المبلغ ونصّ الجسم — يقرؤهما السند وحده، فلا يُعرضان لغيره. */}
+                      {isVoucherDoc && (
+                        <>
+                          <div>
+                            <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                              <span>{isAr ? 'حجم المبلغ الرئيسي:' : 'Amount Size:'}</span>
+                              <span className="font-mono">{currentConfig.fontSizes?.amount || 30}px</span>
+                            </div>
+                            <Slider
+                              min={14}
+                              max={44}
+                              step={1}
+                              size="xs"
+                              color="orange"
+                              value={currentConfig.fontSizes?.amount || 30}
+                              onChange={(v) => updateCurrentConfig('fontSizes.amount', v)}
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                              <span>{isAr ? 'حجم نص الحقول:' : 'Field Text Size:'}</span>
+                              <span className="font-mono">{currentConfig.fontSizes?.body || 11}px</span>
+                            </div>
+                            <Slider
+                              min={8}
+                              max={16}
+                              step={1}
+                              size="xs"
+                              color="orange"
+                              value={currentConfig.fontSizes?.body || 11}
+                              onChange={(v) => updateCurrentConfig('fontSizes.body', v)}
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                              <span>{isAr ? 'حجم تسميات الحقول:' : 'Field Label Size:'}</span>
+                              <span className="font-mono">{currentConfig.fontSizes?.label || 10}px</span>
+                            </div>
+                            <Slider
+                              min={7}
+                              max={14}
+                              step={1}
+                              size="xs"
+                              color="orange"
+                              value={currentConfig.fontSizes?.label || 10}
+                              onChange={(v) => updateCurrentConfig('fontSizes.label', v)}
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1345,6 +1529,457 @@ export const PrintSettingsPage: React.FC = () => {
                           placeholder="توقيع المستلم / المحاسب"
                         />
                       </div>
+
+                      {isVoucherDoc && (
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'الشرط القانوني المطبوع فوق التواقيع' : 'Legal Note Above Signatures'}
+                          </label>
+                          <TextInput
+                            size="xs"
+                            value={currentConfig.notesText || ''}
+                            onChange={(e) => updateCurrentConfig('notesText', e.target.value)}
+                            placeholder="تم استلام المبلغ أعلاه، ويعتبر هذا السند حجة إثبات رسمية."
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'نص التذييل السفلي' : 'Footer Text'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.footerText || ''}
+                          onChange={(e) => updateCurrentConfig('footerText', e.target.value)}
+                          placeholder="جميع الحقوق محفوظة"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ══════════════════════════════════════════════════════
+                    Sub-Tab 5: Layout — the shape of the printed voucher.
+                    كل مفتاح هنا يقرؤه سند القبض والدفع مباشرةً؛ وما لا يُضبط من هنا
+                    لا يُضبط من مكان آخر.
+                   ══════════════════════════════════════════════════════ */}
+                {printTab === 'layout' && isVoucherDoc && (
+                  <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">
+                      <IconLayoutBoard size={14} className="text-[#F45A0A]" />
+                      <span>{isAr ? 'تخطيط الورقة والحقول والتواقيع' : 'Sheet, Fields & Signatures Layout'}</span>
+                    </h4>
+
+                    {/* ── الورقة ── */}
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'نمط التصميم' : 'Sheet Style'}
+                          </label>
+                          <Select
+                            size="xs"
+                            value={currentConfig.sheetStyle || 'formal'}
+                            onChange={(v) => updateCurrentConfig('sheetStyle', v || 'formal')}
+                            data={[
+                              { value: 'formal', label: isAr ? 'رسمي محاسبي' : 'Formal' },
+                              { value: 'modern', label: isAr ? 'عصري (بطاقات ملوّنة)' : 'Modern (cards)' },
+                            ]}
+                            allowDeselect={false}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'حجم الورق' : 'Paper Size'}
+                          </label>
+                          <Select
+                            size="xs"
+                            value={currentConfig.voucherPaperSize || 'A4'}
+                            onChange={(v) => updateCurrentConfig('voucherPaperSize', v || 'A4')}
+                            data={[
+                              { value: 'A4', label: 'A4' },
+                              { value: 'A5', label: 'A5' },
+                              { value: 'THERMAL80', label: isAr ? 'حراري 80mm' : 'Thermal 80mm' },
+                            ]}
+                            allowDeselect={false}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'كثافة الأسطر' : 'Density'}
+                          </label>
+                          <Select
+                            size="xs"
+                            value={currentConfig.density || 'normal'}
+                            onChange={(v) => updateCurrentConfig('density', v || 'normal')}
+                            data={[
+                              { value: 'comfortable', label: isAr ? 'مريحة' : 'Comfortable' },
+                              { value: 'normal', label: isAr ? 'عادية' : 'Normal' },
+                              { value: 'compact', label: isAr ? 'مضغوطة' : 'Compact' },
+                            ]}
+                            allowDeselect={false}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'نسخ في الصفحة' : 'Copies per Page'}
+                          </label>
+                          <Select
+                            size="xs"
+                            value={String(currentConfig.copiesPerPage || 1)}
+                            onChange={(v) => updateCurrentConfig('copiesPerPage', Number(v) || 1)}
+                            data={[
+                              { value: '1', label: isAr ? 'نسخة واحدة' : 'One' },
+                              { value: '2', label: isAr ? 'نسختان (أصل + صورة)' : 'Two (original + copy)' },
+                            ]}
+                            allowDeselect={false}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr
+                            ? `هامش الورقة: ${currentConfig.marginMm ?? 14}mm`
+                            : `Page Margin: ${currentConfig.marginMm ?? 14}mm`}
+                        </label>
+                        <Slider
+                          size="xs"
+                          color="orange"
+                          min={2}
+                          max={28}
+                          value={currentConfig.marginMm ?? 14}
+                          onChange={(v) => updateCurrentConfig('marginMm', v)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* ── الترويسة ── */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'شكل الترويسة' : 'Header Style'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.voucherHeaderStyle || 'rule'}
+                          onChange={(v) => updateCurrentConfig('voucherHeaderStyle', v || 'rule')}
+                          data={[
+                            { value: 'rule', label: isAr ? 'خط سفلي ملوّن' : 'Bottom rule' },
+                            { value: 'band', label: isAr ? 'شريط ملوّن كامل' : 'Colour band' },
+                            { value: 'frame', label: isAr ? 'إطار محيط' : 'Framed' },
+                            { value: 'plain', label: isAr ? 'بلا فاصل' : 'Plain' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'محاذاة الترويسة' : 'Header Alignment'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.logoPosition || 'start'}
+                          onChange={(v) => updateCurrentConfig('logoPosition', v || 'start')}
+                          data={[
+                            { value: 'start', label: isAr ? 'موزّعة على الطرفين' : 'Spread' },
+                            { value: 'center', label: isAr ? 'في الوسط' : 'Centered' },
+                            { value: 'end', label: isAr ? 'إلى الطرف' : 'To the side' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار العنوان في الترويسة' : 'Show Address'}
+                        checked={currentConfig.showAddress !== false}
+                        onChange={(e) => updateCurrentConfig('showAddress', e.currentTarget.checked)}
+                      />
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار الموقع الإلكتروني' : 'Show Website'}
+                        checked={currentConfig.showWebsite !== false}
+                        onChange={(e) => updateCurrentConfig('showWebsite', e.currentTarget.checked)}
+                      />
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار رقم السجل التجاري' : 'Show Commercial Registration'}
+                        checked={currentConfig.showCommercialReg === true}
+                        onChange={(e) => updateCurrentConfig('showCommercialReg', e.currentTarget.checked)}
+                      />
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار الرقم الضريبي' : 'Show Tax Number'}
+                        checked={currentConfig.showTaxNumber === true}
+                        onChange={(e) => updateCurrentConfig('showTaxNumber', e.currentTarget.checked)}
+                      />
+                    </div>
+
+                    {/* ── بيانات السند والمبلغ ── */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'رقم السند والتاريخ' : 'Number & Date Block'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.metaStyle || 'inline'}
+                          onChange={(v) => updateCurrentConfig('metaStyle', v || 'inline')}
+                          data={[
+                            { value: 'inline', label: isAr ? 'سطر واحد' : 'Single line' },
+                            { value: 'box', label: isAr ? 'صندوق تدقيق' : 'Boxed' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'شكل خانة المبلغ' : 'Amount Block'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.amountStyle || 'rule'}
+                          onChange={(v) => updateCurrentConfig('amountStyle', v || 'rule')}
+                          data={[
+                            { value: 'rule', label: isAr ? 'خطّان أفقيان' : 'Rules' },
+                            { value: 'panel', label: isAr ? 'لوحة ملوّنة' : 'Panel' },
+                            { value: 'accent', label: isAr ? 'شريط جانبي' : 'Side accent' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'موضع التفقيط (المبلغ كتابةً)' : 'Amount in Words Placement'}
+                      </label>
+                      <Select
+                        size="xs"
+                        value={currentConfig.tafqeetPlacement || 'underAmount'}
+                        onChange={(v) => updateCurrentConfig('tafqeetPlacement', v || 'underAmount')}
+                        data={[
+                          { value: 'underAmount', label: isAr ? 'تحت المبلغ مباشرةً' : 'Under the amount' },
+                          { value: 'field', label: isAr ? 'كحقل ضمن الجدول' : 'As a table field' },
+                        ]}
+                        allowDeselect={false}
+                        disabled={currentConfig.showTafqeet === false}
+                      />
+                      {currentConfig.showTafqeet === false && (
+                        <p className="text-[9px] text-slate-500 mt-1 font-medium">
+                          {isAr
+                            ? 'التفقيط مُطفأ من تبويب «خيارات» — فعّله ليظهر أثر هذا الاختيار.'
+                            : 'Tafqeet is off in Options — turn it on for this to apply.'}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* ── الحقول: أيّها يُطبع وبأي ترتيب ── */}
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'شكل جدول الحقول' : 'Field Table Style'}
+                          </label>
+                          <Select
+                            size="xs"
+                            value={currentConfig.fieldStyle || 'lines'}
+                            onChange={(v) => updateCurrentConfig('fieldStyle', v || 'lines')}
+                            data={[
+                              { value: 'lines', label: isAr ? 'خطوط فاصلة' : 'Hairlines' },
+                              { value: 'grid', label: isAr ? 'شبكة مغلقة' : 'Closed grid' },
+                              { value: 'zebra', label: isAr ? 'أسطر متناوبة' : 'Zebra' },
+                            ]}
+                            allowDeselect={false}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                            {isAr
+                              ? `عرض عمود التسميات: ${currentConfig.labelWidth || 150}px`
+                              : `Label Column: ${currentConfig.labelWidth || 150}px`}
+                          </label>
+                          <Slider
+                            size="xs"
+                            color="orange"
+                            min={90}
+                            max={240}
+                            value={currentConfig.labelWidth || 150}
+                            onChange={(v) => updateCurrentConfig('labelWidth', v)}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1.5">
+                          {isAr ? 'الحقول المطبوعة وترتيبها' : 'Printed Fields & Order'}
+                        </label>
+                        <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                          {orderedFieldKeys.map((key, i) => {
+                            const field = VOUCHER_FIELDS.find((f) => f.key === key);
+                            if (!field) return null;
+                            const visible = !hiddenFieldKeys.includes(key);
+                            return (
+                              <div key={key} className="flex items-center gap-2 px-2 py-1.5 bg-white">
+                                <Switch
+                                  size="xs"
+                                  color="orange"
+                                  checked={visible}
+                                  onChange={(e) => toggleField(key, e.currentTarget.checked)}
+                                />
+                                <span
+                                  className={`text-[10px] font-bold flex-1 truncate ${
+                                    visible ? 'text-slate-800' : 'text-slate-400 line-through'
+                                  }`}
+                                >
+                                  {isAr ? field.label : field.labelEn}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={i === 0}
+                                  onClick={() => moveField(key, -1)}
+                                  className="p-0.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                                  aria-label={isAr ? 'تحريك لأعلى' : 'Move up'}
+                                >
+                                  <IconArrowUp size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={i === orderedFieldKeys.length - 1}
+                                  onClick={() => moveField(key, 1)}
+                                  className="p-0.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                                  aria-label={isAr ? 'تحريك لأسفل' : 'Move down'}
+                                >
+                                  <IconArrowDown size={13} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[9px] text-slate-500 mt-1 font-medium">
+                          {isAr
+                            ? 'الحقل الفارغ في سند معيّن لا يُطبع أصلاً، حتى لو كان مُفعّلاً هنا.'
+                            : 'A field with no value on a given voucher is never printed, even when enabled here.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* ── التواقيع والختم ── */}
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'شكل خانة التوقيع' : 'Signature Style'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.signatureStyle || 'line'}
+                          onChange={(v) => updateCurrentConfig('signatureStyle', v || 'line')}
+                          data={[
+                            { value: 'line', label: isAr ? 'خط توقيع' : 'Signature line' },
+                            { value: 'box', label: isAr ? 'صندوق بعنوان' : 'Titled box' },
+                          ]}
+                          allowDeselect={false}
+                          disabled={currentConfig.showSignatures === false}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1.5">
+                          {isAr ? 'أعمدة التواقيع' : 'Signature Columns'}
+                        </label>
+                        <div className="space-y-1.5">
+                          {signatureTitles.map((title, i) => (
+                            <div key={i} className="flex items-center gap-1.5">
+                              <TextInput
+                                size="xs"
+                                className="flex-1"
+                                value={title}
+                                onChange={(e) => updateSignatureTitle(i, e.target.value)}
+                                placeholder={isAr ? 'مسمى التوقيع' : 'Signature title'}
+                              />
+                              <Button
+                                size="compact-xs"
+                                variant="light"
+                                color="red"
+                                className="font-bold"
+                                onClick={() =>
+                                  updateCurrentConfig(
+                                    'signatureTitles',
+                                    signatureTitles.filter((_, j) => j !== i)
+                                  )
+                                }
+                              >
+                                {isAr ? 'حذف' : 'Remove'}
+                              </Button>
+                            </div>
+                          ))}
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="orange"
+                            className="font-bold"
+                            disabled={signatureTitles.length >= 4}
+                            onClick={() =>
+                              updateCurrentConfig('signatureTitles', [
+                                ...signatureTitles,
+                                isAr ? 'توقيع جديد' : 'New signature',
+                              ])
+                            }
+                          >
+                            {isAr ? '+ إضافة عمود توقيع' : '+ Add signature column'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إفساح مكان الختم الرسمي' : 'Reserve Space for Official Stamp'}
+                        checked={currentConfig.showStamp === true}
+                        onChange={(e) => updateCurrentConfig('showStamp', e.currentTarget.checked)}
+                      />
+
+                      {currentConfig.showStamp && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'نص داخل الختم' : 'Stamp Label'}
+                            </label>
+                            <TextInput
+                              size="xs"
+                              value={currentConfig.stampText || ''}
+                              onChange={(e) => updateCurrentConfig('stampText', e.target.value)}
+                              placeholder={isAr ? 'الختم' : 'Stamp'}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'موضع الختم' : 'Stamp Position'}
+                            </label>
+                            <Select
+                              size="xs"
+                              value={currentConfig.stampPosition || 'end'}
+                              onChange={(v) => updateCurrentConfig('stampPosition', v || 'end')}
+                              data={[
+                                { value: 'start', label: isAr ? 'قبل التواقيع' : 'Before signatures' },
+                                { value: 'end', label: isAr ? 'بعد التواقيع' : 'After signatures' },
+                              ]}
+                              allowDeselect={false}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1382,6 +2017,9 @@ export const PrintSettingsPage: React.FC = () => {
                       lang="ar"
                     />
                   ) : currentDocKey === 'receipt_voucher' ? (
+                    /* qrPlaceholder: لا رمز حقيقياً في المعاينة — الرمز يُصدره الخادم لكل
+                       طرف على حدة، فيُرسم إطار المكان كي يظهر أثر مفتاح «إظهار QR» بدل
+                       أن يبدو المفتاح معطّلاً. */
                     <PrintableVoucherSheet
                       voucher={MOCK_RECEIPT_VOUCHER}
                       config={{
@@ -1389,6 +2027,7 @@ export const PrintSettingsPage: React.FC = () => {
                         logoUrl: activeLogoUrl || currentConfig?.logoUrl || '',
                       }}
                       lang={isAr ? 'ar' : 'en'}
+                      qrPlaceholder
                     />
                   ) : currentDocKey === 'payment_voucher' ? (
                     <PrintableVoucherSheet
@@ -1398,6 +2037,7 @@ export const PrintSettingsPage: React.FC = () => {
                         logoUrl: activeLogoUrl || currentConfig?.logoUrl || '',
                       }}
                       lang={isAr ? 'ar' : 'en'}
+                      qrPlaceholder
                     />
                   ) : (
                     <PrintableAccountStatementSheet

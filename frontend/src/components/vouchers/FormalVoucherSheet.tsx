@@ -18,6 +18,13 @@ import type { VoucherPrintItem } from './VoucherPrintModal';
  *
  * It prints in one ink beside black if the company wants, survives a photocopier
  * (no light-on-light text), and reads correctly at A5 and on an 80mm roll.
+ *
+ * ── مبدأ هذا الملف ──
+ *
+ * لا قيمة بصرية مكتوبة في الكود إلا وهي قيمة افتراضية لمفتاح في القالب. كل لون وكل
+ * حجم وكل مسافة وكل شكل يمرّ عبر `config`. القاعدة العملية: إن رأى المستخدم شيئاً في
+ * الورقة المطبوعة ولم يجد ما يغيّره في إعدادات القالب، فذلك عيب في هذا الملف لا نقص
+ * في الإعدادات. وما يلي مكتوب على هذا الأساس.
  */
 
 export interface VoucherSheetConfig {
@@ -26,9 +33,11 @@ export interface VoucherSheetConfig {
   density?: 'comfortable' | 'normal' | 'compact';
   marginMm?: number;
   copiesPerPage?: 1 | 2;
+  /** تسميات النسخ حين تُطبع نسختان في صفحة — الأصل والصورة. */
+  copyLabels?: string[];
 
   // ── Header & logo ──
-  voucherHeaderStyle?: 'band' | 'rule' | 'plain';
+  voucherHeaderStyle?: 'band' | 'rule' | 'plain' | 'frame';
   logoPosition?: 'start' | 'center' | 'end';
   logoUrl?: string;
   /**
@@ -41,6 +50,7 @@ export interface VoucherSheetConfig {
    */
   logoHeight?: number;
   logoWidth?: number;
+  logoBorderRadius?: number;
   companyName?: string;
   companyNameEn?: string;
   subtitle?: string;
@@ -48,34 +58,70 @@ export interface VoucherSheetConfig {
   showAddress?: boolean;
   showPhone?: boolean;
   showEmail?: boolean;
+  showWebsite?: boolean;
   showCommercialReg?: boolean;
+  showTaxNumber?: boolean;
   address?: string;
   phone?: string;
   email?: string;
+  website?: string;
   commercialReg?: string;
+  taxNumber?: string;
 
-  // ── Fields: which appear, and in what order ──
+  // ── Document meta (number / date / time) ──
+  metaStyle?: 'inline' | 'box';
+
+  // ── The amount ──
+  amountStyle?: 'rule' | 'panel' | 'accent';
+  showTafqeet?: boolean;
+  /** موضع التفقيط: تحت المبلغ مباشرةً (الأتقن محاسبياً) أو كحقل ضمن الجدول. */
+  tafqeetPlacement?: 'underAmount' | 'field';
+
+  // ── Fields: which appear, how, and in what order ──
   fieldOrder?: string[];
   hiddenFields?: string[];
+  fieldStyle?: 'lines' | 'grid' | 'zebra';
+  /** عرض عمود التسميات بالبكسل — يتّسع للعبارات الطويلة دون كسرها. */
+  labelWidth?: number;
 
-  // ── Signatures, stamp, footer ──
+  // ── Signatures, stamp, notes, footer ──
   signatureTitles?: string[];
   /** التسميتان القديمتان — تُستعملان حين لا يُضبط signatureTitles. */
   payerSignTitle?: string;
   receiverSignTitle?: string;
   showSignatures?: boolean;
+  signatureStyle?: 'line' | 'box';
   showStamp?: boolean;
   stampPosition?: 'start' | 'center' | 'end';
   stampText?: string;
+  stampSize?: number;
+  notesText?: string;
   footerText?: string;
+  footerAlign?: 'start' | 'center' | 'end';
   thankYouText?: string;
   showWatermark?: boolean;
   watermarkText?: string;
+  watermarkColor?: string;
+  watermarkOpacity?: number;
+  watermarkAngle?: number;
+  watermarkSize?: number;
 
-  // ── Ink ──
+  // ── Ink & type ──
   primaryColor?: string;
+  borderColor?: string;
+  amountTextColor?: string;
+  tafqeetTextColor?: string;
   fontFamily?: string;
+  fontSizes?: {
+    companyTitle?: number;
+    subtitle?: number;
+    docTitle?: number;
+    body?: number;
+    label?: number;
+    amount?: number;
+  };
   showQrCode?: boolean;
+  qrSize?: number;
 }
 
 /** Every field the voucher can show, in the order an accountant reads them. */
@@ -100,6 +146,22 @@ const PAPER = {
   A4: { width: 780, minHeight: 1050 },
   A5: { width: 560, minHeight: 760 },
   THERMAL80: { width: 302, minHeight: 0 },
+};
+
+/**
+ * لون الحبر بشفافية — لتخفيف اللون الرئيسي بدل إدخال رمادي غريب عنه.
+ *
+ * الخلفيات والأطر المشتقّة من لون الشركة تبقى منسجمة معه مهما غُيّر، بينما الرمادي
+ * الثابت كان يصطدم بأي لون دافئ ويجعل الورقة تبدو مركّبة من تصميمين.
+ */
+const tint = (hex: string, alpha: number): string => {
+  const raw = String(hex || '').trim().replace(/^#/, '');
+  // الصيغة المختصرة (#0af) واردة في تصاميم محفوظة قديماً، وردّها إلى الافتراضي كان
+  // سيقلب أطر الورقة إلى أزرق غريب عن لون الشركة دون سبب ظاهر.
+  const full = /^[0-9a-f]{3}$/i.test(raw) ? raw.split('').map((c) => c + c).join('') : raw;
+  if (!/^[0-9a-f]{6}$/i.test(full)) return `rgba(15, 61, 110, ${alpha})`;
+  const n = parseInt(full, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 };
 
 /**
@@ -162,6 +224,32 @@ export const FormalVoucherSheet: React.FC<{
   const d = DENSITY[config.density || 'normal'];
   const margin = config.marginMm ?? (isThermal ? 4 : 14);
 
+  /**
+   * مقاسات الخط: ما يختاره المستخدم أولاً، ثم مقاس الكثافة.
+   *
+   * كانت الأحجام أرقاماً مكتوبة في الكود (17 للاسم و21 للعنوان و30 للمبلغ)، بينما
+   * في «إعدادات الطباعة» أشرطةُ تحكّم بهذه الأحجام بالضبط — تُحفظ في القالب ولا
+   * تصل إلى الورقة. ومقاس الحرارة يبقى مشتقّاً لا مضبوطاً: 80mm لا يحتمل 30px مهما
+   * طُلب، فيؤخذ الأصغر بين ما اختير وما يتّسع له العرض.
+   */
+  const fs = config.fontSizes || {};
+  const cap = (value: number, thermalMax: number) => (isThermal ? Math.min(value, thermalMax) : value);
+  const t = {
+    base: fs.body || d.base,
+    label: fs.label || d.label,
+    company: cap(fs.companyTitle || 17, 13),
+    subtitle: fs.subtitle || d.label,
+    docTitle: cap(fs.docTitle || 21, 15),
+    amount: cap(fs.amount || 30, 15),
+  };
+
+  const rule = config.borderColor || tint(ink, 0.22);
+  const softRule = config.borderColor || tint(ink, 0.13);
+  const amountColor = config.amountTextColor || ink;
+  const tafqeetColor = config.tafqeetTextColor || ink;
+  const labelWidth = config.labelWidth || 150;
+  const qrSize = config.qrSize || 62;
+
   const hidden = new Set(config.hiddenFields || []);
   const order = config.fieldOrder?.length ? config.fieldOrder : VOUCHER_FIELDS.map((f) => f.key);
   const fieldByKey = new Map(VOUCHER_FIELDS.map((f) => [f.key, f]));
@@ -171,6 +259,18 @@ export const FormalVoucherSheet: React.FC<{
   const dateText = formatVoucherDate(voucher.date);
   const timeText = formatVoucherTime(voucher);
 
+  /**
+   * التفقيط: يُطاع مفتاحه، ويُوضع حيث يُقرأ.
+   *
+   * مفتاح «إظهار التفقيط» كان موجوداً في الإعدادات منذ البداية وكان هذا التخطيط
+   * يتجاهله تماماً — يطبع المبلغ كتابةً في كل الأحوال. وموضعه الافتراضي الآن تحت
+   * المبلغ رقماً لا في وسط جدول الحقول، لأنه ضبطٌ للمبلغ لا حقلٌ مستقلّ عنه؛ ومن
+   * أراد الصيغة القديمة فـ tafqeetPlacement = 'field'.
+   */
+  const showTafqeet = config.showTafqeet !== false;
+  const tafqeetUnderAmount = showTafqeet && (config.tafqeetPlacement || 'underAmount') === 'underAmount';
+  const tafqeetText = tafqeetArabic(voucher.amount || 0);
+
   /** سطر بيانات الاتصال — بالترتيب، وبلا خانات فارغة تترك نقاطاً معلّقة. */
   const contactLine = isThermal
     ? []
@@ -178,14 +278,16 @@ export const FormalVoucherSheet: React.FC<{
         config.showAddress !== false ? config.address : '',
         config.showPhone !== false ? config.phone : '',
         config.showEmail !== false ? config.email : '',
+        config.showWebsite !== false ? config.website : '',
         config.showCommercialReg ? config.commercialReg : '',
+        config.showTaxNumber ? config.taxNumber : '',
       ]
         .map((v) => String(v || '').trim())
         .filter(Boolean);
 
   const values: Record<string, string> = {
     party: voucher.receivedFromOrPaidTo || voucher.accountName || '',
-    amountWords: tafqeetArabic(voucher.amount || 0),
+    amountWords: tafqeetText,
     reason: voucher.description || '',
     split:
       voucher.splitAccounts?.length
@@ -201,6 +303,8 @@ export const FormalVoucherSheet: React.FC<{
 
   const rows = order
     .filter((key) => !hidden.has(key) && fieldByKey.has(key))
+    // التفقيط لا يُطبع مرتين: إن كان تحت المبلغ فلا يعود حقلاً، وإن أُطفئ فلا يُطبع.
+    .filter((key) => (key === 'amountWords' ? showTafqeet && !tafqeetUnderAmount : true))
     // An empty field on a printed voucher is a blank line with a label and nothing
     // after it, which reads as missing data rather than as absent data.
     .filter((key) => String(values[key] || '').trim().length > 0)
@@ -222,7 +326,7 @@ export const FormalVoucherSheet: React.FC<{
             config.payerSignTitle || (isReceipt ? 'توقيع الدافع / المسلِّم' : 'توقيع المحاسب / الآمر بالصرف'),
             config.receiverSignTitle || (isReceipt ? 'توقيع المستلم / المحاسب' : 'توقيع المستلم'),
           ]
-  ).filter((t) => String(t || '').trim().length > 0);
+  ).filter((title) => String(title || '').trim().length > 0);
 
   const align =
     config.logoPosition === 'center'
@@ -231,9 +335,380 @@ export const FormalVoucherSheet: React.FC<{
         ? 'justify-end'
         : 'justify-between';
 
+  /**
+   * سطر بيانات الاتصال لا يُوزَّع على الطرفين — يتبع الترويسة دون أن يتمدّد.
+   *
+   * كان يرث `justify-between` من صفّ الهوية، فتتباعد أربع قيم قصيرة على عرض الورقة
+   * كلّه وتتعلّق النقاط الفاصلة في الفراغ بين كل قيمتين — يقرأها الناظر كأربعة أعمدة
+   * لا كسطر واحد. والتوزيع منطقي لصفّ الهوية (شعار في طرف واسم في طرف)، وغير منطقي
+   * لقائمة متتابعة.
+   */
+  const contactAlign =
+    config.logoPosition === 'center'
+      ? 'justify-center text-center'
+      : config.logoPosition === 'end'
+        ? 'justify-end'
+        : 'justify-start';
+
+  const headerStyle = config.voucherHeaderStyle || 'rule';
+  const onBand = headerStyle === 'band';
+  const metaStyle = config.metaStyle || 'inline';
+  const amountStyle = config.amountStyle || 'rule';
+  const fieldStyle = config.fieldStyle || 'lines';
+  const footerAlign =
+    config.footerAlign === 'start' ? 'text-start' : config.footerAlign === 'end' ? 'text-end' : 'text-center';
+
+  const metaItems = [
+    { label: isEn ? 'No.' : 'رقم السند', value: voucher.voucherNumber, strong: true },
+    { label: isEn ? 'Date' : 'التاريخ', value: dateText, strong: false },
+    ...(timeText ? [{ label: isEn ? 'Time' : 'الوقت', value: timeText, strong: false }] : []),
+  ].filter((m) => String(m.value || '').trim().length > 0);
+
+  /**
+   * جسد السند — مفصولٌ عن الورقة كي تُطبع منه نسختان في صفحة واحدة.
+   *
+   * `copiesPerPage` مفتاحٌ معلَن في القالب منذ البداية ولم يكن ينفّذ شيئاً؛ وطباعة
+   * «الأصل» و«صورة العميل» على ورقة واحدة هي الطريقة التي تعمل بها دفاتر السندات
+   * فعلاً، فبقاؤه معطّلاً كان يعني أن على المحاسب أن يطبع مرتين ويقصّ يدوياً.
+   */
+  const body = (copyLabel?: string) => (
+    <>
+      {/* ── Header ── */}
+      <header
+        className={
+          onBand
+            ? 'px-3 py-2.5 rounded-md'
+            : headerStyle === 'plain'
+              ? 'pb-2'
+              : headerStyle === 'frame'
+                ? 'p-2.5 rounded-md border'
+                : 'pb-2.5 border-b-2'
+        }
+        style={
+          onBand
+            ? { backgroundColor: ink, color: '#fff' }
+            : headerStyle === 'frame'
+              ? { borderColor: rule }
+              : headerStyle === 'rule'
+                ? { borderColor: ink }
+                : undefined
+        }
+      >
+        {/*
+          الترويسة سطران لا ثلاثة أعمدة.
+
+          كانت بيانات الاتصال عموداً منفصلاً في الطرف المقابل للاسم، فينفتح بينهما
+          فراغ كبير في وسط الترويسة ويبدو السطران غير مرتبطين. الآن: سطر للهوية
+          (الشعار والاسم والوصف)، وتحته سطر واحد يجمع العنوان والهاتف والبريد
+          والسجل مفصولةً بنقاط — أهدأ للعين، ويحترم مفاتيح الإظهار كما هي.
+        */}
+        <div className={`flex items-center gap-3 ${align}`}>
+          {config.logoUrl && (
+            <img
+              src={config.logoUrl}
+              alt=""
+              className="shrink-0"
+              style={{
+                height: config.logoHeight || 44,
+                maxWidth: config.logoWidth || 180,
+                objectFit: 'contain',
+                borderRadius: config.logoBorderRadius || 0,
+              }}
+            />
+          )}
+          <div className="min-w-0">
+            <div className="font-black leading-tight truncate" style={{ fontSize: t.company }}>
+              {(isEn ? config.companyNameEn : config.companyName) || config.companyName || ''}
+            </div>
+            {(isEn ? config.subtitleEn : config.subtitle) && (
+              <div className="opacity-80 truncate" style={{ fontSize: t.subtitle }}>
+                {isEn ? config.subtitleEn : config.subtitle}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {contactLine.length > 0 && (
+          <div
+            className={`mt-1.5 opacity-75 flex flex-wrap items-center gap-x-2 gap-y-0.5 ${contactAlign}`}
+            style={{ fontSize: t.label }}
+          >
+            {contactLine.map((part, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && <span aria-hidden="true" className="opacity-50">·</span>}
+                <span dir={/[A-Za-z0-9@+]/.test(part[0] || '') ? 'ltr' : undefined}>{part}</span>
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+      </header>
+
+      {/* ── Title + identity strip ──
+          The document type, its number and its date are what an auditor looks for
+          first, so they sit together on one line directly under the letterhead. */}
+      {/*
+          العنوان لا ينكسر أبداً.
+
+          «سند قبض» كان يُطبع على سطرين — «سند» ثم «قبض» — لأن العنوان وشريط الأرقام
+          يتقاسمان صفاً واحداً، فإذا طال رقم السند ضُغط العنوان حتى انكسر. الآن
+          العنوان shrink-0 وبلا كسر، والشريط هو الذي يلتفّ عند الضيق.
+      */}
+      <div className="mt-4 flex items-end justify-between gap-x-4 gap-y-2 flex-wrap">
+        <div className="shrink-0">
+          <h1
+            className="font-black tracking-tight whitespace-nowrap"
+            style={{ fontSize: t.docTitle, color: ink }}
+          >
+            {isEn
+              ? isReceipt ? 'RECEIPT VOUCHER' : 'PAYMENT VOUCHER'
+              : isReceipt ? 'سند قبض' : 'سند دفع'}
+          </h1>
+          {copyLabel && (
+            <div className="mt-0.5 font-bold opacity-55" style={{ fontSize: t.label }}>
+              {copyLabel}
+            </div>
+          )}
+        </div>
+
+        {/*
+          رقم السند والتاريخ والوقت في سطر واحد لا تنكسر أجزاؤه.
+
+          في التصميم السابق كانت هذه الثلاثة في صندوق ضيّق، فينقسم رقم مثل
+          KAB-RV-2026-01029 على سطرين ويصطدم التاريخ بالوقت. هنا لكلّ منها
+          whitespace-nowrap، والسطر كلّه يلتفّ إلى سطر تالٍ عند الضيق بدل أن
+          تُقسَّم القيم نفسها — فالرقم المكسور لا يُقرأ ولا يُبحث عنه.
+
+          و«الصندوق» عاد خياراً لا قاعدة: metaStyle = 'box' يرسم جدولاً صغيراً
+          للتدقيق، وهو الشكل المألوف في دفاتر السندات — لكنه لا يضغط القيم لأن كل
+          صف فيه سطر مستقلّ.
+        */}
+        {metaStyle === 'box' && !isThermal ? (
+          <div className="shrink-0 border rounded-md overflow-hidden" style={{ borderColor: rule }}>
+            {metaItems.map((m, i) => (
+              <div
+                key={m.label}
+                className="flex items-center gap-2 px-2.5 py-1"
+                style={{ fontSize: t.label, borderTop: i > 0 ? `1px solid ${softRule}` : undefined }}
+              >
+                <span className="opacity-60 whitespace-nowrap">{m.label}</span>
+                <span
+                  className={`font-mono ${m.strong ? 'font-black' : 'font-bold'} ms-auto whitespace-nowrap`}
+                  dir="ltr"
+                >
+                  {m.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center gap-4 flex-wrap justify-end" style={{ fontSize: t.label }}>
+            {metaItems.map((m) => (
+              <span key={m.label} className="whitespace-nowrap">
+                <span className="opacity-60">{m.label}: </span>
+                <span className={`font-mono ${m.strong ? 'font-black' : 'font-bold'}`} dir="ltr">
+                  {m.value}
+                </span>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── The amount ──
+          The one thing every reader wants, given the weight to match. It is stated
+          once numerically and once in words; the words are the legal control. */}
+      <div
+        className={
+          amountStyle === 'panel'
+            ? 'mt-3 rounded-md px-3 py-2.5'
+            : amountStyle === 'accent'
+              ? 'mt-3 py-2.5 ps-3'
+              : 'mt-3 border-y py-3'
+        }
+        style={
+          amountStyle === 'panel'
+            ? { backgroundColor: tint(ink, 0.06), border: `1px solid ${softRule}` }
+            : amountStyle === 'accent'
+              ? { borderInlineStart: `3px solid ${ink}`, backgroundColor: tint(ink, 0.04) }
+              : { borderColor: rule }
+        }
+      >
+        <div className="flex items-baseline justify-between gap-4">
+          <span className="font-bold opacity-70" style={{ fontSize: t.label }}>
+            {isEn ? 'Amount' : 'المبلغ'}
+          </span>
+          <span
+            className="font-mono font-black tabular-nums lining-nums"
+            style={{ fontSize: t.amount, color: amountColor, whiteSpace: 'nowrap' }}
+            dir="ltr"
+          >
+            {amountText}
+          </span>
+        </div>
+
+        {tafqeetUnderAmount && tafqeetText && (
+          <div
+            className="mt-1.5 pt-1.5 flex items-baseline gap-2 border-t"
+            style={{ borderColor: softRule, fontSize: t.label }}
+          >
+            <span className="opacity-60 shrink-0">{isEn ? 'In words' : 'وقدره كتابةً'}</span>
+            <span className="font-bold break-words" style={{ color: tafqeetColor }}>
+              {tafqeetText}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Fields ──
+          A label column and a value column, aligned, with a hairline between rows.
+          No card, no fill: the eye follows one vertical edge down the page.
+
+          والأشكال الثلاثة ليست زينة: «الخطوط» أهدأ للسندات القصيرة، و«الشبكة» تُلزم
+          كل قيمة بخانة مغلقة حين يُدقَّق السند ورقياً، و«المتناوب» يفيد حين تكثر
+          الحقول فيصعب تتبّع الصف الواحد بالعين. */}
+      <dl className={fieldStyle === 'lines' ? `mt-3 ${d.gap}` : 'mt-3'}>
+        {rows.map((row, i) => (
+          <div
+            key={row.key}
+            className={`grid gap-3 ${d.row} ${fieldStyle === 'grid' ? 'px-2' : ''} ${
+              fieldStyle === 'zebra' ? 'px-2' : ''
+            }`}
+            style={{
+              gridTemplateColumns: isThermal ? '1fr' : `${labelWidth}px 1fr`,
+              borderBottom: `1px solid ${softRule}`,
+              borderInline: fieldStyle === 'grid' ? `1px solid ${softRule}` : undefined,
+              borderTop: fieldStyle === 'grid' && i === 0 ? `1px solid ${softRule}` : undefined,
+              backgroundColor: fieldStyle === 'zebra' && i % 2 === 1 ? tint(ink, 0.04) : undefined,
+            }}
+          >
+            <dt className="font-bold opacity-65" style={{ fontSize: t.label }}>
+              {isEn ? row.labelEn : row.label}
+            </dt>
+            <dd className="font-semibold break-words">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {/*
+        الملاحظات — نصّ القالب لا نصّ السند.
+
+        `notesText` يُكتب في إعدادات الطباعة («تم استلام المبلغ أعلاه نقداً… ويعتبر
+        هذا السند حجة إثبات رسمية») ويُحفظ في القالب، ولم يكن يُطبع أبداً. وهو شرطٌ
+        قانوني على الورقة لا تعليق داخلي، فمكانه فوق التواقيع مباشرةً — يُقرأ قبل
+        أن يُوقَّع.
+      */}
+      {config.notesText && (
+        <div
+          className="mt-3 rounded-md px-2.5 py-2 opacity-80"
+          style={{ border: `1px solid ${softRule}`, backgroundColor: tint(ink, 0.03), fontSize: t.label }}
+        >
+          {config.notesText}
+        </div>
+      )}
+
+      {config.thankYouText && (
+        <p className="mt-4 text-center opacity-70" style={{ fontSize: t.label }}>
+          {config.thankYouText}
+        </p>
+      )}
+
+      {/* ── Signatures and stamp ── */}
+      {(signatures.length > 0 || config.showStamp || (config.showQrCode && showQrArea)) && (
+        <div
+          className={
+            isThermal
+              ? 'mt-6 flex flex-col items-center gap-4'
+              : 'mt-8 flex items-end justify-between gap-6 flex-wrap'
+          }
+        >
+          {config.showStamp && config.stampPosition === 'start' && (
+            <StampBox config={config} labelSize={t.label} rule={rule} />
+          )}
+
+          {/* على ورق الحرارة يُطبع كل توقيع تحت الآخر: عرض 80mm لا يتّسع لعمودين،
+              فتتكسّر التسمية على ثلاثة أسطر وتصير أعرض من الخط الذي تحتها. */}
+          <div
+            className={isThermal ? 'w-full space-y-4' : 'flex-1 grid gap-6'}
+            style={
+              isThermal
+                ? undefined
+                : { gridTemplateColumns: `repeat(${Math.max(1, signatures.length)}, minmax(0, 1fr))` }
+            }
+          >
+            {signatures.map((title, i) =>
+              config.signatureStyle === 'box' ? (
+                <div key={i} className="rounded-md overflow-hidden" style={{ border: `1px solid ${rule}` }}>
+                  <div
+                    className="px-2 py-1 font-bold text-center opacity-75"
+                    style={{ fontSize: t.label, backgroundColor: tint(ink, 0.05), borderBottom: `1px solid ${softRule}` }}
+                  >
+                    {title}
+                  </div>
+                  <div className="h-12" />
+                </div>
+              ) : (
+                <div key={i} className="text-center">
+                  <div className="h-10" />
+                  <div className="border-t" style={{ borderColor: rule }} />
+                  <div className="mt-1 font-bold opacity-75" style={{ fontSize: t.label }}>
+                    {title}
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+
+          {config.showStamp && config.stampPosition !== 'start' && (
+            <StampBox config={config} labelSize={t.label} rule={rule} />
+          )}
+
+          {config.showQrCode && showQrArea && (
+            <div className="text-center shrink-0">
+              {qrDataUrl ? (
+                <img src={qrDataUrl} alt="" style={{ width: qrSize, height: qrSize }} />
+              ) : (
+                /**
+                 * Placeholder — only ever drawn in the design preview.
+                 *
+                 * The real code is issued per counter-party by the server, so there is
+                 * none to draw while someone is choosing colours. Without this the
+                 * «إظهار QR» switch looked broken: it was doing exactly what it says,
+                 * but the space it governs stayed empty either way. It is deliberately
+                 * an empty outline rather than a fake pattern, so nobody mistakes it
+                 * for a code that can be scanned.
+                 */
+                <div
+                  className="flex items-center justify-center border border-dashed"
+                  style={{ width: qrSize, height: qrSize, borderColor: rule, fontSize: 7, lineHeight: 1.3 }}
+                >
+                  <span className="opacity-60 px-1">{isEn ? 'QR' : 'رمز الكشف'}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {config.footerText && (
+        <footer
+          className={`mt-6 pt-2 border-t opacity-60 ${footerAlign}`}
+          style={{ borderColor: softRule, fontSize: t.label }}
+        >
+          {config.footerText}
+        </footer>
+      )}
+    </>
+  );
+
+  const twoUp = config.copiesPerPage === 2 && !isThermal;
+  const copyLabels = config.copyLabels?.length
+    ? config.copyLabels
+    : isEn
+      ? ['Original', 'Copy']
+      : ['النسخة الأصلية', 'نسخة العميل'];
+
   return (
     <div
-      id="printable-voucher-sheet"
       dir={isEn ? 'ltr' : 'rtl'}
       className="bg-white text-slate-900 relative mx-auto"
       style={{
@@ -241,7 +716,7 @@ export const FormalVoucherSheet: React.FC<{
         minHeight: paper.minHeight || undefined,
         padding: `${margin}mm`,
         fontFamily: `'${config.fontFamily || 'IBM Plex Sans Arabic'}', 'Tajawal', Arial, sans-serif`,
-        fontSize: `${d.base}px`,
+        fontSize: `${t.base}px`,
         lineHeight: 1.7,
       }}
     >
@@ -249,17 +724,17 @@ export const FormalVoucherSheet: React.FC<{
           without competing with it — a stamp, not a background. */}
       {config.showWatermark && config.watermarkText && (
         <div
-          className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+          className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden"
           style={{ zIndex: 0 }}
           aria-hidden="true"
         >
           <span
             style={{
-              transform: 'rotate(-24deg)',
-              fontSize: isThermal ? 34 : 76,
+              transform: `rotate(${config.watermarkAngle ?? -24}deg)`,
+              fontSize: config.watermarkSize || (isThermal ? 34 : 76),
               fontWeight: 900,
-              color: ink,
-              opacity: 0.055,
+              color: config.watermarkColor || ink,
+              opacity: config.watermarkOpacity ?? 0.055,
               whiteSpace: 'nowrap',
             }}
           >
@@ -269,229 +744,19 @@ export const FormalVoucherSheet: React.FC<{
       )}
 
       <div className="relative" style={{ zIndex: 1 }}>
-        {/* ── Header ── */}
-        <header
-          className={
-            config.voucherHeaderStyle === 'band'
-              ? 'px-3 py-2.5 rounded-md'
-              : config.voucherHeaderStyle === 'plain'
-                ? 'pb-2'
-                : 'pb-2.5 border-b-2'
-          }
-          style={
-            config.voucherHeaderStyle === 'band'
-              ? { backgroundColor: ink, color: '#fff' }
-              : config.voucherHeaderStyle === 'rule'
-                ? { borderColor: ink }
-                : undefined
-          }
-        >
-          {/*
-            الترويسة سطران لا ثلاثة أعمدة.
-
-            كانت بيانات الاتصال عموداً منفصلاً في الطرف المقابل للاسم، فينفتح بينهما
-            فراغ كبير في وسط الترويسة ويبدو السطران غير مرتبطين. الآن: سطر للهوية
-            (الشعار والاسم والوصف)، وتحته سطر واحد يجمع العنوان والهاتف والبريد
-            والسجل مفصولةً بنقاط — أهدأ للعين، ويحترم مفاتيح الإظهار كما هي.
-          */}
-          <div className={`flex items-center gap-3 ${align}`}>
-            {config.logoUrl && (
-              <img
-                src={config.logoUrl}
-                alt=""
-                className="shrink-0"
-                style={{ height: config.logoHeight || 44, maxWidth: config.logoWidth || 180, objectFit: 'contain' }}
-              />
-            )}
-            <div className="min-w-0">
-              <div
-                className="font-black leading-tight truncate"
-                style={{ fontSize: isThermal ? 13 : 17 }}
-              >
-                {(isEn ? config.companyNameEn : config.companyName) || config.companyName || ''}
-              </div>
-              {(isEn ? config.subtitleEn : config.subtitle) && (
-                <div className="opacity-80 truncate" style={{ fontSize: d.label }}>
-                  {isEn ? config.subtitleEn : config.subtitle}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {contactLine.length > 0 && (
+        {twoUp ? (
+          <>
+            {body(copyLabels[0])}
+            {/* خط القصّ — نقطي وواضح، فالنسختان تُفصلان بمقصّ لا بالتخمين. */}
             <div
-              className={`mt-1.5 opacity-75 flex flex-wrap gap-x-2 gap-y-0.5 ${align}`}
-              style={{ fontSize: d.label }}
-            >
-              {contactLine.map((part, i) => (
-                <React.Fragment key={i}>
-                  {i > 0 && <span aria-hidden="true" className="opacity-50">·</span>}
-                  <span dir={/[A-Za-z0-9@+]/.test(part[0] || '') ? 'ltr' : undefined}>{part}</span>
-                </React.Fragment>
-              ))}
-            </div>
-          )}
-        </header>
-
-        {/* ── Title + identity strip ──
-            The document type, its number and its date are what an auditor looks for
-            first, so they sit together on one line directly under the letterhead. */}
-        {/*
-            العنوان لا ينكسر أبداً.
-
-            «سند قبض» كان يُطبع على سطرين — «سند» ثم «قبض» — لأن العنوان وشريط الأرقام
-            يتقاسمان صفاً واحداً، فإذا طال رقم السند ضُغط العنوان حتى انكسر. الآن
-            العنوان shrink-0 وبلا كسر، والشريط هو الذي يلتفّ عند الضيق.
-        */}
-        <div className="mt-4 flex items-end justify-between gap-x-4 gap-y-1 flex-wrap">
-          <h1
-            className="font-black tracking-tight shrink-0 whitespace-nowrap"
-            style={{ fontSize: isThermal ? 15 : 21, color: ink }}
-          >
-            {isEn
-              ? isReceipt ? 'RECEIPT VOUCHER' : 'PAYMENT VOUCHER'
-              : isReceipt ? 'سند قبض' : 'سند دفع'}
-          </h1>
-          {/*
-            رقم السند والتاريخ والوقت في سطر واحد لا تنكسر أجزاؤه.
-
-            في التصميم السابق كانت هذه الثلاثة في صندوق ضيّق، فينقسم رقم مثل
-            KAB-RV-2026-01029 على سطرين ويصطدم التاريخ بالوقت. هنا لكلّ منها
-            whitespace-nowrap، والسطر كلّه يلتفّ إلى سطر تالٍ عند الضيق بدل أن
-            تُقسَّم القيم نفسها — فالرقم المكسور لا يُقرأ ولا يُبحث عنه.
-          */}
-          <div className="flex items-center gap-4 flex-wrap justify-end" style={{ fontSize: d.label }}>
-            <span className="whitespace-nowrap">
-              <span className="opacity-60">{isEn ? 'No.' : 'رقم السند'}: </span>
-              <span className="font-mono font-black" dir="ltr">{voucher.voucherNumber}</span>
-            </span>
-            <span className="whitespace-nowrap">
-              <span className="opacity-60">{isEn ? 'Date' : 'التاريخ'}: </span>
-              <span className="font-mono font-bold" dir="ltr">{dateText}</span>
-            </span>
-            {timeText && (
-              <span className="whitespace-nowrap">
-                <span className="opacity-60">{isEn ? 'Time' : 'الوقت'}: </span>
-                <span className="font-mono font-bold" dir="ltr">{timeText}</span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* ── The amount ──
-            The one thing every reader wants, given the weight to match. It is stated
-            once numerically and once in words; the words are the legal control. */}
-        <div
-          className="mt-3 flex items-baseline justify-between gap-4 border-y py-3"
-          style={{ borderColor: '#CBD5E1' }}
-        >
-          <span className="font-bold opacity-70" style={{ fontSize: d.label }}>
-            {isEn ? 'Amount' : 'المبلغ'}
-          </span>
-          <span
-            className="font-mono font-black tabular-nums lining-nums"
-            style={{ fontSize: isThermal ? 15 : 30, color: ink, whiteSpace: 'nowrap' }}
-            dir="ltr"
-          >
-            {amountText}
-          </span>
-        </div>
-
-        {/* ── Fields ──
-            A label column and a value column, aligned, with a hairline between rows.
-            No card, no fill: the eye follows one vertical edge down the page. */}
-        <dl className={`mt-3 ${d.gap}`}>
-          {rows.map((row) => (
-            <div
-              key={row.key}
-              className={`grid gap-3 border-b ${d.row}`}
-              style={{
-                gridTemplateColumns: isThermal ? '1fr' : '150px 1fr',
-                borderColor: '#E2E8F0',
-              }}
-            >
-              <dt className="font-bold opacity-65" style={{ fontSize: d.label }}>
-                {isEn ? row.labelEn : row.label}
-              </dt>
-              <dd className="font-semibold break-words">{row.value}</dd>
-            </div>
-          ))}
-        </dl>
-
-        {config.thankYouText && (
-          <p className="mt-4 text-center opacity-70" style={{ fontSize: d.label }}>
-            {config.thankYouText}
-          </p>
-        )}
-
-        {/* ── Signatures and stamp ── */}
-        {(signatures.length > 0 || config.showStamp || (config.showQrCode && showQrArea)) && (
-          <div
-            className={
-              isThermal
-                ? 'mt-6 flex flex-col items-center gap-4'
-                : 'mt-8 flex items-end justify-between gap-6 flex-wrap'
-            }
-          >
-            {config.showStamp && config.stampPosition === 'start' && <StampBox config={config} d={d} />}
-
-            {/* على ورق الحرارة يُطبع كل توقيع تحت الآخر: عرض 80mm لا يتّسع لعمودين،
-                فتتكسّر التسمية على ثلاثة أسطر وتصير أعرض من الخط الذي تحتها. */}
-            <div
-              className={isThermal ? 'w-full space-y-4' : 'flex-1 grid gap-6'}
-              style={
-                isThermal
-                  ? undefined
-                  : { gridTemplateColumns: `repeat(${Math.max(1, signatures.length)}, minmax(0, 1fr))` }
-              }
-            >
-              {signatures.map((title, i) => (
-                <div key={i} className="text-center">
-                  <div className="h-10" />
-                  <div className="border-t" style={{ borderColor: '#94A3B8' }} />
-                  <div className="mt-1 font-bold opacity-75" style={{ fontSize: d.label }}>
-                    {title}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {config.showStamp && config.stampPosition !== 'start' && <StampBox config={config} d={d} />}
-
-            {config.showQrCode && showQrArea && (
-              <div className="text-center shrink-0">
-                {qrDataUrl ? (
-                  <img src={qrDataUrl} alt="" style={{ width: 62, height: 62 }} />
-                ) : (
-                  /**
-                   * Placeholder — only ever drawn in the design preview.
-                   *
-                   * The real code is issued per counter-party by the server, so there is
-                   * none to draw while someone is choosing colours. Without this the
-                   * «إظهار QR» switch looked broken: it was doing exactly what it says,
-                   * but the space it governs stayed empty either way. It is deliberately
-                   * an empty outline rather than a fake pattern, so nobody mistakes it
-                   * for a code that can be scanned.
-                   */
-                  <div
-                    className="flex items-center justify-center border border-dashed"
-                    style={{ width: 62, height: 62, borderColor: '#94A3B8', fontSize: 7, lineHeight: 1.3 }}
-                  >
-                    <span className="opacity-60 px-1">{isEn ? 'QR' : 'رمز الكشف'}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {config.footerText && (
-          <footer
-            className="mt-6 pt-2 border-t text-center opacity-60"
-            style={{ borderColor: '#E2E8F0', fontSize: d.label }}
-          >
-            {config.footerText}
-          </footer>
+              className="my-6 border-t border-dashed"
+              style={{ borderColor: rule }}
+              aria-hidden="true"
+            />
+            {body(copyLabels[1])}
+          </>
+        ) : (
+          body()
         )}
       </div>
     </div>
@@ -499,15 +764,22 @@ export const FormalVoucherSheet: React.FC<{
 };
 
 /** A dotted square, because a real stamp is placed by hand and needs the room. */
-const StampBox: React.FC<{ config: VoucherSheetConfig; d: { label: number } }> = ({ config, d }) => (
-  <div
-    className="shrink-0 flex items-center justify-center rounded-md"
-    style={{ width: 96, height: 96, border: '1.5px dashed #CBD5E1' }}
-  >
-    <span className="opacity-45 font-bold" style={{ fontSize: d.label }}>
-      {config.stampText || 'الختم'}
-    </span>
-  </div>
-);
+const StampBox: React.FC<{ config: VoucherSheetConfig; labelSize: number; rule: string }> = ({
+  config,
+  labelSize,
+  rule,
+}) => {
+  const size = config.stampSize || 96;
+  return (
+    <div
+      className="shrink-0 flex items-center justify-center rounded-md"
+      style={{ width: size, height: size, border: `1.5px dashed ${rule}` }}
+    >
+      <span className="opacity-45 font-bold" style={{ fontSize: labelSize }}>
+        {config.stampText || 'الختم'}
+      </span>
+    </div>
+  );
+};
 
 export default FormalVoucherSheet;

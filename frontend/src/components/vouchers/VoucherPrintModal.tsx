@@ -133,14 +133,23 @@ export const DEFAULT_VOUCHER_CONFIG = {
   thankYouText: 'نشكر لكم ثقتكم ونتطلع إلى المزيد من التعاملات',
   payerSignTitle: 'توقيع الدافع / المسلّم للمبلغ',
   receiverSignTitle: 'توقيع المستلم / المحاسب',
-  notesText: '',
+  notesText: 'تم استلام المبلغ أعلاه، ويعتبر هذا السند حجة إثبات رسمية.',
   footerText: 'جميع الحقوق محفوظة © 2026',
+  /**
+   * مقاسات كُتبت للتخطيط العصري وحده، فصارت الآن مقاسات الورقة كلّها.
+   *
+   * منها ما لم يكن يقرؤه أحد قط (`companyTitle` و`subtitle` و`body` و`amount`) لأن
+   * التخطيط العصري لا يستعمل غير `docTitle`، والتخطيط الرسمي كان يكتب مقاساته في
+   * الكود. وحين صار الرسمي يقرؤها وجب أن تكون مقاساته هو: المبلغ 30 لا 19 — فالمبلغ
+   * أكبر شيء على الورقة، وهو أصل الترتيب البصري فيها لا تفصيلاً من تفاصيله.
+   */
   fontSizes: {
-    companyTitle: 16,
-    subtitle: 11,
+    companyTitle: 17,
+    subtitle: 10,
     docTitle: 24,
     body: 11,
-    amount: 19,
+    label: 10,
+    amount: 30,
   },
 
   /* ── التخطيط (تبويب «التخطيط» في إعدادات الطباعة) ──
@@ -151,18 +160,30 @@ export const DEFAULT_VOUCHER_CONFIG = {
   density: 'normal' as 'comfortable' | 'normal' | 'compact',
   marginMm: 14,
   copiesPerPage: 1 as 1 | 2,
-  voucherHeaderStyle: 'rule' as 'band' | 'rule' | 'plain',
+  voucherHeaderStyle: 'rule' as 'band' | 'rule' | 'plain' | 'frame',
   logoPosition: 'start' as 'start' | 'center' | 'end',
   showAddress: true,
   showPhone: true,
   showEmail: true,
+  showWebsite: true,
   showCommercialReg: false,
+  showTaxNumber: false,
   fieldOrder: ['party', 'amountWords', 'reason', 'split', 'paymentMethod', 'cashbox', 'reference', 'notes'],
   hiddenFields: [] as string[],
   signatureTitles: ['توقيع الدافع / المسلِّم', 'توقيع المستلم / المحاسب'],
   showStamp: false,
   stampPosition: 'end' as 'start' | 'center' | 'end',
   stampText: 'الختم',
+
+  /* ── شكل كل قسم على حدة ──
+     أُضيفت لأن هذه المواضع بالذات كانت مكتوبة في الكود: شكل شريط الأرقام، وإطار
+     المبلغ، وفواصل جدول الحقول، وعرض عمود التسميات، وخانة التوقيع. */
+  metaStyle: 'inline' as 'inline' | 'box',
+  amountStyle: 'rule' as 'rule' | 'panel' | 'accent',
+  tafqeetPlacement: 'underAmount' as 'underAmount' | 'field',
+  fieldStyle: 'lines' as 'lines' | 'grid' | 'zebra',
+  labelWidth: 150,
+  signatureStyle: 'line' as 'line' | 'box',
 };
 
 export const DEFAULT_PAYMENT_VOUCHER_CONFIG = {
