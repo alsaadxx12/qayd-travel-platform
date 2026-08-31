@@ -1921,48 +1921,24 @@ export const ReportsPage: React.FC = () => {
         {/* Transactions Accounting Grid */}
         <div className="flex-1 min-w-0">
           {!selectedAccountId && !hasSearched ? (
-            <div className="text-center py-16 px-6 space-y-4 bg-white rounded-2xl border border-slate-200/90 shadow-xs">
-              <div className="mx-auto w-44 h-44 flex items-center justify-center pointer-events-none">
+            <div className="text-center py-20 px-6 space-y-5 bg-white rounded-2xl border border-slate-200/90 shadow-xs">
+              <div className="mx-auto w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center pointer-events-none">
                 <img
                   src="/illustrations/organizing-papers.svg"
                   alt="Account Statement"
-                  className="w-full h-full object-contain drop-shadow-xs"
+                  className="w-full h-full object-contain drop-shadow-sm transition-transform hover:scale-105"
                 />
               </div>
-              <div className="space-y-1 max-w-lg mx-auto">
-                <h3 className="font-black text-lg text-slate-900 tracking-tight">
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h3 className="font-black text-xl text-slate-900 tracking-tight">
                   {isAr ? 'اختر حساباً لعرض كشف الحساب المالي' : 'Select an Account to View Statement'}
                 </h3>
                 <p className="text-xs font-bold text-slate-500 leading-relaxed">
                   {isAr
-                    ? 'قم بالبحث عن الحساب المحاسبي من الشريط العلوي، أو اختر مباشرة من الحسابات الشائعة أدناه لعرض الحركات المالية فورياً:'
-                    : 'Search and select an account from the top toolbar, or pick directly from the suggested accounts below to load the ledger instantly:'}
+                    ? 'قم بالبحث عن الحساب المحاسبي من الشريط العلوي واختياره لعرض الحركات المالية والمطابقات تلقائياً.'
+                    : 'Search and select an account from the top toolbar to automatically load the financial ledger.'}
                 </p>
               </div>
-
-              {/* Quick Account Selection Chips */}
-              {accounts && accounts.length > 0 && (
-                <div className="pt-3 max-w-xl mx-auto">
-                  <span className="text-[11px] font-black text-slate-400 block mb-2">
-                    {isAr ? '⚡ وصول سريع للحسابات الأكثر استخداماً:' : '⚡ Quick access to common accounts:'}
-                  </span>
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    {accounts.slice(0, 8).map((acc) => (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        onClick={() => selectAccount(acc)}
-                        className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-orange-50 hover:border-orange-200 hover:text-[#C2410C] text-xs font-bold text-slate-700 transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 active:scale-95"
-                      >
-                        <span className="font-mono text-[10.5px] text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200">
-                          {acc.code}
-                        </span>
-                        <span>{isAr ? acc.nameAr : (acc.nameEn || acc.nameAr)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             <AccountingGrid
