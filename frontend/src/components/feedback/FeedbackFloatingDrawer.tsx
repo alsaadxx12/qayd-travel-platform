@@ -315,10 +315,8 @@ export const FeedbackFloatingDrawer: React.FC = () => {
         {/* ── A. STICKY HEADER ── */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB] bg-white shrink-0 sticky top-0 z-10 min-h-[72px]">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 shadow-inner flex items-center justify-center shrink-0 overflow-hidden relative">
-              <div className="w-20 h-20 flex items-center justify-center shrink-0 scale-150 transform-gpu pointer-events-none">
-                <Lottie src={receptionistAnimation} loop={true} autoplay={true} className="w-full h-full" />
-              </div>
+            <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 shadow-2xs flex items-center justify-center shrink-0 p-1 relative">
+              <Lottie src={receptionistAnimation} loop={true} autoplay={true} className="w-full h-full object-contain" />
             </div>
             <div>
               <h3 className="font-bold text-[18px] text-[#111827] leading-tight">
