@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Modal, Loader, TextInput } from '@mantine/core';
 import {
   IconPrinter,
@@ -27,6 +27,7 @@ import { apiRequest } from '../../api/client';
 import { generateChromiumPdf, serializeElementForChromium } from '../../utils/chromiumPdf';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
+import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
 import { tafqeetArabic } from '../reports/AccountStatementPrintModal';
 import { FormalVoucherSheet } from './FormalVoucherSheet';
 
@@ -51,6 +52,8 @@ export interface VoucherPrintItem {
   user?: string;
   receivedFromOrPaidTo?: string;
   time?: string;
+  /** سعر الصرف المعتمد المختوم على السند عند الطباعة — يُطبع في الشريط العلوي بتسمية GN. */
+  gnRate?: number;
   customCategory?: string;
   splitDescription?: string;
   splitAccounts?: Array<{
@@ -950,6 +953,16 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
 }) => {
   const { language } = useLanguageStore();
   const [printLang, setPrintLang] = useState<'ar' | 'en'>(language === 'en' ? 'en' : 'ar');
+  /**
+   * GN — خيار عملة الوصل لسندات الدولار.
+   *
+   * قبل التوليد يختار المستخدم: تحويل المبلغ إلى الدينار بسعر الصرف المعتمد في
+   * النظام، أو طباعته بالدولار كما هو. لا يظهر الخيار إلا حين تكون عملة السند
+   * دولاراً، والسعر المعتمد يُختم على الورقة بتسمية GN في الحالتين — فالقارئ
+   * يعرف بأي سعر حُسب أو كان سيُحسب.
+   */
+  const [usdMode, setUsdMode] = useState<'iqd' | 'usd'>('iqd');
+  const { adoptedRate } = useAdoptedExchangeRate();
   const [config, setConfig] = useState<any>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [customAccounts, setCustomAccounts] = useState<any[]>([]);
@@ -1063,6 +1076,32 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   if (!voucher) return null;
 
   const isReceipt = voucher.type === 'RECEIPT';
+  const isUsdVoucher = (voucher?.currency || 'IQD') === 'USD';
+
+  /**
+   * السند كما سيُطبع — لا كما خُزّن.
+   *
+   * التحويل يجري هنا مرة واحدة فيسري على كل المسارات معاً: المعاينة، والطباعة،
+   * وملف PDF، والبريد — لأنها كلها تقرأ هذا الكائن لا الأصل. وتُحوَّل مبالغ
+   * التقسيم مع المبلغ نفسه، وإلا خرج جدول التقسيم بعملة ومجموعه بأخرى.
+   */
+  const displayVoucher = useMemo(() => {
+    if (!voucher || !isUsdVoucher) return voucher;
+    if (usdMode === 'usd') return { ...voucher, gnRate: adoptedRate };
+    const rate = adoptedRate || 1;
+    return {
+      ...voucher,
+      gnRate: adoptedRate,
+      currency: 'IQD',
+      amount: (Number(voucher.amount) || 0) * rate,
+      splitAccounts: voucher.splitAccounts?.map((sp) => ({
+        ...sp,
+        amount: (Number(sp.amount) || 0) * rate,
+        currency: 'IQD',
+      })),
+    };
+  }, [voucher, isUsdVoucher, usdMode, adoptedRate]);
+
   const isEn = printLang === 'en';
   const voucherLabel = isReceipt
     ? (isEn ? 'Receipt Voucher' : 'سند القبض')
@@ -1248,6 +1287,40 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
           </div>
         </div>
 
+        {isUsdVoucher && (
+          <div className="bg-slate-100/90 p-1.5 rounded-2xl flex items-center justify-between border border-slate-200">
+            <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5 px-2">
+              <IconCoins size={16} className="text-[#F45A0A]" />
+              <span>
+                GN
+                <span className="font-mono font-black text-slate-500 ms-1" dir="ltr">
+                  {Number(adoptedRate || 0).toLocaleString('en-US')}
+                </span>
+              </span>
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setUsdMode('iqd')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                  usdMode === 'iqd' ? 'bg-[#F45A0A] text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {isEn ? 'Convert to IQD' : 'تحويل إلى الدينار'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setUsdMode('usd')}
+                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                  usdMode === 'usd' ? 'bg-[#F45A0A] text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {isEn ? 'Print in USD' : 'طباعته دولار'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <TextInput
           size="sm"
           label={isEn ? 'Recipient email' : 'بريد المستلم'}
@@ -1328,7 +1401,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
         }}
       >
         <PrintableVoucherSheet
-          voucher={voucher}
+          voucher={displayVoucher!}
           config={config}
           qrDataUrl={qrDataUrl}
           lang={printLang}

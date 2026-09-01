@@ -458,7 +458,7 @@ export const FormalVoucherSheet: React.FC<{
    */
   const showTafqeet = config.showTafqeet !== false;
   const tafqeetUnderAmount = showTafqeet && (config.tafqeetPlacement || 'underAmount') === 'underAmount';
-  const tafqeetText = tafqeetArabic(voucher.amount || 0);
+  const tafqeetText = tafqeetArabic(voucher.amount || 0, currency === 'USD' ? 'USD' : 'IQD');
 
   /** سطر بيانات الاتصال — بالترتيب، وبلا خانات فارغة تترك نقاطاً معلّقة. */
   const contactLine = isThermal
@@ -626,6 +626,10 @@ export const FormalVoucherSheet: React.FC<{
   const metaItems = [
     { label: isEn ? 'No.' : 'رقم السند', value: voucher.voucherNumber, strong: true },
     { label: isEn ? 'Date' : 'التاريخ', value: dateText, strong: false },
+    /* GN: سعر الصرف المعتمد المختوم على سندات الدولار — قبل الوقت كما طُلب. */
+    ...(voucher.gnRate
+      ? [{ label: 'GN', value: Number(voucher.gnRate).toLocaleString('en-US'), strong: false }]
+      : []),
     ...(timeText ? [{ label: isEn ? 'Time' : 'الوقت', value: timeText, strong: false }] : []),
   ].filter((m) => String(m.value || '').trim().length > 0);
 
