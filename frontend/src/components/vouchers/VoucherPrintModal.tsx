@@ -21,6 +21,8 @@ import {
   IconTag,
   IconDownload,
   IconX,
+  IconEye,
+  IconArrowBackUp,
 } from '@tabler/icons-react';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { apiRequest } from '../../api/client';
@@ -966,6 +968,8 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
    */
   const [usdMode, setUsdMode] = useState<'iqd' | 'usd'>('iqd');
   const { adoptedRate } = useAdoptedExchangeRate();
+  /** معاينة الورقة داخل النافذة قبل التوليد — تُطوى عند كل فتح جديد. */
+  const [showPreview, setShowPreview] = useState(false);
   const [config, setConfig] = useState<any>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [customAccounts, setCustomAccounts] = useState<any[]>([]);
@@ -983,6 +987,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
     if (!opened || !voucher) return;
     setRecipientEmail(pickAccountEmail(voucher));
     setEmailResolved(!voucher.accountId);
+    setShowPreview(false);
     setLoading(true);
 
     /**
@@ -1223,7 +1228,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
     <Modal
       opened={opened}
       onClose={onClose}
-      size="md"
+      size={showPreview ? 880 : 'md'}
       centered
       radius="lg"
       withCloseButton={false}
@@ -1259,78 +1264,143 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
           </button>
         </div>
 
-        <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between text-xs">
+        {showPreview ? (
+          /* ── المعاينة: الورقة النهائية نفسها — المكوّن الذي يُسلسَل إلى PDF،
+             بالتحويل واللغة والقالب المختارة، لا صورة تقريبية عنها. ── */
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setShowPreview(false)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition-colors cursor-pointer"
+              >
+                <IconArrowBackUp size={15} />
+                {isEn ? 'Back to options' : 'رجوع للخيارات'}
+              </button>
+              <span className="text-[11px] font-bold text-slate-400">
+                {isEn ? 'Exact final sheet' : 'معاينة مطابقة للورقة النهائية'}
+              </span>
+            </div>
+
+            <div
+              className="bg-slate-200/80 border border-slate-300 rounded-2xl p-4 overflow-auto"
+              style={{ maxHeight: '66vh' }}
+            >
+              <div className="mx-auto w-fit shadow-xl">
+                <PrintableVoucherSheet
+                  voucher={displayVoucher!}
+                  config={config}
+                  lang={printLang}
+                  qrDataUrl={qrDataUrl}
+                  customAccounts={customAccounts}
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={busy}
+              className="w-full h-12 rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-extrabold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {exporting || loading ? (
+                <>
+                  <Loader size={18} color="white" />
+                  <span>{isEn ? 'Generating PDF…' : 'جاري توليد PDF…'}</span>
+                </>
+              ) : (
+                <>
+                  <IconDownload size={18} />
+                  <span>{isEn ? 'Generate & download PDF' : 'توليد وتحميل PDF'}</span>
+                </>
+              )}
+            </button>
+          </div>
+        ) : (
+        <>
+        <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between gap-3 text-xs">
           <div className="space-y-0.5 min-w-0">
             <span className="text-[10.5px] font-bold text-slate-400 block">
               {isEn ? 'Account' : 'الحساب'}
             </span>
             <span className="font-extrabold text-slate-900 truncate block">{voucher.accountName}</span>
           </div>
-          <div className="text-end font-mono text-[11px] font-black text-slate-800" dir="ltr">
-            {Number(voucher.amount || 0).toLocaleString()} {voucher.currency || 'IQD'}
-          </div>
-        </div>
-
-        <div className="bg-slate-100/90 p-1.5 rounded-2xl flex items-center justify-between border border-slate-200">
-          <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5 px-2">
-            <IconLanguage size={16} className="text-[#F45A0A]" />
-            {isEn ? 'Document language:' : 'لغة الوصل:'}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setPrintLang('ar')}
-              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                printLang === 'ar' ? 'bg-[#F45A0A] text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              العربية
-            </button>
-            <button
-              type="button"
-              onClick={() => setPrintLang('en')}
-              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                printLang === 'en' ? 'bg-[#F45A0A] text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              English
-            </button>
-          </div>
-        </div>
-
-        {isUsdVoucher && (
-          <div className="bg-slate-100/90 p-1.5 rounded-2xl flex items-center justify-between border border-slate-200">
-            <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5 px-2">
-              <IconCoins size={16} className="text-[#F45A0A]" />
-              <span>
-                GN
-                <span className="font-mono font-black text-slate-500 ms-1" dir="ltr">
-                  {Number(adoptedRate || 0).toLocaleString('en-US')}
-                </span>
-              </span>
+          <div className="text-end shrink-0">
+            <span className="font-mono text-sm font-black text-slate-900 block" dir="ltr">
+              {Number(displayVoucher?.amount ?? 0).toLocaleString('en-US')}{' '}
+              {displayVoucher?.currency || 'IQD'}
             </span>
-            <div className="flex items-center gap-1">
+            {isUsdVoucher && usdMode === 'iqd' && (
+              <span className="text-[10px] font-bold text-slate-400 block" dir="ltr">
+                {Number(voucher.amount || 0).toLocaleString('en-US')} USD {isEn ? 'orig.' : '(الأصل)'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* خيارات الوصل — صفوف متجانسة في بطاقة واحدة بدل بطاقات متناثرة. */}
+        <div className="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden shadow-2xs">
+          <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+              <IconLanguage size={16} className="text-[#F45A0A]" />
+              {isEn ? 'Language' : 'لغة الوصل'}
+            </span>
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
               <button
                 type="button"
-                onClick={() => setUsdMode('iqd')}
-                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                  usdMode === 'iqd' ? 'bg-[#F45A0A] text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-50'
+                onClick={() => setPrintLang('ar')}
+                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                  printLang === 'ar' ? 'bg-[#F45A0A] text-white shadow-xs' : 'text-slate-700 hover:bg-white'
                 }`}
               >
-                {isEn ? 'Convert to IQD' : 'تحويل إلى الدينار'}
+                العربية
               </button>
               <button
                 type="button"
-                onClick={() => setUsdMode('usd')}
-                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                  usdMode === 'usd' ? 'bg-[#F45A0A] text-white shadow-xs' : 'bg-white text-slate-700 hover:bg-slate-50'
+                onClick={() => setPrintLang('en')}
+                className={`px-3 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                  printLang === 'en' ? 'bg-[#F45A0A] text-white shadow-xs' : 'text-slate-700 hover:bg-white'
                 }`}
               >
-                {isEn ? 'Print in USD' : 'طباعته دولار'}
+                English
               </button>
             </div>
           </div>
-        )}
+
+          {isUsdVoucher && (
+            <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+                <IconCoins size={16} className="text-[#F45A0A]" />
+                <span>
+                  GN
+                  <span className="font-mono font-black text-slate-400 ms-1 text-[11px]" dir="ltr">
+                    {Number(adoptedRate || 0).toLocaleString('en-US')}
+                  </span>
+                </span>
+              </span>
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setUsdMode('iqd')}
+                  className={`px-3 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                    usdMode === 'iqd' ? 'bg-[#F45A0A] text-white shadow-xs' : 'text-slate-700 hover:bg-white'
+                  }`}
+                >
+                  {isEn ? 'Convert to IQD' : 'تحويل إلى الدينار'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUsdMode('usd')}
+                  className={`px-3 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                    usdMode === 'usd' ? 'bg-[#F45A0A] text-white shadow-xs' : 'text-slate-700 hover:bg-white'
+                  }`}
+                >
+                  {isEn ? 'Print in USD' : 'طباعته دولار'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <TextInput
           size="sm"
@@ -1349,6 +1419,16 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
         />
 
         <div className="space-y-2.5 pt-1">
+          <button
+            type="button"
+            onClick={() => setShowPreview(true)}
+            disabled={busy}
+            className="w-full h-11 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <IconEye size={17} className="text-[#F45A0A]" />
+            <span>{isEn ? 'Preview before printing' : 'معاينة قبل الطباعة'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleDownloadPdf}
@@ -1392,12 +1472,14 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
             )}
           </button>
         </div>
+        </>
+        )}
       </div>
     </Modal>
 
     {/* مرتبطة بحالة الفتح: خارج النافذة لم تعد Mantine تُلغي تركيبها، فنتكفّل بذلك
         هنا كي لا تبقى ورقة سند مركّبة في الصفحة بعد إغلاق النافذة. */}
-    {opened && (
+    {opened && !showPreview && (
       <div
         aria-hidden="true"
         dir={printLang === 'en' ? 'ltr' : 'rtl'}
