@@ -629,7 +629,14 @@ export const FormalVoucherSheet: React.FC<{
     /* GN: مبلغ الدولار الأصلي لسندٍ حُوِّل إلى الدينار — قبل الوقت كما طُلب.
        والمطبوع بالدولار لا يحمل GN أصلاً: مبلغه هو نفسه، فلا شيء يُوثَّق. */
     ...(voucher.gnUsdAmount
-      ? [{ label: 'GN', value: `${money(voucher.gnUsdAmount)} USD`, strong: false }]
+      ? [
+          {
+            label: 'GN',
+            // بلا أصفار عشرية زائدة ولا رمز عملة: «90» لا «90.00 USD» — والكسور تظهر إن وُجدت فعلاً.
+            value: Number(voucher.gnUsdAmount).toLocaleString('en-US', { maximumFractionDigits: 2 }),
+            strong: false,
+          },
+        ]
       : []),
     ...(timeText ? [{ label: isEn ? 'Time' : 'الوقت', value: timeText, strong: false }] : []),
   ].filter((m) => String(m.value || '').trim().length > 0);
