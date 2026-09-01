@@ -179,6 +179,9 @@ export interface VoucherSheetConfig {
   watermarkOpacity?: number;
   watermarkAngle?: number;
   watermarkSize?: number;
+  /** إزاحة العلامة المائية عن مركز الورقة بالبكسل — موجبةً وسالبةً في الاتجاهين. */
+  watermarkOffsetX?: number;
+  watermarkOffsetY?: number;
 
   /**
    * أين يُطبع سطر العنوان والهاتف والبريد: تحت الترويسة أو في التذييل.
@@ -1147,7 +1150,9 @@ export const FormalVoucherSheet: React.FC<{
         >
           <span
             style={{
-              transform: `rotate(${config.watermarkAngle ?? -24}deg)`,
+              transform: `translate(${config.watermarkOffsetX || 0}px, ${
+                config.watermarkOffsetY || 0
+              }px) rotate(${config.watermarkAngle ?? -24}deg)`,
               fontSize: config.watermarkSize || (isThermal ? 34 : 76),
               fontWeight: 900,
               color: config.watermarkColor || ink,

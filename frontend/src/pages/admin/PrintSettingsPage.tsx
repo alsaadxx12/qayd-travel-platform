@@ -1766,6 +1766,94 @@ export const PrintSettingsPage: React.FC = () => {
                         />
                       </div>
 
+                      {/* ميلان العلامة المائية وموضعها وحجمها وشفافيتها — مفاتيح كانت
+                          في القالب بلا أي واجهة تضبطها. تخص السندات وحدها. */}
+                      {isVoucherDoc && currentConfig.showWatermark !== false && (
+                        <div className="space-y-2 pt-1">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                              {isAr
+                                ? `ميلان العلامة المائية: ${currentConfig.watermarkAngle ?? -24}°`
+                                : `Watermark Angle: ${currentConfig.watermarkAngle ?? -24}°`}
+                            </label>
+                            <Slider
+                              size="xs"
+                              color="orange"
+                              min={-90}
+                              max={90}
+                              value={currentConfig.watermarkAngle ?? -24}
+                              onChange={(v) => updateCurrentConfig('watermarkAngle', v)}
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                                {isAr
+                                  ? `الإزاحة الأفقية: ${currentConfig.watermarkOffsetX || 0}px`
+                                  : `Horizontal Offset: ${currentConfig.watermarkOffsetX || 0}px`}
+                              </label>
+                              <Slider
+                                size="xs"
+                                color="orange"
+                                min={-250}
+                                max={250}
+                                value={currentConfig.watermarkOffsetX || 0}
+                                onChange={(v) => updateCurrentConfig('watermarkOffsetX', v)}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                                {isAr
+                                  ? `الإزاحة العمودية: ${currentConfig.watermarkOffsetY || 0}px`
+                                  : `Vertical Offset: ${currentConfig.watermarkOffsetY || 0}px`}
+                              </label>
+                              <Slider
+                                size="xs"
+                                color="orange"
+                                min={-420}
+                                max={420}
+                                value={currentConfig.watermarkOffsetY || 0}
+                                onChange={(v) => updateCurrentConfig('watermarkOffsetY', v)}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                                {isAr
+                                  ? `حجم الخط: ${currentConfig.watermarkSize || 76}px`
+                                  : `Size: ${currentConfig.watermarkSize || 76}px`}
+                              </label>
+                              <Slider
+                                size="xs"
+                                color="orange"
+                                min={24}
+                                max={150}
+                                value={currentConfig.watermarkSize || 76}
+                                onChange={(v) => updateCurrentConfig('watermarkSize', v)}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                                {isAr
+                                  ? `الوضوح: ${Math.round((currentConfig.watermarkOpacity ?? 0.055) * 100)}%`
+                                  : `Opacity: ${Math.round((currentConfig.watermarkOpacity ?? 0.055) * 100)}%`}
+                              </label>
+                              <Slider
+                                size="xs"
+                                color="orange"
+                                min={2}
+                                max={30}
+                                value={Math.round((currentConfig.watermarkOpacity ?? 0.055) * 100)}
+                                onChange={(v) => updateCurrentConfig('watermarkOpacity', v / 100)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       <div>
                         <label className="text-[10px] font-bold text-slate-700 block mb-1">
                           {isAr ? 'العبارة الترحيبية والفاصل' : 'Thank You Text'}
