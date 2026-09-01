@@ -147,6 +147,7 @@ export interface VoucherSheetConfig {
    * كما يشاء من الإعدادات.
    */
   splitRemainderLabel?: string;
+  splitRemainderLabelEn?: string;
   /**
    * حقول تُطبع ولو كانت فارغة — سطرٌ للكتابة اليدوية.
    *
@@ -158,6 +159,8 @@ export interface VoucherSheetConfig {
 
   // ── Signatures, stamp, notes, footer ──
   signatureTitles?: string[];
+  /** مسميات التواقيع للنسخة الإنجليزية — وإلا طُبعت الافتراضية الإنجليزية لا العربية المحفوظة. */
+  signatureTitlesEn?: string[];
   /** التسميتان القديمتان — تُستعملان حين لا يُضبط signatureTitles. */
   payerSignTitle?: string;
   receiverSignTitle?: string;
@@ -168,13 +171,18 @@ export interface VoucherSheetConfig {
   showStamp?: boolean;
   stampPosition?: 'start' | 'center' | 'end';
   stampText?: string;
+  stampTextEn?: string;
   stampSize?: number;
   notesText?: string;
+  notesTextEn?: string;
   footerText?: string;
+  footerTextEn?: string;
   footerAlign?: 'start' | 'center' | 'end';
   thankYouText?: string;
+  thankYouTextEn?: string;
   showWatermark?: boolean;
   watermarkText?: string;
+  watermarkTextEn?: string;
   watermarkColor?: string;
   watermarkOpacity?: number;
   watermarkAngle?: number;
@@ -337,6 +345,57 @@ const formatVoucherTime = (voucher: { time?: string; date?: string }): string =>
 const money = (value: number) =>
   Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/**
+ * التفقيط الإنجليزي — للوصل المطبوع بالإنجليزية.
+ *
+ * كانت الورقة الإنجليزية تطبع التفقيط العربي كما هو («فقط تسعون دولار…»)، لأن
+ * المفقّط الوحيد في النظام عربي. والتفقيط ضبطٌ قانوني للمبلغ فلا يجوز إسقاطه من
+ * النسخة الإنجليزية ولا تركه بلغة أخرى.
+ */
+const EN_ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+const EN_TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+const enBelowThousand = (n: number): string => {
+  const parts: string[] = [];
+  if (n >= 100) {
+    parts.push(`${EN_ONES[Math.floor(n / 100)]} Hundred`);
+    n %= 100;
+  }
+  if (n >= 20) {
+    const ones = n % 10;
+    parts.push(ones ? `${EN_TENS[Math.floor(n / 10)]}-${EN_ONES[ones]}` : EN_TENS[Math.floor(n / 10)]);
+  } else if (n > 0) {
+    parts.push(EN_ONES[n]);
+  }
+  return parts.join(' ');
+};
+
+const englishNumberWords = (n: number): string => {
+  if (n === 0) return 'Zero';
+  const scales: Array<[number, string]> = [[1e9, 'Billion'], [1e6, 'Million'], [1e3, 'Thousand'], [1, '']];
+  const parts: string[] = [];
+  for (const [value, name] of scales) {
+    const q = Math.floor(n / value);
+    if (q) {
+      parts.push(name ? `${enBelowThousand(q)} ${name}` : enBelowThousand(q));
+      n %= value;
+    }
+  }
+  return parts.join(' ');
+};
+
+const tafqeetEnglish = (num: number, currency: 'IQD' | 'USD'): string => {
+  const abs = Math.abs(Number(num) || 0);
+  const whole = Math.floor(abs);
+  const frac = Math.round((abs - whole) * 100);
+  const unit = currency === 'USD' ? 'US Dollars' : 'Iraqi Dinars';
+  const cents = currency === 'USD' ? 'Cents' : 'Fils';
+  let out = `${englishNumberWords(whole)} ${unit}`;
+  if (frac > 0) out += ` and ${englishNumberWords(frac)} ${cents}`;
+  return `${out} Only`;
+};
+
 export const FormalVoucherSheet: React.FC<{
   voucher: VoucherPrintItem;
   config?: VoucherSheetConfig;
@@ -458,7 +517,10 @@ export const FormalVoucherSheet: React.FC<{
    */
   const showTafqeet = config.showTafqeet !== false;
   const tafqeetUnderAmount = showTafqeet && (config.tafqeetPlacement || 'underAmount') === 'underAmount';
-  const tafqeetText = tafqeetArabic(voucher.amount || 0, currency === 'USD' ? 'USD' : 'IQD');
+  const printCurrency = currency === 'USD' ? ('USD' as const) : ('IQD' as const);
+  const tafqeetText = isEn
+    ? tafqeetEnglish(voucher.amount || 0, printCurrency)
+    : tafqeetArabic(voucher.amount || 0, printCurrency);
 
   /** سطر بيانات الاتصال — بالترتيب، وبلا خانات فارغة تترك نقاطاً معلّقة. */
   const contactLine = isThermal
@@ -536,7 +598,9 @@ export const FormalVoucherSheet: React.FC<{
       /* في صدر الجدول لا ذيله: الأصل أولاً ثم ما اقتُطع منه ثم المجموع —
          هكذا يقرأ المحاسب القسمة من أعلى إلى أسفل بترتيبها الطبيعي. */
       counter.unshift({
-        name: (config.splitRemainderLabel || '').trim() || (isEn ? 'Other' : 'جات النظام'),
+        name: isEn
+          ? (config.splitRemainderLabelEn || '').trim() || 'System Parties'
+          : (config.splitRemainderLabel || '').trim() || 'جات النظام',
         amount: remainder,
       });
     }
@@ -566,12 +630,19 @@ export const FormalVoucherSheet: React.FC<{
   const signatures = (
     config.showSignatures === false
       ? []
-      : config.signatureTitles?.length
-        ? config.signatureTitles
-        : [
-            config.payerSignTitle || (isReceipt ? 'توقيع الدافع / المسلِّم' : 'توقيع المحاسب / الآمر بالصرف'),
-            config.receiverSignTitle || (isReceipt ? 'توقيع المستلم / المحاسب' : 'توقيع المستلم'),
-          ]
+      : isEn
+        ? config.signatureTitlesEn?.length
+          ? config.signatureTitlesEn
+          : [
+              isReceipt ? 'Payer / Depositor Signature' : 'Accountant / Authorizer Signature',
+              isReceipt ? 'Receiver / Accountant Signature' : 'Receiver Signature',
+            ]
+        : config.signatureTitles?.length
+          ? config.signatureTitles
+          : [
+              config.payerSignTitle || (isReceipt ? 'توقيع الدافع / المسلِّم' : 'توقيع المحاسب / الآمر بالصرف'),
+              config.receiverSignTitle || (isReceipt ? 'توقيع المستلم / المحاسب' : 'توقيع المستلم'),
+            ]
   ).filter((title) => String(title || '').trim().length > 0);
 
   const hasLogo = Boolean(config.logoUrl);
@@ -595,6 +666,37 @@ export const FormalVoucherSheet: React.FC<{
    * لقائمة متتابعة.
    */
   const contactInFooter = (config.contactPlacement || 'footer') === 'footer';
+
+  /**
+   * نصوص القالب بلغة الوصل.
+   *
+   * المحفوظ في القالب عربي («نشكر لكم ثقتكم…»، «توقيع الدافع…»)، فكان يُطبع
+   * عربياً داخل الوصل الإنجليزي. القاعدة: النص العربي المضبوط يعني أن الخاصية
+   * مفعّلة، فإن طُبع الوصل بالإنجليزية أُخذ المقابل الإنجليزي المضبوط أو
+   * الافتراضي الإنجليزي — ولا يتسرب العربي أبداً.
+   */
+  const notesText = isEn
+    ? config.notesText
+      ? config.notesTextEn ||
+        'The above amount has been received; this voucher constitutes an official proof.'
+      : ''
+    : config.notesText;
+  const thankYouText = isEn
+    ? config.thankYouText
+      ? config.thankYouTextEn || 'Thank you for your trust — we look forward to serving you again.'
+      : ''
+    : config.thankYouText;
+  const footerText = isEn
+    ? config.footerText
+      ? config.footerTextEn || 'All rights reserved ©'
+      : ''
+    : config.footerText;
+  const watermarkText = isEn
+    ? config.watermarkText
+      ? config.watermarkTextEn || 'OFFICIAL COPY'
+      : ''
+    : config.watermarkText;
+  const stampLabel = isEn ? config.stampTextEn || 'Stamp' : config.stampText || 'الختم';
 
   const contactJustify =
     config.contactAlign === 'center'
@@ -990,7 +1092,7 @@ export const FormalVoucherSheet: React.FC<{
         قانوني على الورقة لا تعليق داخلي، فمكانه فوق التواقيع مباشرةً — يُقرأ قبل
         أن يُوقَّع.
       */}
-      {config.notesText && (
+      {notesText && (
         <div
           className={`mt-3 rounded-md px-2.5 py-2 ${ts.notes?.color ? '' : 'opacity-80'}`}
           style={{
@@ -999,7 +1101,7 @@ export const FormalVoucherSheet: React.FC<{
             backgroundColor: tint(ink, 0.03),
           }}
         >
-          {config.notesText}
+          {notesText}
         </div>
       )}
 
@@ -1014,12 +1116,12 @@ export const FormalVoucherSheet: React.FC<{
       */}
       <div className="grow" style={{ minHeight: 16 }} aria-hidden="true" />
 
-      {config.thankYouText && (
+      {thankYouText && (
         <p
           className={`mt-4 text-center shrink-0 ${ts.thankYou?.color ? '' : 'opacity-70'}`}
           style={styleOf('thankYou', t.label)}
         >
-          {config.thankYouText}
+          {thankYouText}
         </p>
       )}
 
@@ -1033,7 +1135,7 @@ export const FormalVoucherSheet: React.FC<{
           }
         >
           {config.showStamp && config.stampPosition === 'start' && (
-            <StampBox config={config} labelSize={t.label} rule={rule} />
+            <StampBox config={config} label={stampLabel} labelSize={t.label} rule={rule} />
           )}
 
           {/* على ورق الحرارة يُطبع كل توقيع تحت الآخر: عرض 80mm لا يتّسع لعمودين،
@@ -1077,7 +1179,7 @@ export const FormalVoucherSheet: React.FC<{
           </div>
 
           {config.showStamp && config.stampPosition !== 'start' && (
-            <StampBox config={config} labelSize={t.label} rule={rule} />
+            <StampBox config={config} label={stampLabel} labelSize={t.label} rule={rule} />
           )}
 
           {config.showQrCode && showQrArea && (
@@ -1113,7 +1215,7 @@ export const FormalVoucherSheet: React.FC<{
         نزولُها إلى هنا يخفّف الترويسة إلى الهوية وحدها — شعار واسم — وهو تقليد
         المطبوعات الرسمية. ويُرسم التذييل ما دام فيه أحدهما، لا نصُّ الحقوق وحده.
       */}
-      {(config.footerText || (contactInFooter && contactLine.length > 0)) && (
+      {(footerText || (contactInFooter && contactLine.length > 0)) && (
         <footer
           className={`mt-6 pt-2 border-t shrink-0 ${footerAlign} ${
             config.footerTextColor || ts.footer?.color ? '' : 'opacity-60'
@@ -1125,7 +1227,9 @@ export const FormalVoucherSheet: React.FC<{
               <ContactParts parts={contactLine} />
             </div>
           )}
-          {config.footerText && <div className={contactInFooter && contactLine.length > 0 ? 'mt-1' : ''}>{config.footerText}</div>}
+          {footerText && (
+            <div className={contactInFooter && contactLine.length > 0 ? 'mt-1' : ''}>{footerText}</div>
+          )}
         </footer>
       )}
     </>
@@ -1155,7 +1259,7 @@ export const FormalVoucherSheet: React.FC<{
     >
       {/* The watermark sits under the content at an opacity that survives printing
           without competing with it — a stamp, not a background. */}
-      {config.showWatermark && config.watermarkText && (
+      {config.showWatermark && watermarkText && (
         <div
           className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden"
           style={{ zIndex: 0 }}
@@ -1173,7 +1277,7 @@ export const FormalVoucherSheet: React.FC<{
               whiteSpace: 'nowrap',
             }}
           >
-            {config.watermarkText}
+            {watermarkText}
           </span>
         </div>
       )}
@@ -1347,11 +1451,12 @@ const HeaderTitle: React.FC<{
 };
 
 /** A dotted square, because a real stamp is placed by hand and needs the room. */
-const StampBox: React.FC<{ config: VoucherSheetConfig; labelSize: number; rule: string }> = ({
-  config,
-  labelSize,
-  rule,
-}) => {
+const StampBox: React.FC<{
+  config: VoucherSheetConfig;
+  label: string;
+  labelSize: number;
+  rule: string;
+}> = ({ config, label, labelSize, rule }) => {
   const size = config.stampSize || 96;
   return (
     <div
@@ -1359,7 +1464,7 @@ const StampBox: React.FC<{ config: VoucherSheetConfig; labelSize: number; rule: 
       style={{ width: size, height: size, border: `1.5px dashed ${rule}` }}
     >
       <span className="opacity-45 font-bold" style={{ fontSize: labelSize }}>
-        {config.stampText || 'الختم'}
+        {label}
       </span>
     </div>
   );
