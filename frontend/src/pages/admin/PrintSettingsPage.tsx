@@ -1380,7 +1380,7 @@ export const PrintSettingsPage: React.FC = () => {
 
                     <div>
                       <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'العنوان' : 'Address'}
+                        {isAr ? 'العنوان (عربي)' : 'Address (Arabic)'}
                       </label>
                       <TextInput
                         size="xs"
@@ -1388,6 +1388,51 @@ export const PrintSettingsPage: React.FC = () => {
                         onChange={(e) => updateCurrentConfig('address', e.target.value)}
                         placeholder="العراق - بغداد - المنصور - شارع الصناعة"
                       />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'العنوان (إنجليزي)' : 'Address (English)'}
+                      </label>
+                      <TextInput
+                        size="xs"
+                        value={currentConfig.addressEn || ''}
+                        onChange={(e) => updateCurrentConfig('addressEn', e.target.value)}
+                        placeholder="Iraq - Karbala - Al-Iskan St."
+                        dir="ltr"
+                      />
+                      <p className="text-[9px] text-slate-500 mt-1 font-medium">
+                        {isAr
+                          ? 'يُطبع في الوصل الإنجليزي؛ وإن تُرك فارغاً طُبع العنوان العربي.'
+                          : 'Printed on the English voucher; falls back to the Arabic address when empty.'}
+                      </p>
+                    </div>
+
+                    {/* حقلا السجل التجاري والرقم الضريبي — مفتاحا إظهارهما كانا موجودين
+                        في «التخطيط» بلا أي حقل يملأهما، فيطبعان بيانات افتراضية وهمية. */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'رقم السجل التجاري' : 'Commercial Registration'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.commercialReg || ''}
+                          onChange={(e) => updateCurrentConfig('commercialReg', e.target.value)}
+                          placeholder={isAr ? 'س.ت: 12345 / كربلاء' : 'CR: 12345'}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'الرقم الضريبي' : 'Tax Number'}
+                        </label>
+                        <TextInput
+                          size="xs"
+                          value={currentConfig.taxNumber || ''}
+                          onChange={(e) => updateCurrentConfig('taxNumber', e.target.value)}
+                          placeholder={isAr ? 'الرقم الضريبي: …' : 'Tax No: …'}
+                        />
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
@@ -2112,6 +2157,20 @@ export const PrintSettingsPage: React.FC = () => {
                         label={isAr ? 'إظهار العنوان في الترويسة' : 'Show Address'}
                         checked={currentConfig.showAddress !== false}
                         onChange={(e) => updateCurrentConfig('showAddress', e.currentTarget.checked)}
+                      />
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار رقم الهاتف' : 'Show Phone'}
+                        checked={currentConfig.showPhone !== false}
+                        onChange={(e) => updateCurrentConfig('showPhone', e.currentTarget.checked)}
+                      />
+                      <Switch
+                        size="xs"
+                        color="orange"
+                        label={isAr ? 'إظهار البريد الإلكتروني' : 'Show Email'}
+                        checked={currentConfig.showEmail !== false}
+                        onChange={(e) => updateCurrentConfig('showEmail', e.currentTarget.checked)}
                       />
                       <Switch
                         size="xs"

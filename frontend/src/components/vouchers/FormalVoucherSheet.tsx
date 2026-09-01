@@ -89,6 +89,8 @@ export interface VoucherSheetConfig {
   showCommercialReg?: boolean;
   showTaxNumber?: boolean;
   address?: string;
+  /** العنوان بالإنجليزية — يُطبع في الوصل الإنجليزي بدل العربي. */
+  addressEn?: string;
   phone?: string;
   email?: string;
   website?: string;
@@ -526,7 +528,9 @@ export const FormalVoucherSheet: React.FC<{
   const contactLine = isThermal
     ? []
     : [
-        config.showAddress !== false ? config.address : '',
+        config.showAddress !== false
+          ? (isEn ? config.addressEn || config.address : config.address)
+          : '',
         config.showPhone !== false ? config.phone : '',
         config.showEmail !== false ? config.email : '',
         config.showWebsite !== false ? config.website : '',
