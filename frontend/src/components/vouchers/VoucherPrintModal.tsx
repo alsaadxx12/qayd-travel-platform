@@ -196,7 +196,7 @@ export const DEFAULT_VOUCHER_CONFIG = {
   tafqeetPlacement: 'underAmount' as 'underAmount' | 'field',
   fieldStyle: 'table' as 'lines' | 'grid' | 'zebra' | 'table',
   splitStyle: 'table' as 'inline' | 'table' | 'entry',
-  splitRemainderLabel: 'جهة',
+  splitRemainderLabel: 'جات النظام',
   labelWidth: 150,
   fieldLabelBg: '',
   fieldRowPadding: 8,

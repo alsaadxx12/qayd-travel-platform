@@ -2142,9 +2142,9 @@ export const PrintSettingsPage: React.FC = () => {
                       </label>
                       <TextInput
                         size="xs"
-                        value={currentConfig.splitRemainderLabel ?? 'جهة'}
+                        value={currentConfig.splitRemainderLabel ?? 'جات النظام'}
                         onChange={(e) => updateCurrentConfig('splitRemainderLabel', e.target.value)}
-                        placeholder="جهة"
+                        placeholder="جات النظام"
                         disabled={(currentConfig.splitStyle || 'table') === 'inline'}
                       />
                       <p className="text-[9px] text-slate-500 mt-1 font-medium">

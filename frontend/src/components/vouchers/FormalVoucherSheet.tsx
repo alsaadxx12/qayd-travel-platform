@@ -532,7 +532,7 @@ export const FormalVoucherSheet: React.FC<{
       /* في صدر الجدول لا ذيله: الأصل أولاً ثم ما اقتُطع منه ثم المجموع —
          هكذا يقرأ المحاسب القسمة من أعلى إلى أسفل بترتيبها الطبيعي. */
       counter.unshift({
-        name: (config.splitRemainderLabel || '').trim() || (isEn ? 'Other' : 'جهة'),
+        name: (config.splitRemainderLabel || '').trim() || (isEn ? 'Other' : 'جات النظام'),
         amount: remainder,
       });
     }
