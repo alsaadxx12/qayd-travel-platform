@@ -1073,9 +1073,13 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
     };
   }, [opened, voucher]);
 
-  if (!voucher) return null;
-
-  const isReceipt = voucher.type === 'RECEIPT';
+  /*
+   * قبل الخروج المبكر حتماً — الخطافات تُستدعى بالعدد نفسه في كل تصيير.
+   *
+   * وضع هذا الـuseMemo بعد `if (!voucher) return null` جعل عدد الخطافات يتغيّر
+   * بين تصييرِ النافذة مغلقةً وتصييرها مفتوحة، فيرمي React خطأ الترتيب وتبيضّ
+   * الشاشة عند أول نقرة على زر الطباعة.
+   */
   const isUsdVoucher = (voucher?.currency || 'IQD') === 'USD';
 
   /**
@@ -1102,6 +1106,9 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
     };
   }, [voucher, isUsdVoucher, usdMode, adoptedRate]);
 
+  if (!voucher) return null;
+
+  const isReceipt = voucher.type === 'RECEIPT';
   const isEn = printLang === 'en';
   const voucherLabel = isReceipt
     ? (isEn ? 'Receipt Voucher' : 'سند القبض')
