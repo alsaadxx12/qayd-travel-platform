@@ -510,6 +510,22 @@ export const FormalVoucherSheet: React.FC<{
           amount: Number(sp.amount) || 0,
         }))
       : [{ name: values.party || (isEn ? 'Account' : 'الحساب'), amount: total }];
+    /**
+     * الباقي يعود إلى حساب الطرف — حتى يساوي المجموعُ المبلغَ المستلم دائماً.
+     *
+     * النظام يخزّن في التقسيم الأجزاء المقتطعة وحدها (فلاي: 50,000 من قبضٍ
+     * قدره 190,000)، وما بقي يستقرّ على حساب الطرف ضمناً دون سطر يذكره. جدولٌ
+     * مجموعه أقل من مبلغ السند يقرؤه المدقّق خطأً محاسبياً لا اصطلاح تخزين،
+     * فيُدرج الباقي صراحةً باسم الطرف ويُطابق المجموعُ المبلغَ بالبناء.
+     */
+    const allocated = counter.reduce((a, c) => a + c.amount, 0);
+    const remainder = total - allocated;
+    if (voucher.splitAccounts?.length && remainder > 0.005) {
+      counter.push({
+        name: values.party || (isEn ? 'Account' : 'الحساب'),
+        amount: remainder,
+      });
+    }
     if (splitStyle === 'table') {
       /* جدول بسيط: الحسابات المقسّم عليها ومبلغ كلٍّ منها — بلا طرفي قيد. */
       return counter.map((c) => ({ name: c.name, debit: c.amount, credit: 0 }));
