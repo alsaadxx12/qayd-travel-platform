@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MicroCache } from '../common/micro-cache';
 import { AccountType, AccountCategory, Prisma } from '@prisma/client';
 import { IsNotEmpty, IsString, IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -244,22 +245,19 @@ export class UpdateAccountDto {
 
 @Injectable()
 export class AccountsService {
-  private treeCache = new Map<string, { data: any; timestamp: number }>();
+  private treeCache = new MicroCache(5 * 60_000, 2000, { refreshAhead: true });
   private flatCache = new Map<string, { data: any; timestamp: number }>();
   private readonly CACHE_TTL = 60000;
 
   public invalidateCache(companyId?: string) {
     if (companyId) this.seededCompanies.delete(companyId);
     else this.seededCompanies.clear();
+    this.treeCache.invalidate(companyId ? `${companyId}:` : undefined);
     if (companyId) {
-      for (const key of this.treeCache.keys()) {
-        if (key.startsWith(companyId)) this.treeCache.delete(key);
-      }
       for (const key of this.flatCache.keys()) {
         if (key.startsWith(companyId)) this.flatCache.delete(key);
       }
     } else {
-      this.treeCache.clear();
       this.flatCache.clear();
     }
   }
@@ -618,11 +616,10 @@ export class AccountsService {
 
   async getTree(companyId: string, lite = false) {
     const cacheKey = lite ? `${companyId}:lite` : `${companyId}:full`;
-    const cached = this.treeCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-      return cached.data;
-    }
+    return this.treeCache.wrap(cacheKey, () => this.getTreeUncached(companyId, lite));
+  }
 
+  private async getTreeUncached(companyId: string, lite = false) {
     let accounts = await this.prisma.account.findMany({
       where: { companyId },
       orderBy: { code: 'asc' },
@@ -880,7 +877,6 @@ export class AccountsService {
     }
 
     tree.forEach(aggregateNode);
-    this.treeCache.set(cacheKey, { data: tree, timestamp: Date.now() });
     return tree;
   }
 

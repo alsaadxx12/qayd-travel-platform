@@ -11,7 +11,7 @@ export class PrintTemplatesService {
    * المعتمد — وكل قراءة رحلة إلى قاعدة بيانات بعيدة. الحفظ يُسقط خبيئة الشركة
    * كلها، فطلب «طازج» بعد الحفظ يجد الجديد دائماً — والسرعة لا تفسد الصحّة.
    */
-  private readonly templateCache = new MicroCache(60_000);
+  private readonly templateCache = new MicroCache(5 * 60_000, 2000, { refreshAhead: true });
 
   // 1. Get default or active template for a docType
   async getTemplate(companyId: string, docType: string) {

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MicroCache } from '../common/micro-cache';
 import { TenantStatus, PaymentStatus, BillingCycle } from '@prisma/client';
 
 import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean, IsArray } from 'class-validator';
@@ -67,7 +68,14 @@ export class SubscriptionsService {
   /**
    * Public Plans for Pricing Page & Onboarding
    */
+  /** الخطط تتغيّر عند تحرير المشرف لها فحسب — وكانت أبطأ نداء في تقرير الأداء. */
+  private readonly plansCache = new MicroCache(10 * 60_000, 50, { refreshAhead: true });
+
   async getPublicPlans() {
+    return this.plansCache.wrap('public', () => this.getPublicPlansUncached());
+  }
+
+  private async getPublicPlansUncached() {
     const plans = await this.prisma.plan.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
@@ -127,6 +135,7 @@ export class SubscriptionsService {
    * Update Plan & create new version if price or limits changed
    */
   async updatePlan(planId: string, dto: UpdatePlanDto) {
+    this.plansCache.invalidate();
     const plan = await this.prisma.plan.findUnique({
       where: { id: planId },
       include: {

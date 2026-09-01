@@ -35,7 +35,7 @@ export class NotificationsService {
    * تحت مهلة استطلاع الواجهة (30s)، وأي كتابة — إنشاء، قراءة، حذف — تُسقطها
    * فيصل الجديد في الاستطلاع التالي مباشرة.
    */
-  private readonly cache = new MicroCache(15_000);
+  private readonly cache = new MicroCache(15_000, 2000, { refreshAhead: true });
 
   async getMyNotifications(userId?: string, tenantId?: string) {
     return this.cache.wrap(`list|${userId || ''}|${tenantId || ''}`, () =>

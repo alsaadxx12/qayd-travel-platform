@@ -179,7 +179,7 @@ export class BranchesService {
    * وكل طلب كان يدفع رحلة كاملة إلى قاعدة البيانات البعيدة (~550-990ms في
    * فاحص الأداء). الخبيئة 60 ثانية وتسقط كلها عند أي إنشاء أو تعديل أو حذف.
    */
-  private readonly listCache = new MicroCache(60_000);
+  private readonly listCache = new MicroCache(5 * 60_000, 2000, { refreshAhead: true });
 
   async findAll(
     companyId: string,

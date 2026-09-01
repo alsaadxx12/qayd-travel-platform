@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MicroCache } from '../common/micro-cache';
 import { Prisma, FiscalYearStatus } from '@prisma/client';
 import {
   CreateFiscalYearDto,
@@ -25,20 +26,19 @@ export class FiscalYearsService {
    */
   private static readonly COMPANY_CACHE_TTL = 10 * 60 * 1000;
   private companyIdCache = new Map<string, { id: string; expiresAt: number }>();
-  private activeYearCache = new Map<string, { data: any; expiresAt: number }>();
-  private yearsListCache = new Map<string, { data: any; expiresAt: number }>();
+  private activeYearCache = new MicroCache(5 * 60_000, 2000, { refreshAhead: true });
+  private yearsListCache = new MicroCache(5 * 60_000, 2000, { refreshAhead: true });
 
   public clearCache(companyId?: string) {
     if (companyId) {
       this.companyIdCache.delete(companyId);
-      for (const key of this.activeYearCache.keys()) {
-        if (key.includes(companyId)) this.activeYearCache.delete(key);
-      }
-      this.yearsListCache.delete(companyId);
+      // مفاتيح السنة النشطة `user:company` فلا تصلح بادئةً — والإفراغ الكامل رخيص.
+      this.activeYearCache.invalidate();
+      this.yearsListCache.invalidate(companyId);
     } else {
       this.companyIdCache.clear();
-      this.activeYearCache.clear();
-      this.yearsListCache.clear();
+      this.activeYearCache.invalidate();
+      this.yearsListCache.invalidate();
     }
   }
 
@@ -95,11 +95,10 @@ export class FiscalYearsService {
   // 1. Get all fiscal years for a company with metrics
   async getYears(companyId: string) {
     const validCompanyId = await this.resolveCompanyId(companyId);
-    const cached = this.yearsListCache.get(validCompanyId);
-    if (cached && Date.now() < cached.expiresAt) {
-      return cached.data;
-    }
+    return this.yearsListCache.wrap(validCompanyId, () => this.getYearsUncached(validCompanyId));
+  }
 
+  private async getYearsUncached(validCompanyId: string) {
     // Auto-seed default fiscal years if company has none
     const count = await this.prisma.fiscalYear.count({ where: { companyId: validCompanyId } });
     if (count === 0) {
@@ -133,7 +132,6 @@ export class FiscalYearsService {
       };
     });
 
-    this.yearsListCache.set(validCompanyId, { data: result, expiresAt: Date.now() + 60 * 1000 });
     return result;
   }
 
@@ -283,12 +281,12 @@ export class FiscalYearsService {
   async getActiveYear(userId: string, companyId: string) {
     const validCompanyId = await this.resolveCompanyId(companyId);
     const cacheKey = `${userId || 'anon'}:${validCompanyId}`;
+    return this.activeYearCache.wrap(cacheKey, () =>
+      this.getActiveYearUncached(userId, validCompanyId),
+    );
+  }
 
-    const cached = this.activeYearCache.get(cacheKey);
-    if (cached && Date.now() < cached.expiresAt) {
-      return cached.data;
-    }
-
+  private async getActiveYearUncached(userId: string, validCompanyId: string) {
     let activeYear: any = null;
 
     if (userId) {
@@ -326,10 +324,6 @@ export class FiscalYearsService {
         where: { companyId: validCompanyId, isCurrent: true },
         include: { periods: true },
       });
-    }
-
-    if (activeYear) {
-      this.activeYearCache.set(cacheKey, { data: activeYear, expiresAt: Date.now() + 60 * 1000 });
     }
 
     return activeYear;

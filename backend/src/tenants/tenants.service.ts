@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MicroCache } from '../common/micro-cache';
 import { Prisma, TenantRole, TenantStatus } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -225,11 +226,10 @@ export class TenantsService {
    * The TTL is deliberately short: any plan or branch change shows up within it, and
    * writes that go through this service clear it outright.
    */
-  private static readonly TENANT_CACHE_TTL = 30 * 1000;
-  private tenantCache = new Map<string, { at: number; data: any }>();
+  private tenantCache = new MicroCache(60_000, 2000, { refreshAhead: true });
 
   public invalidateTenantCache() {
-    this.tenantCache.clear();
+    this.tenantCache.invalidate();
   }
 
   private async fetchSupabaseManagementUsage(): Promise<SupabaseManagementUsageSnapshot> {
@@ -1610,13 +1610,7 @@ export class TenantsService {
 
   async getTenantById(id?: string, companyId?: string, userId?: string) {
     const cacheKey = `${id || ''}|${companyId || ''}|${userId || ''}`;
-    const hit = this.tenantCache.get(cacheKey);
-    if (hit && Date.now() - hit.at < TenantsService.TENANT_CACHE_TTL) {
-      return hit.data;
-    }
-    const result = await this.buildTenantById(id, companyId, userId);
-    this.tenantCache.set(cacheKey, { at: Date.now(), data: result });
-    return result;
+    return this.tenantCache.wrap(cacheKey, () => this.buildTenantById(id, companyId, userId));
   }
 
   private async buildTenantById(id?: string, companyId?: string, userId?: string) {
