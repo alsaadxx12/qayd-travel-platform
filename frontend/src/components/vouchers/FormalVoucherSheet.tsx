@@ -249,6 +249,7 @@ export const VOUCHER_TEXT_ELEMENTS: Array<{ key: string; label: string; labelEn:
   { key: 'tafqeet', label: 'التفقيط (المبلغ كتابةً)', labelEn: 'Amount in words' },
   { key: 'fieldLabel', label: 'تسميات الحقول', labelEn: 'Field labels' },
   { key: 'fieldValue', label: 'قيم الحقول', labelEn: 'Field values' },
+  { key: 'splitTable', label: 'بيانات جدول التقسيم', labelEn: 'Allocation table' },
   { key: 'thankYou', label: 'عبارة الشكر', labelEn: 'Thank-you line' },
   { key: 'signature', label: 'مسميات التواقيع', labelEn: 'Signature titles' },
   { key: 'notes', label: 'الشرط القانوني', labelEn: 'Legal note' },
@@ -889,7 +890,7 @@ export const FormalVoucherSheet: React.FC<{
                 rows={entryRows}
                 mode={splitStyle === 'entry' ? 'entry' : 'table'}
                 isEn={isEn}
-                labelSize={t.label}
+                textStyle={styleOf('splitTable', t.label)}
                 border={config.fieldBorderColor || softRule}
                 headBg={config.fieldLabelBg || config.fieldBgColor || tint(ink, 0.05)}
               />
@@ -1206,10 +1207,11 @@ const SplitEntryTable: React.FC<{
   rows: Array<{ name: string; debit: number; credit: number }>;
   mode: 'table' | 'entry';
   isEn: boolean;
-  labelSize: number;
+  /** نمط نصوص الجدول من «تخصيص نص بعينه» — حجماً ولوناً ووزناً وميلاً. */
+  textStyle: React.CSSProperties;
   border: string;
   headBg: string;
-}> = ({ rows, mode, isEn, labelSize, border, headBg }) => {
+}> = ({ rows, mode, isEn, textStyle, border, headBg }) => {
   const totalDebit = rows.reduce((a, r) => a + r.debit, 0);
   const totalCredit = rows.reduce((a, r) => a + r.credit, 0);
   const cell: React.CSSProperties = { padding: '3px 8px', border: `1px solid ${border}` };
@@ -1218,7 +1220,7 @@ const SplitEntryTable: React.FC<{
   return (
     <table
       className="w-full font-semibold"
-      style={{ borderCollapse: 'collapse', fontSize: labelSize }}
+      style={{ borderCollapse: 'collapse', ...textStyle }}
     >
       <thead>
         <tr className="font-bold" style={{ backgroundColor: headBg }}>

@@ -95,6 +95,22 @@ export function serializeElementForChromium(element: HTMLElement): string {
       "font-family:'IBM Plex Sans Arabic','Tajawal','Cairo',sans-serif",
     );
 
+    /**
+     * ما كتبه المكوّن في style بيده يبقى — فهو قصدٌ لا أثرَ متصفح.
+     *
+     * القائمة أعلاه تحذف transform و height المحسوبتين لأن قيمهما المتجمدة من
+     * المتصفح تكسر تخطيط الورقة على خادم الطباعة. لكن الحذف كان يطال قيم المؤلف
+     * نفسها: دوران «نسخة رسمية» وإزاحتها inline transform، وفراغ التوقيع ومربع
+     * الختم inline height — فتخرج الـPDF بعلامة مائية أفقية في المنتصف وتواقيع
+     * بلا مساحة. فتُعاد التصريحات المكتوبة inline آخراً لتغلب ما قبلها.
+     */
+    const inline = (from as HTMLElement).style;
+    for (let i = 0; i < inline.length; i++) {
+      const prop = inline[i];
+      if (!prop || prop.startsWith('--')) continue;
+      parts.push(`${prop}:${inline.getPropertyValue(prop)}`);
+    }
+
     to.setAttribute('style', parts.join(';'));
     to.removeAttribute('class');
     const fromKids = from.children;
