@@ -3,9 +3,14 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
+import compression from 'compression';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // ضغط الاستجابات: قوائم القيود والسندات تصل مئات الكيلوبايتات نصاً قابلاً
+  // للانضغاط إلى أعشاره — وعلى وصلة المستخدم البطيئة هذا فرق يُقاس بالثواني.
+  app.use(compression());
 
   // Increase JSON payload limit for image logo uploads (up to 50MB)
   app.use(json({ limit: '50mb' }));

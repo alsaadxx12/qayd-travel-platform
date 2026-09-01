@@ -1,12 +1,26 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MicroCache } from '../common/micro-cache';
 
 @Injectable()
 export class PrintTemplatesService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * القالب يُقرأ عند كل طباعة وكل فتح لشاشة الإعدادات وفي خطاف سعر الصرف
+   * المعتمد — وكل قراءة رحلة إلى قاعدة بيانات بعيدة. الحفظ يُسقط خبيئة الشركة
+   * كلها، فطلب «طازج» بعد الحفظ يجد الجديد دائماً — والسرعة لا تفسد الصحّة.
+   */
+  private readonly templateCache = new MicroCache(60_000);
+
   // 1. Get default or active template for a docType
   async getTemplate(companyId: string, docType: string) {
+    return this.templateCache.wrap(`${companyId}|${docType}`, () =>
+      this.getTemplateUncached(companyId, docType),
+    );
+  }
+
+  private async getTemplateUncached(companyId: string, docType: string) {
     let template = await this.prisma.printTemplate.findFirst({
       where: { companyId, docType, isDefault: true },
       orderBy: { updatedAt: 'desc' },
@@ -83,6 +97,7 @@ export class PrintTemplatesService {
 
   // 4. Create new saved print template
   async createTemplate(companyId: string, docType: string, name: string, config: any, isDefault: boolean = false) {
+    this.templateCache.invalidate(`${companyId}|`);
     const jsonConfig = typeof config === 'string' ? config : JSON.stringify(config);
 
     if (isDefault) {
@@ -122,6 +137,7 @@ export class PrintTemplatesService {
 
   // 5. Update an existing template
   async updateTemplate(companyId: string, id: string, name?: string, config?: any, isDefault?: boolean) {
+    this.templateCache.invalidate(`${companyId}|`);
     const existing = await this.prisma.printTemplate.findFirst({
       where: { id, companyId },
     });
@@ -159,6 +175,7 @@ export class PrintTemplatesService {
 
   // 6. Set template as approved default template
   async setDefaultTemplate(companyId: string, id: string) {
+    this.templateCache.invalidate(`${companyId}|`);
     const existing = await this.prisma.printTemplate.findFirst({
       where: { id, companyId },
     });
@@ -191,6 +208,7 @@ export class PrintTemplatesService {
 
   // 7. Delete saved template
   async deleteTemplate(companyId: string, id: string) {
+    this.templateCache.invalidate(`${companyId}|`);
     const existing = await this.prisma.printTemplate.findFirst({
       where: { id, companyId },
     });
@@ -225,6 +243,7 @@ export class PrintTemplatesService {
 
   // Legacy save method wrapper
   async saveTemplate(companyId: string, docType: string, config: any, name?: string) {
+    this.templateCache.invalidate(`${companyId}|`);
     const existing = await this.prisma.printTemplate.findFirst({
       where: { companyId, docType, isDefault: true },
     });

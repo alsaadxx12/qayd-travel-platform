@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MicroCache } from '../common/micro-cache';
 
 export interface CreateNotificationDto {
   tenantId?: string;
@@ -28,7 +29,21 @@ export interface CreateNotificationDto {
 export class NotificationsService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * القائمة والعدّاد يُستطلعان دورياً من كل جلسة مفتوحة، وكلاهما كان رحلة
+   * كاملة إلى قاعدة بيانات بعيدة (1.1s في فاحص الأداء). خمس عشرة ثانية خبيئة
+   * تحت مهلة استطلاع الواجهة (30s)، وأي كتابة — إنشاء، قراءة، حذف — تُسقطها
+   * فيصل الجديد في الاستطلاع التالي مباشرة.
+   */
+  private readonly cache = new MicroCache(15_000);
+
   async getMyNotifications(userId?: string, tenantId?: string) {
+    return this.cache.wrap(`list|${userId || ''}|${tenantId || ''}`, () =>
+      this.getMyNotificationsUncached(userId, tenantId),
+    );
+  }
+
+  private async getMyNotificationsUncached(userId?: string, tenantId?: string) {
     // Return all notifications where target is this user or this tenant and not deleted
     return await this.prisma.appNotification.findMany({
       where: {
@@ -47,6 +62,12 @@ export class NotificationsService {
   }
 
   async getUnreadCount(userId?: string, tenantId?: string) {
+    return this.cache.wrap(`count|${userId || ''}|${tenantId || ''}`, () =>
+      this.getUnreadCountUncached(userId, tenantId),
+    );
+  }
+
+  private async getUnreadCountUncached(userId?: string, tenantId?: string) {
     return await this.prisma.appNotification.count({
       where: {
         isDeleted: false,
@@ -63,6 +84,7 @@ export class NotificationsService {
   }
 
   async create(dto: CreateNotificationDto) {
+    this.cache.invalidate();
     return await this.prisma.appNotification.create({
       data: {
         tenantId: dto.tenantId,
@@ -77,6 +99,7 @@ export class NotificationsService {
   }
 
   async markAsRead(id: string) {
+    this.cache.invalidate();
     return await this.prisma.appNotification.update({
       where: { id },
       data: { isRead: true, readAt: new Date() },
@@ -84,6 +107,7 @@ export class NotificationsService {
   }
 
   async markAllAsRead(userId?: string, tenantId?: string) {
+    this.cache.invalidate();
     return await this.prisma.appNotification.updateMany({
       where: {
         isDeleted: false,
@@ -101,6 +125,7 @@ export class NotificationsService {
   }
 
   async deleteNotification(id: string) {
+    this.cache.invalidate();
     // Mark as deleted so it never appears again
     return await this.prisma.appNotification.update({
       where: { id },
@@ -109,6 +134,7 @@ export class NotificationsService {
   }
 
   async clearAll(userId?: string, tenantId?: string) {
+    this.cache.invalidate();
     return await this.prisma.appNotification.updateMany({
       where: {
         isDeleted: false,

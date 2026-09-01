@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MicroCache } from '../common/micro-cache';
 import { IsString, IsOptional, IsBoolean } from 'class-validator';
 
 export class CreateBranchDto {
@@ -173,7 +174,25 @@ export class BranchesService {
     });
   }
 
+  /**
+   * قائمتا الفروع تُطلبان في كل تحميل صفحة ولا تتغيّران إلا بكتابة صريحة،
+   * وكل طلب كان يدفع رحلة كاملة إلى قاعدة البيانات البعيدة (~550-990ms في
+   * فاحص الأداء). الخبيئة 60 ثانية وتسقط كلها عند أي إنشاء أو تعديل أو حذف.
+   */
+  private readonly listCache = new MicroCache(60_000);
+
   async findAll(
+    companyId: string,
+    allowedBranchIds: string[] = [],
+    enforceAllowedBranchIds = false,
+  ) {
+    return this.listCache.wrap(
+      `all|${companyId}|${enforceAllowedBranchIds}|${[...allowedBranchIds].sort().join(',')}`,
+      () => this.findAllUncached(companyId, allowedBranchIds, enforceAllowedBranchIds),
+    );
+  }
+
+  private async findAllUncached(
     companyId: string,
     allowedBranchIds: string[] = [],
     enforceAllowedBranchIds = false,
@@ -197,6 +216,17 @@ export class BranchesService {
   }
 
   async findLoginOptions(
+    companyId: string,
+    allowedBranchIds: string[] = [],
+    enforceAllowedBranchIds = false,
+  ) {
+    return this.listCache.wrap(
+      `login|${companyId}|${enforceAllowedBranchIds}|${[...allowedBranchIds].sort().join(',')}`,
+      () => this.findLoginOptionsUncached(companyId, allowedBranchIds, enforceAllowedBranchIds),
+    );
+  }
+
+  private async findLoginOptionsUncached(
     companyId: string,
     allowedBranchIds: string[] = [],
     enforceAllowedBranchIds = false,
@@ -233,6 +263,7 @@ export class BranchesService {
   }
 
   async create(companyId: string, dto: CreateBranchDto) {
+    this.listCache.invalidate();
     const existing = await this.prisma.branch.findUnique({
       where: { companyId_code: { companyId, code: dto.code } },
     });
@@ -309,6 +340,7 @@ export class BranchesService {
   }
 
   async update(id: string, companyId: string, dto: UpdateBranchDto) {
+    this.listCache.invalidate();
     const branch = await this.prisma.branch.findFirst({
       where: { id, companyId },
     });
@@ -337,6 +369,7 @@ export class BranchesService {
   }
 
   async delete(id: string, companyId: string) {
+    this.listCache.invalidate();
     const branch = await this.prisma.branch.findFirst({
       where: { id, companyId },
     });
