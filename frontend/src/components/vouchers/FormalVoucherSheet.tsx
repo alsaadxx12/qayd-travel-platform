@@ -626,9 +626,10 @@ export const FormalVoucherSheet: React.FC<{
   const metaItems = [
     { label: isEn ? 'No.' : 'رقم السند', value: voucher.voucherNumber, strong: true },
     { label: isEn ? 'Date' : 'التاريخ', value: dateText, strong: false },
-    /* GN: سعر الصرف المعتمد المختوم على سندات الدولار — قبل الوقت كما طُلب. */
-    ...(voucher.gnRate
-      ? [{ label: 'GN', value: Number(voucher.gnRate).toLocaleString('en-US'), strong: false }]
+    /* GN: مبلغ الدولار الأصلي لسندٍ حُوِّل إلى الدينار — قبل الوقت كما طُلب.
+       والمطبوع بالدولار لا يحمل GN أصلاً: مبلغه هو نفسه، فلا شيء يُوثَّق. */
+    ...(voucher.gnUsdAmount
+      ? [{ label: 'GN', value: `${money(voucher.gnUsdAmount)} USD`, strong: false }]
       : []),
     ...(timeText ? [{ label: isEn ? 'Time' : 'الوقت', value: timeText, strong: false }] : []),
   ].filter((m) => String(m.value || '').trim().length > 0);

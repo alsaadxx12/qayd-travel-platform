@@ -52,8 +52,11 @@ export interface VoucherPrintItem {
   user?: string;
   receivedFromOrPaidTo?: string;
   time?: string;
-  /** سعر الصرف المعتمد المختوم على السند عند الطباعة — يُطبع في الشريط العلوي بتسمية GN. */
-  gnRate?: number;
+  /**
+   * مبلغ الدولار الأصلي قبل تحويله إلى الدينار — يُطبع في الشريط العلوي بتسمية GN.
+   * لا يُختم إلا حين يُحوَّل السند فعلاً؛ المطبوع بالدولار لا GN له أصلاً.
+   */
+  gnUsdAmount?: number;
   customCategory?: string;
   splitDescription?: string;
   splitAccounts?: Array<{
@@ -1091,11 +1094,12 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
    */
   const displayVoucher = useMemo(() => {
     if (!voucher || !isUsdVoucher) return voucher;
-    if (usdMode === 'usd') return { ...voucher, gnRate: adoptedRate };
+    /* بالدولار كما هو: لا تحويل ولا ختم GN — الورقة أصلاً بعملتها. */
+    if (usdMode === 'usd') return voucher;
     const rate = adoptedRate || 1;
     return {
       ...voucher,
-      gnRate: adoptedRate,
+      gnUsdAmount: Number(voucher.amount) || 0,
       currency: 'IQD',
       amount: (Number(voucher.amount) || 0) * rate,
       splitAccounts: voucher.splitAccounts?.map((sp) => ({
