@@ -529,7 +529,9 @@ export const FormalVoucherSheet: React.FC<{
     const allocated = counter.reduce((a, c) => a + c.amount, 0);
     const remainder = total - allocated;
     if (voucher.splitAccounts?.length && remainder > 0.005) {
-      counter.push({
+      /* في صدر الجدول لا ذيله: الأصل أولاً ثم ما اقتُطع منه ثم المجموع —
+         هكذا يقرأ المحاسب القسمة من أعلى إلى أسفل بترتيبها الطبيعي. */
+      counter.unshift({
         name: (config.splitRemainderLabel || '').trim() || (isEn ? 'Other' : 'جهة'),
         amount: remainder,
       });
