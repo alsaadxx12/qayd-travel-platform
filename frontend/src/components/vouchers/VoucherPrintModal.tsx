@@ -248,7 +248,7 @@ export interface PrintableVoucherSheetProps {
    */
   qrDataUrl?: string | null;
   /** Custom allocation accounts from system settings — used to resolve display names. */
-  customAccounts?: Array<{ nameAr: string; targetAccountId: string; targetAccountName?: string }>;
+  customAccounts?: Array<{ nameAr: string; nameEn?: string; targetAccountId: string; targetAccountName?: string }>;
   /** Design-preview only: outline the QR area when no code has been issued yet. */
   qrPlaceholder?: boolean;
 }
@@ -320,7 +320,8 @@ export const PrintableVoucherSheet: React.FC<PrintableVoucherSheetProps> = ({
           (ca.targetAccountName && split.accountName && ca.targetAccountName.includes(split.accountName)) ||
           (split.accountName && ca.targetAccountName && split.accountName.includes(ca.targetAccountName?.split(' - ').pop() || ''))
       );
-      if (match) return match.nameAr;
+      /* بلغة الوصل: الاسم الإنجليزي إن طُبع إنجليزياً وكان مضبوطاً، وإلا العربي. */
+      if (match) return (isEn && match.nameEn) || match.nameAr;
     }
     return split.accountName || '';
   };
@@ -959,8 +960,12 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   voucher,
 }) => {
   const { language } = useLanguageStore();
-  /** لغة الوصل الافتراضية إنجليزية بقرار صاحب النظام — ولا تُقاد بلغة الواجهة. */
-  const [printLang, setPrintLang] = useState<'ar' | 'en'>('en');
+  /** لغة الوصل تفتح على لغة الموقع نفسها: إنجليزية للواجهة الإنجليزية وعربية للعربية. */
+  const [printLang, setPrintLang] = useState<'ar' | 'en'>(language === 'en' ? 'en' : 'ar');
+
+  useEffect(() => {
+    if (language === 'en' || language === 'ar') setPrintLang(language);
+  }, [language]);
   /**
    * GN — خيار عملة الوصل لسندات الدولار.
    *

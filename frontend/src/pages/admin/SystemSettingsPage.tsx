@@ -87,6 +87,8 @@ export interface PaymentMethodMapping {
 export interface CustomVoucherAccountMapping {
   id: string;
   nameAr: string;
+  /** الاسم التعريفي بالإنجليزية — يُطبع في الوصل الإنجليزي بدل العربي. */
+  nameEn?: string;
   targetAccountId: string;
   targetAccountName?: string;
   category?: 'RECEIPT' | 'PAYMENT' | 'BOTH';
@@ -197,6 +199,7 @@ export const SystemSettingsPage: React.FC = () => {
   ]);
   const [isSavingCustomVoucherAccounts, setIsSavingCustomVoucherAccounts] = useState(false);
   const [newCustomAccountName, setNewCustomAccountName] = useState('');
+  const [newCustomAccountNameEn, setNewCustomAccountNameEn] = useState('');
   const [newCustomAccountId, setNewCustomAccountId] = useState('');
   const [newCustomCategory, setNewCustomCategory] = useState<'RECEIPT' | 'PAYMENT' | 'BOTH'>('RECEIPT');
 
@@ -589,6 +592,7 @@ export const SystemSettingsPage: React.FC = () => {
     const newAcc: CustomVoucherAccountMapping = {
       id: `cva-${Date.now()}`,
       nameAr: newCustomAccountName.trim(),
+      nameEn: newCustomAccountNameEn.trim(),
       targetAccountId: newCustomAccountId,
       targetAccountName: acc ? `${acc.code} - ${acc.nameAr}` : 'حساب مخصص',
       category: newCustomCategory,
@@ -597,6 +601,7 @@ export const SystemSettingsPage: React.FC = () => {
     };
     setCustomVoucherAccounts((prev) => [...prev, newAcc]);
     setNewCustomAccountName('');
+    setNewCustomAccountNameEn('');
     setNewCustomAccountId('');
     showSuccessNotification('تمت الإضافة', `تمت إضافة "${newAcc.nameAr}" بنجاح، اضغط على حفظ لتثبيت التغييرات`);
   };
@@ -1934,13 +1939,27 @@ export const SystemSettingsPage: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
-                    <div className="sm:col-span-4 space-y-1">
-                      <label className="text-[11px] font-bold text-slate-700">الاسم التعريفي للتقسيم (مثل: مبيعات التذاكر، عمولات، تأشيرات):</label>
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700">الاسم التعريفي (عربي):</label>
                       <TextInput
                         size="xs"
-                        placeholder="أدخل الاسم (مثال: مبيعات تذاكر الطيران)..."
+                        placeholder="مثال: مبيعات تذاكر الطيران..."
                         value={newCustomAccountName}
                         onChange={(e) => setNewCustomAccountName(e.currentTarget.value)}
+                        styles={{
+                          input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
+                        }}
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700">الاسم التعريفي (إنجليزي):</label>
+                      <TextInput
+                        size="xs"
+                        placeholder="e.g. Flight Tickets..."
+                        dir="ltr"
+                        value={newCustomAccountNameEn}
+                        onChange={(e) => setNewCustomAccountNameEn(e.currentTarget.value)}
                         styles={{
                           input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
                         }}
@@ -2016,6 +2035,23 @@ export const SystemSettingsPage: React.FC = () => {
                               <div className="text-[11px] text-slate-600 font-mono bg-white p-1.5 rounded-lg border border-slate-200">
                                 🔗 {displayAccName}
                               </div>
+
+                              {/* الاسم الإنجليزي قابل للتحرير في مكانه — يُطبع في الوصل الإنجليزي. */}
+                              <TextInput
+                                size="xs"
+                                dir="ltr"
+                                placeholder="English name…"
+                                value={item.nameEn || ''}
+                                onChange={(e) => {
+                                  const v = e.currentTarget.value;
+                                  setCustomVoucherAccounts((prev) =>
+                                    prev.map((a) => (a.id === item.id ? { ...a, nameEn: v } : a))
+                                  );
+                                }}
+                                styles={{
+                                  input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#e2e8f0', fontSize: 10.5, fontWeight: 700, borderRadius: 8, height: 28 },
+                                }}
+                              />
                             </div>
 
                             <div className="flex items-center justify-between border-t border-slate-100 pt-2 mt-1">
