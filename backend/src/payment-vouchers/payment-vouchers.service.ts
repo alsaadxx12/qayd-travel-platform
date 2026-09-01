@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { voucherSyncStamp } from '../common/voucher-sync-stamp';
 import { Prisma } from '@prisma/client';
 import { IsNotEmpty, IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -397,6 +398,7 @@ export class PaymentVouchersService {
   }
 
   async create(companyId: string, userId: string, dto: CreatePaymentVoucherDto) {
+    voucherSyncStamp.invalidate(companyId);
     const amount = Number(dto.amount);
     if (!amount || amount <= 0) {
       throw new BadRequestException('مبلغ سند الدفع يجب أن يكون أكبر من الصفر');
@@ -509,6 +511,7 @@ export class PaymentVouchersService {
   }
 
   async remove(id: string, companyId: string) {
+    voucherSyncStamp.invalidate(companyId);
     const voucher = await this.prisma.paymentVoucher.findFirst({
       where: { id, companyId },
       include: { journalEntry: { include: { lines: true } } },
@@ -839,6 +842,7 @@ export class PaymentVouchersService {
   }
 
   async update(id: string, companyId: string, userId: string, dto: any) {
+    voucherSyncStamp.invalidate(companyId);
     try {
       const amount = Number(dto.amount);
       if (!amount || amount <= 0) {

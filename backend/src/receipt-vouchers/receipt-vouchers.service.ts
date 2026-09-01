@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { voucherSyncStamp } from '../common/voucher-sync-stamp';
 import { Prisma } from '@prisma/client';
 import { IsNotEmpty, IsString, IsNumber, IsOptional, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -213,6 +214,10 @@ export class ReceiptVouchersService {
    * If either changes, the client knows to do a full refetch.
    */
   async getLastModified(companyId: string) {
+    /* من الذاكرة ما دام الختم صالحاً — انظر voucher-sync-stamp لماذا وبأي مقايضة. */
+    const cached = voucherSyncStamp.get(companyId);
+    if (cached) return cached;
+
     const [countResult, latestReceipt, latestPayment] = await Promise.all([
       this.prisma.receiptVoucher.count({ where: { companyId } }),
       this.prisma.receiptVoucher.findFirst({
@@ -233,11 +238,13 @@ export class ReceiptVouchersService {
     ];
     const latestTs = Math.max(...timestamps);
 
-    return {
+    const stamp = {
       count: countResult,
       lastModified: latestTs > 0 ? new Date(latestTs).toISOString() : null,
       hash: `${countResult}-${latestTs}`,
     };
+    voucherSyncStamp.set(companyId, stamp);
+    return stamp;
   }
 
   async findAll(companyId: string, requestedLimit?: number) {
@@ -402,6 +409,7 @@ export class ReceiptVouchersService {
   }
 
   async create(companyId: string, userId: string, dto: CreateReceiptVoucherDto) {
+    voucherSyncStamp.invalidate(companyId);
     const amount = Number(dto.amount);
     if (!amount || amount <= 0) {
       throw new BadRequestException('مبلغ سند القبض يجب أن يكون أكبر من الصفر');
@@ -815,6 +823,7 @@ export class ReceiptVouchersService {
   }
 
   async remove(id: string, companyId: string) {
+    voucherSyncStamp.invalidate(companyId);
     const voucher = await this.prisma.receiptVoucher.findFirst({
       where: { id, companyId },
       include: { journalEntry: { include: { lines: true } } },
@@ -841,6 +850,7 @@ export class ReceiptVouchersService {
   }
 
   async update(id: string, companyId: string, userId: string, dto: any) {
+    voucherSyncStamp.invalidate(companyId);
     try {
       const amount = Number(dto.amount);
       if (!amount || amount <= 0) {
