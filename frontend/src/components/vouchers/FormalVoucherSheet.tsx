@@ -140,6 +140,14 @@ export interface VoucherSheetConfig {
    */
   splitStyle?: 'inline' | 'table' | 'entry';
   /**
+   * تسمية سطر الباقي في جدول التقسيم.
+   *
+   * الباقي يستقرّ على حساب الطرف، لكن طباعة اسم الشخص هناك تكرارٌ لما في سطر
+   * «استلمنا من» أعلاه — فالسطر يحمل تسميةً محايدة («جهة») يغيّرها صاحب النظام
+   * كما يشاء من الإعدادات.
+   */
+  splitRemainderLabel?: string;
+  /**
    * حقول تُطبع ولو كانت فارغة — سطرٌ للكتابة اليدوية.
    *
    * القاعدة العامة أن الحقل الفارغ لا يُطبع كي لا يُقرأ نقصاً في البيانات، لكن
@@ -522,7 +530,7 @@ export const FormalVoucherSheet: React.FC<{
     const remainder = total - allocated;
     if (voucher.splitAccounts?.length && remainder > 0.005) {
       counter.push({
-        name: values.party || (isEn ? 'Account' : 'الحساب'),
+        name: (config.splitRemainderLabel || '').trim() || (isEn ? 'Other' : 'جهة'),
         amount: remainder,
       });
     }
@@ -1207,7 +1215,7 @@ const SplitEntryTable: React.FC<{
     >
       <thead>
         <tr className="font-bold" style={{ backgroundColor: headBg }}>
-          <th style={{ ...cell, textAlign: 'start' }}>{isEn ? 'Account' : 'الحساب'}</th>
+          <th style={{ ...cell, textAlign: 'start' }}>{isEn ? 'Party' : 'الجهة'}</th>
           {isEntry ? (
             <>
               <th style={num}>{isEn ? 'Debit' : 'مدين'}</th>

@@ -2138,6 +2138,24 @@ export const PrintSettingsPage: React.FC = () => {
 
                     <div>
                       <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'تسمية سطر الباقي في جدول التقسيم' : 'Remainder Row Label'}
+                      </label>
+                      <TextInput
+                        size="xs"
+                        value={currentConfig.splitRemainderLabel ?? 'جهة'}
+                        onChange={(e) => updateCurrentConfig('splitRemainderLabel', e.target.value)}
+                        placeholder="جهة"
+                        disabled={(currentConfig.splitStyle || 'table') === 'inline'}
+                      />
+                      <p className="text-[9px] text-slate-500 mt-1 font-medium">
+                        {isAr
+                          ? 'ما تبقّى من المبلغ بعد الجهات المقسّم عليها يُطبع بهذه التسمية لا باسم الشخص.'
+                          : 'The amount left after the allocated parties prints under this label, not the person name.'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-700 block mb-1">
                         {isAr ? 'موضع التفقيط (المبلغ كتابةً)' : 'Amount in Words Placement'}
                       </label>
                       <Select
