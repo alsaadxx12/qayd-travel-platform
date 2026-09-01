@@ -957,7 +957,8 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   voucher,
 }) => {
   const { language } = useLanguageStore();
-  const [printLang, setPrintLang] = useState<'ar' | 'en'>(language === 'en' ? 'en' : 'ar');
+  /** لغة الوصل الافتراضية إنجليزية بقرار صاحب النظام — ولا تُقاد بلغة الواجهة. */
+  const [printLang, setPrintLang] = useState<'ar' | 'en'>('en');
   /**
    * GN — خيار عملة الوصل لسندات الدولار.
    *
@@ -978,10 +979,6 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
   const [sending, setSending] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState('');
   const [emailResolved, setEmailResolved] = useState(false);
-
-  useEffect(() => {
-    if (language === 'en' || language === 'ar') setPrintLang(language);
-  }, [language]);
 
   useEffect(() => {
     if (!opened || !voucher) return;

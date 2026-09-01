@@ -536,10 +536,24 @@ export const FormalVoucherSheet: React.FC<{
         .map((v) => String(v || '').trim())
         .filter(Boolean);
 
+  /**
+   * البيان الإنجليزي يُؤلَّف من بيانات السند لا يُترجم.
+   *
+   * البيان المخزّن نصّ عربي يكتبه النظام أو المستخدم، ولا سبيل لترجمته آلياً
+   * بأمانة — فيُبنى للوصل الإنجليزي بيانٌ مكافئ من الأرقام والأسماء نفسها:
+   * المبلغ والعملة كما سيُطبعان والطرف كما خُزّن (الاسم اسمٌ في اللغتين).
+   */
+  const partyName = voucher.receivedFromOrPaidTo || voucher.accountName || '';
+  const englishStatement = `${isReceipt ? 'Received payment of' : 'Payment of'} ${money(
+    voucher.amount || 0
+  )} ${currency}${partyName ? `${isReceipt ? ' from' : ' to'} ${partyName}` : ''}${
+    voucher.reference ? ` — Ref: ${voucher.reference}` : ''
+  }`;
+
   const values: Record<string, string> = {
-    party: voucher.receivedFromOrPaidTo || voucher.accountName || '',
+    party: partyName,
     amountWords: tafqeetText,
-    reason: voucher.description || '',
+    reason: isEn ? englishStatement : voucher.description || '',
     split:
       voucher.splitAccounts?.length
         ? voucher.splitAccounts
