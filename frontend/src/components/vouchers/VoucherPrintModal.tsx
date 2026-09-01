@@ -1243,7 +1243,7 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
       <div className="p-4 space-y-4 text-slate-900 font-sans" dir={isEn ? 'ltr' : 'rtl'}>
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-sky-600 to-blue-500 text-white flex items-center justify-center shadow-md shadow-sky-500/20">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F45A0A] to-orange-400 text-white flex items-center justify-center shadow-md shadow-orange-500/20">
               <IconReceipt size={22} />
             </div>
             <div>
@@ -1418,59 +1418,63 @@ export const VoucherPrintModal: React.FC<VoucherPrintModalProps> = ({
           styles={{ label: { fontWeight: 800, fontSize: 12, marginBottom: 6 }, description: { fontSize: 11, fontWeight: 700 } }}
         />
 
-        <div className="space-y-2.5 pt-1">
+        {/* الإجراءات: معاينة بعرض كامل، والتوليد والإرسال جنباً إلى جنب —
+            بهوية لونية واحدة: برتقالي مصمت للأساسي، ومخطَّط برتقالي للمكافئ له. */}
+        <div className="space-y-2 pt-1">
           <button
             type="button"
             onClick={() => setShowPreview(true)}
             disabled={busy}
-            className="w-full h-11 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            className="w-full h-10 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            <IconEye size={17} className="text-[#F45A0A]" />
+            <IconEye size={16} className="text-[#F45A0A]" />
             <span>{isEn ? 'Preview before printing' : 'معاينة قبل الطباعة'}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            disabled={busy}
-            className="w-full h-12 rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-extrabold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {exporting || loading ? (
-              <>
-                <Loader size={18} color="white" />
-                <span>{isEn ? 'Generating PDF…' : 'جاري توليد PDF…'}</span>
-              </>
-            ) : (
-              <>
-                <IconDownload size={18} />
-                <span>{isEn ? 'Generate & download PDF' : 'توليد وتحميل PDF'}</span>
-              </>
-            )}
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={busy}
+              className="h-12 rounded-2xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-extrabold text-xs shadow-md shadow-orange-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {exporting || loading ? (
+                <>
+                  <Loader size={16} color="white" />
+                  <span>{isEn ? 'Generating…' : 'جاري التوليد…'}</span>
+                </>
+              ) : (
+                <>
+                  <IconDownload size={16} />
+                  <span>{isEn ? 'Download PDF' : 'توليد وتحميل'}</span>
+                </>
+              )}
+            </button>
 
-          <button
-            type="button"
-            onClick={handleSendEmail}
-            disabled={busy || !emailOk}
-            title={
-              emailOk
-                ? undefined
-                : (isEn ? 'This account has no email' : 'لا يوجد بريد إلكتروني على هذا الحساب')
-            }
-            className="w-full h-12 rounded-2xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-950 font-extrabold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-sky-50"
-          >
-            {sending ? (
-              <>
-                <Loader size={18} color="blue" />
-                <span>{isEn ? 'Sending…' : 'جاري الإرسال…'}</span>
-              </>
-            ) : (
-              <>
-                <IconMail size={18} className="text-sky-600" />
-                <span>{isEn ? 'Send PDF by email' : 'إرسال PDF عبر البريد'}</span>
-              </>
-            )}
-          </button>
+            <button
+              type="button"
+              onClick={handleSendEmail}
+              disabled={busy || !emailOk}
+              title={
+                emailOk
+                  ? undefined
+                  : (isEn ? 'This account has no email' : 'لا يوجد بريد إلكتروني على هذا الحساب')
+              }
+              className="h-12 rounded-2xl border-2 border-[#F45A0A]/25 bg-white hover:bg-orange-50 text-[#DD4F05] font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white"
+            >
+              {sending ? (
+                <>
+                  <Loader size={16} color="orange" />
+                  <span>{isEn ? 'Sending…' : 'جاري الإرسال…'}</span>
+                </>
+              ) : (
+                <>
+                  <IconMail size={16} />
+                  <span>{isEn ? 'Send by email' : 'إرسال بالبريد'}</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
         </>
         )}
