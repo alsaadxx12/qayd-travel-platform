@@ -1678,6 +1678,11 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
                           ))}
                         </Popover.Dropdown>
                       </Popover>
+                    ) : !isUnpriced ? (
+                      /* له سعر كُتب في صفّه أو في سطر فئته — فهو مسعَّر، ولو بلا دفعة. */
+                      <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {isAr ? 'مسعَّر' : 'Priced'}
+                      </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                         {isAr ? 'غير مسعر' : 'Unpriced'}

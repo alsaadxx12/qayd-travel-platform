@@ -1302,7 +1302,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       if (hasUnpriced && targetStatus === 'POSTED') {
         showErrorNotification(
           isAr ? 'يرجى تسعير المسافرين' : 'Unpriced Passengers',
-          isAr ? 'يوجد مسافرين غير مسعرين! يرجى إدخال سعر الشراء والبيع والضغط على Enter أو زر التطبيق لتسعير المسافرين.' : 'Please price all passengers before posting.'
+          isAr ? 'يوجد مسافرون بلا سعر — اكتب سعر البيع في سطر فئتهم (بالغ/طفل/رضيع)، أو في صفّ المسافر نفسه.' : 'Some passengers have no price — set it on their type row, or in the passenger row itself.'
         );
         handleNavigateToField('field-price-batch-bar');
         throw new Error('Unpriced passengers');

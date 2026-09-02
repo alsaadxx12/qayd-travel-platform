@@ -14,6 +14,7 @@ import {
   Plus,
   Trash2,
   Users,
+  User,
   Plane,
   Sparkles,
   ShieldCheck,
@@ -27,15 +28,14 @@ import {
   MoreVertical,
   History,
   ClipboardPaste,
-  FileSpreadsheet,
   Coins,
-  ChevronDown,
 } from 'lucide-react';
 import { ticketsApi, type TicketData } from '../../api/tickets';
 import { airlinesApi, type AirlineItem } from '../../api/airlines';
 import { partnersApi } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
 import { employeesApi, type Employee } from '../../api/employees';
+import { fetchPrintTemplate } from '../../api/printTemplates';
 import { SearchableCombobox, ComboboxOption } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
 import { CurrencySegmentedControl } from '../ui/CurrencySegmentedControl';
@@ -105,10 +105,10 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
   // Reference Datasets
   const [customers, setCustomers] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [cashboxes, setCashboxes] = useState<any[]>([]);
+  const [accountsList, setAccountsList] = useState<any[]>([]);
   const [airlinesList, setAirlinesList] = useState<AirlineItem[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [paymentMethodsConfig, setPaymentMethodsConfig] = useState<any[] | null>(null);
 
   // Workspace Form State
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
@@ -123,9 +123,12 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
   const [supplierAccount, setSupplierAccount] = useState<string>('');
   const [supplierAccountName, setSupplierAccountName] = useState<string>('');
   const [employeeName, setEmployeeName] = useState<string>('');
-  const [paymentType, setPaymentType] = useState<string>('ON_ACCOUNT');
-  const [cashboxId, setCashboxId] = useState<string>('');
-  const [bankAccountId, setBankAccountId] = useState<string>('');
+  
+  // Payment Type & Method States
+  const [paymentType, setPaymentType] = useState<string>('نقدي'); // 'نقدي' | 'آجل'
+  const [paymentMethod, setPaymentMethod] = useState<string>('CASH_HAND');
+  const [receivingCashbox, setReceivingCashbox] = useState<string>('');
+  const [autoMatchedCashboxName, setAutoMatchedCashboxName] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
 
@@ -154,6 +157,123 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
     const found = customers.find((c) => c.id === raw || c.nameAr === raw || c.name === raw);
     return found ? (found.nameAr || found.name || raw) : raw;
   }, [customers]);
+
+  // Filter accounts for cashboxes & bank accounts
+  const availableCashboxes = useMemo(() => {
+    return accountsList.filter((acc: any) => {
+      if (acc.isGroup || acc.isParent) return false;
+      const cat = (acc.category || '').toUpperCase();
+      if (cat === 'CUSTOMER' || cat === 'SUPPLIER') return false;
+      const type = (acc.type || acc.accountType || '').toUpperCase();
+      const code = String(acc.code || '');
+      const name = `${acc.nameAr || ''} ${acc.nameEn || ''} ${acc.name || ''}`.toLowerCase();
+      return (
+        cat === 'CASH' ||
+        cat === 'BANK' ||
+        type === 'CASH' ||
+        type === 'BANK' ||
+        type === 'TREASURY' ||
+        code.startsWith('181') ||
+        code.startsWith('101') ||
+        code.startsWith('102') ||
+        code.startsWith('110') ||
+        code.startsWith('111') ||
+        code.startsWith('112') ||
+        code.startsWith('120') ||
+        name.includes('صندوق') ||
+        name.includes('كاش') ||
+        name.includes('خزينة') ||
+        name.includes('بورصة') ||
+        name.includes('قاصة') ||
+        name.includes('مصرف') ||
+        name.includes('بنك') ||
+        acc.isCashbox === true
+      );
+    });
+  }, [accountsList]);
+
+  // Formatted select options for Cashboxes (Exclusively clean account names, NO appended codes)
+  const formattedCashboxesData: ComboboxOption[] = useMemo(() => {
+    return availableCashboxes.map((c: any) => ({
+      value: c.id || c.code,
+      label: isAr ? (c.nameAr || c.name || c.id) : (c.nameEn || c.nameAr || c.name || c.id),
+      subtitle: c.code || undefined,
+    }));
+  }, [availableCashboxes, isAr]);
+
+  // Payment methods list fetched dynamically from System Settings
+  const paymentMethodsList: ComboboxOption[] = useMemo(() => {
+    if (Array.isArray(paymentMethodsConfig) && paymentMethodsConfig.length > 0) {
+      return paymentMethodsConfig.map((pm: any) => {
+        const displayLabel = isAr ? (pm.nameAr || pm.key) : (pm.nameEn || pm.nameAr || pm.key);
+        return {
+          value: pm.key || pm.id || pm.nameAr,
+          label: displayLabel,
+          subtitle: pm.description || undefined,
+        };
+      });
+    }
+
+    return [
+      { value: 'CASH_HAND', label: isAr ? 'كاش باليد (نقدي)' : 'Cash in Hand (Immediate)' },
+      { value: 'ZAIN_CASH', label: isAr ? 'زين كاش (Zain Cash)' : 'Zain Cash' },
+      { value: 'FIB', label: isAr ? 'مصرف العراق الأول (FIB)' : 'First Iraqi Bank (FIB)' },
+      { value: 'QI_CARD', label: isAr ? 'كي كارد (Qi Card)' : 'Qi Card' },
+      { value: 'BANK_TRANSFER', label: isAr ? 'تحويل بنكي' : 'Bank Transfer' },
+    ];
+  }, [paymentMethodsConfig, isAr]);
+
+  // Auto assign cashbox from selected employee
+  const applyEmployeeCashbox = useCallback((selectedEmpName: string, availableBoxes: any[]) => {
+    if (!selectedEmpName || availableBoxes.length === 0) return false;
+
+    const emp = employees.find((e: any) => {
+      const names = [e.fullName, e.name, e.username, e.email];
+      return names.some((n) => String(n || '').trim() === String(selectedEmpName).trim());
+    });
+
+    const assigned = String(
+      emp?.assignedCashbox || (emp as any)?.assignedCashboxId || (emp as any)?.cashboxId || (emp as any)?.cashboxAccountId || '',
+    ).trim();
+
+    const matchBox = (boxes: any[], hint: string) => {
+      if (!hint) return null;
+      const h = hint.toLowerCase();
+      return (
+        boxes.find((c: any) => c.id === hint || c.code === hint) ||
+        boxes.find(
+          (c: any) =>
+            String(c.nameAr || '').trim() === hint ||
+            String(c.nameEn || '').trim() === hint ||
+            String(c.name || '').trim() === hint,
+        ) ||
+        boxes.find((c: any) => {
+          const label = `${c.nameAr || ''} ${c.nameEn || ''} ${c.name || ''} ${c.code || ''}`.toLowerCase();
+          return label.includes(h);
+        }) ||
+        null
+      );
+    };
+
+    let targetBox = matchBox(availableBoxes, assigned);
+    if (!targetBox && emp?.fullName) {
+      targetBox = matchBox(availableBoxes, emp.fullName);
+    }
+
+    if (targetBox) {
+      setReceivingCashbox(targetBox.id || targetBox.code);
+      setAutoMatchedCashboxName(isAr ? (targetBox.nameAr || targetBox.name) : (targetBox.nameEn || targetBox.nameAr));
+      return true;
+    }
+
+    if (availableBoxes.length > 0) {
+      setReceivingCashbox(availableBoxes[0].id || availableBoxes[0].code);
+      setAutoMatchedCashboxName(isAr ? (availableBoxes[0].nameAr || availableBoxes[0].name) : (availableBoxes[0].nameEn || availableBoxes[0].nameAr));
+      return true;
+    }
+
+    return false;
+  }, [employees, isAr]);
 
   // ── Financial Calculation Logic ──
   const activeLines = useMemo(() => pnrLines.filter((l) => l.selected), [pnrLines]);
@@ -203,7 +323,12 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
         setCurrency(initialData.currency || 'IQD');
         setExchangeRate(initialData.exchangeRate || 1);
         setEmployeeName(initialData.employeeName || user?.name || '');
-        setPaymentType(initialData.paymentType || 'ON_ACCOUNT');
+        
+        const rawPayType = initialData.paymentType || '';
+        const isCredit = rawPayType === 'CREDIT' || rawPayType === 'آجل' || rawPayType === 'ON_ACCOUNT';
+        setPaymentType(isCredit ? 'آجل' : 'نقدي');
+        setPaymentMethod(initialData.paymentMethod || 'CASH_HAND');
+        setReceivingCashbox(initialData.receivingCashbox || (initialData as any).cashboxAccountId || initialData.cashbox || '');
         setNotes(initialData.notes || '');
         setAirline(initialData.airline || '');
 
@@ -250,6 +375,8 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
       } else {
         setInvoiceNumber(getNextSequenceNumber('groups'));
         setEmployeeName(user?.name || '');
+        setPaymentType('نقدي');
+        setPaymentMethod('CASH_HAND');
         setPnrLines([
           {
             id: `pnr-${Date.now()}`,
@@ -274,36 +401,33 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
       partnersApi.getCustomers().then((data) => setCustomers(data || [])).catch(() => {});
       partnersApi.getSuppliers().then((data) => setSuppliers(data || [])).catch(() => {});
       airlinesApi.getAll().then((data) => setAirlinesList(data || [])).catch(() => {});
-      employeesApi.getAll().then((data) => setEmployees(data || [])).catch(() => {});
+      employeesApi.getAll().then((data) => {
+        const empList = data || [];
+        setEmployees(empList);
+      }).catch(() => {});
       
-      accountsApi.getFlat('ASSET', 'CASH').then((data) => {
-        const boxList = data || [];
-        setCashboxes(boxList);
-        const userCashboxId =
-          (user as any)?.defaultCashboxId ||
-          (user as any)?.cashboxId ||
-          (user as any)?.cashboxAccountId ||
-          localStorage.getItem('userDefaultCashbox');
-        
-        const matched =
-          boxList.find((b: any) => b.id === userCashboxId || b.code === userCashboxId) ||
-          boxList.find((b: any) => user?.name && (b.nameAr?.includes(user.name) || b.name?.includes(user.name))) ||
-          boxList[0];
-
-        if (matched) {
-          setCashboxId(matched.id || matched.code);
-        }
+      accountsApi.getFlat(undefined, undefined, true).then((data) => {
+        const accList = data || [];
+        setAccountsList(accList);
       }).catch(() => {});
 
-      accountsApi.getFlat('ASSET', 'BANK').then((data) => {
-        const bankList = data || [];
-        setBankAccounts(bankList);
-        if (bankList.length > 0) {
-          setBankAccountId(bankList[0].id || bankList[0].code);
-        }
-      }).catch(() => {});
+      // Fetch payment methods configuration
+      fetchPrintTemplate('payment_methods_mapping')
+        .then((res: any) => {
+          if (res?.config?.mappings && Array.isArray(res.config.mappings)) {
+            setPaymentMethodsConfig(res.config.mappings.filter((m: any) => m.isActive !== false));
+          }
+        })
+        .catch(() => {});
     }
   }, [opened, initialData, user, resolveCustomerDisplay]);
+
+  // Sync employee cashbox on load or employee change
+  useEffect(() => {
+    if (employeeName && availableCashboxes.length > 0 && !receivingCashbox) {
+      applyEmployeeCashbox(employeeName, availableCashboxes);
+    }
+  }, [employeeName, availableCashboxes, receivingCashbox, applyEmployeeCashbox]);
 
   // Sync supplier name
   useEffect(() => {
@@ -345,7 +469,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
         selected: true,
         pnr: '',
         ticketNumber: '',
-        route: generalRoute || (prev[prev.length - 1]?.route || ''),
+        route: generalRoute || '',
         paxCount: 1,
         buyPrice: prev[prev.length - 1]?.buyPrice || 0,
         sellPrice: prev[prev.length - 1]?.sellPrice || 0,
@@ -510,9 +634,9 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
       return;
     }
 
-    const settlementAccountId = paymentType === 'CASH_HAND' ? cashboxId : paymentType === 'MASTER_CARD' ? bankAccountId : '';
-    if (paymentType !== 'ON_ACCOUNT' && !settlementAccountId) {
-      showErrorNotification(isAr ? 'حساب الصندوق مطلوب' : 'Cashbox required', isAr ? 'اختر الصندوق أو الحساب البنكي للتسوية.' : 'Select settlement cashbox or bank account.');
+    const isCashSale = paymentType === 'نقدي' || paymentType === 'DEBIT';
+    if (isCashSale && !receivingCashbox) {
+      showErrorNotification(isAr ? 'صندوق التحصيل مطلوب' : 'Cashbox required', isAr ? 'اختر صندوق استلام قيمة البيع.' : 'Select receiving cashbox.');
       return;
     }
 
@@ -540,18 +664,20 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
         customerAccountId: matchedCustomer?.accountId || matchedCustomer?.account?.id || undefined,
         employeeName: employeeName.trim(),
         entryEmployee: user?.name || employeeName.trim(),
-        cashbox: settlementAccountId || null,
-        cashboxAccountId: settlementAccountId || null,
+        cashbox: isCashSale ? receivingCashbox : null,
+        cashboxAccountId: isCashSale ? receivingCashbox : null,
+        receivingCashbox: isCashSale ? receivingCashbox : null,
         currency,
         exchangeRate,
-        paymentType,
+        paymentType: isCashSale ? 'DEBIT' : 'CREDIT',
+        paymentMethod: isCashSale ? paymentMethod : null,
         supplierAccount,
         supplierAccountName,
         supplierId: matchedSupplier?.id || undefined,
         supplierAccountId: matchedSupplier?.accountId || matchedSupplier?.account?.id || undefined,
         tripType: 'GROUP_FARE',
         airline: airline || undefined,
-        route: generalRoute || activeLines[0]?.route || undefined,
+        route: generalRoute || undefined,
         totalSell,
         totalBuy,
         netSell: totalSell,
@@ -708,148 +834,242 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
           {/* Main Content Area */}
           <div className="space-y-4 min-w-0">
 
-            {/* ── A. General Ticket & Group Details Card ── */}
-            <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 space-y-4 shadow-2xs font-sans">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2 text-[14px] font-bold text-[#111827]">
-                  <Building2 size={17} className="text-[#F45A0A]" />
-                  <span>{isAr ? 'بيانات الكروب والعميل والمورد' : 'Group Booking & Partner Details'}</span>
+            {/* ── Top Header Strip: Currency Switcher ── */}
+            <div className="flex items-center justify-between bg-white rounded-2xl border border-[#E5E7EB] p-3 px-4 shadow-2xs">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                <Coins size={16} className="text-[#F45A0A]" />
+                <span>{isAr ? 'عملة الفاتورة وسعر الصرف:' : 'Invoice Currency:'}</span>
+              </div>
+              <CurrencySegmentedControl
+                value={currency}
+                onChange={(val) => setCurrency(val as 'IQD' | 'USD')}
+              />
+            </div>
+
+            {/* ── TWO SEPARATE CARDS: Customer Details (Left) + Supplier & Flight Details (Right) ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start font-sans">
+              
+              {/* ── CARD 1: CUSTOMER DETAILS (معلومات العميل) ── */}
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 space-y-3.5 shadow-2xs">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-sky-50 text-sky-700 border border-sky-200 flex items-center justify-center shrink-0">
+                      <User size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
+                        {isAr ? 'معلومات العميل' : 'Customer Details'}
+                      </h4>
+                      <p className="text-[11px] text-[#6B7280]">
+                        {isAr ? 'العميل ونوع البيع وطريقة الاستلام والصندوق' : 'Customer, payment term, receiving method & box'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {paymentType === 'آجل' && (
+                    <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full shrink-0">
+                      {isAr ? 'بيع آجل' : 'Credit'}
+                    </span>
+                  )}
                 </div>
-                
-                {/* Currency Switcher */}
-                <CurrencySegmentedControl
-                  value={currency}
-                  onChange={(val) => setCurrency(val as 'IQD' | 'USD')}
-                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Customer Combobox */}
+                  <div>
+                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'العميل *' : 'Customer *'}
+                    </label>
+                    <SearchableCombobox
+                      value={customerName}
+                      onChange={(val) => setCustomerName(val || '')}
+                      options={customerOptions}
+                      placeholder={isAr ? 'اختر العميل...' : 'Select customer...'}
+                      allowCustomValue
+                    />
+                  </div>
+
+                  {/* Payment Term / Sale Type */}
+                  <div>
+                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'نوع البيع' : 'Sale Type'}
+                    </label>
+                    <SearchableCombobox
+                      value={paymentType}
+                      onChange={(val) => {
+                        setPaymentType(val || 'نقدي');
+                      }}
+                      options={[
+                        { value: 'نقدي', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
+                        { value: 'آجل', label: isAr ? 'آجل (ذمة العميل)' : 'Credit (On Account)' },
+                      ]}
+                      clearable={false}
+                    />
+                  </div>
+
+                  {/* Cash Details: Receiving Method & Cashbox */}
+                  {paymentType === 'نقدي' && (
+                    <>
+                      <div>
+                        <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'طريقة الاستلام *' : 'Receiving Method *'}
+                        </label>
+                        <SearchableCombobox
+                          value={paymentMethod}
+                          onChange={(val) => {
+                            const nextMethod = val || 'CASH_HAND';
+                            setPaymentMethod(nextMethod);
+                            if (employeeName) {
+                              applyEmployeeCashbox(employeeName, availableCashboxes);
+                            }
+                          }}
+                          options={paymentMethodsList}
+                          clearable={false}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'صندوق استلام قيمة البيع *' : 'Receiving Cashbox *'}
+                        </label>
+                        <SearchableCombobox
+                          value={receivingCashbox}
+                          onChange={(val) => setReceivingCashbox(val || '')}
+                          options={formattedCashboxesData}
+                          placeholder={isAr ? 'اختر صندوق التحصيل...' : 'Select cashbox...'}
+                        />
+                        {autoMatchedCashboxName && (
+                          <p className="mt-1 text-[11px] text-emerald-700 font-medium">
+                            {isAr ? `تلقائي من صندوق الموظف: ${autoMatchedCashboxName}` : `Auto from employee box: ${autoMatchedCashboxName}`}
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 items-start">
-                
-                {/* Customer */}
-                <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700 block">
-                    {isAr ? 'العميل / الحساب *' : 'Customer Account *'}
-                  </label>
-                  <SearchableCombobox
-                    value={customerName}
-                    onChange={(val) => setCustomerName(val || '')}
-                    options={customerOptions}
-                    placeholder={isAr ? 'اختر العميل...' : 'Select customer...'}
-                  />
+              {/* ── CARD 2: SUPPLIER & FLIGHT DETAILS (معلومات المورد والطيران) ── */}
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 space-y-3.5 shadow-2xs">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+                  <div className="w-8 h-8 rounded-full bg-violet-50 text-violet-700 border border-violet-200 flex items-center justify-center shrink-0">
+                    <Building2 size={16} />
+                  </div>
+                  <div>
+                    <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
+                      {isAr ? 'معلومات المورد والطيران والرحلة' : 'Supplier & Flight Details'}
+                    </h4>
+                    <p className="text-[11px] text-[#6B7280]">
+                      {isAr ? 'المورد والخطوط ومسار الكروب وموظف الإصدار' : 'Supplier, airline, route, staff & dates'}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Supplier */}
-                <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700 block">
-                    {isAr ? 'المورد / جهة الإصدار' : 'Supplier Account'}
-                  </label>
-                  <SearchableCombobox
-                    value={supplierAccount}
-                    onChange={(val) => setSupplierAccount(val || '')}
-                    options={supplierOptions}
-                    placeholder={isAr ? 'اختر المورد...' : 'Select supplier...'}
-                  />
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Supplier */}
+                  <div>
+                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'المورد / جهة الإصدار' : 'Supplier Account'}
+                    </label>
+                    <SearchableCombobox
+                      value={supplierAccount}
+                      onChange={(val) => setSupplierAccount(val || '')}
+                      options={supplierOptions}
+                      placeholder={isAr ? 'اختر المورد...' : 'Select supplier...'}
+                    />
+                  </div>
 
-                {/* Airline */}
-                <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700 block">
-                    {isAr ? 'شركة الطيران' : 'Airline'}
-                  </label>
-                  <SearchableCombobox
-                    value={airline}
-                    onChange={(val) => setAirline(val || '')}
-                    options={airlineOptions}
-                    placeholder={isAr ? 'اختر شركة الطيران...' : 'Select airline...'}
-                  />
-                </div>
+                  {/* Airline */}
+                  <div>
+                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'شركة الطيران' : 'Airline'}
+                    </label>
+                    <SearchableCombobox
+                      value={airline}
+                      onChange={(val) => setAirline(val || '')}
+                      options={airlineOptions}
+                      placeholder={isAr ? 'اختر شركة الطيران...' : 'Select airline...'}
+                    />
+                  </div>
 
-                {/* General Route */}
-                <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700 block">
-                    {isAr ? 'مسار الرحلة العام' : 'General Flight Route'}
-                  </label>
-                  <input
-                    type="text"
-                    dir="ltr"
-                    placeholder="e.g. BGW-IST-BGW"
-                    value={generalRoute}
-                    onChange={(e) => setGeneralRoute(e.target.value.toUpperCase())}
-                    style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                    className="w-full h-[38px] px-3 rounded-[9px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-mono font-bold text-slate-900 uppercase outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A]"
-                  />
-                </div>
-
-                {/* Dates: Issue, Travel, Return */}
-                <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700 block">
-                    {isAr ? 'تاريخ الإصدار' : 'Issue Date'}
-                  </label>
-                  <SegmentedDatePicker
-                    value={issueDate}
-                    onChange={(d) => d && setIssueDate(d)}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700 block">
-                    {isAr ? 'تاريخ السفر' : 'Travel Date'}
-                  </label>
-                  <SegmentedDatePicker
-                    value={travelDate}
-                    onChange={(d) => setTravelDate(d)}
-                    placeholder={isAr ? 'اختياري...' : 'Optional...'}
-                  />
-                </div>
-
-                {/* Issuing Employee */}
-                <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700 block">
-                    {isAr ? 'موظف الإصدار *' : 'Issuing Employee *'}
-                  </label>
-                  <SearchableCombobox
-                    value={employeeName}
-                    onChange={(val) => setEmployeeName(val || '')}
-                    options={employeeOptions}
-                    placeholder={isAr ? 'اختر الموظف...' : 'Select employee...'}
-                  />
-                </div>
-
-                {/* Payment Method */}
-                <div className="space-y-1">
-                  <label className="text-[12px] font-bold text-slate-700 block">
-                    {isAr ? 'طريقة الدفع والتسوية' : 'Payment Type'}
-                  </label>
-                  <select
-                    value={paymentType}
-                    onChange={(e) => setPaymentType(e.target.value)}
-                    className="w-full h-[38px] px-3 rounded-[9px] bg-white border border-[#E5E7EB] text-xs font-bold text-slate-800 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] cursor-pointer"
-                  >
-                    <option value="ON_ACCOUNT">{isAr ? 'على الحساب (ذمم)' : 'On Account (Credit)'}</option>
-                    <option value="CASH_HAND">{isAr ? 'نقدي (صندوق)' : 'Cash in Hand'}</option>
-                    <option value="MASTER_CARD">{isAr ? 'ماستر كارد / بنك' : 'Bank / Master Card'}</option>
-                  </select>
-                </div>
-
-                {/* Exchange Rate (if USD) */}
-                {currency === 'USD' && (
-                  <div className="space-y-1">
-                    <label className="text-[12px] font-bold text-slate-700 block">
-                      {isAr ? 'سعر الصرف (1$ مقابل د.ع)' : 'Exchange Rate'}
+                  {/* General Route */}
+                  <div>
+                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'مسار الرحلة العام' : 'General Flight Route'}
                     </label>
                     <input
                       type="text"
-                      inputMode="numeric"
                       dir="ltr"
-                      value={exchangeRate ? exchangeRate.toLocaleString('en-US') : ''}
-                      onChange={(e) => setExchangeRate(parseCleanNumber(e.target.value))}
+                      placeholder="e.g. BGW-IST-BGW"
+                      value={generalRoute}
+                      onChange={(e) => setGeneralRoute(e.target.value.toUpperCase())}
                       style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                      className="w-full h-[38px] px-3 rounded-[9px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A]"
+                      className="w-full h-[38px] px-3 rounded-[9px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-mono font-bold text-slate-900 uppercase outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A]"
                     />
                   </div>
-                )}
 
+                  {/* Issuing Employee */}
+                  <div>
+                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'موظف الإصدار *' : 'Issuing Employee *'}
+                    </label>
+                    <SearchableCombobox
+                      value={employeeName}
+                      onChange={(val) => {
+                        const nextEmp = val || '';
+                        setEmployeeName(nextEmp);
+                        if (nextEmp) {
+                          applyEmployeeCashbox(nextEmp, availableCashboxes);
+                        }
+                      }}
+                      options={employeeOptions}
+                      placeholder={isAr ? 'اختر الموظف...' : 'Select employee...'}
+                    />
+                  </div>
+
+                  {/* Issue Date */}
+                  <div>
+                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'تاريخ الإصدار' : 'Issue Date'}
+                    </label>
+                    <SegmentedDatePicker
+                      value={issueDate}
+                      onChange={(d) => d && setIssueDate(d)}
+                    />
+                  </div>
+
+                  {/* Travel Date */}
+                  <div>
+                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'تاريخ السفر' : 'Travel Date'}
+                    </label>
+                    <SegmentedDatePicker
+                      value={travelDate}
+                      onChange={(d) => setTravelDate(d)}
+                      placeholder={isAr ? 'اختياري...' : 'Optional...'}
+                    />
+                  </div>
+
+                  {/* Exchange Rate (if USD) */}
+                  {currency === 'USD' && (
+                    <div className="sm:col-span-2">
+                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'سعر الصرف (1$ مقابل د.ع)' : 'Exchange Rate'}
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        dir="ltr"
+                        value={exchangeRate ? exchangeRate.toLocaleString('en-US') : ''}
+                        onChange={(e) => setExchangeRate(parseCleanNumber(e.target.value))}
+                        style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                        className="w-full h-[38px] px-3 rounded-[9px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A]"
+                      />
+                    </div>
+                  )}
+
+                </div>
               </div>
+
             </div>
 
             {/* ── B. Multi-PNR Management Table ── */}
