@@ -37,6 +37,37 @@ interface SearchableComboboxProps {
   maxListHeight?: number;
 }
 
+/*
+ * البحث يقرأ الكلمات، لا السلسلة المتّصلة.
+ *
+ * كان الفلتر يطلب أن يظهر ما كتبه المستخدم متّصلاً كما كتبه، فمن بحث عن «قريش
+ * كربلاء» لا يجد «قمر قريش / كربلاء» — والحساب موجود أمامه في القائمة. وهذه
+ * أسماءُ جهاتٍ يكتبها الناس بترتيبٍ يتذكّرونه لا بترتيبٍ مسجَّل، فيُطلب أن تَرِد
+ * كل كلمةٍ في مكانٍ ما من السطر، لا أن ترد كلها متجاورة.
+ *
+ * والعربية تُوحَّد حروفها قبل المقارنة: الهمزات إلى ألف، والتاء المربوطة إلى هاء،
+ * والألف المقصورة إلى ياء، وتُسقط الحركات والتطويل — فلا يحرم كاتبَ «كربلاء»
+ * من نتيجته أنه كتبها «كربلا».
+ */
+const normalizeSearchText = (value: string): string =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[\u064B-\u0652\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+
+export const matchesSearchTokens = (haystack: string, query: string): boolean => {
+  const q = normalizeSearchText(query);
+  if (!q) return true;
+  const hay = normalizeSearchText(haystack);
+  return q.split(' ').every((token) => token.length === 0 || hay.includes(token));
+};
+
 export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   label,
   labelAction,
@@ -83,14 +114,11 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
 
   const filteredOptions = options.filter((opt) => {
     if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase().trim();
-    const l = (opt.label || '').toLowerCase();
-    const c = (opt.code || '').toLowerCase();
-    const v = (opt.value || '').toLowerCase();
-    const n = (opt.name || '').toLowerCase();
-    const nAr = (opt.nameAr || '').toLowerCase();
-    const nEn = (opt.nameEn || '').toLowerCase();
-    return l.includes(q) || c.includes(q) || v.includes(q) || n.includes(q) || nAr.includes(q) || nEn.includes(q);
+    // كل حقول الخيار سطرٌ واحد للبحث، فيجد من يكتب الاسم ومن يكتب الرمز معاً.
+    const haystack = [opt.label, opt.code, opt.value, (opt as any).name, opt.nameAr, opt.nameEn]
+      .filter(Boolean)
+      .join(' ');
+    return matchesSearchTokens(haystack, searchQuery);
   });
 
   const visibleOptions = filteredOptions.length <= maxRendered

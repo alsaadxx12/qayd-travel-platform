@@ -41,6 +41,7 @@ import { CurrencySwitchModal } from './CurrencySwitchModal';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { ParsedTicketData } from './SmartTicketImportModal';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
+import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
 import { CurrencySegmentedControl } from '../ui/CurrencySegmentedControl';
 import { DateTimeField } from '../ui/DateTimeField';
 import { DeleteInvoiceModal } from '../ui/DeleteInvoiceModal';
@@ -92,6 +93,15 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
   const [supplierAccount, setSupplierAccount] = useState<string>('');
   const [supplierAccountName, setSupplierAccountName] = useState<string>('');
   const [manageAirlinesModalOpened, setManageAirlinesModalOpened] = useState(false);
+  /*
+   * البحث المتقدّم: القائمة المنسدلة تعرض ما يخصّ الحقل، وهذه تفتح على الشجرة كلها.
+   * تُفتح على ما كتبه المستخدم في الحقل، فلا يعيد كتابته مرة أخرى.
+   */
+  const [accountFinder, setAccountFinder] = useState<{
+    open: boolean;
+    scope: 'SUPPLIER' | 'CUSTOMER';
+    query: string;
+  }>({ open: false, scope: 'SUPPLIER', query: '' });
   const [reconciliationModalOpen, setReconciliationModalOpen] = useState(false);
   const [unmatchedCustomerData, setUnmatchedCustomerData] = useState<UnmatchedPartyData | null>(null);
   const [unmatchedSupplierData, setUnmatchedSupplierData] = useState<UnmatchedPartyData | null>(null);
@@ -1780,6 +1790,23 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <SearchableCombobox
                       label={isAr ? 'العميل' : 'Customer'}
+                      labelAction={
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAccountFinder({
+                              open: true,
+                              scope: 'CUSTOMER',
+                              query: /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(customerName || '') ? '' : customerName || '',
+                            })
+                          }
+                          title={isAr ? 'البحث في كل حسابات العملاء والموردين' : 'Search every customer and supplier account'}
+                          className="h-[18px] text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50/70 hover:bg-orange-100/80 px-1.5 rounded-md border border-orange-200/60 transition-colors leading-none"
+                        >
+                          <Search size={11} className="stroke-[2.5]" />
+                          <span>{isAr ? 'بحث متقدّم' : 'Advanced'}</span>
+                        </button>
+                      }
                       required={paymentType === 'آجل' || paymentType === 'CREDIT'}
                       value={customerName}
                       onChange={(val) => {
@@ -1895,6 +1922,25 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <SearchableCombobox
                       label={isAr ? 'المورد' : 'Supplier'}
+                      labelAction={
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAccountFinder({
+                              open: true,
+                              scope: 'SUPPLIER',
+                              query: /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(supplierAccount || '')
+                                ? supplierAccountName || ''
+                                : supplierAccount || supplierAccountName || '',
+                            })
+                          }
+                          title={isAr ? 'البحث في كل حسابات الموردين والعملاء' : 'Search every supplier and customer account'}
+                          className="h-[18px] text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50/70 hover:bg-orange-100/80 px-1.5 rounded-md border border-orange-200/60 transition-colors leading-none"
+                        >
+                          <Search size={11} className="stroke-[2.5]" />
+                          <span>{isAr ? 'بحث متقدّم' : 'Advanced'}</span>
+                        </button>
+                      }
                       value={supplierAccount}
                       onChange={(val) => {
                         setSupplierAccount(val);
@@ -2398,6 +2444,30 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
         onSelectAirline={(airlineName, airlineItem) => {
           setAirline(airlineItem?.id || airlineName);
           setErrors((current) => ({ ...current, airline: '' }));
+          markDirty();
+        }}
+      />
+
+      {/*
+        * البحث المتقدّم في كل الحسابات.
+        *
+        * ما يُختار هنا يُكتب في الحقل بمعرّف حسابه واسمه معاً، فيرتبط القيدُ
+        * بالحساب الصحيح ولو لم يكن مسجَّلاً في قائمة الموردين أو العملاء.
+        */}
+      <AccountFinderModal
+        opened={accountFinder.open}
+        initialQuery={accountFinder.query}
+        initialScope={accountFinder.scope}
+        onClose={() => setAccountFinder((prev) => ({ ...prev, open: false }))}
+        onSelect={(account: AccountFinderResult) => {
+          if (accountFinder.scope === 'SUPPLIER') {
+            setSupplierAccount(account.id);
+            setSupplierAccountName(account.name);
+            setErrors((current) => (current.supplierAccount ? { ...current, supplierAccount: '' } : current));
+          } else {
+            setCustomerName(account.name);
+            setErrors((current) => (current.customerName ? { ...current, customerName: '' } : current));
+          }
           markDirty();
         }}
       />

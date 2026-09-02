@@ -950,16 +950,16 @@ export const TicketsPage: React.FC = () => {
       dir={direction}
       style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
     >
-      {/* ── 1. KPI CARDS + LOTTIE ANIMATION (Responsive flex/grid) ── */}
-      <div className="flex flex-col xl:flex-row gap-2.5 sm:gap-3 items-stretch">
+      {/* ── 1. KPI CARDS + LOTTIE ANIMATION (Responsive compact flex/grid) ── */}
+      <div className="flex flex-col xl:flex-row gap-2 sm:gap-2.5 items-stretch">
         {/* KPI Cards */}
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3">
+        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-2.5">
           {/* Card 1: Total Sales */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3 sm:px-3.5 sm:py-2.5 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all min-h-[92px]">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11.5px] sm:text-[12px] font-bold text-slate-800">{t('tickets.totalSales')}</span>
-              <div className="w-[28px] sm:w-[32px] h-[28px] sm:h-[32px] rounded-[8px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-                <Banknote size={16} strokeWidth={1.85} />
+          <div className="bg-white border border-[#E5E7EB] rounded-[12px] px-3.5 py-2 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[11.5px] font-bold text-slate-800">{t('tickets.totalSales')}</span>
+              <div className="w-[26px] h-[26px] rounded-[7px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <Banknote size={14} strokeWidth={1.85} />
               </div>
             </div>
             <div>
@@ -967,25 +967,25 @@ export const TicketsPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2 animate-pulse">
                   <div className="space-y-1">
                     <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4 w-16 bg-slate-200/70 rounded" />
+                    <div className="h-3.5 w-16 bg-slate-200/70 rounded" />
                   </div>
                   <div className="space-y-1">
                     <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4 w-20 bg-slate-200/70 rounded" />
+                    <div className="h-3.5 w-20 bg-slate-200/70 rounded" />
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 items-baseline">
                   <div>
-                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
-                    <span className="text-[14px] sm:text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dollar')}</span>
+                    <span className="text-[14px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
                       ${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
-                    <span className="text-[13px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
-                      {kpis.totalSellIQD.toLocaleString()} <span className="text-[9px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dinar')}</span>
+                    <span className="text-[13px] sm:text-[14px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                      {kpis.totalSellIQD.toLocaleString()} <span className="text-[8.5px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                     </span>
                   </div>
                 </div>
@@ -994,11 +994,11 @@ export const TicketsPage: React.FC = () => {
           </div>
 
           {/* Card 2: Total Buy Cost */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3 sm:px-3.5 sm:py-2.5 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all min-h-[92px]">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11.5px] sm:text-[12px] font-bold text-slate-800">{t('tickets.totalCost')}</span>
-              <div className="w-[28px] sm:w-[32px] h-[28px] sm:h-[32px] rounded-[8px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-                <ReceiptText size={16} strokeWidth={1.85} />
+          <div className="bg-white border border-[#E5E7EB] rounded-[12px] px-3.5 py-2 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[11.5px] font-bold text-slate-800">{t('tickets.totalCost')}</span>
+              <div className="w-[26px] h-[26px] rounded-[7px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <ReceiptText size={14} strokeWidth={1.85} />
               </div>
             </div>
             <div>
@@ -1006,25 +1006,25 @@ export const TicketsPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2 animate-pulse">
                   <div className="space-y-1">
                     <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4 w-16 bg-slate-200/70 rounded" />
+                    <div className="h-3.5 w-16 bg-slate-200/70 rounded" />
                   </div>
                   <div className="space-y-1">
                     <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4 w-20 bg-slate-200/70 rounded" />
+                    <div className="h-3.5 w-20 bg-slate-200/70 rounded" />
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 items-baseline">
                   <div>
-                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
-                    <span className="text-[14px] sm:text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dollar')}</span>
+                    <span className="text-[14px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
                       ${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
-                    <span className="text-[13px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
-                      {kpis.totalBuyIQD.toLocaleString()} <span className="text-[9px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dinar')}</span>
+                    <span className="text-[13px] sm:text-[14px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                      {kpis.totalBuyIQD.toLocaleString()} <span className="text-[8.5px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                     </span>
                   </div>
                 </div>
@@ -1033,11 +1033,11 @@ export const TicketsPage: React.FC = () => {
           </div>
 
           {/* Card 3: Net Profit */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3 sm:px-3.5 sm:py-2.5 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all min-h-[92px] sm:col-span-2 md:col-span-1">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11.5px] sm:text-[12px] font-bold text-slate-800">{t('tickets.netProfit')}</span>
-              <div className="w-[28px] sm:w-[32px] h-[28px] sm:h-[32px] rounded-[8px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
-                <TrendingUp size={16} strokeWidth={1.85} />
+          <div className="bg-white border border-[#E5E7EB] rounded-[12px] px-3.5 py-2 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all sm:col-span-2 md:col-span-1">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[11.5px] font-bold text-slate-800">{t('tickets.netProfit')}</span>
+              <div className="w-[26px] h-[26px] rounded-[7px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
+                <TrendingUp size={14} strokeWidth={1.85} />
               </div>
             </div>
             <div>
@@ -1045,30 +1045,30 @@ export const TicketsPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2 animate-pulse">
                   <div className="space-y-1">
                     <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4 w-16 bg-slate-200/70 rounded" />
+                    <div className="h-3.5 w-16 bg-slate-200/70 rounded" />
                   </div>
                   <div className="space-y-1">
                     <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4 w-20 bg-slate-200/70 rounded" />
+                    <div className="h-3.5 w-20 bg-slate-200/70 rounded" />
                   </div>
                 </div>
               ) : canViewProfits ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 items-baseline">
                   <div>
-                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
-                    <span className={`text-[14px] sm:text-[16px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dollar')}</span>
+                    <span className={`text-[14px] sm:text-[15px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
                       {kpis.totalProfitUSD > 0 ? `+$${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : kpis.totalProfitUSD < 0 ? `-$${Math.abs(kpis.totalProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `$0.00`}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
-                    <span className={`text-[13px] sm:text-[15px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
-                      {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`} <span className="text-[9px] font-sans font-bold">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dinar')}</span>
+                    <span className={`text-[13px] sm:text-[14px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                      {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`} <span className="text-[8.5px] font-sans font-bold">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                     </span>
                   </div>
                 </div>
               ) : (
-                <span className="text-[13px] text-slate-400 font-mono">{t('tickets.unauthorized')}</span>
+                <span className="text-[12px] text-slate-400 font-mono">{t('tickets.unauthorized')}</span>
               )}
             </div>
           </div>
@@ -1083,30 +1083,32 @@ export const TicketsPage: React.FC = () => {
           className="hidden"
         />
 
-        {/* Lottie Animation — Last (left side in RTL, click directly opens file chooser dialog) */}
+        {/* Lottie Animation — Compact (left side in RTL, click directly opens file chooser dialog) */}
         <div
           onClick={() => {
             ticketFileInputRef.current?.click();
           }}
-          className="relative hidden xl:flex w-[180px] shrink-0 bg-white border border-[#E5E7EB] hover:border-[#F45A0A] rounded-[14px] shadow-2xs items-center justify-center overflow-hidden p-1 min-h-[92px] cursor-pointer group transition-all"
+          className="relative hidden xl:flex flex-col w-[110px] shrink-0 bg-white border border-[#E5E7EB] hover:border-[#F45A0A] rounded-[12px] shadow-2xs items-center justify-center overflow-hidden px-1.5 py-1 cursor-pointer group transition-all"
           onMouseEnter={() => lottieRef.current?.play()}
           onMouseLeave={() => {
             lottieRef.current?.stop();
           }}
           title={language === 'ar' ? '📸 انقر مباشرة لاختيار ملف التذكرة أو الصق لقطة الشاشة (Ctrl+V)' : '📸 Click directly to select ticket file or paste screenshot (Ctrl+V)'}
         >
-          <Lottie
-            lottieRef={lottieRef}
-            src={aiSpiderAnimation}
-            loop={true}
-            autoplay={false}
-            className="w-full h-full object-contain scale-105 transition-transform duration-300 group-hover:scale-115"
-          />
+          <div className="w-[36px] h-[36px] flex items-center justify-center -mt-1">
+            <Lottie
+              lottieRef={lottieRef}
+              src={aiSpiderAnimation}
+              loop={true}
+              autoplay={false}
+              className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-110"
+            />
+          </div>
 
           {/* Floating Action Badge */}
-          <div className="absolute bottom-1 inset-x-2 flex items-center justify-center gap-1 bg-white/95 group-hover:bg-[#FFF3E8] border border-slate-200 group-hover:border-[#F45A0A]/30 py-0.5 px-1.5 rounded-lg text-[10px] font-bold text-slate-700 group-hover:text-[#F45A0A] transition-all shadow-2xs backdrop-blur-xs">
-            <Sparkles size={11} className="text-[#F45A0A]" />
-            <span>{language === 'ar' ? 'اختر تذكرة (AI)' : 'Pick Ticket (AI)'}</span>
+          <div className="w-full flex items-center justify-center gap-1 bg-white/95 group-hover:bg-[#FFF3E8] border border-slate-200 group-hover:border-[#F45A0A]/30 py-0.5 px-1 rounded-[6px] text-[9px] font-bold text-slate-700 group-hover:text-[#F45A0A] transition-all shadow-2xs backdrop-blur-xs mt-0.5">
+            <Sparkles size={10} className="text-[#F45A0A] shrink-0" />
+            <span className="truncate">{language === 'ar' ? 'تذكرة (AI)' : 'AI Ticket'}</span>
           </div>
         </div>
       </div>
