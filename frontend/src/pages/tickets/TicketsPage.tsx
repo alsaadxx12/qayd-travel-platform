@@ -37,6 +37,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { TicketInvoiceEditorWorkspace } from '../../components/tickets/TicketInvoiceEditorWorkspace';
+import { GroupFareEditorWorkspace } from '../../components/tickets/GroupFareEditorWorkspace';
 import { TicketRefundEditorWorkspace } from '../../components/refunds/TicketRefundEditorWorkspace';
 import { InvoiceAuditLogModal } from '../../components/tickets/InvoiceAuditLogModal';
 import { SmartTicketImportModal, ParsedTicketData } from '../../components/tickets/SmartTicketImportModal';
@@ -293,6 +294,8 @@ export const TicketsPage: React.FC = () => {
 
   // Modals State
   const [modalOpen, setModalOpen] = useState(false);
+  const [groupFareWorkspaceOpen, setGroupFareWorkspaceOpen] = useState(false);
+  const [groupFareEditingTicket, setGroupFareEditingTicket] = useState<any>(null);
   const [smartImportModalOpen, setSmartImportModalOpen] = useState(false);
   const [selectedTicketFile, setSelectedTicketFile] = useState<File | null>(null);
   const [editingTicketData, setEditingTicketData] = useState<any>(null);
@@ -1213,6 +1216,19 @@ export const TicketsPage: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+              {/* Group Fare Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setGroupFareEditingTicket(null);
+                  setGroupFareWorkspaceOpen(true);
+                }}
+                className="flex-1 sm:flex-initial h-[38px] px-3.5 sm:px-4 rounded-[9px] bg-white border border-[#FED7AA] hover:bg-[#FFF3E8] text-[#F45A0A] font-bold text-[12.5px] sm:text-[13px] shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <Layers size={16} strokeWidth={2.2} />
+                <span>{language === 'ar' ? 'كروب فير' : 'Group Fare'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -2024,6 +2040,20 @@ export const TicketsPage: React.FC = () => {
           setEditingTicketData(null);
         }}
         onSuccess={handleTicketSaved}
+      />
+
+      <GroupFareEditorWorkspace
+        opened={groupFareWorkspaceOpen}
+        initialData={groupFareEditingTicket}
+        onClose={() => {
+          setGroupFareWorkspaceOpen(false);
+          setGroupFareEditingTicket(null);
+        }}
+        onSuccess={() => {
+          setGroupFareWorkspaceOpen(false);
+          setGroupFareEditingTicket(null);
+          reloadTicketsFromApi(false);
+        }}
       />
 
       <SmartTicketImportModal

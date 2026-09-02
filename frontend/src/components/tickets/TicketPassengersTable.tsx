@@ -81,6 +81,89 @@ interface TicketPassengersTableProps {
 }
 
 // ── Smart Number Parsing Utility (handles 210 -> 210,000 in IQD, 190k, 190,000, ١٩٠٠٠٠, 190000) ──
+/**
+ * خانة سعر تُقرأ كنصّ وتُحرَّر كحقل.
+ *
+ * تبدو رقماً عادياً في الجدول حتى تُنقر، فلا تزدحم الشاشة بمربّعات إدخال؛ وعند
+ * النقر تصير حقلاً مفتوحاً على قيمته محدَّدةً بالكامل ليُكتب فوقها مباشرة.
+ * Enter وTab يثبّتان، وEsc يتراجع، وCtrl+↓ ينسخ القيمة إلى بقية الصفوف.
+ */
+const EditablePriceCell: React.FC<{
+  value: number | null;
+  display: string;
+  bold?: boolean;
+  placeholder: string;
+  title: string;
+  onCommit: (raw: string) => void;
+  onFillDown: () => void;
+}> = ({ value, display, bold, placeholder, title, onCommit, onFillDown }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const open = () => {
+    setDraft(value === null || value === undefined ? '' : String(value));
+    setEditing(true);
+    window.setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 0);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        dir="ltr"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          onCommit(draft);
+          setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'Tab') {
+            onCommit(draft);
+            setEditing(false);
+            return;
+          }
+          if (e.key === 'Escape') {
+            e.stopPropagation();
+            setEditing(false);
+            return;
+          }
+          if (e.ctrlKey && e.key === 'ArrowDown') {
+            e.preventDefault();
+            onCommit(draft);
+            setEditing(false);
+            window.setTimeout(onFillDown, 0);
+          }
+        }}
+        placeholder={placeholder}
+        className="w-full h-8 px-2 rounded-[6px] border border-[#F45A0A] bg-white font-mono font-bold text-xs text-slate-900 text-end outline-none ring-2 ring-orange-100"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={open}
+      className={`w-full h-8 px-2 rounded-[6px] border border-transparent hover:border-slate-300 hover:bg-white text-end font-mono text-xs cursor-text transition-colors ${
+        value === null || value === undefined
+          ? 'text-slate-300 font-normal'
+          : bold
+          ? 'text-slate-900 font-bold'
+          : 'text-slate-800 font-semibold'
+      }`}
+    >
+      {value === null || value === undefined ? placeholder : display}
+    </button>
+  );
+};
+
 export const parseNumberInput = (raw?: string | number | null, currency: string = 'IQD'): number => {
   if (raw === undefined || raw === null || raw === '') return 0;
   if (typeof raw === 'number') {
@@ -593,6 +676,193 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
     onChangePassengers(nextList);
   };
 
+  /*
+   * السعر يُكتب في صفّ صاحبه.
+   *
+   * كان التسعير كلّه في شريطٍ فوق الجدول: تسعّر «فئة» هناك، وتقرأ أثرها في صفٍّ
+   * هنا — فكل تصحيح لمسافرٍ واحد رحلةٌ إلى أعلى الشاشة ثم عودة. والسعر مخزَّن
+   * أصلاً لكل مسافر على حدة (fareBuy وfareSell)، فلا شيء يمنع كتابته حيث يُقرأ.
+   *
+   * وتعبئة العمود إلى أسفل بـCtrl+↓ لأن أغلب الملفات تتشارك السعر نفسه، فيُكتب
+   * مرة ويُنسخ على البقية كما في الجداول الحسابية.
+   */
+  const commitRowPrice = (idx: number, field: 'fareBuy' | 'fareSell', raw: string) => {
+    const text = String(raw ?? '').trim();
+    const updated = [...passengers];
+    const value = text === '' ? null : parseNumberInput(text, currency);
+    updated[idx] = { ...updated[idx], [field]: value };
+    // السعر المكتوب باليد يفكّ ارتباط الصف بدفعته، وإلا بدا تابعاً لسعرٍ لا يساويه.
+    if (updated[idx].batchId) updated[idx] = { ...updated[idx], batchId: undefined };
+    onChangePassengers(updated);
+  };
+
+  const fillPriceDown = (fromIdx: number, field: 'fareBuy' | 'fareSell') => {
+    const source = passengers[fromIdx]?.[field];
+    if (source === null || source === undefined) return;
+    const updated = passengers.map((p, i) =>
+      i <= fromIdx ? p : { ...p, [field]: source, batchId: undefined },
+    );
+    onChangePassengers(updated);
+    showSuccessNotification(
+      isAr ? 'تمّت التعبئة' : 'Filled down',
+      isAr
+        ? `نُسخ ${formatCurrency(source as number, currency)} إلى ${updated.length - fromIdx - 1} صفاً تحته`
+        : `Copied ${formatCurrency(source as number, currency)} to ${updated.length - fromIdx - 1} row(s) below`,
+    );
+  };
+
+  const { language, direction } = useLanguageStore();
+  const isAr = language === 'ar';
+
+  /*
+   * سطر التسعير: أمرٌ واحد بدل أربعة حقول.
+   *
+   * كان في الشيفرة محلّلٌ يفهم «2A 100k 150k» لكنه مدفون داخل حقل الشراء بلا أي
+   * إشارة إليه في الواجهة — طريقٌ سريع لا يعرف أحدٌ أنه موجود. وهو هنا ظاهرٌ
+   * بمعاينةٍ حيّة تقول ماذا سيفعل قبل الضغط.
+   *
+   * ويفهم ما يفكّر به التاجر فعلاً، لا سعر الفرد وحده: الربح للراس (+25k)،
+   * والنسبة (%15)، وإجمالي الملف (t 1200k) مقسوماً على الرؤوس.
+   */
+  const parsePricingCommand = (input: string) => {
+    const text = String(input || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!text) return null;
+
+    const unpriced = passengers.filter((p) => p.fareSell === null || p.fareSell === undefined);
+    const targets = unpriced.length > 0 ? unpriced : passengers;
+    const num = (v: string) => parseNumberInput(v, currency);
+
+    // ربح للفرد: «+25k» — البيع = الشراء + الربح
+    const margin = text.match(/^\+\s*([\d.,km]+)$/);
+    if (margin) {
+      const add = num(margin[1]);
+      if (!add) return null;
+      return {
+        kind: 'MARGIN' as const,
+        add,
+        count: targets.filter((p) => p.fareBuy !== null && p.fareBuy !== undefined).length,
+      };
+    }
+
+    // نسبة ربح: «%15»
+    const percent = text.match(/^%\s*([\d.]+)$/) || text.match(/^([\d.]+)\s*%$/);
+    if (percent) {
+      const pct = Number(percent[1]);
+      if (!pct) return null;
+      return {
+        kind: 'PERCENT' as const,
+        pct,
+        count: targets.filter((p) => p.fareBuy !== null && p.fareBuy !== undefined).length,
+      };
+    }
+
+    // إجمالي شراء الملف: «t 1200k» — يُقسَّم على عدد المسافرين
+    const total = text.match(/^(?:t|ت)\s*([\d.,km]+)$/);
+    if (total) {
+      const sum = num(total[1]);
+      if (!sum || targets.length === 0) return null;
+      return { kind: 'TOTAL' as const, perHead: Math.round(sum / targets.length), count: targets.length, sum };
+    }
+
+    // «2a 100k 150k» أو «100k 150k» لكل من بقي
+    const full = text.match(/^(\d+)\s*([aciأطتر])\s+([\d.,km]+)\s+([\d.,km]+)$/);
+    const pair = text.match(/^([\d.,km]+)\s+([\d.,km]+)$/);
+    if (full || pair) {
+      const buy = num(full ? full[3] : pair![1]);
+      const sell = num(full ? full[4] : pair![2]);
+      if (!sell) return null;
+      let type: 'ADULT' | 'CHILD' | 'INFANT' | null = null;
+      let count = targets.length;
+      if (full) {
+        const ch = full[2];
+        type = ch === 'c' || ch === 'ط' ? 'CHILD' : ch === 'i' || ch === 'ت' || ch === 'ر' ? 'INFANT' : 'ADULT';
+        count = Math.min(parseInt(full[1], 10), targets.filter((p) => (p.ticketType || 'ADULT') === type).length);
+      }
+      return { kind: 'PAIR' as const, buy, sell, type, count };
+    }
+
+    return null;
+  };
+
+  const [pricingCommand, setPricingCommand] = useState('');
+  const pricingPreview = useMemo(() => parsePricingCommand(pricingCommand), [pricingCommand, passengers, currency]);
+
+  const runPricingCommand = () => {
+    const plan = parsePricingCommand(pricingCommand);
+    if (!plan) return;
+
+    const unpriced = passengers.filter((p) => p.fareSell === null || p.fareSell === undefined);
+    const useUnpriced = unpriced.length > 0;
+    let applied = 0;
+
+    const updated = passengers.map((p) => {
+      const isTarget = useUnpriced ? p.fareSell === null || p.fareSell === undefined : true;
+      if (!isTarget) return p;
+
+      if (plan.kind === 'MARGIN' || plan.kind === 'PERCENT') {
+        if (p.fareBuy === null || p.fareBuy === undefined) return p;
+        applied += 1;
+        const sell =
+          plan.kind === 'MARGIN'
+            ? (p.fareBuy as number) + plan.add
+            : Math.round((p.fareBuy as number) * (1 + plan.pct / 100));
+        return { ...p, fareSell: sell, batchId: undefined };
+      }
+
+      if (plan.kind === 'TOTAL') {
+        applied += 1;
+        return { ...p, fareBuy: plan.perHead, batchId: undefined };
+      }
+
+      if (plan.type && (p.ticketType || 'ADULT') !== plan.type) return p;
+      if (applied >= plan.count) return p;
+      applied += 1;
+      return { ...p, fareBuy: plan.buy || p.fareBuy || 0, fareSell: plan.sell, batchId: undefined };
+    });
+
+    if (applied === 0) return;
+    onChangePassengers(updated);
+    setPricingCommand('');
+    showSuccessNotification(
+      isAr ? 'تمّ التسعير' : 'Priced',
+      isAr ? `طُبّق على ${applied} مسافراً` : `Applied to ${applied} passenger(s)`,
+    );
+  };
+
+  const pricingPreviewText = useMemo(() => {
+    const p = pricingPreview;
+    if (!p) return null;
+    const money = (v: number) => formatCurrency(v, currency);
+    if (p.count === 0) {
+      return isAr
+        ? 'لا مسافر ينطبق عليه هذا الأمر — الربح والنسبة يحتاجان سعر شراء مُدخَلاً أولاً'
+        : 'No passenger matches — margin and percent need a buy price first';
+    }
+    if (p.kind === 'MARGIN') {
+      return isAr
+        ? `ربح ${money(p.add)} للفرد — البيع = الشراء + الربح، على ${p.count} مسافراً لهم سعر شراء`
+        : `Margin ${money(p.add)} per head on ${p.count} passenger(s) that have a buy price`;
+    }
+    if (p.kind === 'PERCENT') {
+      return isAr
+        ? `ربح ${p.pct}% — البيع = الشراء + النسبة، على ${p.count} مسافراً لهم سعر شراء`
+        : `Margin ${p.pct}% on ${p.count} passenger(s) that have a buy price`;
+    }
+    if (p.kind === 'TOTAL') {
+      return isAr
+        ? `إجمالي شراء ${money(p.sum)} على ${p.count} مسافراً = ${money(p.perHead)} للفرد`
+        : `Total buy ${money(p.sum)} over ${p.count} = ${money(p.perHead)} each`;
+    }
+    const who = p.type
+      ? isAr
+        ? p.type === 'CHILD' ? 'أطفال' : p.type === 'INFANT' ? 'رضّع' : 'بالغين'
+        : p.type.toLowerCase()
+      : isAr ? 'مسافراً' : 'passenger(s)';
+    return isAr
+      ? `${p.count} ${who}: شراء ${money(p.buy)} · بيع ${money(p.sell)}`
+      : `${p.count} ${who}: buy ${money(p.buy)} · sell ${money(p.sell)}`;
+  }, [pricingPreview, currency, isAr]);
+
   const handleFieldChange = (idx: number, field: keyof PassengerLine, value: any) => {
     const updated = [...passengers];
     updated[idx] = { ...updated[idx], [field]: value };
@@ -620,8 +890,6 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
   const draftBuyNum = parseNumberInput(draftBuy, currency);
   const draftSellNum = parseNumberInput(draftSell, currency);
   const draftProfit = draftSellNum - draftBuyNum;
-  const { language, direction } = useLanguageStore();
-  const isAr = language === 'ar';
 
   // Header status string
   const statusString = useMemo(() => {
@@ -864,6 +1132,76 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
               </button>
             )}
           </div>
+        </div>
+
+        {/*
+          * سطر التسعير الظاهر.
+          *
+          * أعلى الحقول الأربعة لأنه يغني عنها في أغلب الحالات، ومعه أمثلته مكتوبة
+          * — فالطريق السريع لا ينفع إن لم يُرَ. والمعاينة تحته تقول ماذا سيحدث
+          * قبل الضغط، فلا يُسعَّر أحدٌ على غير ما قُصد.
+          */}
+        <div className="rounded-xl border border-orange-200/70 bg-white p-2.5 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                dir="ltr"
+                value={pricingCommand}
+                onChange={(e) => setPricingCommand(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    runPricingCommand();
+                  }
+                }}
+                placeholder="2a 100k 150k   ·   100k 150k   ·   +25k   ·   %15   ·   t 1200k"
+                className="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white font-mono text-xs font-bold text-slate-900 outline-none hover:border-slate-400 focus:border-[#F45A0A] focus:ring-2 focus:ring-orange-100 transition-all placeholder:text-slate-300 placeholder:font-normal"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={!pricingPreview || (pricingPreview as any).count === 0}
+              onClick={runPricingCommand}
+              className="h-9 px-3 rounded-lg bg-[#F45A0A] hover:bg-[#dd4f05] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-[11.5px] font-bold cursor-pointer transition-colors shrink-0"
+            >
+              {isAr ? 'تسعير ↵' : 'Price ↵'}
+            </button>
+          </div>
+
+          {pricingPreviewText ? (
+            <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
+              <Zap size={11} className="text-emerald-600 shrink-0" />
+              <span>{pricingPreviewText}</span>
+            </div>
+          ) : (
+            <div className="text-[10.5px] text-slate-500 font-medium leading-relaxed">
+              {isAr ? (
+                <>
+                  <b className="font-mono text-slate-700">2a 100k 150k</b> بالغان شراءً وبيعاً ·{' '}
+                  <b className="font-mono text-slate-700">100k 150k</b> لكل من بقي بلا سعر ·{' '}
+                  <b className="font-mono text-slate-700">+25k</b> ربح للفرد ·{' '}
+                  <b className="font-mono text-slate-700">%15</b> نسبة ربح ·{' '}
+                  <b className="font-mono text-slate-700">t 1200k</b> إجمالي الشراء مقسوماً على الرؤوس
+                  <span className="block mt-0.5 text-slate-400">
+                    وتقدر تكتب السعر داخل صف المسافر مباشرة — و<b className="font-mono">Ctrl+↓</b> يعبّئ العمود كلّه
+                  </span>
+                </>
+              ) : (
+                <>
+                  <b className="font-mono text-slate-700">2a 100k 150k</b> two adults ·{' '}
+                  <b className="font-mono text-slate-700">100k 150k</b> everyone unpriced ·{' '}
+                  <b className="font-mono text-slate-700">+25k</b> margin per head ·{' '}
+                  <b className="font-mono text-slate-700">%15</b> margin percent ·{' '}
+                  <b className="font-mono text-slate-700">t 1200k</b> total buy split per head
+                  <span className="block mt-0.5 text-slate-400">
+                    Prices are editable straight in the passenger row — <b className="font-mono">Ctrl+↓</b> fills the column
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── MOBILE 2-COLUMN GRID (sm:hidden) ── */}
@@ -1674,14 +2012,29 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
                     )}
                   </td>
 
-                  {/* Buy Fare Display */}
-                  <td className={`py-2 px-3 ${isAr ? 'text-left' : 'text-right'} font-mono font-semibold text-xs text-slate-800`} dir="ltr">
-                    {formatAmount(buyVal)}
+                  {/* Buy Fare — editable in place */}
+                  <td className="py-2 px-2" dir="ltr">
+                    <EditablePriceCell
+                      value={buyVal}
+                      display={formatAmount(buyVal)}
+                      placeholder="—"
+                      title={isAr ? 'انقر للتعديل · Ctrl+↓ لتعبئة العمود' : 'Click to edit · Ctrl+↓ to fill down'}
+                      onCommit={(raw) => commitRowPrice(idx, 'fareBuy', raw)}
+                      onFillDown={() => fillPriceDown(idx, 'fareBuy')}
+                    />
                   </td>
 
-                  {/* Sell Fare Display */}
-                  <td className={`py-2 px-3 ${isAr ? 'text-left' : 'text-right'} font-mono font-bold text-xs text-slate-900`} dir="ltr">
-                    {formatAmount(sellVal)}
+                  {/* Sell Fare — editable in place */}
+                  <td className="py-2 px-2" dir="ltr">
+                    <EditablePriceCell
+                      value={sellVal}
+                      display={formatAmount(sellVal)}
+                      bold
+                      placeholder="—"
+                      title={isAr ? 'انقر للتعديل · Ctrl+↓ لتعبئة العمود' : 'Click to edit · Ctrl+↓ to fill down'}
+                      onCommit={(raw) => commitRowPrice(idx, 'fareSell', raw)}
+                      onFillDown={() => fillPriceDown(idx, 'fareSell')}
+                    />
                   </td>
 
                   {/* Net Profit Display */}
