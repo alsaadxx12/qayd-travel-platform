@@ -52,6 +52,7 @@ const PaymentVouchersPage = lazy(() => import('./pages/PaymentVouchersPage').the
 const DeletedRecordsPage = lazy(() => import('./pages/archive/DeletedRecordsPage').then((m) => ({ default: m.DeletedRecordsPage })));
 const StatementPortalPage = lazy(() => import('./pages/portal/StatementPortalPage').then((m) => ({ default: m.StatementPortalPage })));
 const StatementQrPage = lazy(() => import('./pages/admin/StatementQrPage').then((m) => ({ default: m.StatementQrPage })));
+const NovaAiLandingPage = lazy(() => import('./pages/NovaAiLandingPage').then((m) => ({ default: m.NovaAiLandingPage })));
 
 // Smart Root Redirect: unauthenticated users always go to /login, authenticated users go to /dashboard
 const RootRedirect: React.FC = () => {
@@ -75,6 +76,10 @@ export const App: React.FC = () => {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/onboarding" element={<OnboardingPage />} />
           <Route path="/map-test" element={<MapTestPage />} />
+
+          {/* NOVA_AI Cinematic Landing Page */}
+          <Route path="/nova-ai" element={<NovaAiLandingPage />} />
+          <Route path="/nova" element={<NovaAiLandingPage />} />
 
           {/* The customer-facing statement page. It sits OUTSIDE AppLayout on
               purpose: whoever scans the barcode is not a user of the system, has no

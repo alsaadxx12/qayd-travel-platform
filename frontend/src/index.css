@@ -644,3 +644,21 @@ aside ::-webkit-scrollbar-button {
   animation: spinGradient 2.8s linear infinite;
 }
 
+/* ─── NOVA_AI Cinematic Landing Page ─── */
+.nova-ai-root {
+  font-family: 'Flexo Soft Medium', system-ui, sans-serif !important;
+  background-color: #0a0a0a;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+}
+
+.nova-ai-root,
+.nova-ai-root * {
+  font-family: 'Flexo Soft Medium', system-ui, sans-serif;
+}
+
+.nova-ai-root ::selection {
+  background-color: rgba(244, 90, 10, 0.45);
+  color: #ffffff;
+}
+
