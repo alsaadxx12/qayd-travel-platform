@@ -22,6 +22,7 @@ import {
   Receipt,
   Eye,
   ExternalLink,
+  Package,
 } from 'lucide-react';
 import { Loader, Modal, Tooltip, SegmentedControl, Badge } from '@mantine/core';
 import { AccountingGrid, AccountingColumnDef, AccountingActionMenuItem } from '../../components/common/AccountingGrid';
@@ -430,15 +431,9 @@ export const GroupsPage: React.FC = () => {
   const actionMenuItems: AccountingActionMenuItem[] = useMemo(
     () => [
       {
-        label: isAr ? 'تعديل كروب فير' : 'Edit Group Fare',
+        label: isAr ? 'تعديل الكروب' : 'Edit Group',
         icon: Edit,
-        description: isAr ? 'يفتح مساحة عمل حجز الكروب وتوزيع الـ PNRs' : 'Edit group fare and PNR lines',
-        onClick: (row: any) => openFareEditor(row),
-      },
-      {
-        label: isAr ? 'تصميم حزمة الكروب (سياحي)' : 'Design Tour Package',
-        icon: Sparkles,
-        description: isAr ? 'يفتح مصمم حزم البرامج والخدمات السياحية' : 'Tour package components designer',
+        description: isAr ? 'يفتح مصمم حزمة الكروب ومكونات الكلفة وتوزيع المقاعد' : 'Open group package and seat allocation designer',
         onClick: (row: any) => openDesignEditor(row),
       },
       {
@@ -465,12 +460,12 @@ export const GroupsPage: React.FC = () => {
           {/* Page Identity & Badge */}
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-[#FFF3E8] border border-[#FED7AA] text-[#F45A0A] flex items-center justify-center shadow-2xs shrink-0">
-              <Layers size={22} strokeWidth={2.2} />
+              <Package size={22} strokeWidth={2.2} />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-black text-base sm:text-lg text-[#111827] leading-tight">
-                  {isAr ? 'تذاكر الكروبات (حجز جماعي)' : 'Group Fares & Charters'}
+                  {isAr ? 'الكروبات والرحلات السياحية' : 'Tour Groups & Packages'}
                 </h1>
                 <Badge
                   color="orange"
@@ -484,8 +479,8 @@ export const GroupsPage: React.FC = () => {
               </div>
               <p className="text-[11.5px] text-[#6B7280] font-medium mt-0.5">
                 {isAr
-                  ? 'إدارة حجوزات المجموعات السياحية والـ PNRs، المقاعد، والموردين وصافي أرباح الرحلات'
-                  : 'Manage group bookings, multi-PNR seat allocations, suppliers and flight profits'}
+                  ? 'إدارة حجوزات الكروبات السياحية: تصميم المكونات (طيران، فنادق، فيز)، كلفة المقاعد والمبيعات والأرباح'
+                  : 'Manage tour group packages, cost components (flights, hotels, visas), seats and profits'}
               </p>
             </div>
           </div>
@@ -503,7 +498,7 @@ export const GroupsPage: React.FC = () => {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={isAr ? 'ابحث برقم الكروب، PNR، أو المستفيد...' : 'Search by group #, PNR, customer...'}
+                placeholder={isAr ? 'ابحث باسم الكروب، المستفيد، أو المسار...' : 'Search by group name, customer, route...'}
                 className="h-[38px] w-60 sm:w-72 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] text-[12px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] focus:bg-white transition-all shadow-2xs"
                 style={{ paddingInlineStart: 32, paddingInlineEnd: search ? 30 : 10 }}
               />
@@ -559,14 +554,14 @@ export const GroupsPage: React.FC = () => {
               </button>
             </Tooltip>
 
-            {/* New Group Button (Primary Brand Action) */}
+            {/* New Group Button (Opens GroupDesignWorkspace) */}
             <button
               type="button"
-              onClick={() => openFareEditor()}
+              onClick={() => openDesignEditor()}
               className="h-[38px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-black text-xs cursor-pointer transition-all flex items-center gap-1.5 shadow-xs"
             >
               <Plus size={16} strokeWidth={2.4} />
-              <span>{isAr ? 'كروب فير جديد' : 'New Group Fare'}</span>
+              <span>{isAr ? 'كروب جديد' : 'New Group'}</span>
             </button>
 
           </div>
@@ -684,17 +679,17 @@ export const GroupsPage: React.FC = () => {
       {/* ── 3. MAIN DATA GRID ── */}
       <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-2xs">
         <AccountingGrid
-          gridKey="group_fares_grid_v2"
+          gridKey="groups_tour_grid_v2"
           data={filtered}
           columnDefs={columnDefs}
           loading={loading}
           actionMenuItems={actionMenuItems}
-          onRowDoubleClick={(row: any) => openFareEditor(row)}
+          onRowDoubleClick={(row: any) => openDesignEditor(row)}
           onRefresh={load}
           emptyMessage={
             isAr
-              ? 'لا توجد كروبات مسجّلة حالياً — اضغط على «كروب فير جديد» لإضافة أول حجز جماعي.'
-              : 'No group fares registered yet — click "New Group Fare" to add your first booking.'
+              ? 'لا توجد كروبات مسجّلة حالياً — اضغط على «كروب جديد» لتصميم وإضافة أول كروب سياحي.'
+              : 'No groups registered yet — click "New Group" to design your first tour package.'
           }
         />
       </div>
