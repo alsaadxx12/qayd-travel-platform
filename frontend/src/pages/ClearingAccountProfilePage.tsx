@@ -86,6 +86,8 @@ export const ClearingAccountProfilePage: React.FC = () => {
   const adoptedEx = useAdoptedExchangeRate();
   const iqdRate = adoptedEx.adoptedRate || DEFAULT_RATES.IQD_PER_USD;
   const tomanRate = DEFAULT_RATES.TOMAN_PER_USD;
+  /** حساب العميل لا يتعامل بالتومان إطلاقاً — عملاته الدينار والدولار فقط. */
+  const isClientAccount = account?.category === 'CLIENT';
 
   // Unified Voucher Modal State (Creating & Editing Vouchers in One Unified Modal)
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
@@ -835,23 +837,13 @@ export const ClearingAccountProfilePage: React.FC = () => {
             تحديث
           </Button>
 
-          <Button
-            size="xs"
-            variant="default"
-            onClick={handleOpenEditAccount}
-            leftSection={<IconEdit size={14} className="text-blue-600" />}
-            className="font-bold bg-white hover:bg-slate-50 border-slate-300 text-slate-700"
-          >
-            تعديل الحساب
-          </Button>
-
           {/* زر سند قبض */}
           <Button
             size="xs"
             color="teal"
             onClick={() => {
               setVoucherType('RECEIPT');
-              setVoucherCurrency('TOMAN');
+              setVoucherCurrency(isClientAccount ? 'IQD' : 'TOMAN');
               setVoucherAmount(0);
               setVoucherCustomRate(0);
               setVoucherNotes('');
@@ -869,7 +861,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
             color="red"
             onClick={() => {
               setVoucherType('PAYMENT');
-              setVoucherCurrency('TOMAN');
+              setVoucherCurrency(isClientAccount ? 'IQD' : 'TOMAN');
               setVoucherAmount(0);
               setVoucherCustomRate(0);
               setVoucherNotes('');
@@ -887,7 +879,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
             color="orange"
             variant="light"
             onClick={() => {
-              setFromCurrency('TOMAN');
+              setFromCurrency(isClientAccount ? 'IQD' : 'TOMAN');
               setToCurrency('USD');
               setFromAmount(0);
               setExchangeCustomRate(92000);
@@ -907,7 +899,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
             variant="default"
             onClick={() => {
               setVoucherType('JOURNAL');
-              setVoucherCurrency('TOMAN');
+              setVoucherCurrency(isClientAccount ? 'IQD' : 'TOMAN');
               setVoucherAmount(0);
               setVoucherCustomRate(0);
               setVoucherNotes('');
@@ -922,8 +914,9 @@ export const ClearingAccountProfilePage: React.FC = () => {
       </div>
 
       {/* ═══════════════ 2. بطاقات أرصدة العملات الثلاث والمعادل بالدولار لهذا الحساب ═══════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-        {/* 1. إجمالي التقييم الشامل بالدولار */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2.5 ${isClientAccount ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
+        {/* 1. إجمالي التقييم الشامل بالدولار — يُخفى لحساب العميل */}
+        {!isClientAccount && (
         <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
             <span>إجمالي الرصيد المعادل بالدولار</span>
@@ -938,6 +931,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
             التقييم الشامل لأرصدة العملات الثلاث
           </div>
         </Paper>
+        )}
 
         {/* 2. رصيد الدولار */}
         <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
@@ -969,7 +963,8 @@ export const ClearingAccountProfilePage: React.FC = () => {
           </div>
         </Paper>
 
-        {/* 4. رصيد التومان الإيراني */}
+        {/* 4. رصيد التومان — يُخفى لحساب العميل (لا يتعامل بالتومان) */}
+        {!isClientAccount && (
         <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
             <span>رصيد التومان (TOMAN)</span>
@@ -984,6 +979,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
             سعر الصرف المرجعي: {tomanRate.toLocaleString()} تومان/$
           </div>
         </Paper>
+        )}
       </div>
 
       {/* ═══════════════ 3. كشف الحساب وسجل الحركات المحاسبية مع الفلترة المتقدمة ═══════════════ */}
@@ -1588,7 +1584,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
                       setVoucherCustomRate(0);
                     }}
                     data={[
-                      { label: 'تومان (TOM)', value: 'TOMAN' },
+                      ...(isClientAccount ? [] : [{ label: 'تومان (TOM)', value: 'TOMAN' }]),
                       { label: 'دينار (IQD)', value: 'IQD' },
                       { label: 'دولار ($)', value: 'USD' },
                     ]}
@@ -1932,7 +1928,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
                 value={fromCurrency}
                 onChange={v => setFromCurrency(v as any)}
                 data={[
-                  { label: 'تومان (TOMAN)', value: 'TOMAN' },
+                  ...(isClientAccount ? [] : [{ label: 'تومان (TOMAN)', value: 'TOMAN' }]),
                   { label: 'دينار (IQD)', value: 'IQD' },
                   { label: 'دولار ($)', value: 'USD' },
                 ]}
@@ -1958,7 +1954,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
                 data={[
                   { label: 'دولار ($ USD)', value: 'USD' },
                   { label: 'دينار (IQD)', value: 'IQD' },
-                  { label: 'تومان (TOMAN)', value: 'TOMAN' },
+                  ...(isClientAccount ? [] : [{ label: 'تومان (TOMAN)', value: 'TOMAN' }]),
                 ]}
                 color="teal"
                 className="bg-white font-bold"
