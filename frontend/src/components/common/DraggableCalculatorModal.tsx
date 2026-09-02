@@ -57,9 +57,9 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
   const [showHistory, setShowHistory] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [copied, setCopied] = useState(false);
+  const hostRef = useRef<HTMLDivElement>(null);
   const [isPoppedOut, setIsPoppedOut] = useState(false);
   const pipWindowRef = useRef<Window | null>(null);
-  const pipRootRef = useRef<ReturnType<typeof ReactDOM.createRoot> | null>(null);
 
   // Cleanup PiP window when calculator closes
   useEffect(() => {
@@ -70,13 +70,12 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
     }
   }, [opened]);
 
-  // Pop-out into Picture-in-Picture window
+  // Pop-out into Picture-in-Picture window (Zero-latency DOM Transfer)
   const handlePopOut = useCallback(async () => {
     // If already popped out, close and bring back
     if (isPoppedOut && pipWindowRef.current) {
       pipWindowRef.current.close();
       pipWindowRef.current = null;
-      pipRootRef.current = null;
       setIsPoppedOut(false);
       return;
     }
@@ -84,7 +83,7 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
     // Use Document Picture-in-Picture API (Chrome 116+ / Edge 116+)
     if ('documentPictureInPicture' in window) {
       try {
-        // @ts-ignore – API not yet in TS lib
+        // @ts-ignore – Document PiP API
         const pip = await window.documentPictureInPicture.requestWindow({
           width: 340,
           height: 560,
@@ -93,7 +92,7 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
         pipWindowRef.current = pip;
         setIsPoppedOut(true);
 
-        // Copy all stylesheets into PiP window so Tailwind works
+        // Copy all stylesheets into PiP window so Tailwind & Mantine work
         [...document.styleSheets].forEach((sheet) => {
           try {
             const cssText = [...sheet.cssRules].map((r) => r.cssText).join('');
@@ -110,73 +109,44 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
           }
         });
 
-        // Add base styles
+        // Add reset styles for PiP window body
         const baseStyle = pip.document.createElement('style');
         baseStyle.textContent = `
           * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { background: transparent; font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif; overflow: hidden; }
+          body { background: #FFFFFF; font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
           ::-webkit-scrollbar { display: none; }
         `;
         pip.document.head.appendChild(baseStyle);
 
-        // Create container & render calculator UI inside PiP
-        const container = pip.document.createElement('div');
-        pip.document.body.appendChild(container);
+        // Move the modal element into PiP window
+        const contentEl = modalRef.current;
+        if (contentEl) {
+          contentEl.style.position = 'static';
+          contentEl.style.left = '0px';
+          contentEl.style.top = '0px';
+          contentEl.style.width = '100%';
+          contentEl.style.height = '100%';
+          pip.document.body.appendChild(contentEl);
+        }
 
-        // Close PiP state handler
+        // Return element back to main window when PiP is closed
         pip.addEventListener('pagehide', () => {
-          pipRootRef.current?.unmount();
-          pipRootRef.current = null;
+          if (contentEl && hostRef.current) {
+            contentEl.style.position = 'fixed';
+            contentEl.style.left = `${dragRef.current.currentX || 40}px`;
+            contentEl.style.top = `${dragRef.current.currentY || 60}px`;
+            contentEl.style.width = isMinimized ? '280px' : '340px';
+            contentEl.style.height = 'auto';
+            hostRef.current.appendChild(contentEl);
+          }
           pipWindowRef.current = null;
           setIsPoppedOut(false);
         });
-
-        showSuccessNotification(
-          isAr ? 'تم فتح الحاسبة 🖥️' : 'Calculator Popped Out 🖥️',
-          isAr ? 'الحاسبة الآن تعمل فوق جميع النوافذ' : 'Calculator is now floating above all windows',
-        );
       } catch (err) {
-        // Fallback: open as regular popup window
-        const popup = window.open(
-          '',
-          'qayd-calculator',
-          'width=340,height=580,resizable=no,scrollbars=no,toolbar=no,menubar=no,location=no,status=no,alwaysOnTop=1',
-        );
-        if (popup) {
-          pipWindowRef.current = popup;
-          setIsPoppedOut(true);
-          popup.document.title = isAr ? 'قيد — الحاسبة الذكية' : 'QAYD Calculator';
-
-          // Copy styles
-          [...document.styleSheets].forEach((sheet) => {
-            try {
-              if ((sheet as CSSStyleSheet).href) {
-                const link = popup.document.createElement('link');
-                link.rel = 'stylesheet';
-                link.href = (sheet as CSSStyleSheet).href!;
-                popup.document.head.appendChild(link);
-              }
-            } catch { /* skip */ }
-          });
-
-          popup.addEventListener('beforeunload', () => {
-            pipWindowRef.current = null;
-            setIsPoppedOut(false);
-          });
-
-          showSuccessNotification(
-            isAr ? 'تم فتح الحاسبة' : 'Calculator Opened',
-            isAr ? 'تم فتح الحاسبة في نافذة منفصلة' : 'Calculator opened in a separate window',
-          );
-        }
+        console.error('Error opening PiP:', err);
       }
-    } else {
-      showSuccessNotification(
-        isAr ? 'غير مدعوم' : 'Not Supported',
-        isAr ? 'المتصفح الحالي لا يدعم هذه الميزة. استخدم Chrome أو Edge' : 'Use Chrome or Edge to enable this feature',
-      );
     }
-  }, [isPoppedOut, isAr]);
+  }, [isPoppedOut, isMinimized]);
 
   // Dragging State (GPU accelerated)
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
@@ -516,15 +486,16 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
   if (!opened) return null;
 
   return (
-    <div
-      ref={modalRef}
-      style={{
-        position: 'fixed',
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        zIndex: 9999,
-        willChange: isDragging ? 'left, top' : 'auto',
-      }}
+    <div ref={hostRef}>
+      <div
+        ref={modalRef}
+        style={{
+          position: 'fixed',
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          zIndex: 9999,
+          willChange: isDragging ? 'left, top' : 'auto',
+        }}
       className={`font-sans select-none ${
         isMinimized ? 'w-[280px]' : 'w-[340px]'
       }`}
@@ -929,6 +900,7 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
         )}
       </div>
     </div>
+  </div>
   );
 };
 
