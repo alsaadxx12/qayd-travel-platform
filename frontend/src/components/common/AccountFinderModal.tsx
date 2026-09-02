@@ -77,7 +77,7 @@ export const AccountFinderModal: React.FC<AccountFinderModalProps> = ({
     let cancelled = false;
     setLoading(true);
     accountsApi
-      .getFlat()
+      .getFlat(undefined, undefined, true)
       .then((data: any) => {
         if (cancelled) return;
         setAccounts(Array.isArray(data) ? data : (data?.data || []));

@@ -216,7 +216,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
 
   const { data: accountsData } = useQuery({
     queryKey: ['cashbox-accounts-list'],
-    queryFn: () => accountsApi.getFlat(),
+    queryFn: () => accountsApi.getFlat(undefined, undefined, true),
     staleTime: 5 * 60 * 1000,
   });
 

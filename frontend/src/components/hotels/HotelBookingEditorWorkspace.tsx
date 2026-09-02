@@ -300,7 +300,7 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
       if (Array.isArray(data)) setSuppliersList(data);
     }).catch(() => {});
 
-    accountsApi.getFlat().then((data) => {
+    accountsApi.getFlat(undefined, undefined, true).then((data) => {
       if (Array.isArray(data)) {
         setAccountsList(data);
         const cashboxes = data.filter((a) =>
