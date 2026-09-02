@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactDOM from 'react-dom/client';
 import calculatorSvg from '../../assets/calculator.svg';
 import {
   X,
@@ -10,6 +11,7 @@ import {
   Check,
   Delete,
   ArrowRightLeft,
+  PictureInPicture2,
 } from 'lucide-react';
 import { Tooltip } from '@mantine/core';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -55,6 +57,126 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
   const [showHistory, setShowHistory] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isPoppedOut, setIsPoppedOut] = useState(false);
+  const pipWindowRef = useRef<Window | null>(null);
+  const pipRootRef = useRef<ReturnType<typeof ReactDOM.createRoot> | null>(null);
+
+  // Cleanup PiP window when calculator closes
+  useEffect(() => {
+    if (!opened && pipWindowRef.current) {
+      pipWindowRef.current.close();
+      pipWindowRef.current = null;
+      setIsPoppedOut(false);
+    }
+  }, [opened]);
+
+  // Pop-out into Picture-in-Picture window
+  const handlePopOut = useCallback(async () => {
+    // If already popped out, close and bring back
+    if (isPoppedOut && pipWindowRef.current) {
+      pipWindowRef.current.close();
+      pipWindowRef.current = null;
+      pipRootRef.current = null;
+      setIsPoppedOut(false);
+      return;
+    }
+
+    // Use Document Picture-in-Picture API (Chrome 116+ / Edge 116+)
+    if ('documentPictureInPicture' in window) {
+      try {
+        // @ts-ignore – API not yet in TS lib
+        const pip = await window.documentPictureInPicture.requestWindow({
+          width: 340,
+          height: 560,
+          disallowReturnToOpener: false,
+        });
+        pipWindowRef.current = pip;
+        setIsPoppedOut(true);
+
+        // Copy all stylesheets into PiP window so Tailwind works
+        [...document.styleSheets].forEach((sheet) => {
+          try {
+            const cssText = [...sheet.cssRules].map((r) => r.cssText).join('');
+            const style = pip.document.createElement('style');
+            style.textContent = cssText;
+            pip.document.head.appendChild(style);
+          } catch {
+            if ((sheet as CSSStyleSheet).href) {
+              const link = pip.document.createElement('link');
+              link.rel = 'stylesheet';
+              link.href = (sheet as CSSStyleSheet).href!;
+              pip.document.head.appendChild(link);
+            }
+          }
+        });
+
+        // Add base styles
+        const baseStyle = pip.document.createElement('style');
+        baseStyle.textContent = `
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { background: transparent; font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif; overflow: hidden; }
+          ::-webkit-scrollbar { display: none; }
+        `;
+        pip.document.head.appendChild(baseStyle);
+
+        // Create container & render calculator UI inside PiP
+        const container = pip.document.createElement('div');
+        pip.document.body.appendChild(container);
+
+        // Close PiP state handler
+        pip.addEventListener('pagehide', () => {
+          pipRootRef.current?.unmount();
+          pipRootRef.current = null;
+          pipWindowRef.current = null;
+          setIsPoppedOut(false);
+        });
+
+        showSuccessNotification(
+          isAr ? 'تم فتح الحاسبة 🖥️' : 'Calculator Popped Out 🖥️',
+          isAr ? 'الحاسبة الآن تعمل فوق جميع النوافذ' : 'Calculator is now floating above all windows',
+        );
+      } catch (err) {
+        // Fallback: open as regular popup window
+        const popup = window.open(
+          '',
+          'qayd-calculator',
+          'width=340,height=580,resizable=no,scrollbars=no,toolbar=no,menubar=no,location=no,status=no,alwaysOnTop=1',
+        );
+        if (popup) {
+          pipWindowRef.current = popup;
+          setIsPoppedOut(true);
+          popup.document.title = isAr ? 'قيد — الحاسبة الذكية' : 'QAYD Calculator';
+
+          // Copy styles
+          [...document.styleSheets].forEach((sheet) => {
+            try {
+              if ((sheet as CSSStyleSheet).href) {
+                const link = popup.document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = (sheet as CSSStyleSheet).href!;
+                popup.document.head.appendChild(link);
+              }
+            } catch { /* skip */ }
+          });
+
+          popup.addEventListener('beforeunload', () => {
+            pipWindowRef.current = null;
+            setIsPoppedOut(false);
+          });
+
+          showSuccessNotification(
+            isAr ? 'تم فتح الحاسبة' : 'Calculator Opened',
+            isAr ? 'تم فتح الحاسبة في نافذة منفصلة' : 'Calculator opened in a separate window',
+          );
+        }
+      }
+    } else {
+      showSuccessNotification(
+        isAr ? 'غير مدعوم' : 'Not Supported',
+        isAr ? 'المتصفح الحالي لا يدعم هذه الميزة. استخدم Chrome أو Edge' : 'Use Chrome or Edge to enable this feature',
+      );
+    }
+  }, [isPoppedOut, isAr]);
 
   // Dragging State (GPU accelerated)
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
@@ -444,6 +566,26 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
                 </button>
               </Tooltip>
             )}
+
+            {/* Pop-Out to Floating Window */}
+            <Tooltip
+              label={isPoppedOut ? (isAr ? 'إعادة الدمج' : 'Bring Back') : (isAr ? 'فتح فوق كل النوافذ' : 'Float Above All Windows')}
+              withArrow
+              position="top"
+            >
+              <button
+                type="button"
+                onClick={handlePopOut}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
+                  isPoppedOut
+                    ? 'bg-blue-100 text-blue-600 shadow-2xs'
+                    : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50'
+                }`}
+                title={isPoppedOut ? 'إعادة الدمج' : 'فتح فوق كل النوافذ'}
+              >
+                <PictureInPicture2 size={14} />
+              </button>
+            </Tooltip>
 
             {/* Minimize / Maximize Button */}
             <button
