@@ -353,12 +353,14 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
             <div>
               <h2 className="font-black text-sm sm:text-base text-[#111827] leading-tight">
                 {(initialData as any)?.id
-                  ? isAr ? 'تعديل الكروب السياحي وقوالب الأسعار' : 'Edit Tour Group & Templates'
-                  : isAr ? 'تصميم وإدارة الكروب السياحي (Design Custom Groups)' : 'Design Custom Groups & Pricing Templates'}
+                  ? isAr ? 'تعديل الكروب السياحي' : 'Edit Tour Group'
+                  : isAr ? 'تصميم وإدارة الكروب السياحي' : 'Tour Group Workspace'}
               </h2>
-              <p className="text-[11px] font-bold text-slate-500 mt-0.5 font-mono">
-                {design.groupName || (isAr ? '— كروب بدون اسم بعد —' : '— Unnamed Group —')}
-              </p>
+              {design.groupName && (
+                <p className="text-[11px] font-bold text-[#F45A0A] mt-0.5 font-mono">
+                  {design.groupName}
+                </p>
+              )}
             </div>
           </div>
 
@@ -374,7 +376,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
               }`}
             >
               <Palette size={14} />
-              <span>{isAr ? '١. معلومات وتصميم الكروب (Group Design)' : '1. Group Info & Design'}</span>
+              <span>{isAr ? '١. معلومات وتصميم الكروب' : '1. Group Info & Design'}</span>
             </button>
 
             <button
@@ -387,7 +389,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
               }`}
             >
               <Users size={14} />
-              <span>{isAr ? '٢. المستفيدين وتوزيع المقاعد (Customers & Sale)' : '2. Customers & Seats'}</span>
+              <span>{isAr ? '٢. المستفيدين وتوزيع المقاعد' : '2. Customers & Seats'}</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10.5px] font-mono font-bold bg-white/20">
                 {(design.customers || []).length}
               </span>
@@ -411,7 +413,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
           
           {activeTab === 1 ? (
             /* ══════════════════════════════════════════════════════════════
-               TAB 1: GROUP INFO & PRICES TEMPLATES TABLE (الصورة 3)
+               TAB 1: GROUP INFO & PRICES TEMPLATES TABLE
                ══════════════════════════════════════════════════════════════ */
             <div className="space-y-4">
               
@@ -423,7 +425,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                       <Package size={15} />
                     </div>
                     <span className="font-black text-[13.5px] text-slate-900">
-                      {isAr ? 'معلومات وهوية الكروب (Group Info)' : 'Group Information'}
+                      {isAr ? 'معلومات وهوية الكروب' : 'Group Information'}
                     </span>
                   </div>
                 </div>
@@ -561,13 +563,13 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                         <Palette size={15} />
                       </div>
                       <span className="font-black text-[13.5px] text-slate-900">
-                        {isAr ? 'قوالب الأسعار وتكاليف المقاعد (Prices Templates)' : 'Prices Templates'}
+                        {isAr ? 'قوالب الأسعار وتكاليف المقاعد' : 'Prices Templates'}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500 font-medium mt-0.5">
                       {isAr
-                        ? 'أضف قالباً أو أكثر لتخصيص أسعار وتكاليف المشتريات (طيران، فندق، فيزا، خدمات) وبيعها للمستفيدين'
-                        : 'Add templates with distinct purchasing costs (flights, hotels, visas) and seat prices'}
+                        ? 'تخصيص قوالب التكاليف والأسعار للمقاعد وتحديد المشتريات والمبيعات'
+                        : 'Manage price templates with distinct purchasing costs and seat prices'}
                     </p>
                   </div>
 
@@ -577,7 +579,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                     className="h-[38px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
                   >
                     <Plus size={16} strokeWidth={2.4} />
-                    <span>{isAr ? 'إضافة تيمبلت جديد (Add Template)' : 'Add Template (+)'}</span>
+                    <span>{isAr ? 'إضافة قالب جديد' : 'Add Template'}</span>
                   </button>
                 </div>
 
@@ -690,7 +692,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                     <tfoot>
                       <tr className="bg-[#F8FAFC] border-t-2 border-[#E5E7EB] font-black text-[12px] text-slate-900">
                         <td colSpan={6} className="p-2.5 text-start font-sans">
-                          {isAr ? 'إجمالي مجاميع القوالب (Summary):' : 'Templates Summary:'}
+                          {isAr ? 'إجمالي مجاميع القوالب:' : 'Templates Summary:'}
                         </td>
                         <td className="p-2.5 text-end font-mono text-slate-800" dir="ltr">
                           {money(totals.sumBuy, design.currency)}
@@ -730,7 +732,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                     </div>
                     <div>
                       <span className="font-black text-[14px] text-slate-900 block leading-tight">
-                        {isAr ? 'توزيع مقاعد الكروب على المستفيدين والعملاء (Customers & Sales)' : 'Seat Sales & Customers'}
+                        {isAr ? 'توزيع مقاعد الكروب على المستفيدين والعملاء' : 'Seat Sales & Customers'}
                       </span>
                       <span className="text-[11px] text-slate-500 font-medium block mt-0.5">
                         {isAr
@@ -978,7 +980,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                 className="h-[42px] px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer flex items-center gap-1.5 transition-colors"
               >
                 {direction === 'rtl' ? <ArrowRight size={15} /> : <ArrowLeft size={15} />}
-                <span>{isAr ? 'رجوع لتصميم الكروب' : 'Back to Design'}</span>
+                <span>{isAr ? 'رجوع للتصميم' : 'Back to Design'}</span>
               </button>
             ) : (
               <button
@@ -986,7 +988,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                 onClick={() => setActiveTab(2)}
                 className="h-[42px] px-5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
               >
-                <span>{isAr ? 'التالي: توزيع المقاعد للمستفيدين' : 'Next: Customers & Seats'}</span>
+                <span>{isAr ? 'التالي: توزيع المقاعد' : 'Next: Customers & Seats'}</span>
                 {direction === 'rtl' ? <ArrowLeft size={15} /> : <ArrowRight size={15} />}
               </button>
             )}
@@ -1140,7 +1142,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
             </div>
             <div>
               <h3 className="font-black text-sm text-slate-900 leading-tight">
-                {isAr ? 'قالب الأسعار والمشتريات (Prices Template)' : 'Prices Template Designer'}
+                {isAr ? 'قالب الأسعار والمشتريات' : 'Prices Template Designer'}
               </h3>
               <span className="text-[11px] font-bold text-slate-400 font-mono">{tpl.name}</span>
             </div>
@@ -1154,7 +1156,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
               className="h-[38px] px-4 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
             >
               <ShoppingCart size={15} />
-              <span>{isAr ? 'فتح البيع للعملاء (Open Sale)' : 'Open Sale'}</span>
+              <span>{isAr ? 'فتح البيع للعملاء' : 'Open Sale'}</span>
             </button>
 
             <button
@@ -1172,7 +1174,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           {/* Template Name */}
           <div>
             <label className="text-[11px] font-bold text-slate-600 block mb-1">
-              {isAr ? 'اسم القالب (Template Name)' : 'Template Name'}
+              {isAr ? 'اسم القالب' : 'Template Name'}
             </label>
             <input
               value={tpl.name}
@@ -1184,7 +1186,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           {/* Seats* */}
           <div>
             <label className="text-[11px] font-bold text-slate-600 block mb-1">
-              {isAr ? 'عدد المقاعد (Seats*)' : 'Seats*'}
+              {isAr ? 'عدد المقاعد' : 'Seats'}
             </label>
             <input
               value={tpl.seats}
@@ -1197,7 +1199,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           {/* Currency (SearchableCombobox) */}
           <div>
             <SearchableCombobox
-              label={isAr ? 'العملة (Currency)' : 'Currency'}
+              label={isAr ? 'العملة' : 'Currency'}
               value={tpl.currency}
               onChange={(val) => patchTpl({ currency: (val as 'IQD' | 'USD') || groupCurrency })}
               options={[
@@ -1211,7 +1213,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           {/* Price Sale (Image 2) */}
           <div>
             <label className="text-[11px] font-bold text-[#F45A0A] block mb-1">
-              {isAr ? 'سعر البيع المقترح (Price Sale)' : 'Price Sale'}
+              {isAr ? 'سعر البيع المقترح' : 'Price Sale'}
             </label>
             <input
               value={tpl.seatPrice ? tpl.seatPrice.toLocaleString('en-US') : ''}
@@ -1236,7 +1238,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           }`}
         >
           <Ticket size={14} />
-          <span>{isAr ? 'المشتريات التلقائية للمقعد (Auto Purchases)' : 'Auto Purchases'}</span>
+          <span>{isAr ? 'المشتريات التلقائية للمقعد' : 'Auto Purchases'}</span>
         </button>
 
         <button
@@ -1249,7 +1251,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           }`}
         >
           <Package size={14} />
-          <span>{isAr ? 'المشتريات العامة الشاملة (Global Purchases)' : 'Global Purchases'}</span>
+          <span>{isAr ? 'المشتريات العامة الشاملة' : 'Global Purchases'}</span>
         </button>
 
         <button
@@ -1262,7 +1264,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           }`}
         >
           <Coins size={14} />
-          <span>{isAr ? 'المصاريف العامة (Global Expenses)' : 'Global Expenses'}</span>
+          <span>{isAr ? 'المصاريف العامة' : 'Global Expenses'}</span>
         </button>
       </div>
 
@@ -1286,7 +1288,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
                 className="h-[36px] px-3.5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all"
               >
                 <Plus size={15} strokeWidth={2.4} />
-                <span>{isAr ? 'إضافة مكوّن جديد (+)' : 'Add Component (+)'}</span>
+                <span>{isAr ? 'إضافة مكوّن جديد' : 'Add Component'}</span>
               </button>
             </Menu.Target>
             <Menu.Dropdown className="p-1.5" style={{ direction }}>
