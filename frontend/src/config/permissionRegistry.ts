@@ -114,18 +114,18 @@ export const PERMISSION_REGISTRY: ModuleDefinition[] = [
     ],
   },
 
-  // ── 5. المجموعات والكروبات السياحية ──
+  // ── 5. تذاكر الكروبات ──
   {
     id: 'groups',
-    title: 'المجموعات والكروبات السياحية',
+    title: 'تذاكر الكروبات',
     route: '/groups',
     category: 'العمليات والخدمات',
     iconName: 'IconUsersGroup',
     permissions: [
-      { code: 'groups.view', label: 'عرض قائمة المجموعات والرحلات السياحية', actionType: 'View' },
-      { code: 'groups.create', label: 'إنشاء باقة ورحلة سياحية جماعية', actionType: 'Create' },
-      { code: 'groups.update', label: 'تعديل برامج ومسار الكروب السياحي', actionType: 'Update' },
-      { code: 'groups.delete', label: 'حذف أو إلغاء كروب سياحي', actionType: 'Delete', isSensitive: true },
+      { code: 'groups.view', label: 'عرض سجل تذاكر الكروبات', actionType: 'View' },
+      { code: 'groups.create', label: 'إصدار كروب جديد', actionType: 'Create' },
+      { code: 'groups.update', label: 'تعديل بيانات الكروب وأسعاره', actionType: 'Update' },
+      { code: 'groups.delete', label: 'حذف كروب', actionType: 'Delete', isSensitive: true },
       { code: 'groups.post', label: 'ترحيل الحساب المالي للمجموعة السياحية', actionType: 'Post', isSensitive: true },
       { code: 'groups.print', label: 'طباعة كشف المسافرين والمانيفست', actionType: 'Print' },
       { code: 'groups.viewProfit', label: 'مشاهدة أرباح الرحلة الجماعية', actionType: 'ViewProfit', isSensitive: true },

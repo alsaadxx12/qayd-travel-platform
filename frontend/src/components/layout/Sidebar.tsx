@@ -85,7 +85,7 @@ const DEFAULT_SIDEBAR_SECTIONS: NavSection[] = [
     items: [
       { id: 'tickets', title: 'تذاكر الطيران', path: '/tickets', iconKey: 'PlaneTakeoff' },
       { id: 'visas', title: 'الفيزا والتأشيرات', path: '/visas', iconKey: 'BadgeCheck' },
-      { id: 'groups', title: 'تذاكر المجموعات', path: '/groups', iconKey: 'UsersRound' },
+      { id: 'groups', title: 'تذاكر الكروبات', path: '/groups', iconKey: 'UsersRound' },
       { id: 'hotels', title: 'حجوزات الفنادق', path: '/hotels', iconKey: 'Building2' },
       { id: 'refunds', title: 'استرجاع التذاكر', path: '/refunds', iconKey: 'Undo2' },
       { id: 'reissues', title: 'تغيير التذاكر', path: '/reissues', iconKey: 'RefreshCw' },

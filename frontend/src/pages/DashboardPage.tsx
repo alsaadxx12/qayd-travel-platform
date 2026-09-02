@@ -1003,7 +1003,7 @@ export const DashboardPage: React.FC = () => {
               <Menu.Item leftSection={<LucideBadgeCheck size={15} className="text-[#F45A0A]" />} onClick={() => handleExecuteAction('/visas?action=new', 'visas', isAr ? 'الفيزا والتأشيرات' : 'Visas')}>
                 {isAr ? 'إضافة تأشيرة' : 'New Visa'}
               </Menu.Item>
-              <Menu.Item leftSection={<UsersRound size={15} className="text-[#F45A0A]" />} onClick={() => handleExecuteAction('/groups?action=new', 'groups', isAr ? 'تذاكر المجموعات' : 'Group Tickets')}>
+              <Menu.Item leftSection={<UsersRound size={15} className="text-[#F45A0A]" />} onClick={() => handleExecuteAction('/groups?action=new', 'groups', isAr ? 'تذاكر الكروبات' : 'Group Tickets')}>
                 {isAr ? 'إضافة مجموعة' : 'New Group Ticket'}
               </Menu.Item>
               <Menu.Item leftSection={<Building2 size={15} className="text-[#F45A0A]" />} onClick={() => handleExecuteAction('/hotels?action=new', 'hotels', isAr ? 'حجوزات الفنادق' : 'Hotel Bookings')}>
@@ -1442,7 +1442,7 @@ export const DashboardPage: React.FC = () => {
 
           {/* Card 2: Group Tickets */}
           <div
-            onClick={() => handleExecuteAction('/groups', 'groups', isAr ? 'تذاكر المجموعات' : 'Group Tickets')}
+            onClick={() => handleExecuteAction('/groups', 'groups', isAr ? 'تذاكر الكروبات' : 'Group Tickets')}
             className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 flex flex-col justify-between hover:border-orange-300 transition-all cursor-pointer shadow-2xs"
           >
             <div className="flex items-center justify-between">
@@ -1451,7 +1451,7 @@ export const DashboardPage: React.FC = () => {
                   <UsersRound size={18} />
                 </div>
                 <div>
-                  <div className="text-[13px] font-bold text-slate-900">{isAr ? 'تذاكر المجموعات' : 'Group Tickets'}</div>
+                  <div className="text-[13px] font-bold text-slate-900">{isAr ? 'تذاكر الكروبات' : 'Group Tickets'}</div>
                   <div className="text-[11px] text-slate-400 font-mono">0 {isAr ? 'عملية' : 'ops'}</div>
                 </div>
               </div>
@@ -1687,7 +1687,7 @@ export const DashboardPage: React.FC = () => {
                   { value: 'ALL', label: isAr ? 'جميع العمليات' : 'All Operations' },
                   { value: 'TICKETS', label: isAr ? 'تذاكر الطيران' : 'Flight Tickets' },
                   { value: 'VISAS', label: isAr ? 'التأشيرات والفيز' : 'Visas' },
-                  { value: 'GROUPS', label: isAr ? 'تذاكر المجموعات' : 'Group Tickets' },
+                  { value: 'GROUPS', label: isAr ? 'تذاكر الكروبات' : 'Group Tickets' },
                   { value: 'HOTELS', label: isAr ? 'حجوزات الفنادق' : 'Hotels' },
                   { value: 'REISSUES', label: isAr ? 'تغيير التذاكر' : 'Reissues' },
                   { value: 'REFUNDS', label: isAr ? 'استرجاع التذاكر' : 'Refunds' },

@@ -5,7 +5,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, { code: string; title: string 
   '/dashboard': { code: 'dashboard.view', title: 'لوحة التحكم والمؤشرات' },
   '/tickets': { code: 'tickets.view', title: 'تذاكر الطيران' },
   '/visas': { code: 'visas.view', title: 'تأشيرات الدخول (الفيزا)' },
-  '/groups': { code: 'groups.view', title: 'المجموعات والكروبات السياحية' },
+  '/groups': { code: 'groups.view', title: 'تذاكر الكروبات' },
   '/hotels': { code: 'hotels.view', title: 'حجوزات الفنادق' },
   '/refunds': { code: 'refunds.view', title: 'استرجاع التذاكر والخدمات' },
   '/reissues': { code: 'reissues.view', title: 'تغيير الحجوزات وإعادة الإصدار' },

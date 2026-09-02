@@ -16,7 +16,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.operations': 'العمليات والخدمات',
     'nav.tickets': 'تذاكر الطيران',
     'nav.visas': 'الفيزا والتأشيرات',
-    'nav.groups': 'تذاكر المجموعات',
+    'nav.groups': 'تذاكر الكروبات',
     'nav.hotels': 'حجوزات الفنادق',
     'nav.refunds': 'استرجاع التذاكر',
     'nav.reissues': 'تغيير التذاكر',
