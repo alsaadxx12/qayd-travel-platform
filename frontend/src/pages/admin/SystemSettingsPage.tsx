@@ -107,6 +107,7 @@ export interface CoreAccountsConfig {
   dividendsPayableAccountId: string;
   commissionsParentAccountId: string;
   otherRevenuesParentAccountId: string;
+  externalPartiesParentAccountId: string;
 }
 
 export interface ServicesAccountsConfig {
@@ -164,6 +165,7 @@ export const SystemSettingsPage: React.FC = () => {
     dividendsPayableAccountId: '',
     commissionsParentAccountId: '',
     otherRevenuesParentAccountId: '',
+    externalPartiesParentAccountId: '',
   });
   const [isSavingCoreAccounts, setIsSavingCoreAccounts] = useState(false);
 
@@ -633,6 +635,7 @@ export const SystemSettingsPage: React.FC = () => {
       dividendsPayableAccountId: pDiv?.id || '',
       commissionsParentAccountId: pComm?.id || '',
       otherRevenuesParentAccountId: pOthRev?.id || '',
+      externalPartiesParentAccountId: allAccs.find((a: any) => a.code === '9')?.id || '',
     };
   };
 
@@ -1898,6 +1901,33 @@ export const SystemSettingsPage: React.FC = () => {
                         input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
                       }}
                     />
+                  </div>
+
+                  {/* 11. حساب أب الأطراف الخارجية (خارج الميزانية) */}
+                  <div className="space-y-1 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-emerald-300 transition-colors shadow-2xs md:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <IconBuildingBank size={15} className="text-purple-700" />
+                        حساب أب الأطراف الخارجية (بورصة / مكاتب / عملاء — خارج الميزانية)
+                      </label>
+                      <span className="text-[10.5px] text-slate-500 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+                        المقترح: 9
+                      </span>
+                    </div>
+                    <Select
+                      size="xs"
+                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr} ${a.isParent ? '(أب)' : ''}` }))}
+                      value={coreAccounts.externalPartiesParentAccountId}
+                      onChange={(val) => setCoreAccounts(p => ({ ...p, externalPartiesParentAccountId: val || '' }))}
+                      searchable
+                      placeholder="اختر الحساب الأب للأطراف الخارجية..."
+                      styles={{
+                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
+                      }}
+                    />
+                    <p className="text-[10px] text-slate-500 font-medium mt-1">
+                      حساباتهم (البورصة، المكاتب الوسيطة، العملاء) تُدرج تحته ولا تُحتسب ضمن الموجودات أو المطلوبات — رقابية بحتة.
+                    </p>
                   </div>
                 </div>
               </div>

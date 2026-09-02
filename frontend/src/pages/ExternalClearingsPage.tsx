@@ -75,7 +75,7 @@ export const ExternalClearingsPage: React.FC = () => {
   const [loadingStatement, setLoadingStatement] = useState(false);
 
   // New Multi-Currency Clearing Account Form State
-  const [newCategory, setNewCategory] = useState<'BOURSE' | 'OFFICE' | 'SUSPENSE'>('BOURSE');
+  const [newCategory, setNewCategory] = useState<'BOURSE' | 'OFFICE' | 'CLIENT'>('BOURSE');
   const [newNameAr, setNewNameAr] = useState('');
   const [newNameEn, setNewNameEn] = useState('');
   const [newOpeningType, setNewOpeningType] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
@@ -288,7 +288,7 @@ export const ExternalClearingsPage: React.FC = () => {
       totalCount: clearingAccounts.length,
       bourseCount: clearingAccounts.filter(a => a.category === 'BOURSE').length,
       officeCount: clearingAccounts.filter(a => a.category === 'OFFICE').length,
-      suspenseCount: clearingAccounts.filter(a => a.category === 'SUSPENSE').length,
+      clientCount: clearingAccounts.filter(a => a.category === 'CLIENT').length,
     };
   }, [clearingAccounts]);
 
@@ -688,7 +688,7 @@ export const ExternalClearingsPage: React.FC = () => {
                   { label: `الكل (${totals.totalCount})`, value: 'ALL' },
                   { label: `بورصة (${totals.bourseCount})`, value: 'BOURSE' },
                   { label: `مكاتب وسيطة (${totals.officeCount})`, value: 'OFFICE' },
-                  { label: `مقاصة معلقة (${totals.suspenseCount})`, value: 'SUSPENSE' },
+                  { label: `عملاء (${totals.clientCount})`, value: 'CLIENT' },
                 ]}
                 color="orange"
                 className="bg-slate-100 font-bold"
@@ -791,7 +791,7 @@ export const ExternalClearingsPage: React.FC = () => {
                                   variant="light"
                                   className="font-bold text-[10px]"
                                 >
-                                  {isBourse ? 'حساب بورصة' : isOffice ? 'مكتب وسيط' : 'حساب مقاصة'}
+                                  {isBourse ? 'حساب بورصة' : isOffice ? 'مكتب وسيط' : 'حساب عميل'}
                                 </Badge>
                               </div>
                             </div>
@@ -1076,12 +1076,12 @@ export const ExternalClearingsPage: React.FC = () => {
         <div className="space-y-3.5 text-xs select-none">
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 font-medium text-[11px] leading-relaxed">
             {accountModalMode === 'CREATE'
-              ? 'هذا الحساب يدعم العملات الثلاث تلقائياً (الدولار، الدينار، والتومان) تحت الدليل الرقابي 91، دون أن يختلط بالميزانية العمومية أو الأرباح والخسائر.'
+              ? 'هذا الحساب يدعم العملات الثلاث تلقائياً (الدولار، الدينار، والتومان) تحت جذر «الأطراف الخارجية» (الدليل 9، خارج الميزانية)، دون أن يختلط بالموجودات أو المطلوبات أو الأرباح والخسائر.'
               : 'يمكنك تعديل المسميات وجهات الاتصال والملاحظات. الأرصدة الافتتاحية مقفلة ولا يمكن تعديلها مباشرة حفاظاً على دقة القيود.'}
           </div>
 
           <div>
-            <label className="block font-bold text-slate-700 mb-1">نوع حساب التصفية</label>
+            <label className="block font-bold text-slate-700 mb-1">نوع الطرف الخارجي</label>
             <SegmentedControl
               fullWidth
               size="xs"
@@ -1089,13 +1089,25 @@ export const ExternalClearingsPage: React.FC = () => {
               onChange={v => setNewCategory(v as any)}
               disabled={accountModalMode === 'EDIT'}
               data={[
-                { label: 'حساب بورصة', value: 'BOURSE' },
+                { label: 'مكتب بورصة', value: 'BOURSE' },
                 { label: 'مكتب وسيط', value: 'OFFICE' },
-                { label: 'مقاصة', value: 'SUSPENSE' },
+                { label: 'عميل', value: 'CLIENT' },
               ]}
               color="orange"
               className="bg-slate-100 font-bold"
             />
+            {/* يُظهر تحت أي حساب أب سيُدرج — تحت جذر «الأطراف الخارجية» خارج الميزانية. */}
+            <p className="mt-1.5 text-[10.5px] font-bold text-slate-500">
+              يُدرج تلقائياً تحت الحساب الأب:{' '}
+              <span className="text-orange-700">
+                {newCategory === 'BOURSE'
+                  ? '91 · مكاتب البورصة'
+                  : newCategory === 'OFFICE'
+                  ? '92 · المكاتب الوسيطة'
+                  : '93 · العملاء الخارجيون'}
+              </span>{' '}
+              — ضمن جذر «الأطراف الخارجية (خارج الميزانية)».
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -7,7 +7,7 @@ export interface ClearingAccountItem {
   code: string;
   nameAr: string;
   nameEn?: string;
-  category: 'BOURSE' | 'OFFICE' | 'SUSPENSE';
+  category: 'BOURSE' | 'OFFICE' | 'CLIENT';
   type: string;
   balanceUSD: number;          // الرصيد الفعلي بالدولار
   balanceIQD: number;          // الرصيد الفعلي بالدينار
@@ -42,10 +42,10 @@ export const DEFAULT_RATES = {
 };
 
 export function mapAccountToClearingItem(acc: any, customRates?: { iqdRate?: number; tomanRate?: number }): ClearingAccountItem {
-  let cat: 'BOURSE' | 'OFFICE' | 'SUSPENSE' = 'OFFICE';
-  if (acc.code?.startsWith('911')) cat = 'BOURSE';
-  else if (acc.code?.startsWith('912')) cat = 'OFFICE';
-  else if (acc.code?.startsWith('913')) cat = 'SUSPENSE';
+  let cat: 'BOURSE' | 'OFFICE' | 'CLIENT' = 'OFFICE';
+  if (acc.code?.startsWith('91')) cat = 'BOURSE';
+  else if (acc.code?.startsWith('92')) cat = 'OFFICE';
+  else if (acc.code?.startsWith('93')) cat = 'CLIENT';
 
   let balUSD = 0;
   let balIQD = 0;
@@ -124,13 +124,9 @@ export const clearingsApi = {
     try {
       const allAccounts = prefetchedAccounts || await accountsApi.getFlat();
       // Filter accounts under code 9 / 91
-      const clearingAccounts = allAccounts.filter(acc => 
-        acc.code?.startsWith('9') && 
-        acc.code !== '9' && 
-        acc.code !== '91' &&
-        acc.code !== '911' &&
-        acc.code !== '912' &&
-        acc.code !== '913'
+      const PARENT_CODES = ['9', '91', '92', '93'];
+      const clearingAccounts = allAccounts.filter(
+        (acc) => acc.code?.startsWith('9') && !PARENT_CODES.includes(acc.code)
       );
 
       return clearingAccounts.map(acc => mapAccountToClearingItem(acc, customRates));
@@ -142,7 +138,7 @@ export const clearingsApi = {
 
   // Create a new multi-currency clearing account in Supabase
   create: async (payload: {
-    category: 'BOURSE' | 'OFFICE' | 'SUSPENSE';
+    category: 'BOURSE' | 'OFFICE' | 'CLIENT';
     nameAr: string;
     nameEn?: string;
     phone?: string;
@@ -155,10 +151,10 @@ export const clearingsApi = {
     iqdRate?: number;
     tomanRate?: number;
   }) => {
-    // Find parent code based on category
-    let parentCode = '912'; // Default Office
-    if (payload.category === 'BOURSE') parentCode = '911';
-    else if (payload.category === 'SUSPENSE') parentCode = '913';
+    // القاصة الأب حسب النوع — تحت جذر الأطراف الخارجية 9 (خارج الميزانية).
+    let parentCode = '92'; // المكاتب الوسيطة افتراضاً
+    if (payload.category === 'BOURSE') parentCode = '91';
+    else if (payload.category === 'CLIENT') parentCode = '93';
 
     // Get all accounts to determine next available sequential code under parent
     const allAccounts = await accountsApi.getFlat();
