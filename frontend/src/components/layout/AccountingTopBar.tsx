@@ -9,6 +9,8 @@ import { FinancialVoucherForm } from '../vouchers/FinancialVoucherForm';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
+import calculatorSvg from '../../assets/calculator.svg';
+import { DraggableCalculatorModal } from '../common/DraggableCalculatorModal';
 import { Menu as MenuIcon } from 'lucide-react';
 
 interface AccountingTopBarProps {
@@ -18,6 +20,7 @@ interface AccountingTopBarProps {
 export const AccountingTopBar: React.FC<AccountingTopBarProps> = () => {
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [voucherModalType] = useState<'RECEIPT' | 'PAYMENT'>('RECEIPT');
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
   const { toggleSidebar, sidebarCollapsed, openTab } = useWorkspaceStore();
   const { direction, language } = useLanguageStore();
   const navigate = useNavigate();
@@ -48,8 +51,8 @@ export const AccountingTopBar: React.FC<AccountingTopBarProps> = () => {
         </div>
       </div>
 
-      {/* Clean Neutral Exchange Rate Pill + Notifications + User */}
-      <div className="flex items-center gap-3 shrink-0">
+      {/* Clean Neutral Exchange Rate Pill + Lottie Calculator + Notifications + User */}
+      <div className="flex items-center gap-2.5 shrink-0">
         {/* Modern Clean Exchange Rate Pill (No Dollar icon, neutral modern palette) */}
         <Tooltip
           label={
@@ -82,9 +85,33 @@ export const AccountingTopBar: React.FC<AccountingTopBarProps> = () => {
               openTab({ id: 'system-settings', title: language === 'ar' ? 'إعدادات النظام' : 'System Settings', path: '/system-settings', closable: true });
               navigate('/system-settings');
             }}
-            className="h-[36px] flex items-center px-3.5 bg-[#F8FAFC] hover:bg-slate-100 border border-[#E2E8F0] text-[#334155] rounded-[9px] transition-all cursor-pointer shadow-2xs font-mono font-bold text-xs"
+            className="h-[36px] flex items-center px-3 bg-[#F8FAFC] hover:bg-slate-100 border border-[#E2E8F0] text-[#334155] rounded-[9px] transition-all cursor-pointer shadow-2xs font-mono font-bold text-xs"
           >
             <span dir="ltr">1 USD = {adoptedExchange.adoptedRate.toLocaleString()} IQD</span>
+          </button>
+        </Tooltip>
+
+        {/* Smart Interactive Calculator Button (Icon only, enlarged & clear) */}
+        <Tooltip
+          label={language === 'ar' ? 'الحاسبة الإلكترونية الذكية ⚡' : 'Smart Interactive Calculator ⚡'}
+          withArrow
+          position="bottom"
+        >
+          <button
+            type="button"
+            onClick={() => setCalculatorOpen((prev) => !prev)}
+            aria-label={language === 'ar' ? 'الحاسبة الإلكترونية' : 'Smart Calculator'}
+            className={`w-[38px] h-[36px] flex items-center justify-center rounded-[9px] border transition-all cursor-pointer shadow-2xs ${
+              calculatorOpen
+                ? 'bg-[#FFF3E8] border-[#F45A0A] ring-2 ring-orange-200 shadow-xs'
+                : 'bg-[#F8FAFC] hover:bg-[#FFF3E8] hover:border-orange-300 border-[#E2E8F0]'
+            }`}
+          >
+            <img
+              src={calculatorSvg}
+              alt="Calculator"
+              className="w-[22px] h-[22px] object-contain transition-transform hover:scale-110 active:scale-95"
+            />
           </button>
         </Tooltip>
 
@@ -97,6 +124,12 @@ export const AccountingTopBar: React.FC<AccountingTopBarProps> = () => {
         {/* User Account Menu */}
         <UserMenu />
       </div>
+
+      {/* Draggable Electronic Calculator */}
+      <DraggableCalculatorModal
+        opened={calculatorOpen}
+        onClose={() => setCalculatorOpen(false)}
+      />
 
       {/* New Voucher Modal */}
       <FinancialVoucherForm
