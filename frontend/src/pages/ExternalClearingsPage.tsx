@@ -393,7 +393,8 @@ export const ExternalClearingsPage: React.FC = () => {
       setNewContactPerson('');
       setNewPhone('');
       setNewNotes('');
-      await loadData();
+      // تحديث في الخلفية: النافذة أُغلقت والزر تحرّر، فلا يشعر المستخدم بزمن الجلب.
+      void loadData();
     } catch (err: any) {
       showErrorNotification('خطأ', err.message || 'تعذر حفظ حساب التصفية');
     } finally {
@@ -526,11 +527,11 @@ export const ExternalClearingsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-3 w-full select-none text-slate-800 font-['IBM_Plex_Sans_Arabic',sans-serif]">
+    <div className="space-y-4 w-full select-none text-slate-800 font-['IBM_Plex_Sans_Arabic',sans-serif]">
       {/* ═══════════════ 1. رأس الصفحة والأزرار الرئيسية ═══════════════ */}
-      <div className="bg-gradient-to-l from-white to-orange-50/40 border border-slate-200 rounded-2xl px-4 py-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F45A0A] to-orange-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-orange-500/25">
+      <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-[#F45A0A] text-white flex items-center justify-center shrink-0">
             <IconScale size={22} stroke={1.9} />
           </div>
           <div>
@@ -598,10 +599,10 @@ export const ExternalClearingsPage: React.FC = () => {
       </div>
 
       {/* ═══════════════ 2. بطاقات الإحصائيات ═══════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* 1. إجمالي التقييم الشامل بالدولار */}
-        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 pt-5">
-          <span className="absolute top-0 inset-x-0 h-1 bg-gradient-to-l from-[#F45A0A] to-orange-400" />
+        <div className="relative overflow-hidden bg-white rounded-xl border border-slate-200 shadow-2xs p-3.5 pt-4.5">
+          <span className="absolute top-0 inset-x-0 h-[3px] bg-[#F45A0A]" />
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] text-slate-500 font-bold">إجمالي التصفية الشامل</span>
             <span className="text-[10px] font-mono font-black text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
@@ -615,8 +616,8 @@ export const ExternalClearingsPage: React.FC = () => {
         </div>
 
         {/* 2. الأرصدة بالدولار */}
-        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 pt-5">
-          <span className="absolute top-0 inset-x-0 h-1 bg-emerald-500" />
+        <div className="relative overflow-hidden bg-white rounded-xl border border-slate-200 shadow-2xs p-3.5 pt-4.5">
+          <span className="absolute top-0 inset-x-0 h-[3px] bg-[#F45A0A]" />
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] text-slate-500 font-bold">الأرصدة بالدولار</span>
             <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">USD</span>
@@ -628,8 +629,8 @@ export const ExternalClearingsPage: React.FC = () => {
         </div>
 
         {/* 3. الأرصدة بالدينار */}
-        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 pt-5">
-          <span className="absolute top-0 inset-x-0 h-1 bg-sky-500" />
+        <div className="relative overflow-hidden bg-white rounded-xl border border-slate-200 shadow-2xs p-3.5 pt-4.5">
+          <span className="absolute top-0 inset-x-0 h-[3px] bg-[#F45A0A]" />
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] text-slate-500 font-bold">الأرصدة بالدينار</span>
             <span className="text-[10px] font-mono font-bold text-slate-400" dir="ltr">
@@ -643,8 +644,8 @@ export const ExternalClearingsPage: React.FC = () => {
         </div>
 
         {/* 4. الأرصدة بالتومان */}
-        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 pt-5">
-          <span className="absolute top-0 inset-x-0 h-1 bg-violet-500" />
+        <div className="relative overflow-hidden bg-white rounded-xl border border-slate-200 shadow-2xs p-3.5 pt-4.5">
+          <span className="absolute top-0 inset-x-0 h-[3px] bg-[#F45A0A]" />
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] text-slate-500 font-bold">الأرصدة بالتومان</span>
             <span className="text-[10px] font-mono font-bold text-slate-400" dir="ltr">
@@ -659,9 +660,9 @@ export const ExternalClearingsPage: React.FC = () => {
       </div>
 
       {/* ═══════════════ 3. التبويبات وجدول الحسابات ═══════════════ */}
-      <Paper radius="md" withBorder className="bg-white border-slate-200 shadow-2xs overflow-hidden">
+      <Paper radius="lg" withBorder className="bg-white border-slate-200 shadow-2xs overflow-hidden">
         <Tabs value={activeTab} onChange={setActiveTab} color="orange">
-          <div className="border-b border-slate-200 px-4 pt-2 bg-slate-50/50 flex items-center justify-between">
+          <div className="border-b border-slate-200 px-5 pt-2.5 bg-slate-50/50 flex items-center justify-between">
             <Tabs.List className="border-b-0">
               <Tabs.Tab value="accounts" leftSection={<IconScale size={14} />} className="font-bold text-xs">
                 دليل حسابات التصفيات ({filteredAccounts.length})
@@ -673,9 +674,9 @@ export const ExternalClearingsPage: React.FC = () => {
           </div>
 
           {/* ─── TAB 1: دليل حسابات التصفيات ─── */}
-          <Tabs.Panel value="accounts" p="md" className="space-y-3">
+          <Tabs.Panel value="accounts" p="md" className="space-y-3.5">
             {/* شريط الفلاتر والبحث */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
               <SegmentedControl
                 size="xs"
                 value={categoryFilter}
@@ -727,7 +728,7 @@ export const ExternalClearingsPage: React.FC = () => {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {filteredAccounts.map(acc => {
                   const isBourse = acc.category === 'BOURSE';
                   const isOffice = acc.category === 'OFFICE';
@@ -757,13 +758,13 @@ export const ExternalClearingsPage: React.FC = () => {
                     <div
                       key={acc.id}
                       onClick={() => navigate(`/external-clearings/${acc.id}`)}
-                      className="bg-white rounded-2xl border border-[#E5EAF0] p-4 shadow-2xs hover:shadow-md hover:border-orange-300 transition-all duration-200 cursor-pointer flex flex-col justify-between group space-y-3.5"
+                      className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs hover:shadow-md hover:border-orange-300 transition-all duration-200 cursor-pointer flex flex-col justify-between group space-y-3"
                     >
                       {/* ──── Header ──── */}
                       <div>
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200/70 text-orange-600 flex items-center justify-center shrink-0 shadow-2xs group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                            <div className="w-9 h-9 rounded-lg bg-orange-50 border border-orange-200/70 text-[#F45A0A] flex items-center justify-center shrink-0 group-hover:bg-[#F45A0A] group-hover:text-white transition-colors">
                               {isBourse ? (
                                 <IconBuildingBank size={20} stroke={1.8} />
                               ) : isOffice ? (
@@ -774,7 +775,7 @@ export const ExternalClearingsPage: React.FC = () => {
                             </div>
 
                             <div className="min-w-0">
-                              <h3 className="text-[15px] font-bold text-slate-900 group-hover:text-orange-600 transition-colors leading-tight truncate">
+                              <h3 className="text-[14px] font-bold text-slate-900 group-hover:text-[#F45A0A] transition-colors leading-tight truncate">
                                 {acc.nameAr}
                               </h3>
                               <div className="flex items-center gap-1.5 mt-1">
@@ -838,17 +839,17 @@ export const ExternalClearingsPage: React.FC = () => {
                       </div>
 
                       {/* ──── Currency Balances Grid ──── */}
-                      <div className="grid grid-cols-3 gap-1.5 text-center font-mono">
-                        <div className="bg-slate-50 border border-slate-200/80 p-2 rounded-xl">
-                          <div className="text-[11px] font-sans font-bold text-slate-600 mb-0.5">$ دولار</div>
+                      <div className="grid grid-cols-3 gap-1.5 text-center font-mono mt-1">
+                        <div className="bg-slate-50 border border-slate-200/80 p-1.5 rounded-lg">
+                          <div className="text-[10px] font-sans font-bold text-slate-500 mb-0.5">$ دولار</div>
                           {formatCurrencyBox(acc.balanceUSD, '$')}
                         </div>
-                        <div className="bg-slate-50 border border-slate-200/80 p-2 rounded-xl">
-                          <div className="text-[11px] font-sans font-bold text-slate-600 mb-0.5">د.ع دينار</div>
+                        <div className="bg-slate-50 border border-slate-200/80 p-1.5 rounded-lg">
+                          <div className="text-[10px] font-sans font-bold text-slate-500 mb-0.5">د.ع دينار</div>
                           {formatCurrencyBox(acc.balanceIQD, '')}
                         </div>
-                        <div className="bg-slate-50 border border-slate-200/80 p-2 rounded-xl">
-                          <div className="text-[11px] font-sans font-bold text-slate-600 mb-0.5">تومان</div>
+                        <div className="bg-slate-50 border border-slate-200/80 p-1.5 rounded-lg">
+                          <div className="text-[10px] font-sans font-bold text-slate-500 mb-0.5">تومان</div>
                           {formatCurrencyBox(acc.balanceTOMAN, '')}
                         </div>
                       </div>
@@ -1275,7 +1276,7 @@ export const ExternalClearingsPage: React.FC = () => {
         radius="lg"
       >
         <div className="space-y-3.5 text-xs select-none">
-          {/* نوع السند بأيقونات احترافية في الأعلى */}
+          {/* نوع السند */}
           <div>
             <label className="block font-bold text-slate-700 mb-1">نوع السند / الحركة</label>
             <SegmentedControl
@@ -1317,15 +1318,14 @@ export const ExternalClearingsPage: React.FC = () => {
             />
           </div>
 
-          {/* الترتيب العرضي: عمودين متوازنين بمساحة مريحة */}
+          {/* عمودين متوازنين */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-            {/* ══ العمود الأيمن: الحسابات والجهة المستفيدة والتاريخ ══ */}
+            {/* ══ العمود الأيمن ══ */}
             <div className="space-y-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* حساب التصفية */}
                 <Select
                   label={voucherType === 'RECEIPT' ? 'جهة التصفية (الدافع)' : 'جهة التصفية (المستلم)'}
-                  placeholder="اختر حساب التصفية..."
                   searchable
                   nothingFoundMessage="لا توجد حسابات تصفية"
                   data={clearingAccounts.map(a => ({
@@ -1341,7 +1341,6 @@ export const ExternalClearingsPage: React.FC = () => {
                 {/* الحساب المقابل */}
                 <Select
                   label={voucherType === 'RECEIPT' ? 'الصندوق / المصرف (المقبوض إليه)' : 'الصندوق / المصرف (المدفوع منه)'}
-                  placeholder="اختر الصندوق أو البنك..."
                   searchable
                   nothingFoundMessage="لا توجد حسابات مالية"
                   data={realCashAccounts}
@@ -1352,17 +1351,16 @@ export const ExternalClearingsPage: React.FC = () => {
                 />
               </div>
 
-              {/* حقل اسم الجهة المرسل إليها الحوالة / المستفيد */}
+              {/* حقل اسم الجهة المرسل إليها */}
               <TextInput
                 label="الجهة المحول لها / المستفيد (اختياري)"
-                placeholder="مثال: شركة النور / مكتب دبي / المستفيد أحمد..."
                 value={voucherBeneficiary}
                 onChange={e => setVoucherBeneficiary(e.target.value)}
                 size="xs"
                 className="font-medium"
               />
 
-              {/* تقويم متطور مع اختصارات سريعة */}
+              {/* تقويم مع اختصارات سريعة */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="block text-[11px] font-bold text-slate-700">تاريخ الحركة</label>
@@ -1405,25 +1403,24 @@ export const ExternalClearingsPage: React.FC = () => {
                 <AccountingDatePicker
                   value={voucherDate}
                   onChange={val => setVoucherDate(val)}
-                  placeholder="اختر التاريخ..."
                 />
               </div>
 
-              {/* نص إرشادي لطيف ومختصر */}
+              {/* نص إرشادي */}
               <div className="bg-white border border-slate-200 rounded-lg p-2 text-[11px] text-slate-600 font-medium">
                 {voucherType === 'RECEIPT' ? (
-                  <span>🟢 <strong>سند قبض:</strong> استلام مبالغ للصندوق / المصرف.</span>
+                  <span><strong>سند قبض:</strong> استلام مبالغ للصندوق / المصرف.</span>
                 ) : voucherType === 'PAYMENT' ? (
-                  <span>🔴 <strong>سند دفع:</strong> صرف مبالغ من الصندوق / المصرف.</span>
+                  <span><strong>سند دفع:</strong> صرف مبالغ من الصندوق / المصرف.</span>
                 ) : (
-                  <span>⚖️ <strong>قيد مقاصة:</strong> تسوية محاسبية مباشرة بين الحسابين.</span>
+                  <span><strong>قيد مقاصة:</strong> تسوية محاسبية مباشرة بين الحسابين.</span>
                 )}
               </div>
             </div>
 
-            {/* ══ العمود الأيسر: العملة، المبلغ، الصرف، والمعادل ══ */}
+            {/* ══ العمود الأيسر ══ */}
             <div className="space-y-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200">
-              {/* أزرار العملة (افتراضياً تومان) */}
+              {/* أزرار العملة */}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">العملة</label>
                 <SegmentedControl
@@ -1447,7 +1444,6 @@ export const ExternalClearingsPage: React.FC = () => {
 
               {/* حقول المبلغ وسعر الصرف */}
               {voucherCurrency === 'USD' ? (
-                /* في حالة الدولار: يظهر حقل المبلغ فقط بعرض كامل دون الحاجة للصرافة */
                 <FormattedNumberInput
                   label="المبلغ بالدولار ($ USD)"
                   value={voucherAmount}
@@ -1455,7 +1451,6 @@ export const ExternalClearingsPage: React.FC = () => {
                   size="xs"
                 />
               ) : (
-                /* في حالة التومان أو الدينار: يظهر حقل المبلغ وحقل سعر الصرف بجانبه */
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FormattedNumberInput
                     label={voucherCurrency === 'TOMAN' ? 'المبلغ بالتومان' : 'المبلغ بالدينار'}
@@ -1466,7 +1461,6 @@ export const ExternalClearingsPage: React.FC = () => {
 
                   <FormattedNumberInput
                     label="سعر الصرف (لكل 1$)"
-                    placeholder={voucherCurrency === 'TOMAN' ? '92,000' : '1,530'}
                     value={voucherCustomRate}
                     onChange={v => setVoucherCustomRate(typeof v === 'number' ? v : parseFloat(String(v || '0')) || 0)}
                     size="xs"
@@ -1474,35 +1468,37 @@ export const ExternalClearingsPage: React.FC = () => {
                 </div>
               )}
 
-              {/* المعادل المباشر بالدولار */}
+              {/* المعادل بالدولار */}
               <div className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center justify-between font-mono">
                 <span className="text-slate-700 font-bold text-xs">المعادل بالدولار:</span>
-                <span className="text-base font-black text-emerald-900">
+                <span className="text-base font-black text-[#F45A0A]" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
                   ${voucherConvertedUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
 
-              {/* البيان التلقائي المولّد */}
+              {/* البيان التلقائي */}
               <div className="space-y-1.5">
-                <label className="block text-[11px] font-bold text-slate-700">البيان المحاسبي (يُكتب تلقائياً)</label>
+                <label className="block text-[11px] font-bold text-slate-700">البيان المحاسبي (تلقائي)</label>
                 {autoGeneratedDescription ? (
                   <div className="bg-orange-50/60 border border-orange-200/80 rounded-lg p-2.5 text-[11px] text-slate-800 font-medium leading-relaxed">
                     {autoGeneratedDescription}
                   </div>
                 ) : (
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-[11px] text-slate-400 font-medium italic">
-                    سيظهر البيان تلقائياً عند تعبئة الحقول أعلاه...
+                    يُولَّد تلقائياً عند تعبئة الحقول
                   </div>
                 )}
 
                 <Textarea
                   label="ملاحظات إضافية (اختياري)"
-                  placeholder="أي ملاحظات خاصة تُضاف للبيان..."
-                  rows={1}
+                  rows={3}
                   value={voucherNotes}
                   onChange={e => setVoucherNotes(e.target.value)}
                   size="xs"
                   className="font-medium"
+                  autosize
+                  minRows={3}
+                  maxRows={6}
                 />
               </div>
             </div>

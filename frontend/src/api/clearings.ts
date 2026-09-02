@@ -150,14 +150,16 @@ export const clearingsApi = {
     openingBalanceTOMAN?: number;
     iqdRate?: number;
     tomanRate?: number;
-  }) => {
+  }, prefetchedAccounts?: any[]) => {
     // القاصة الأب حسب النوع — تحت جذر الأطراف الخارجية 9 (خارج الميزانية).
     let parentCode = '92'; // المكاتب الوسيطة افتراضاً
     if (payload.category === 'BOURSE') parentCode = '91';
     else if (payload.category === 'CLIENT') parentCode = '93';
 
-    // Get all accounts to determine next available sequential code under parent
-    const allAccounts = await accountsApi.getFlat();
+    // إعادة استعمال قائمة الحسابات المحمّلة في الصفحة — تجنّباً لجلبها من جديد.
+    const allAccounts = prefetchedAccounts && prefetchedAccounts.length
+      ? prefetchedAccounts
+      : await accountsApi.getFlat();
     const parentAccount = allAccounts.find(a => a.code === parentCode);
     const siblings = allAccounts.filter(a => a.code.startsWith(parentCode) && a.code !== parentCode);
 

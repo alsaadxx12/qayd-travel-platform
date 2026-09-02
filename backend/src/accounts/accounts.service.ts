@@ -1251,26 +1251,35 @@ export class AccountsService {
   async create(companyId: string, dto: CreateAccountDto) {
     await this.validateOpeningBalanceInput(companyId, dto);
 
-    const existing = await this.prisma.account.findUnique({
-      where: { companyId_code: { companyId, code: dto.code } },
-    });
+    /*
+     * فحص التكرار وجلب الأب معاً لا بالتتابع.
+     *
+     * كانا رحلتين متسلسلتين إلى قاعدة بيانات بعيدة (~600ms لكل منهما)، وهما
+     * مستقلّان، فيُطلقان معاً. وتحديث الأب إلى isParent لا يُنفَّذ إلا إن لم يكن
+     * أباً أصلاً — فحسابات الأب الثابتة (91/92/93) توفّر رحلة كاملة كل مرة.
+     */
+    const [existing, parent] = await Promise.all([
+      this.prisma.account.findUnique({
+        where: { companyId_code: { companyId, code: dto.code } },
+      }),
+      dto.parentId
+        ? this.prisma.account.findFirst({ where: { id: dto.parentId, companyId } })
+        : Promise.resolve(null),
+    ]);
     if (existing) {
       throw new BadRequestException(`رمز الحساب (${dto.code}) مستخدم بالفعل`);
     }
 
     let level = 1;
-
     if (dto.parentId) {
-      const parent = await this.prisma.account.findFirst({
-        where: { id: dto.parentId, companyId },
-      });
       if (!parent) throw new BadRequestException('الحساب الأب غير موجود');
       level = parent.level + 1;
-
-      await this.prisma.account.update({
-        where: { id: parent.id },
-        data: { isParent: true },
-      });
+      if (!parent.isParent) {
+        await this.prisma.account.update({
+          where: { id: parent.id },
+          data: { isParent: true },
+        });
+      }
     }
 
     const effectiveCategory = dto.accountRole === 'CUSTOMER' ? AccountCategory.CUSTOMER
