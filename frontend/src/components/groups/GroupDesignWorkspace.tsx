@@ -115,6 +115,10 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
   const [saving, setSaving] = useState(false);
   const [customersList, setCustomersList] = useState<any[]>([]);
 
+  // Active Template & Purchases Tab for Inline Workspace
+  const [activeTemplateId, setActiveTemplateId] = useState<string>('');
+  const [purchasesTab, setPurchasesTab] = useState<'AUTO' | 'GLOBAL' | 'EXPENSES'>('AUTO');
+
   // Prices Template Editor Modal State
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<GroupTemplate | null>(null);
@@ -139,7 +143,11 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
   useEffect(() => {
     if (!opened) return;
     setActiveTab(1);
-    setDesign(designFromTicket(initialData));
+    const loaded = designFromTicket(initialData);
+    setDesign(loaded);
+    if (loaded.templates && loaded.templates.length > 0) {
+      setActiveTemplateId(loaded.templates[0].id);
+    }
     partnersApi
       .getCustomers()
       .then((d: any) => setCustomersList(Array.isArray(d) ? d : d?.data || []))
@@ -281,6 +289,81 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
   }, [design.templates]);
 
   // ── TEMPLATE MANAGEMENT ──
+  const currentActiveTemplate = useMemo(() => {
+    const list = design.templates || [];
+    return list.find((t) => t.id === activeTemplateId) || list[0];
+  }, [design.templates, activeTemplateId]);
+
+  const patchActiveTemplate = (changes: Partial<GroupTemplate>) => {
+    if (!currentActiveTemplate) return;
+    setDesign((d) => ({
+      ...d,
+      templates: (d.templates || []).map((t) =>
+        t.id === currentActiveTemplate.id ? { ...t, ...changes } : t,
+      ),
+    }));
+  };
+
+  const addComponentToActiveTemplate = (kind: GroupComponentKind) => {
+    if (!currentActiveTemplate) return;
+    const newComp: GroupComponent = {
+      id: `cmp-${Date.now()}-${(currentActiveTemplate.components || []).length}`,
+      kind,
+      supplierName: '',
+      cost: 0,
+      issueDate: new Date().toISOString().slice(0, 10),
+      currency: currentActiveTemplate.currency,
+      perSeat: kind !== 'EXPENSE' && purchasesTab === 'AUTO',
+      active: true,
+    };
+    patchActiveTemplate({
+      components: [...(currentActiveTemplate.components || []), newComp],
+    });
+  };
+
+  const patchComponentInActiveTemplate = (componentId: string, changes: Partial<GroupComponent>) => {
+    if (!currentActiveTemplate) return;
+    patchActiveTemplate({
+      components: (currentActiveTemplate.components || []).map((c) =>
+        c.id === componentId ? { ...c, ...changes } : c,
+      ),
+    });
+  };
+
+  const removeComponentFromActiveTemplate = (componentId: string) => {
+    if (!currentActiveTemplate) return;
+    patchActiveTemplate({
+      components: (currentActiveTemplate.components || []).filter((c) => c.id !== componentId),
+    });
+  };
+
+  const activeTabComponents = useMemo(() => {
+    if (!currentActiveTemplate) return [];
+    return (currentActiveTemplate.components || []).filter((c) => {
+      if (purchasesTab === 'EXPENSES') return c.kind === 'EXPENSE';
+      if (purchasesTab === 'GLOBAL') return c.kind !== 'EXPENSE' && !c.perSeat;
+      // purchasesTab === 'AUTO'
+      return c.kind !== 'EXPENSE' && c.perSeat;
+    });
+  }, [currentActiveTemplate, purchasesTab]);
+
+  const activeTemplateTotals = useMemo(() => {
+    if (!currentActiveTemplate) {
+      return {
+        seats: 0,
+        autoBuy: 0,
+        globalBuy: 0,
+        globalExpenses: 0,
+        costPerSeat: 0,
+        seatPrice: 0,
+        totalCost: 0,
+        totalSale: 0,
+        totalProfit: 0,
+      };
+    }
+    return computeTemplateTotals(currentActiveTemplate);
+  }, [currentActiveTemplate]);
+
   const handleAddNewTemplate = () => {
     const newTpl = createDefaultTemplate(
       design.seats || 1,
@@ -292,11 +375,11 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
       ...d,
       templates: [...(d.templates || []), newTpl],
     }));
-    setEditingTemplate(newTpl);
-    setTemplateModalOpen(true);
+    setActiveTemplateId(newTpl.id);
   };
 
   const handleEditTemplate = (tpl: GroupTemplate) => {
+    setActiveTemplateId(tpl.id);
     setEditingTemplate({ ...tpl, components: [...(tpl.components || [])] });
     setTemplateModalOpen(true);
   };
@@ -306,6 +389,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
       ...d,
       templates: (d.templates || []).map((t) => (t.id === updatedTpl.id ? updatedTpl : t)),
     }));
+    setActiveTemplateId(updatedTpl.id);
     setTemplateModalOpen(false);
     setEditingTemplate(null);
   };
@@ -318,10 +402,14 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
       );
       return;
     }
+    const remaining = (design.templates || []).filter((t) => t.id !== tplId);
     setDesign((d) => ({
       ...d,
-      templates: (d.templates || []).filter((t) => t.id !== tplId),
+      templates: remaining,
     }));
+    if (activeTemplateId === tplId) {
+      setActiveTemplateId(remaining[0]?.id || '');
+    }
   };
 
   // ── CUSTOMER MANAGEMENT ──
@@ -643,163 +731,593 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                 </div>
               </div>
 
-              {/* Card B: Prices Templates Table (تيمبلت الأسعار - الصورة 3) */}
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+              {/* Card B: Full Interactive Prices Template & Purchases (قالب الأسعار والمشتريات) */}
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-5">
+                
+                {/* Header & Template Switcher Tabs */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
-                        <Palette size={15} />
+                      <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
+                        <Palette size={17} />
                       </div>
-                      <span className="font-black text-[13.5px] text-slate-900">
-                        {isAr ? 'قوالب الأسعار وتكاليف المقاعد' : 'Prices Templates'}
-                      </span>
+                      <div>
+                        <span className="font-black text-[14px] text-slate-900 block leading-tight">
+                          {isAr ? 'قوالب الأسعار وتكاليف المشتريات (Prices Template)' : 'Prices Template & Purchases'}
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-medium block mt-0.5">
+                          {isAr
+                            ? 'حدد المصدر وتاريخ الإصدار وسعر الشراء وسعر القالب للمقاعد'
+                            : 'Specify supplier, issue date, buy cost, and sale price per seat'}
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                      {isAr
-                        ? 'تخصيص قوالب التكاليف والأسعار للمقاعد وتحديد المشتريات والمبيعات'
-                        : 'Manage price templates with distinct purchasing costs and seat prices'}
-                    </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleAddNewTemplate}
-                    className="h-[38px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
-                  >
-                    <Plus size={16} strokeWidth={2.4} />
-                    <span>{isAr ? 'إضافة قالب جديد' : 'Add Template'}</span>
-                  </button>
+                  {/* Template Switcher Pills + Add Template Button */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(design.templates || []).map((t, idx) => {
+                      const isActive = t.id === currentActiveTemplate?.id;
+                      return (
+                        <div
+                          key={t.id}
+                          className={`flex items-center rounded-xl border transition-all ${
+                            isActive
+                              ? 'bg-orange-50 border-orange-300 text-[#F45A0A] shadow-xs'
+                              : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setActiveTemplateId(t.id)}
+                            className="px-3.5 py-1.5 text-[12px] font-black cursor-pointer flex items-center gap-1.5"
+                          >
+                            <span className="w-2 h-2 rounded-full bg-[#F45A0A]" />
+                            <span>{t.name || `${isAr ? 'قالب' : 'Template'} #${idx + 1}`}</span>
+                            <span className="font-mono text-[11px] font-black text-slate-900">
+                              ({money(t.seatPrice, t.currency)})
+                            </span>
+                          </button>
+
+                          {(design.templates || []).length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTemplate(t.id)}
+                              className="pe-2 ps-1 py-1.5 text-slate-400 hover:text-rose-600 cursor-pointer"
+                              title={isAr ? 'حذف القالب' : 'Delete template'}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={handleAddNewTemplate}
+                      className="h-[36px] px-3 rounded-xl border border-dashed border-orange-300 text-[#F45A0A] hover:bg-orange-50 text-[11.5px] font-black cursor-pointer flex items-center gap-1 transition-all"
+                    >
+                      <Plus size={14} strokeWidth={2.4} />
+                      <span>{isAr ? 'إضافة قالب جديد' : 'New Template'}</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Templates Grid / Table */}
-                <div className="overflow-x-auto rounded-xl border border-[#E5E7EB]">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-[#0284C7] text-white text-[11.5px] font-black divide-x divide-white/20">
-                        <th className="p-2.5 w-12 text-center">ID</th>
-                        <th className="p-2.5 text-start">{isAr ? 'اسم التيمبلت' : 'Template Name'}</th>
-                        <th className="p-2.5 w-20 text-center">{isAr ? 'المقاعد*' : 'Seats*'}</th>
-                        <th className="p-2.5 w-20 text-center">{isAr ? 'المستفيدون' : 'Customers'}</th>
-                        <th className="p-2.5 w-28 text-end">{isAr ? 'كلفة مفرد' : 'Single Buy'}</th>
-                        <th className="p-2.5 w-28 text-end">{isAr ? 'بيع مفرد' : 'Single Sale'}</th>
-                        <th className="p-2.5 w-28 text-end">{isAr ? 'المشتريات' : 'Purchase'}</th>
-                        <th className="p-2.5 w-24 text-end">{isAr ? 'المصاريف' : 'Expenses'}</th>
-                        <th className="p-2.5 w-28 text-end">{isAr ? 'التكلفة' : 'Cost'}</th>
-                        <th className="p-2.5 w-28 text-end">{isAr ? 'المبيعات' : 'Sales'}</th>
-                        <th className="p-2.5 w-28 text-end">{isAr ? 'الربح' : 'Profit'}</th>
-                        <th className="p-2.5 w-40 text-center">{isAr ? 'الإجراءات' : 'Actions'}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {(design.templates || []).map((tpl, idx) => {
-                        const tplTotals = computeTemplateTotals(tpl);
-                        const assignedCustomers = (design.customers || []).filter(
-                          (c) => c.templateId === tpl.id,
-                        ).length;
+                {/* ── Active Template Settings Bar (Template Name, Seats, Currency, Price Sale, Open Sale) ── */}
+                {currentActiveTemplate && (
+                  <div className="bg-[#FAFAFA] rounded-2xl border border-slate-200 p-4 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
+                      
+                      {/* 1. Template Name */}
+                      <div className="sm:col-span-2 md:col-span-1">
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'اسم القالب' : 'Template Name'}
+                        </label>
+                        <input
+                          value={currentActiveTemplate.name}
+                          onChange={(e) => patchActiveTemplate({ name: e.target.value })}
+                          className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+                        />
+                      </div>
 
-                        return (
-                          <tr key={tpl.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-2.5 text-center font-mono font-bold text-slate-500">
-                              {idx + 1}
-                            </td>
-                            <td className="p-2.5 font-bold text-slate-900">
-                              <div className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-[#F45A0A]" />
-                                <span>{tpl.name}</span>
-                              </div>
-                            </td>
-                            <td className="p-2.5 text-center font-mono font-black text-slate-900" dir="ltr">
-                              {tplTotals.seats}
-                            </td>
-                            <td className="p-2.5 text-center font-mono font-bold text-indigo-700" dir="ltr">
-                              {assignedCustomers}
-                            </td>
-                            <td className="p-2.5 text-end font-mono font-black text-slate-800" dir="ltr">
-                              {money(tplTotals.costPerSeat, tpl.currency)}
-                            </td>
-                            <td className="p-2.5 text-end font-mono font-black text-slate-900" dir="ltr">
-                              {money(tplTotals.seatPrice, tpl.currency)}
-                            </td>
-                            <td className="p-2.5 text-end font-mono font-bold text-slate-800" dir="ltr">
-                              {money(tplTotals.autoBuy + tplTotals.globalBuy, tpl.currency)}
-                            </td>
-                            <td className="p-2.5 text-end font-mono font-bold text-slate-500" dir="ltr">
-                              {money(tplTotals.globalExpenses, tpl.currency)}
-                            </td>
-                            <td className="p-2.5 text-end font-mono font-black text-slate-900" dir="ltr">
-                              {money(tplTotals.totalCost, tpl.currency)}
-                            </td>
-                            <td className="p-2.5 text-end font-mono font-black text-slate-900" dir="ltr">
-                              {money(tplTotals.totalSale, tpl.currency)}
-                            </td>
-                            <td className="p-2.5 text-end font-mono font-black text-[#078B61]" dir="ltr">
-                              {tplTotals.totalProfit >= 0 ? '+' : ''}
-                              {money(tplTotals.totalProfit, tpl.currency)}
-                            </td>
-                            <td className="p-2.5 text-center">
-                              <div className="flex items-center justify-center gap-1.5">
-                                {/* Design Button (Cyan button like legacy Image 3) */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleEditTemplate(tpl)}
-                                  className="px-2.5 py-1 rounded-lg bg-[#0284C7] hover:bg-[#0369A1] text-white text-[11px] font-black cursor-pointer flex items-center gap-1 shadow-2xs transition-colors"
-                                >
-                                  <Palette size={12} />
-                                  <span>{isAr ? 'تصميم' : 'Design'}</span>
-                                </button>
+                      {/* 2. Seats* */}
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'عدد المقاعد' : 'Seats'}
+                        </label>
+                        <input
+                          value={currentActiveTemplate.seats}
+                          onChange={(e) =>
+                            patchActiveTemplate({
+                              seats: Math.max(1, Math.round(numeric(e.target.value))),
+                            })
+                          }
+                          dir="ltr"
+                          className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-mono font-black text-center text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+                        />
+                      </div>
 
-                                {/* Sale Button (Magenta button like legacy Image 3) */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenSaleModal(tpl.id)}
-                                  className="px-2.5 py-1 rounded-lg bg-[#BE185D] hover:bg-[#9D174D] text-white text-[11px] font-black cursor-pointer flex items-center gap-1 shadow-2xs transition-colors"
-                                >
-                                  <ShoppingCart size={12} />
-                                  <span>{isAr ? 'بيع' : 'Sale'}</span>
-                                </button>
+                      {/* 3. Currency */}
+                      <div>
+                        <SearchableCombobox
+                          label={isAr ? 'العملة' : 'Currency'}
+                          value={currentActiveTemplate.currency}
+                          onChange={(val) =>
+                            patchActiveTemplate({
+                              currency: (val as 'IQD' | 'USD') || design.currency,
+                            })
+                          }
+                          options={[
+                            { value: 'USD', label: isAr ? '$ دولار أمريكي (USD)' : '$ US Dollar (USD)' },
+                            { value: 'IQD', label: isAr ? 'د.ع دينار عراقي (IQD)' : 'IQD Iraqi Dinar' },
+                          ]}
+                          placeholder={isAr ? 'العملة...' : 'Currency...'}
+                        />
+                      </div>
 
-                                {/* Delete */}
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteTemplate(tpl.id)}
-                                  className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
-                                  title={isAr ? 'حذف القالب' : 'Delete'}
+                      {/* 4. Price Sale (سعر بيع المقعد) */}
+                      <div>
+                        <label className="text-[11px] font-black text-[#F45A0A] block mb-1">
+                          {isAr ? 'سعر بيع المقعد (Price Sale) *' : 'Price Sale *'}
+                        </label>
+                        <input
+                          value={
+                            currentActiveTemplate.seatPrice
+                              ? currentActiveTemplate.seatPrice.toLocaleString('en-US')
+                              : ''
+                          }
+                          onChange={(e) =>
+                            patchActiveTemplate({ seatPrice: numeric(e.target.value) })
+                          }
+                          placeholder="0.00"
+                          dir="ltr"
+                          className="w-full h-[46px] px-3.5 rounded-[11px] border border-orange-300 bg-white text-[13.5px] font-mono font-black text-end text-slate-900 outline-none hover:border-orange-400 focus:border-2 focus:border-[#F45A0A] transition-all"
+                        />
+                      </div>
+
+                      {/* 5. Open Sale Button (Image 1) */}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleOpenSaleModal(currentActiveTemplate.id);
+                            setActiveTab(2);
+                          }}
+                          className="w-full h-[46px] px-4 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-[12.5px] font-black cursor-pointer flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+                        >
+                          <ShoppingCart size={16} />
+                          <span>{isAr ? 'فتح البيع للعملاء' : 'Open Sale'}</span>
+                        </button>
+                      </div>
+
+                    </div>
+
+                    {/* ── 3 Tabs (Auto Purchases, Global Purchases, Global Expenses) ── */}
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="bg-slate-50 border-b border-slate-200 px-3 pt-1.5 flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPurchasesTab('AUTO')}
+                            className={`px-3.5 py-2 text-[12px] font-black border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                              purchasesTab === 'AUTO'
+                                ? 'border-[#F45A0A] text-[#F45A0A] bg-white rounded-t-lg'
+                                : 'border-transparent text-slate-500 hover:text-slate-800'
+                            }`}
+                          >
+                            <Ticket size={14} />
+                            <span>{isAr ? 'المشتريات التلقائية للمقعد' : 'Auto Purchases'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPurchasesTab('GLOBAL')}
+                            className={`px-3.5 py-2 text-[12px] font-black border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                              purchasesTab === 'GLOBAL'
+                                ? 'border-[#F45A0A] text-[#F45A0A] bg-white rounded-t-lg'
+                                : 'border-transparent text-slate-500 hover:text-slate-800'
+                            }`}
+                          >
+                            <Package size={14} />
+                            <span>{isAr ? 'المشتريات العامة الشاملة' : 'Global Purchases'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPurchasesTab('EXPENSES')}
+                            className={`px-3.5 py-2 text-[12px] font-black border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                              purchasesTab === 'EXPENSES'
+                                ? 'border-[#F45A0A] text-[#F45A0A] bg-white rounded-t-lg'
+                                : 'border-transparent text-slate-500 hover:text-slate-800'
+                            }`}
+                          >
+                            <Coins size={14} />
+                            <span>{isAr ? 'المصاريف العامة' : 'Global Expenses'}</span>
+                          </button>
+                        </div>
+
+                        {/* Add Component Menu */}
+                        <Menu position="bottom-end" shadow="lg" radius="xl" width={220} withinPortal zIndex={10080}>
+                          <Menu.Target>
+                            <button
+                              type="button"
+                              className="h-[34px] px-3.5 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[11.5px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all my-1"
+                            >
+                              <Plus size={14} strokeWidth={2.4} />
+                              <span>{isAr ? 'إضافة مكوّن جديد' : 'Add Component'}</span>
+                            </button>
+                          </Menu.Target>
+                          <Menu.Dropdown className="p-1.5" style={{ direction }}>
+                            {COMPONENT_KINDS.map((k) => {
+                              const Icon = KIND_ICON[k.kind];
+                              const tone = KIND_TONE[k.kind];
+                              return (
+                                <Menu.Item
+                                  key={k.kind}
+                                  className="rounded-xl py-2"
+                                  leftSection={
+                                    <span
+                                      className={`w-7 h-7 rounded-lg border flex items-center justify-center ${tone.bg} ${tone.border} ${tone.text}`}
+                                    >
+                                      <Icon size={14} />
+                                    </span>
+                                  }
+                                  onClick={() => addComponentToActiveTemplate(k.kind)}
                                 >
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    {/* Summary Row at bottom of table (Image 3) */}
-                    <tfoot>
-                      <tr className="bg-[#F8FAFC] border-t-2 border-[#E5E7EB] font-black text-[12px] text-slate-900">
-                        <td colSpan={6} className="p-2.5 text-start font-sans">
-                          {isAr ? 'إجمالي مجاميع القوالب:' : 'Templates Summary:'}
-                        </td>
-                        <td className="p-2.5 text-end font-mono text-slate-800" dir="ltr">
-                          {money(totals.sumBuy, design.currency)}
-                        </td>
-                        <td className="p-2.5 text-end font-mono text-slate-500" dir="ltr">
-                          {money(totals.sumExpenses, design.currency)}
-                        </td>
-                        <td className="p-2.5 text-end font-mono text-slate-900" dir="ltr">
-                          {money(totals.sumCost, design.currency)}
-                        </td>
-                        <td className="p-2.5 text-end font-mono text-slate-900" dir="ltr">
-                          {money(totals.sumExpectedSale, design.currency)}
-                        </td>
-                        <td className="p-2.5 text-end font-mono text-[#078B61]" dir="ltr">
-                          +{money(totals.expectedProfit, design.currency)}
-                        </td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  </table>
+                                  <span className="text-[12.5px] font-bold text-slate-800">
+                                    {isAr ? k.ar : k.en}
+                                  </span>
+                                </Menu.Item>
+                              );
+                            })}
+                          </Menu.Dropdown>
+                        </Menu>
+                      </div>
+
+                      {/* ── Components Rows (Supplier, Issue Date, Buy, Scope, Actions) ── */}
+                      <div className="p-3.5 space-y-2.5">
+                        {activeTabComponents.length === 0 ? (
+                          <div className="py-10 text-center rounded-xl border border-dashed border-slate-200 bg-white">
+                            <Package size={28} className="mx-auto text-slate-300 mb-1.5" />
+                            <p className="text-[12px] font-bold text-slate-600">
+                              {isAr
+                                ? 'لا توجد عناصر مضافة في هذا القسم بعد'
+                                : 'No items added in this tab yet'}
+                            </p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {isAr
+                                ? 'اضغط على «إضافة مكوّن جديد» لإضافة تذكرة، فندق، فيزا، أو نقل وتحديد المصدر وسعر الشراء'
+                                : 'Click "Add Component" to add tickets, hotels, visas, or transport'}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {activeTabComponents.map((c) => {
+                              const Icon = KIND_ICON[c.kind];
+                              const tone = KIND_TONE[c.kind];
+                              return (
+                                <div
+                                  key={c.id}
+                                  className="grid grid-cols-1 md:grid-cols-[auto_minmax(0,1.8fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto_auto] items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-2xs"
+                                >
+                                  {/* Kind Badge */}
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <div
+                                      className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${tone.bg} ${tone.border} ${tone.text}`}
+                                    >
+                                      <Icon size={17} />
+                                    </div>
+                                    <span className="text-[11.5px] font-black text-slate-700 block md:hidden">
+                                      {kindLabel(c.kind, isAr)}
+                                    </span>
+                                  </div>
+
+                                  {/* Supplier (المصدر / المورد) */}
+                                  <div className="min-w-0">
+                                    <label className="text-[10px] font-black text-slate-500 block mb-1">
+                                      {isAr ? 'المصدر / المورد (Supplier)' : 'Supplier'}
+                                    </label>
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        value={c.supplierName || ''}
+                                        onChange={(e) =>
+                                          patchComponentInActiveTemplate(c.id, {
+                                            supplierName: e.target.value,
+                                          })
+                                        }
+                                        placeholder={
+                                          isAr
+                                            ? 'اسم المورد أو شركة الطيران...'
+                                            : 'Supplier name...'
+                                        }
+                                        className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900 outline-none focus:border-[#F45A0A]"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setFinder({
+                                            open: true,
+                                            onSelectCallback: (account) =>
+                                              patchComponentInActiveTemplate(c.id, {
+                                                supplierName: account.name,
+                                                supplierAccountId: account.id,
+                                              }),
+                                          })
+                                        }
+                                        className="h-8 w-8 rounded-lg border border-cyan-200 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 flex items-center justify-center cursor-pointer shrink-0 transition-colors shadow-2xs"
+                                        title={isAr ? 'بحث في الحسابات' : 'Search accounts'}
+                                      >
+                                        <Search size={13} />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Issue Date (تاريخ الإصدار) */}
+                                  <div>
+                                    <label className="text-[10px] font-black text-slate-500 block mb-1">
+                                      {isAr ? 'تاريخ الإصدار' : 'Issue Date'}
+                                    </label>
+                                    <AccountingDatePicker
+                                      value={c.issueDate}
+                                      onChange={(val) =>
+                                        patchComponentInActiveTemplate(c.id, { issueDate: val })
+                                      }
+                                      placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
+                                    />
+                                  </div>
+
+                                  {/* Buy / Cost (سعر الشراء / الكلفة) */}
+                                  <div>
+                                    <label className="text-[10px] font-black text-slate-500 block mb-1">
+                                      {isAr
+                                        ? `سعر الشراء (${currentActiveTemplate.currency})`
+                                        : `Buy (${currentActiveTemplate.currency})`}
+                                    </label>
+                                    <input
+                                      value={c.cost ? c.cost.toLocaleString('en-US') : ''}
+                                      onChange={(e) =>
+                                        patchComponentInActiveTemplate(c.id, {
+                                          cost: numeric(e.target.value),
+                                        })
+                                      }
+                                      placeholder="0.00"
+                                      dir="ltr"
+                                      className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12.5px] font-mono font-black text-slate-900 text-end outline-none focus:border-[#F45A0A]"
+                                    />
+                                  </div>
+
+                                  {/* Scope Toggle: per seat vs whole group */}
+                                  <div>
+                                    <label className="text-[10px] font-black text-slate-500 block mb-1">
+                                      {isAr ? 'النطاق' : 'Scope'}
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        patchComponentInActiveTemplate(c.id, {
+                                          perSeat: !c.perSeat,
+                                        })
+                                      }
+                                      className={`h-8 px-2.5 rounded-lg border text-[11px] font-black cursor-pointer whitespace-nowrap transition-colors ${
+                                        c.perSeat
+                                          ? 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                                          : 'bg-amber-50 border-amber-200 text-amber-800'
+                                      }`}
+                                    >
+                                      {c.perSeat
+                                        ? isAr
+                                          ? 'للمقعد'
+                                          : 'Per seat'
+                                        : isAr
+                                        ? 'للكروب كامل'
+                                        : 'Whole group'}
+                                    </button>
+                                  </div>
+
+                                  {/* Delete */}
+                                  <div>
+                                    <label className="text-[10px] font-black text-transparent block mb-1">
+                                      -
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => removeComponentFromActiveTemplate(c.id)}
+                                      className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-200 flex items-center justify-center cursor-pointer shrink-0 transition-colors"
+                                      title={isAr ? 'حذف المكوّن' : 'Delete'}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Summary Row for Active Template */}
+                      <div className="bg-[#F8FAFC] border-t border-slate-200 p-3 flex items-center justify-between gap-3 flex-wrap text-xs">
+                        <div className="flex items-center gap-3 font-mono font-bold flex-wrap" dir="ltr">
+                          <span className="text-slate-600">
+                            <span className="font-sans text-slate-400 font-semibold">
+                              {isAr ? 'مشتريات المقاعد: ' : 'Buy: '}
+                            </span>
+                            {money(activeTemplateTotals.autoBuy, currentActiveTemplate.currency)}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-slate-600">
+                            <span className="font-sans text-slate-400 font-semibold">
+                              {isAr ? 'شاملة: ' : 'Global Buy: '}
+                            </span>
+                            {money(activeTemplateTotals.globalBuy, currentActiveTemplate.currency)}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-slate-600">
+                            <span className="font-sans text-slate-400 font-semibold">
+                              {isAr ? 'مصاريف: ' : 'Expenses: '}
+                            </span>
+                            {money(activeTemplateTotals.globalExpenses, currentActiveTemplate.currency)}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-slate-900 font-black">
+                            <span className="font-sans text-slate-500">
+                              {isAr ? 'الكلفة الكلية: ' : 'Cost: '}
+                            </span>
+                            {money(activeTemplateTotals.totalCost, currentActiveTemplate.currency)}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-slate-900 font-black">
+                            <span className="font-sans text-slate-500">
+                              {isAr ? 'المبيعات: ' : 'Sale: '}
+                            </span>
+                            {money(activeTemplateTotals.totalSale, currentActiveTemplate.currency)}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-[#078B61] font-black">
+                            <span className="font-sans text-emerald-800">
+                              {isAr ? 'صافي الربح: ' : 'Profit: '}
+                            </span>
+                            +{money(activeTemplateTotals.totalProfit, currentActiveTemplate.currency)}
+                          </span>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Summary Comparison Table for All Templates ── */}
+                <div className="space-y-2 pt-2">
+                  <span className="text-[12px] font-black text-slate-700 block">
+                    {isAr ? 'جدول مقارنة مجاميع كافة القوالب:' : 'All Templates Summary:'}
+                  </span>
+                  
+                  <div className="overflow-x-auto rounded-xl border border-[#E5E7EB]">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-[#0284C7] text-white text-[11.5px] font-black divide-x divide-white/20">
+                          <th className="p-2.5 w-12 text-center">ID</th>
+                          <th className="p-2.5 text-start">{isAr ? 'اسم التيمبلت' : 'Template Name'}</th>
+                          <th className="p-2.5 w-20 text-center">{isAr ? 'المقاعد*' : 'Seats*'}</th>
+                          <th className="p-2.5 w-20 text-center">{isAr ? 'المستفيدون' : 'Customers'}</th>
+                          <th className="p-2.5 w-28 text-end">{isAr ? 'كلفة مفرد' : 'Single Buy'}</th>
+                          <th className="p-2.5 w-28 text-end">{isAr ? 'بيع مفرد' : 'Single Sale'}</th>
+                          <th className="p-2.5 w-28 text-end">{isAr ? 'المشتريات' : 'Purchase'}</th>
+                          <th className="p-2.5 w-24 text-end">{isAr ? 'المصاريف' : 'Expenses'}</th>
+                          <th className="p-2.5 w-28 text-end">{isAr ? 'التكلفة' : 'Cost'}</th>
+                          <th className="p-2.5 w-28 text-end">{isAr ? 'المبيعات' : 'Sales'}</th>
+                          <th className="p-2.5 w-28 text-end">{isAr ? 'الربح' : 'Profit'}</th>
+                          <th className="p-2.5 w-32 text-center">{isAr ? 'الإجراءات' : 'Actions'}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {(design.templates || []).map((tpl, idx) => {
+                          const tplTotals = computeTemplateTotals(tpl);
+                          const assignedCustomers = (design.customers || []).filter(
+                            (c) => c.templateId === tpl.id,
+                          ).length;
+
+                          return (
+                            <tr
+                              key={tpl.id}
+                              onClick={() => setActiveTemplateId(tpl.id)}
+                              className={`cursor-pointer transition-colors ${
+                                tpl.id === currentActiveTemplate?.id ? 'bg-orange-50/60' : 'hover:bg-slate-50'
+                              }`}
+                            >
+                              <td className="p-2.5 text-center font-mono font-bold text-slate-500">
+                                {idx + 1}
+                              </td>
+                              <td className="p-2.5 font-bold text-slate-900">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full bg-[#F45A0A]" />
+                                  <span>{tpl.name}</span>
+                                </div>
+                              </td>
+                              <td className="p-2.5 text-center font-mono font-black text-slate-900" dir="ltr">
+                                {tplTotals.seats}
+                              </td>
+                              <td className="p-2.5 text-center font-mono font-bold text-indigo-700" dir="ltr">
+                                {assignedCustomers}
+                              </td>
+                              <td className="p-2.5 text-end font-mono font-black text-slate-800" dir="ltr">
+                                {money(tplTotals.costPerSeat, tpl.currency)}
+                              </td>
+                              <td className="p-2.5 text-end font-mono font-black text-slate-900" dir="ltr">
+                                {money(tplTotals.seatPrice, tpl.currency)}
+                              </td>
+                              <td className="p-2.5 text-end font-mono font-bold text-slate-800" dir="ltr">
+                                {money(tplTotals.autoBuy + tplTotals.globalBuy, tpl.currency)}
+                              </td>
+                              <td className="p-2.5 text-end font-mono font-bold text-slate-500" dir="ltr">
+                                {money(tplTotals.globalExpenses, tpl.currency)}
+                              </td>
+                              <td className="p-2.5 text-end font-mono font-black text-slate-900" dir="ltr">
+                                {money(tplTotals.totalCost, tpl.currency)}
+                              </td>
+                              <td className="p-2.5 text-end font-mono font-black text-slate-900" dir="ltr">
+                                {money(tplTotals.totalSale, tpl.currency)}
+                              </td>
+                              <td className="p-2.5 text-end font-mono font-black text-[#078B61]" dir="ltr">
+                                {tplTotals.totalProfit >= 0 ? '+' : ''}
+                                {money(tplTotals.totalProfit, tpl.currency)}
+                              </td>
+                              <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {/* Sale Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenSaleModal(tpl.id)}
+                                    className="px-2.5 py-1 rounded-lg bg-[#BE185D] hover:bg-[#9D174D] text-white text-[11px] font-black cursor-pointer flex items-center gap-1 shadow-2xs transition-colors"
+                                  >
+                                    <ShoppingCart size={12} />
+                                    <span>{isAr ? 'بيع' : 'Sale'}</span>
+                                  </button>
+
+                                  {/* Delete */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteTemplate(tpl.id)}
+                                    className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
+                                    title={isAr ? 'حذف القالب' : 'Delete'}
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-[#F8FAFC] border-t-2 border-[#E5E7EB] font-black text-[12px] text-slate-900">
+                          <td colSpan={6} className="p-2.5 text-start font-sans">
+                            {isAr ? 'إجمالي مجاميع القوالب:' : 'Templates Summary:'}
+                          </td>
+                          <td className="p-2.5 text-end font-mono text-slate-800" dir="ltr">
+                            {money(totals.sumBuy, design.currency)}
+                          </td>
+                          <td className="p-2.5 text-end font-mono text-slate-500" dir="ltr">
+                            {money(totals.sumExpenses, design.currency)}
+                          </td>
+                          <td className="p-2.5 text-end font-mono text-slate-900" dir="ltr">
+                            {money(totals.sumCost, design.currency)}
+                          </td>
+                          <td className="p-2.5 text-end font-mono text-slate-900" dir="ltr">
+                            {money(totals.sumExpectedSale, design.currency)}
+                          </td>
+                          <td className="p-2.5 text-end font-mono text-[#078B61]" dir="ltr">
+                            +{money(totals.expectedProfit, design.currency)}
+                          </td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
+
               </div>
 
             </div>
