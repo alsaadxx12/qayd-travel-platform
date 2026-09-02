@@ -112,6 +112,8 @@ export const SubCashboxesSettlementPage: React.FC = () => {
   // ── Unconfirmed Vouchers Batch Settlement Modal ──
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchModalSelectedBoxId, setBatchModalSelectedBoxId] = useState<string>('ALL');
+  /** القاصة الوجهة التي تُورَّد إليها المحصَّلات — تُختار من النافذة. */
+  const [batchDestBoxId, setBatchDestBoxId] = useState<string>('');
   const [batchModalTypeFilter, setBatchModalTypeFilter] = useState<string>('ALL');
   const [batchSelectedVoucherIds, setBatchSelectedVoucherIds] = useState<Set<string>>(new Set());
   const [batchSubmitting, setBatchSubmitting] = useState(false);
@@ -491,6 +493,8 @@ export const SubCashboxesSettlementPage: React.FC = () => {
   // Open Batch Clearance Modal showing all unconfirmed vouchers
   const handleOpenBatchClearanceModal = (sourceBoxId: string = 'ALL') => {
     setBatchModalSelectedBoxId(sourceBoxId);
+    const defaultDest = cashboxCards.find((c) => c.isMain) || cashboxCards[0];
+    setBatchDestBoxId((prev) => prev || defaultDest?.id || '');
     const unconfirmed = allItems.filter((i) => {
       if (i.isSettled) return false;
       if (sourceBoxId !== 'ALL' && i.cashboxAccountId !== sourceBoxId) return false;
@@ -534,6 +538,10 @@ export const SubCashboxesSettlementPage: React.FC = () => {
       showErrorNotification('تنبيه', 'يرجى تحديد وصولات واحدة على الأقل للتحصيل.');
       return;
     }
+    if (!batchDestBoxId) {
+      showErrorNotification('تنبيه', 'يرجى اختيار القاصة الوجهة التي تُورَّد إليها المحصَّلات.');
+      return;
+    }
 
     setBatchSubmitting(true);
     try {
@@ -542,6 +550,7 @@ export const SubCashboxesSettlementPage: React.FC = () => {
         body: JSON.stringify({
           voucherIds: Array.from(batchSelectedVoucherIds),
           sourceBoxId: batchModalSelectedBoxId,
+          destinationBoxId: batchDestBoxId || undefined,
         }),
       });
 
@@ -1204,7 +1213,7 @@ export const SubCashboxesSettlementPage: React.FC = () => {
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2">
-                <label className="font-bold text-slate-700">{isAr ? 'الصندوق:' : 'Cashbox:'}</label>
+                <label className="font-bold text-slate-700">{isAr ? 'من صندوق:' : 'From:'}</label>
                 <Select
                   size="xs"
                   radius="md"
@@ -1230,6 +1239,23 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                   className="w-56"
                 />
               </div>
+              {/* القاصة الوجهة — إلى أين تُورَّد المحصَّلات. */}
+              <div className="flex items-center gap-2">
+                <label className="font-bold text-slate-700">{isAr ? 'إلى قاصة:' : 'To cashbox:'}</label>
+                <Select
+                  size="xs"
+                  radius="md"
+                  data={cashboxCards.map((c) => ({
+                    value: c.id,
+                    label: c.isMain ? `${c.nameAr} ★` : c.nameAr,
+                  }))}
+                  value={batchDestBoxId}
+                  onChange={(val) => setBatchDestBoxId(val || '')}
+                  placeholder={isAr ? 'اختر القاصة الوجهة' : 'Select destination'}
+                  className="w-56"
+                />
+              </div>
+
               <div className="flex items-center gap-2">
                 <label className="font-bold text-slate-700">{isAr ? 'النوع:' : 'Type:'}</label>
                 <Select

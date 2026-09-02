@@ -488,11 +488,14 @@ export class CashboxesBanksService {
   async settleVoucher(
     companyId: string,
     userId: string,
-    dto: { voucherId: string; voucherNumber?: string; isSettled: boolean },
+    dto: { voucherId: string; voucherNumber?: string; isSettled: boolean; destinationBoxId?: string },
   ) {
     const { voucherId, isSettled } = dto;
 
-    const mainBoxAcc = await this.resolveMainCashbox(companyId);
+    // القاصة الوجهة: ما يختاره المستخدم إن حُدِّد، وإلا القاصة الرئيسية المستنتَجة.
+    const mainBoxAcc = dto.destinationBoxId
+      ? await this.prisma.account.findUnique({ where: { id: dto.destinationBoxId } })
+      : await this.resolveMainCashbox(companyId);
     if (!mainBoxAcc) {
       throw new NotFoundException(
         'تعذّر تحديد صندوق الشركة الرئيسي في شجرة الحسابات. عيّنه من إعدادات النظام (الحساب المخصص للقاصة الرئيسية) ثم أعد المحاولة.',
@@ -634,11 +637,15 @@ export class CashboxesBanksService {
   async settleBatchVouchers(
     companyId: string,
     userId: string,
-    dto: { voucherIds: string[]; sourceBoxId?: string },
+    dto: { voucherIds: string[]; sourceBoxId?: string; destinationBoxId?: string },
   ) {
     const results: any[] = [];
     for (const vId of dto.voucherIds) {
-      const res = await this.settleVoucher(companyId, userId, { voucherId: vId, isSettled: true });
+      const res = await this.settleVoucher(companyId, userId, {
+        voucherId: vId,
+        isSettled: true,
+        destinationBoxId: dto.destinationBoxId,
+      });
       results.push(res);
     }
     return { success: true, count: results.length };

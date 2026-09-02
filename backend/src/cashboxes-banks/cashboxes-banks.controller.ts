@@ -47,7 +47,7 @@ export class CashboxesBanksController {
   @ApiOperation({ summary: 'تحصيل أو إلغاء تحصيل سند مالي وتوريده إلى الصندوق الرئيسي' })
   async settleVoucher(
     @Req() req: any,
-    @Body() dto: { voucherId: string; voucherNumber?: string; isSettled: boolean },
+    @Body() dto: { voucherId: string; voucherNumber?: string; isSettled: boolean; destinationBoxId?: string },
   ) {
     return this.service.settleVoucher(req.user.companyId, req.user.userId, dto);
   }
@@ -56,7 +56,7 @@ export class CashboxesBanksController {
   @ApiOperation({ summary: 'تحصيل وتوريد مجموعة وصولات وسندات دفعة واحدة' })
   async settleBatch(
     @Req() req: any,
-    @Body() dto: { voucherIds: string[]; sourceBoxId?: string },
+    @Body() dto: { voucherIds: string[]; sourceBoxId?: string; destinationBoxId?: string },
   ) {
     return this.service.settleBatchVouchers(req.user.companyId, req.user.userId, dto);
   }
