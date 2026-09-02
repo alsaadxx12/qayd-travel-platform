@@ -276,7 +276,20 @@ export const ExternalClearingsPage: React.FC = () => {
     let sumIQD = 0;
     let sumTOMAN = 0;
 
+    /*
+     * العملاء خارج التصفية الشاملة.
+     *
+     * التصفية الشاملة تقيس مراكزنا لدى مكاتب البورصة والوسطاء بعملاتها الثلاث
+     * موحّدةً بالدولار؛ والعملاء ذمم تجارية بالدينار والدولار لا تُوحَّد معها،
+     * فخلطهم بها يعطي رقماً لا يمثّل شيئاً. لذا يُحسب الإجمالي من غير العملاء،
+     * ويبقى العميل ظاهراً في القائمة وبطاقته كما هو.
+     */
+    let clientCount = 0;
     clearingAccounts.forEach(acc => {
+      if (acc.category === 'CLIENT') {
+        clientCount++;
+        return;
+      }
       grandTotalUSD += acc.totalConsolidatedUSD;
       sumUSD += acc.balanceUSD;
       sumIQD += acc.balanceIQD;
@@ -288,10 +301,11 @@ export const ExternalClearingsPage: React.FC = () => {
       sumUSD,
       sumIQD,
       sumTOMAN,
+      settlementCount: clearingAccounts.length - clientCount,
       totalCount: clearingAccounts.length,
       bourseCount: clearingAccounts.filter(a => a.category === 'BOURSE').length,
       officeCount: clearingAccounts.filter(a => a.category === 'OFFICE').length,
-      clientCount: clearingAccounts.filter(a => a.category === 'CLIENT').length,
+      clientCount,
     };
   }, [clearingAccounts]);
 
@@ -483,14 +497,26 @@ export const ExternalClearingsPage: React.FC = () => {
   // Confirm Delete Clearing Account
   const handleConfirmDeleteAccount = async () => {
     if (!accountToDelete) return;
+    /*
+     * حذف آنيّ: البطاقة تختفي فوراً والصفحة لا تُعاد.
+     *
+     * كان الحذف ينتظر الخادم ثم يستدعي loadData فتُجلب كل الحسابات من جديد
+     * وتومض البطاقات كلها لأجل بطاقة واحدة زالت. الآن تُزال من القائمة فوراً
+     * (فتتحدّث الإحصائيات معها لأنها مشتقّة منها)، ويُرسل الحذف بعدها؛ وإن فشل
+     * تُعاد البطاقة إلى مكانها ويُخبَر المستخدم — فلا تكذب الشاشة أبداً.
+     */
+    const removed = accountToDelete;
+    setClearingAccounts(prev => prev.filter(a => a.id !== removed.id));
+    setDeleteAccountModalOpen(false);
+    setAccountToDelete(null);
     setDeletingAccount(true);
     try {
-      await accountsApi.delete(accountToDelete.id);
-      showSuccessNotification('تم الحذف بنجاح', `تم حذف حساب التصفية "${accountToDelete.nameAr}"`);
-      setDeleteAccountModalOpen(false);
-      setAccountToDelete(null);
-      await loadData();
+      await accountsApi.delete(removed.id);
+      showSuccessNotification('تم الحذف بنجاح', `تم حذف حساب التصفية "${removed.nameAr}"`);
     } catch (err: any) {
+      setClearingAccounts(prev =>
+        prev.some(a => a.id === removed.id) ? prev : [...prev, removed],
+      );
       showErrorNotification('تعذر الحذف', err.message || 'لا يمكن حذف الحساب لاحتوائه على قيود مرتبطة');
     } finally {
       setDeletingAccount(false);
@@ -612,13 +638,13 @@ export const ExternalClearingsPage: React.FC = () => {
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] text-slate-500 font-bold">إجمالي التصفية الشامل</span>
             <span className="text-[10px] font-mono font-black text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
-              {totals.totalCount} حساب
+              {totals.settlementCount} حساب
             </span>
           </div>
           <div className="text-2xl font-black text-slate-900 font-mono tracking-tight tabular-nums" dir="ltr">
             ${totals.grandTotalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[10px] font-medium text-slate-400 mt-1">العملات الثلاث مقوّمة بالدولار</div>
+          <div className="text-[10px] font-medium text-slate-400 mt-1">البورصة والمكاتب فقط — بلا حسابات العملاء</div>
         </div>
 
         {/* 2. الأرصدة بالدولار */}

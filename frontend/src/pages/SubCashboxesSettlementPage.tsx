@@ -1195,25 +1195,32 @@ export const SubCashboxesSettlementPage: React.FC = () => {
         onClose={() => setBatchModalOpen(false)}
         title={
           <div className="flex items-center gap-2.5 font-black text-sm text-slate-900">
-            <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#F45A0A] border border-orange-200 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-orange-50 text-[#F45A0A] border border-orange-200 flex items-center justify-center shrink-0">
               <IconBuildingBank size={18} />
             </div>
-            <span>
-              {isAr ? 'تحصيل وتوريد الوصولات غير المؤكدة إلى قاصة الشركة الرئيسية' : 'Batch Settlement to Main HQ Cashbox'}
-            </span>
+            <div className="flex flex-col">
+              <span>{isAr ? 'تحصيل وتوريد الوصولات غير المؤكدة' : 'Batch Settlement to Main HQ Cashbox'}</span>
+              <span className="text-[11px] font-semibold text-slate-400">
+                {isAr ? 'توريد إلى قاصة الشركة الرئيسية' : 'Transfer to main company cashbox'}
+              </span>
+            </div>
           </div>
         }
-        size="xl"
+        size={1100}
         centered
         radius="lg"
         dir={direction}
+        styles={{
+          header: { borderBottom: '1px solid #E5E7EB', paddingBottom: '12px' },
+          body: { padding: '0' },
+        }}
       >
-        <div className="space-y-4 text-xs pt-1" dir={direction}>
-          {/* Header Controls & Filter */}
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
-                <label className="font-bold text-slate-700">{isAr ? 'من صندوق:' : 'From:'}</label>
+        <div className="flex flex-col text-xs" dir={direction} style={{ maxHeight: 'calc(80vh - 120px)' }}>
+          {/* ── Filter Controls ── */}
+          <div className="px-4 py-3.5 bg-slate-50/80 border-b border-slate-200">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+                <label className="text-[11px] font-bold text-slate-500">{isAr ? 'من صندوق' : 'Source'}</label>
                 <Select
                   size="xs"
                   radius="md"
@@ -1236,12 +1243,12 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                     });
                     setBatchSelectedVoucherIds(new Set(unconf.map((u) => u.id)));
                   }}
-                  className="w-56"
+                  styles={{ input: { border: '1px solid #E5E7EB', fontWeight: 700 } }}
                 />
               </div>
               {/* القاصة الوجهة — إلى أين تُورَّد المحصَّلات. */}
-              <div className="flex items-center gap-2">
-                <label className="font-bold text-slate-700">{isAr ? 'إلى قاصة:' : 'To cashbox:'}</label>
+              <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+                <label className="text-[11px] font-bold text-slate-500">{isAr ? 'إلى قاصة' : 'Destination'}</label>
                 <Select
                   size="xs"
                   radius="md"
@@ -1252,17 +1259,16 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                   value={batchDestBoxId}
                   onChange={(val) => setBatchDestBoxId(val || '')}
                   placeholder={isAr ? 'اختر القاصة الوجهة' : 'Select destination'}
-                  className="w-56"
+                  styles={{ input: { border: '1px solid #E5E7EB', fontWeight: 700 } }}
                 />
               </div>
-
-              <div className="flex items-center gap-2">
-                <label className="font-bold text-slate-700">{isAr ? 'النوع:' : 'Type:'}</label>
+              <div className="flex flex-col gap-1 min-w-[160px]">
+                <label className="text-[11px] font-bold text-slate-500">{isAr ? 'النوع' : 'Type'}</label>
                 <Select
                   size="xs"
                   radius="md"
                   data={[
-                    { value: 'ALL', label: isAr ? 'الكل (قبض + دفع)' : 'All (Receipts + Payments)' },
+                    { value: 'ALL', label: isAr ? 'الكل (قبض + دفع)' : 'All' },
                     { value: 'RECEIPT', label: isAr ? 'سندات القبض فقط' : 'Receipts' },
                     { value: 'PAYMENT', label: isAr ? 'سندات الدفع فقط' : 'Payments' },
                   ]}
@@ -1278,54 +1284,62 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                     });
                     setBatchSelectedVoucherIds(new Set(unconf.map((u) => u.id)));
                   }}
-                  className="w-48"
+                  styles={{ input: { border: '1px solid #E5E7EB', fontWeight: 700 } }}
                 />
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (batchSelectedVoucherIds.size === modalUnconfirmedVouchers.length) {
+                    setBatchSelectedVoucherIds(new Set());
+                  } else {
+                    setBatchSelectedVoucherIds(new Set(modalUnconfirmedVouchers.map((v) => v.id)));
+                  }
+                }}
+                className="h-[30px] px-3 rounded-lg border border-slate-200 bg-white hover:bg-orange-50 text-slate-600 hover:text-[#F45A0A] font-bold text-[11px] cursor-pointer transition-colors whitespace-nowrap"
+              >
+                {batchSelectedVoucherIds.size === modalUnconfirmedVouchers.length
+                  ? (isAr ? 'إلغاء تحديد الكل' : 'Deselect All')
+                  : (isAr ? 'تحديد الكل' : 'Select All')}
+              </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (batchSelectedVoucherIds.size === modalUnconfirmedVouchers.length) {
-                  setBatchSelectedVoucherIds(new Set());
-                } else {
-                  setBatchSelectedVoucherIds(new Set(modalUnconfirmedVouchers.map((v) => v.id)));
-                }
-              }}
-              className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs cursor-pointer"
-            >
-              {batchSelectedVoucherIds.size === modalUnconfirmedVouchers.length
-                ? (isAr ? 'إلغاء تحديد الكل' : 'Deselect All')
-                : (isAr ? 'تحديد كل الوصولات' : 'Select All')}
-            </button>
           </div>
 
-          {/* Table of Unconfirmed Vouchers */}
-          <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[360px] overflow-y-auto">
-            <table className="w-full text-start border-collapse text-xs whitespace-nowrap">
-              <thead className="sticky top-0 bg-slate-100/95 border-b border-slate-200 z-10 font-bold text-slate-800 text-[11.5px]">
+          {/* ── Table ── */}
+          <div className="flex-1 overflow-y-auto" style={{ minHeight: '180px', maxHeight: '380px' }}>
+            <table className="w-full text-start border-collapse text-xs">
+              <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200">
                 <tr>
-                  <th className="p-2.5 w-10 text-center">#</th>
-                  <th className="p-2.5 w-28 font-mono">{isAr ? 'رقم السند' : 'Voucher No.'}</th>
-                  <th className="p-2.5 w-36">{isAr ? 'الصندوق الفرعي' : 'Source Cashbox'}</th>
-                  <th className="p-2.5 w-36">{isAr ? 'الحساب المقابل' : 'Account'}</th>
-                  <th className="p-2.5 w-32 text-end font-mono">{isAr ? 'المبلغ والعملة' : 'Amount'}</th>
-                  <th className="p-2.5">{isAr ? 'البيان والشرح' : 'Description'}</th>
-                  <th className="p-2.5 w-24 text-center font-mono">{isAr ? 'التاريخ' : 'Date'}</th>
-                  <th className="p-2.5 w-28">{isAr ? 'الموظف' : 'User'}</th>
+                  <th className="px-2.5 py-2.5 w-10 text-center text-slate-400 text-[10px] font-bold">#</th>
+                  <th className="px-2.5 py-2.5 w-24 font-mono text-slate-600 font-bold text-[11px]">{isAr ? 'رقم السند' : 'Voucher No.'}</th>
+                  <th className="px-2.5 py-2.5 text-slate-600 font-bold text-[11px]">{isAr ? 'الصندوق الفرعي' : 'Source'}</th>
+                  <th className="px-2.5 py-2.5 text-slate-600 font-bold text-[11px]">{isAr ? 'الحساب المقابل' : 'Account'}</th>
+                  <th className="px-2.5 py-2.5 w-32 text-end font-mono text-slate-600 font-bold text-[11px]">{isAr ? 'المبلغ والعملة' : 'Amount'}</th>
+                  <th className="px-2.5 py-2.5 text-slate-600 font-bold text-[11px]">{isAr ? 'البيان والشرح' : 'Description'}</th>
+                  <th className="px-2.5 py-2.5 w-24 text-center font-mono text-slate-600 font-bold text-[11px]">{isAr ? 'التاريخ' : 'Date'}</th>
+                  <th className="px-2.5 py-2.5 w-24 text-slate-600 font-bold text-[11px]">{isAr ? 'الموظف' : 'User'}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {modalUnconfirmedVouchers.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-10 text-center text-slate-500 font-bold">
-                      {isAr ? '🎉 لا توجد وصولات معلقة لهذا الصندوق. كل الوصولات محصلة بالكامل.' : 'No pending vouchers found.'}
+                    <td colSpan={8} className="py-14 text-center">
+                      <div className="flex flex-col items-center gap-2.5">
+                        <div className="w-12 h-12 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center">
+                          <IconCircleCheck size={24} className="text-[#F45A0A]" />
+                        </div>
+                        <p className="font-black text-slate-700 text-[13px]">
+                          {isAr ? 'كل الوصولات محصلة بالكامل' : 'All vouchers are settled'}
+                        </p>
+                        <p className="text-slate-400 font-semibold text-[11px]">
+                          {isAr ? 'لا توجد وصولات معلقة لهذا الصندوق' : 'No pending vouchers found'}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
-                  modalUnconfirmedVouchers.map((v) => {
+                  modalUnconfirmedVouchers.map((v, idx) => {
                     const isChecked = batchSelectedVoucherIds.has(v.id);
-
                     return (
                       <tr
                         key={v.id}
@@ -1337,11 +1351,15 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                             return next;
                           });
                         }}
-                        className={`cursor-pointer transition-colors ${
-                          isChecked ? 'bg-orange-50/50 hover:bg-orange-50' : 'bg-white hover:bg-slate-50'
+                        className={`cursor-pointer transition-colors border-b border-slate-100 ${
+                          isChecked
+                            ? 'bg-orange-50/50 hover:bg-orange-50'
+                            : idx % 2 === 0
+                              ? 'bg-white hover:bg-slate-50'
+                              : 'bg-slate-50/40 hover:bg-slate-50'
                         }`}
                       >
-                        <td className="p-2.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-2.5 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             size="xs"
                             color="orange"
@@ -1357,15 +1375,15 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                             }}
                           />
                         </td>
-                        <td className="p-2.5 font-mono font-black text-slate-900">{v.voucherNumber}</td>
-                        <td className="p-2.5 font-bold text-slate-900">{v.cashboxName}</td>
-                        <td className="p-2.5 text-slate-700 truncate">{v.accountName}</td>
-                        <td className="p-2.5 text-end font-mono font-black text-slate-900">
-                          {Number(v.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })} {v.currency}
+                        <td className="px-2.5 py-2.5 font-mono font-black text-slate-900">{v.voucherNumber}</td>
+                        <td className="px-2.5 py-2.5 font-bold text-slate-800">{v.cashboxName}</td>
+                        <td className="px-2.5 py-2.5 text-slate-600 truncate max-w-[160px]">{v.accountName}</td>
+                        <td className="px-2.5 py-2.5 text-end font-mono font-black text-slate-900">
+                          {Number(v.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })} <span className="text-slate-400 font-semibold">{v.currency}</span>
                         </td>
-                        <td className="p-2.5 text-slate-600 truncate max-w-xs">{v.description}</td>
-                        <td className="p-2.5 text-center font-mono text-slate-700">{v.dateFormatted}</td>
-                        <td className="p-2.5 text-slate-700 truncate">{v.userName}</td>
+                        <td className="px-2.5 py-2.5 text-slate-500 truncate max-w-[180px]">{v.description}</td>
+                        <td className="px-2.5 py-2.5 text-center font-mono text-slate-600 text-[11px]">{v.dateFormatted}</td>
+                        <td className="px-2.5 py-2.5 text-slate-600 truncate max-w-[120px]">{v.userName}</td>
                       </tr>
                     );
                   })
@@ -1374,27 +1392,27 @@ export const SubCashboxesSettlementPage: React.FC = () => {
             </table>
           </div>
 
-          {/* Modal Footer Summary and Submit */}
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <span className="font-bold text-slate-700">
-                {isAr ? 'الإجمالي المحدد للتحصيل:' : 'Selected Total:'}
-              </span>
-              <span className="font-mono font-black text-sm text-[#F45A0A]">
-                {modalSelectedStats.totalIQD.toLocaleString()} د.ع
+          {/* ── Footer ── */}
+          <div className="px-4 py-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 whitespace-nowrap">
+              <span className="text-[11px] font-bold text-slate-500">{isAr ? 'الإجمالي المحدد للتحصيل:' : 'Selected Total:'}</span>
+              <span className="font-mono font-black text-[14px] text-[#F45A0A]" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                {modalSelectedStats.totalIQD.toLocaleString('en-US')} <span className="text-[11px] font-bold text-slate-400">د.ع</span>
               </span>
               {modalSelectedStats.totalUSD > 0 && (
-                <span className="font-mono font-black text-xs text-slate-700">
-                  (${modalSelectedStats.totalUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                <span className="font-mono font-black text-[13px] text-slate-700" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                  ${modalSelectedStats.totalUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </span>
               )}
+              <span className="text-[11px] font-bold text-slate-400">
+                ({modalSelectedStats.count} {isAr ? 'سند' : 'items'})
+              </span>
             </div>
-
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setBatchModalOpen(false)}
-                className="h-9 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs cursor-pointer"
+                className="h-9 px-4 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs cursor-pointer transition-colors"
               >
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
@@ -1402,7 +1420,7 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                 type="button"
                 disabled={batchSubmitting || modalSelectedStats.count === 0}
                 onClick={handleExecuteBatchSettlement}
-                className="h-9 px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-xs shadow-xs cursor-pointer disabled:opacity-50"
+                className="h-9 px-5 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-xs cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {batchSubmitting
                   ? (isAr ? 'جاري التحصيل...' : 'Clearing...')

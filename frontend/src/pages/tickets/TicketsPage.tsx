@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Tooltip, Menu, Modal, Popover } from '@mantine/core';
+import { Lottie } from 'lottie-react';
+import flightBookingAnimation from '../../assets/animations/flight-booking.json';
 
 import {
   PlaneTakeoff,
@@ -862,297 +864,171 @@ export const TicketsPage: React.FC = () => {
       dir={direction}
       style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
     >
-      {/* ── 1. UNIFIED PAGE HEADER (84–88px Height) ── */}
-      <div className="flex items-center justify-between flex-wrap gap-4 bg-white rounded-[14px] border border-[#E5E7EB] px-5 py-4 min-h-[86px] shadow-2xs">
-        {/* Title and Icon Container (38x38px) */}
-        <div className="flex items-center gap-3.5">
-          <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shadow-2xs shrink-0">
-            <PlaneTakeoff size={21} strokeWidth={1.85} />
+      {/* ── 1. KPI CARDS + LOTTIE ANIMATION (Height 124px) ── */}
+      <div className="flex gap-3 items-stretch h-[124px]">
+        {/* KPI Cards (First in RTL) */}
+        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 h-full">
+          {/* Card 1: Total Sales */}
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.totalSales')}</span>
+              <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <Banknote size={19} strokeWidth={1.85} />
+              </div>
+            </div>
+            <div>
+              {ticketsLoading ? (
+                <div className="grid grid-cols-2 gap-2 animate-pulse">
+                  <div className="space-y-1">
+                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4.5 w-16 bg-slate-200/70 rounded" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4.5 w-20 bg-slate-200/70 rounded" />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dollar')}</span>
+                    <span className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
+                      ${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dinar')}</span>
+                    <span className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
+                      {kpis.totalSellIQD.toLocaleString()} <span className="text-[10px] font-sans font-semibold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-[20px] text-[#111827] leading-tight">{t('tickets.title')}</h1>
-            <p className="text-[13px] font-normal text-[#64748B] mt-0.5">
-              {t('tickets.subtitle')}
-            </p>
+
+          {/* Card 2: Total Buy Cost */}
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.totalCost')}</span>
+              <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <ReceiptText size={19} strokeWidth={1.85} />
+              </div>
+            </div>
+            <div>
+              {ticketsLoading ? (
+                <div className="grid grid-cols-2 gap-2 animate-pulse">
+                  <div className="space-y-1">
+                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4.5 w-16 bg-slate-200/70 rounded" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4.5 w-20 bg-slate-200/70 rounded" />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dollar')}</span>
+                    <span className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
+                      ${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dinar')}</span>
+                    <span className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
+                      {kpis.totalBuyIQD.toLocaleString()} <span className="text-[10px] font-sans font-semibold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Card 3: Net Profit */}
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.netProfit')}</span>
+              <div className="w-[36px] h-[36px] rounded-[10px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
+                <TrendingUp size={19} strokeWidth={1.85} />
+              </div>
+            </div>
+            <div>
+              {ticketsLoading ? (
+                <div className="grid grid-cols-2 gap-2 animate-pulse">
+                  <div className="space-y-1">
+                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4.5 w-16 bg-slate-200/70 rounded" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4.5 w-20 bg-slate-200/70 rounded" />
+                  </div>
+                </div>
+              ) : canViewProfits ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dollar')}</span>
+                    <span className={`text-[17px] font-bold font-mono tabular-nums leading-tight block ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                      {kpis.totalProfitUSD > 0 ? `+$${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : kpis.totalProfitUSD < 0 ? `-$${Math.abs(kpis.totalProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `$0.00`}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dinar')}</span>
+                    <span className={`text-[16px] font-bold font-mono tabular-nums leading-tight block ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                      {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`} <span className="text-[10px] font-sans font-semibold">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <span className="text-[13.5px] text-slate-400 font-mono">{t('tickets.unauthorized')}</span>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            type="button"
-            onClick={() => {
-              setEditingTicketData(null);
-              setModalOpen(true);
-            }}
-            className="h-[44px] px-5 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-semibold text-[13.5px] shadow-xs flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <Plus size={17} strokeWidth={2.4} />
-            <span>{t('tickets.newInvoice')}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => reloadTicketsFromApi(false)}
-            disabled={ticketsLoading}
-            className="h-[44px] px-4 rounded-[9px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold text-[13px] flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
-            title={t('tickets.refresh')}
-          >
-            <RefreshCw size={16} className={ticketsLoading ? 'animate-spin text-[#F45A0A]' : 'text-[#64748B]'} />
-            <span className="hidden sm:inline">{t('tickets.refresh')}</span>
-          </button>
+        {/* Lottie Animation — Last (left side in RTL) */}
+        <div className="hidden lg:flex w-[220px] shrink-0 bg-white border border-[#E5E7EB] rounded-[14px] shadow-2xs items-center justify-center overflow-hidden p-2 h-full">
+          <Lottie src={flightBookingAnimation} loop={true} autoplay={true} className="w-full h-full object-contain" />
         </div>
       </div>
 
-      {/* ── 2. FOUR KPI ANALYTICAL CARDS (Height 116px, 16px Padding, 2-Column Currency Grid) ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Total Sales */}
-        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px]">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.totalSales')}</span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-              <Banknote size={20} strokeWidth={1.85} />
+      {/* ── 2. FILTERS BAR ── */}
+      <div className="bg-white rounded-[14px] border border-[#E5E7EB] px-4 py-3 shadow-2xs">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Right Group: Search + Dates */}
+          <div className="flex items-center gap-3 flex-wrap flex-1 min-w-[300px]">
+            {/* Search Input */}
+            <div className="relative min-w-[200px] max-w-[280px] flex-1">
+              <Search size={16} className={`absolute ${direction === 'rtl' ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder={t('filters.searchPlaceholder')}
+                className={`w-full h-[38px] ${direction === 'rtl' ? 'pr-9 pl-3' : 'pl-9 pr-3'} rounded-[10px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13px] text-[#111827] placeholder-[#9CA3AF] outline-none hover:bg-white hover:border-[#D1D5DB] focus:bg-white focus:border-2 focus:border-[#F45A0A] transition-colors`}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className={`absolute ${direction === 'rtl' ? 'left-2.5' : 'right-2.5'} top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer`}
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
-          </div>
-          <div>
-            {ticketsLoading ? (
-              <div className="grid grid-cols-2 gap-2 animate-pulse">
-                <div className="space-y-1">
-                  <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                  <div className="h-5 w-20 bg-slate-200/70 rounded" />
-                </div>
-                <div className="space-y-1">
-                  <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                  <div className="h-5 w-24 bg-slate-200/70 rounded" />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{t('currency.dollar')}</span>
-                  <span className="text-[18px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
-                    ${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{t('currency.dinar')}</span>
-                  <span className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
-                    {kpis.totalSellIQD.toLocaleString()} <span className="text-[10px] font-sans font-semibold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
 
-        {/* Card 2: Total Buy Cost */}
-        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px]">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.totalCost')}</span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-              <ReceiptText size={20} strokeWidth={1.85} />
-            </div>
-          </div>
-          <div>
-            {ticketsLoading ? (
-              <div className="grid grid-cols-2 gap-2 animate-pulse">
-                <div className="space-y-1">
-                  <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                  <div className="h-5 w-20 bg-slate-200/70 rounded" />
-                </div>
-                <div className="space-y-1">
-                  <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                  <div className="h-5 w-24 bg-slate-200/70 rounded" />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{t('currency.dollar')}</span>
-                  <span className="text-[18px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
-                    ${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{t('currency.dinar')}</span>
-                  <span className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
-                    {kpis.totalBuyIQD.toLocaleString()} <span className="text-[10px] font-sans font-semibold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Card 3: Net Profit */}
-        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px]">
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.netProfit')}</span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
-              <TrendingUp size={20} strokeWidth={1.85} />
-            </div>
-          </div>
-          <div>
-            {ticketsLoading ? (
-              <div className="grid grid-cols-2 gap-2 animate-pulse">
-                <div className="space-y-1">
-                  <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                  <div className="h-5 w-20 bg-slate-200/70 rounded" />
-                </div>
-                <div className="space-y-1">
-                  <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                  <div className="h-5 w-24 bg-slate-200/70 rounded" />
-                </div>
-              </div>
-            ) : canViewProfits ? (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{t('currency.dollar')}</span>
-                  <span className={`text-[18px] font-bold font-mono tabular-nums leading-tight block ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
-                    {kpis.totalProfitUSD > 0 ? `+$${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : kpis.totalProfitUSD < 0 ? `-$${Math.abs(kpis.totalProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `$0.00`}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{t('currency.dinar')}</span>
-                  <span className={`text-[17px] font-bold font-mono tabular-nums leading-tight block ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
-                    {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`} <span className="text-[10px] font-sans font-semibold">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <span className="text-[14px] text-slate-400 font-mono">{t('tickets.unauthorized')}</span>
-            )}
-          </div>
-        </div>
-
-        {/* Card 4: Financial Audit Status */}
-        <div
-          onClick={() => {
-            setAuditFilter((prev) => (prev === 'ALL' ? 'UNAUDITED' : prev === 'UNAUDITED' ? 'AUDITED' : 'ALL'));
-            setCurrentPage(1);
-          }}
-          className={`bg-white rounded-[14px] p-4 shadow-2xs transition-all cursor-pointer hover:shadow-xs flex flex-col justify-between h-[116px] border ${
-            auditFilter !== 'ALL' ? 'border-[#F45A0A] bg-orange-50/20' : 'border-[#E5E7EB]'
-          }`}
-          title={t('tickets.auditStatus')}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.auditStatus')}</span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-              <ShieldCheck size={20} strokeWidth={1.85} />
-            </div>
-          </div>
-          <div>
-            {ticketsLoading ? (
-              <div className="grid grid-cols-3 gap-2 animate-pulse pt-1">
-                <div className="h-8 bg-slate-200/70 rounded" />
-                <div className="h-8 bg-slate-200/70 rounded" />
-                <div className="h-8 bg-slate-200/70 rounded" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-1 text-center pt-1 border-t border-slate-100">
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-0.5">
-                    <BadgeCheck size={11} /> {t('tickets.audited')}
-                  </span>
-                  <span className="font-mono font-bold text-[14px] text-emerald-800">{kpis.auditedCount}</span>
-                </div>
-
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-amber-700 font-bold flex items-center gap-0.5">
-                    <Clock3 size={11} /> {t('tickets.underReview')}
-                  </span>
-                  <span className="font-mono font-bold text-[14px] text-amber-800">{kpis.pendingAuditCount}</span>
-                </div>
-
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-[#C2410C] font-bold flex items-center gap-0.5">
-                    <ShieldAlert size={11} /> {t('tickets.unaudited')}
-                  </span>
-                  <span className="font-mono font-bold text-[14px] text-[#C2410C]">{kpis.unauditedCount}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3. STREAMLINED FILTERS BAR (Search + Date Range + Currency Only) ── */}
-      <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-3.5 shadow-2xs">
-        <div className="flex items-center justify-between gap-3.5 flex-wrap">
-          {/* General Search Input */}
-          <div className="relative min-w-[280px] max-w-[420px] flex-1">
-            <Search size={16} className={`absolute ${direction === 'rtl' ? 'right-3.5' : 'left-3.5'} top-1/2 -translate-y-1/2 text-slate-400`} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder={t('filters.searchPlaceholder')}
-              className={`w-full h-[44px] ${direction === 'rtl' ? 'pr-10 pl-3.5' : 'pl-10 pr-3.5'} rounded-[10px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13.5px] text-[#111827] placeholder-[#9CA3AF] outline-none hover:bg-white hover:border-[#D1D5DB] focus:bg-white focus:border-2 focus:border-[#F45A0A] transition-colors`}
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className={`absolute ${direction === 'rtl' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer`}
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          {/* View Mode: Aggregated vs Detailed */}
-          <div className="flex items-center gap-1 bg-[#F1F5F9] p-1 rounded-xl border border-slate-200">
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode('aggregated');
-                setCurrentPage(1);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                viewMode === 'aggregated'
-                  ? 'bg-white text-[#F45A0A] shadow-xs border border-[#FFD8B2]'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Layers size={14} className={viewMode === 'aggregated' ? 'text-[#F45A0A]' : 'text-slate-400'} />
-              <span>{language === 'ar' ? 'تجميعي' : 'Summary'}</span>
-              <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded-full ${viewMode === 'aggregated' ? 'bg-[#FFF3E8] text-[#F45A0A]' : 'bg-slate-200 text-slate-600'}`}>
-                {filteredTickets.length}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setViewMode('detailed');
-                setCurrentPage(1);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${
-                viewMode === 'detailed'
-                  ? 'bg-white text-[#F45A0A] shadow-xs border border-[#FFD8B2]'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Users size={14} className={viewMode === 'detailed' ? 'text-[#F45A0A]' : 'text-slate-400'} />
-              <span>{language === 'ar' ? 'تفصيلي' : 'Detailed'}</span>
-              <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded-full ${viewMode === 'detailed' ? 'bg-[#FFF3E8] text-[#F45A0A]' : 'bg-slate-200 text-slate-600'}`}>
-                {detailedTicketItems.length}
-              </span>
-            </button>
-          </div>
-
-          {/* Date Range Filters (From & To) */}
-          <div className="flex items-center gap-3.5 flex-wrap">
-            {/* From Date with Label */}
-            <div className="flex items-center gap-2" dir="ltr">
-              <span className="text-xs font-bold text-slate-600 shrink-0 select-none">{language === 'ar' ? 'من:' : 'From:'}</span>
-              <div className="w-[245px]">
+            {/* Date From */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-bold text-slate-700 shrink-0 select-none bg-slate-100 px-2 py-1 rounded-md">{language === 'ar' ? 'من' : 'From'}</span>
+              <div className="w-[220px]">
                 <SegmentedDatePicker
-                  placeholder={t('filters.fromDate')}
+                  placeholder={language === 'ar' ? 'من تاريخ' : 'From Date'}
                   value={dateFrom}
                   onChange={(d) => {
                     setDateFrom(d);
@@ -1163,12 +1039,12 @@ export const TicketsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* To Date with Label */}
-            <div className="flex items-center gap-2" dir="ltr">
-              <span className="text-xs font-bold text-slate-600 shrink-0 select-none">{language === 'ar' ? 'إلى:' : 'To:'}</span>
-              <div className="w-[245px]">
+            {/* Date To */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-bold text-slate-700 shrink-0 select-none bg-slate-100 px-2 py-1 rounded-md">{language === 'ar' ? 'إلى' : 'To'}</span>
+              <div className="w-[220px]">
                 <SegmentedDatePicker
-                  placeholder={t('filters.toDate')}
+                  placeholder={language === 'ar' ? 'إلى تاريخ' : 'To Date'}
                   value={dateTo}
                   onChange={(d) => {
                     setDateTo(d);
@@ -1180,8 +1056,9 @@ export const TicketsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Currency Segmented Switcher (All Currencies + IQD + USD) */}
-          <div className="flex items-center gap-2">
+          {/* Left Group: Currency + Action Buttons */}
+          <div className="flex items-center gap-3 shrink-0">
+            {/* Currency Switcher */}
             <CurrencySegmentedControl
               value={currencyFilter}
               onChange={(val) => {
@@ -1191,6 +1068,32 @@ export const TicketsPage: React.FC = () => {
               showAllOption={true}
               showLabel={false}
             />
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingTicketData(null);
+                  setModalOpen(true);
+                }}
+                className="h-[38px] px-4 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-semibold text-[13px] shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Plus size={15} strokeWidth={2.4} />
+                <span>{t('tickets.newInvoice')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => reloadTicketsFromApi(false)}
+                disabled={ticketsLoading}
+                className="h-[38px] px-3 rounded-[9px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold text-[13px] flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                title={t('tickets.refresh')}
+              >
+                <RefreshCw size={14} className={ticketsLoading ? 'animate-spin text-[#F45A0A]' : 'text-[#64748B]'} />
+                <span className="hidden sm:inline">{t('tickets.refresh')}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

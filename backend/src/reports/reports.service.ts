@@ -672,6 +672,59 @@ export class ReportsService {
       orderBy: [{ journalEntry: { createdAt: 'asc' } }, { createdAt: 'asc' }],
     });
 
+    /*
+     * تفاصيل الخدمة تُجلب دفعةً واحدة لا سطراً سطراً.
+     *
+     * كشف الحساب كان يعرض وصف القيد وحده، فلا يعرف القارئ أهي تذكرة أم تأشيرة أم
+     * فندق أم استرجاع، ولا يرى المسافر ولا خط السير ولا رقم الحجز. تُجمع معرّفات
+     * المصادر ثم تُقرأ تذاكرها باستعلام واحد، فتُسمّى كل حركة باسم خدمتها وتُرفق
+     * تفاصيلها — على الشاشة وفي الكشف المطبوع سواء.
+     */
+    const SERVICE_TYPES = ['TICKET', 'VISA', 'HOTEL', 'REFUND'];
+    const serviceSourceIds = Array.from(
+      new Set(
+        lines
+          .filter((l) => SERVICE_TYPES.includes(String(l.journalEntry.sourceType || '')))
+          .map((l) => l.journalEntry.sourceId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+
+    const serviceTickets = serviceSourceIds.length
+      ? await this.prisma.ticket.findMany({
+          where: { id: { in: serviceSourceIds } },
+          select: {
+            id: true,
+            invoiceNumber: true,
+            tripType: true,
+            status: true,
+            pnr: true,
+            airline: true,
+            route: true,
+            issueDate: true,
+            travelDate: true,
+            passengers: { select: { name: true, ticketNumber: true, ticketType: true } },
+          },
+        }).catch(() => [])
+      : [];
+    const ticketById = new Map(serviceTickets.map((t: any) => [t.id, t]));
+
+    /** اسم الخدمة كما يُقرأ في الكشف — والاسترجاع بالإنجليزية «Refund» بطلب صاحب النظام. */
+    const serviceLabelOf = (sourceType?: string | null): string | null => {
+      switch (String(sourceType || '')) {
+        case 'TICKET':
+          return 'مبيعات تذاكر';
+        case 'VISA':
+          return 'مبيعات تأشيرات';
+        case 'HOTEL':
+          return 'حجوزات فنادق';
+        case 'REFUND':
+          return 'Refund';
+        default:
+          return null;
+      }
+    };
+
     let runningBalance = openingBalance;
     const formattedLines = lines.map((l) => {
       const debit = Number(l.debit);
@@ -686,6 +739,38 @@ export class ReportsService {
         ? 'PAYMENT'
         : '';
 
+      const srcType = String(l.journalEntry.sourceType || '');
+      const ticket: any = l.journalEntry.sourceId ? ticketById.get(l.journalEntry.sourceId) : null;
+      // الاسترجاع قد يُسجَّل على تذكرة حالتها REFUNDED دون أن يكون نوع القيد REFUND.
+      const isRefundRow =
+        srcType === 'REFUND' || ticket?.tripType === 'REFUND' || ticket?.status === 'REFUNDED';
+      const effectiveServiceType = isRefundRow
+        ? 'REFUND'
+        : SERVICE_TYPES.includes(srcType)
+        ? srcType
+        : ticket?.tripType === 'HOTEL'
+        ? 'HOTEL'
+        : ticket?.tripType === 'VISA'
+        ? 'VISA'
+        : srcType;
+
+      const serviceDetails = ticket
+        ? [
+            ticket.invoiceNumber ? `فاتورة ${ticket.invoiceNumber}` : '',
+            ticket.pnr ? `PNR ${ticket.pnr}` : '',
+            ticket.airline || '',
+            ticket.route || '',
+            (ticket.passengers || [])
+              .map((pax: any) => pax.name)
+              .filter(Boolean)
+              .slice(0, 4)
+              .join('، '),
+          ]
+            .map((part: string) => String(part || '').trim())
+            .filter(Boolean)
+            .join(' · ')
+        : '';
+
       return {
         id: l.id,
         date: l.journalEntry.date,
@@ -693,6 +778,10 @@ export class ReportsService {
         entryNumber: l.journalEntry.entryNumber,
         voucherNumber: voucher?.voucherNumber || null,
         voucherType,
+        serviceType: effectiveServiceType || null,
+        serviceLabel: serviceLabelOf(effectiveServiceType),
+        serviceDetails: serviceDetails || null,
+        passengers: ticket?.passengers?.map((x: any) => x.name).filter(Boolean) || [],
         reference: l.journalEntry.reference,
         description:
           (voucher ? parseLegacySplitMarker(voucher.description).cleanDescription : '') ||

@@ -1789,7 +1789,14 @@ export class TicketsService {
           companyId,
           createdById,
           postedById: createdById,
-          sourceType: isVisa ? 'VISA' : 'TICKET',
+          /*
+           * نوع الخدمة يُسجَّل كما هو لا مختزلاً إلى «تذكرة».
+           *
+           * كان كل قيد يُوسَم TICKET إلا الفيزا، فيضيع تمييز الفنادق والاسترجاع في
+           * كشف الحساب ويظهر الجميع باسم واحد. الآن: استرجاع REFUND، فندق HOTEL،
+           * فيزا VISA، وما بقي TICKET — فيُسمّى كل سطر باسم خدمته.
+           */
+          sourceType: isRefund ? 'REFUND' : isVisa ? 'VISA' : (ticket as any).tripType === 'HOTEL' ? 'HOTEL' : 'TICKET',
           sourceId: ticket.id,
           lines: {
             create: lines,

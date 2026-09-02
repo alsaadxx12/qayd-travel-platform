@@ -346,7 +346,7 @@ export const SegmentedDatePicker: React.FC<SegmentedDatePickerProps> = ({
   const hasValue = Boolean(yearStr || monthStr || dayStr);
 
   return (
-    <div ref={containerRef} className={`relative inline-block w-full min-w-[235px] ${className}`}>
+    <div ref={containerRef} className={`relative inline-block w-full min-w-0 ${className}`}>
       {/* ── Strict Isolation CSS to eliminate browser native indicators, spinners & clear buttons ── */}
       <style>{`
         .custom-seg-picker input::-webkit-outer-spin-button,

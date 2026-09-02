@@ -421,8 +421,8 @@ export const PartnersPage: React.FC = () => {
   }, [partners]);
 
   return (
-    <div className="space-y-2 w-full">
-      {/* Grid Component */}
+    <div className="w-full">
+      {/* ── Grid ── */}
       <AccountingGrid
         gridKey="partners_accounting_grid"
         data={filteredPartners}
@@ -442,9 +442,9 @@ export const PartnersPage: React.FC = () => {
           { label: 'المستفيدون والموظفون (Beneficiaries)', value: 'BENEFICIARY' },
         ]}
         customToolbarElements={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-700 shrink-0">العملة:</span>
+              <span className="text-[11px] font-bold text-slate-500 shrink-0">العملة:</span>
               <SegmentedControl
                 size="xs"
                 value={selectedCurrency}
@@ -454,16 +454,17 @@ export const PartnersPage: React.FC = () => {
                   { label: 'IQD', value: 'IQD' },
                   { label: 'USD', value: 'USD' },
                 ]}
-                color="emerald"
-                className="bg-slate-100 font-bold border border-slate-300 shadow-2xs"
+                color="orange"
+                className="bg-slate-100 font-bold"
               />
             </div>
 
             <Button
               size="xs"
-              color="emerald"
+              color="orange"
               leftSection={<IconPlus size={14} />}
               onClick={() => setCreateModalOpen(true)}
+              className="font-bold"
             >
               إضافة طرف جديد
             </Button>
@@ -471,43 +472,44 @@ export const PartnersPage: React.FC = () => {
         }
       />
 
-      {/* Change Credit Limits Modal (IQD & USD) */}
+      {/* ── Credit Limits Modal ── */}
       <Modal
         opened={creditModalOpen}
         onClose={() => setCreditModalOpen(false)}
-        title="تغير حد الائتمان (دينار ودولار)"
+        title={
+          <div className="flex items-center gap-2 font-bold text-sm text-slate-900">
+            <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center shrink-0">
+              <IconCreditCard size={16} />
+            </div>
+            <span>تغيير حد الائتمان</span>
+          </div>
+        }
         size="sm"
         centered
+        radius="lg"
       >
         {selectedPartner && (
-          <div className="space-y-4 text-xs">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded">
+          <div className="space-y-3.5 text-xs">
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
               <span className="text-[10px] text-slate-500 font-bold block">اسم الحساب / الطرف</span>
-              <div className="text-sm font-bold text-slate-900">
-                {selectedPartner.code} - {selectedPartner.nameAr}
+              <div className="text-sm font-bold text-slate-900 mt-0.5">
+                {selectedPartner.nameAr}
               </div>
-              <div className="text-[11px] text-slate-500 mt-1 flex flex-col gap-0.5">
+              <div className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-3">
                 <span>
-                  حد الائتمان بالدينار: {' '}
-                  <span className="font-bold text-emerald-800">
-                    {selectedPartner.creditLimitIQD ? `${selectedPartner.creditLimitIQD.toLocaleString()} د.ع` : 'غير محدد'}
-                  </span>
+                  دينار: <span className="font-bold text-slate-700">{selectedPartner.creditLimitIQD ? `${selectedPartner.creditLimitIQD.toLocaleString()} د.ع` : 'غير محدد'}</span>
                 </span>
+                <span className="text-slate-300">|</span>
                 <span>
-                  حد الائتمان بالدولار: {' '}
-                  <span className="font-bold text-blue-900">
-                    {selectedPartner.creditLimitUSD ? `$ ${selectedPartner.creditLimitUSD.toLocaleString()}` : 'غير محدد'}
-                  </span>
+                  دولار: <span className="font-bold text-slate-700">{selectedPartner.creditLimitUSD ? `$ ${selectedPartner.creditLimitUSD.toLocaleString()}` : 'غير محدد'}</span>
                 </span>
               </div>
             </div>
 
-            {/* Field 1: IQD Limit */}
             <div>
-              <label className="block font-bold text-slate-700 mb-1">حد الائتمان بالدينار العراقي (IQD)</label>
+              <label className="block font-bold text-slate-700 mb-1 text-[11px]">حد الائتمان بالدينار العراقي (IQD)</label>
               <NumberInput
-                size="sm"
-                placeholder="أدخل حد الائتمان بالدينار"
+                size="xs"
                 value={newCreditLimitIQD}
                 onChange={(val) => setNewCreditLimitIQD(val)}
                 thousandSeparator=","
@@ -516,29 +518,27 @@ export const PartnersPage: React.FC = () => {
               />
             </div>
 
-            {/* Field 2: USD Limit */}
             <div>
-              <label className="block font-bold text-slate-700 mb-1">حد الائتمان بالدولار الأمريكي (USD)</label>
+              <label className="block font-bold text-slate-700 mb-1 text-[11px]">حد الائتمان بالدولار الأمريكي (USD)</label>
               <NumberInput
-                size="sm"
-                placeholder="أدخل حد الائتمان بالدولار"
+                size="xs"
                 value={newCreditLimitUSD}
                 onChange={(val) => setNewCreditLimitUSD(val)}
                 thousandSeparator=","
                 min={0}
                 allowNegative={false}
               />
-              <span className="text-[10px] text-slate-500 block mt-1">
-                اكتب المبلغ المسموح به لكل عملة، أو اتركه فارغاً لإلغاء الحد.
+              <span className="text-[10px] text-slate-400 block mt-1">
+                اتركه فارغاً لإلغاء الحد.
               </span>
             </div>
 
-            <div className="pt-2 flex justify-end gap-2">
-              <Button variant="light" color="gray" size="xs" onClick={() => setCreditModalOpen(false)}>
+            <div className="pt-2 border-t border-slate-100 flex justify-end gap-2">
+              <Button variant="default" size="xs" onClick={() => setCreditModalOpen(false)} className="font-medium">
                 إلغاء
               </Button>
-              <Button color="emerald" size="xs" loading={savingLimit} onClick={handleUpdateCreditLimit}>
-                حفظ التغير
+              <Button color="orange" size="xs" loading={savingLimit} onClick={handleUpdateCreditLimit} className="font-bold">
+                حفظ التغيير
               </Button>
             </div>
           </div>
@@ -553,101 +553,119 @@ export const PartnersPage: React.FC = () => {
         defaultAccountType="INDIVIDUAL_CLIENT"
       />
 
-      {/* Partner Detail Drawer */}
+      {/* ── Partner Detail Drawer ── */}
       <Drawer
         opened={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        title="بطاقة بيانات الطرف المحاسبية الشاملة"
+        title={
+          <span className="font-black text-sm text-slate-900">بطاقة بيانات الطرف</span>
+        }
         position="left"
         size="md"
       >
         {selectedPartner && (
-          <div className="space-y-3 text-xs">
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded">
-              <span className="text-[10px] text-slate-500 font-bold block">كود واسم الطرف</span>
-              <div className="text-sm font-bold text-emerald-800 tabular-nums">
-                {selectedPartner.code} - {selectedPartner.nameAr}
+          <div className="space-y-3.5 text-xs">
+            {/* Header Card */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold block">كود واسم الطرف</span>
+                  <div className="text-sm font-bold text-slate-900 mt-0.5">
+                    {selectedPartner.nameAr}
+                  </div>
+                </div>
+                <span className="font-mono text-[11px] font-bold text-slate-500 bg-white px-2 py-1 rounded-lg border border-slate-200">
+                  {selectedPartner.code}
+                </span>
               </div>
-              <Badge size="xs" color={selectedPartner.badgeColor} className="mt-1">
+              <Badge size="xs" color={selectedPartner.badgeColor} className="mt-2">
                 {selectedPartner.partnerTypeLabel}
               </Badge>
             </div>
 
-            <div className="p-3 border border-slate-200 rounded space-y-2">
-              <div className="font-bold text-slate-700 border-b pb-1">الرصيد المالي الحقيقي من الحركات</div>
-              
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="p-2 bg-emerald-50/50 rounded border border-emerald-100">
-                  <span className="text-[10px] text-slate-500 block">الرصيد بالدينار العراقي</span>
-                  <span className="font-extrabold text-xs tabular-nums text-emerald-900">
-                    {selectedPartner.balanceIQD.toLocaleString()} د.ع
+            {/* Balance Card */}
+            <div className="p-3.5 border border-slate-200 rounded-lg space-y-2.5">
+              <div className="font-bold text-slate-700 text-[11px]">الرصيد المالي الحقيقي</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold block">الرصيد بالدينار</span>
+                  <span className="font-black text-xs tabular-nums text-slate-900 font-mono" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                    {selectedPartner.balanceIQD.toLocaleString('en-US')} <span className="text-slate-400 font-semibold">د.ع</span>
                   </span>
                 </div>
-                <div className="p-2 bg-blue-50/50 rounded border border-blue-100">
-                  <span className="text-[10px] text-slate-500 block">الرصيد بالدولار الأمريكي</span>
-                  <span className="font-extrabold text-xs tabular-nums text-blue-950">
-                    $ {selectedPartner.balanceUSD.toLocaleString()}
+                <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold block">الرصيد بالدولار</span>
+                  <span className="font-black text-xs tabular-nums text-slate-900 font-mono" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                    $ {selectedPartner.balanceUSD.toLocaleString('en-US')}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="p-3 border border-slate-200 rounded space-y-2">
-              <div>
-                <span className="text-slate-500 block text-[10px]">الهاتف</span>
-                <span className="font-bold text-slate-800">{selectedPartner.phone || '-'}</span>
+            {/* Contact & Credit Card */}
+            <div className="p-3.5 border border-slate-200 rounded-lg space-y-2.5">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                <div>
+                  <span className="text-slate-400 block text-[10px] font-bold">الهاتف</span>
+                  <span className="font-bold text-slate-800">{selectedPartner.phone || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] font-bold">البريد الإلكتروني</span>
+                  <span className="font-bold text-slate-800">{selectedPartner.email || '-'}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-slate-400 block text-[10px] font-bold">العنوان</span>
+                  <span className="font-bold text-slate-800">{selectedPartner.address || '-'}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-500 block text-[10px]">البريد الإلكتروني</span>
-                <span className="font-bold text-slate-800">{selectedPartner.email || '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px]">العنوان</span>
-                <span className="font-bold text-slate-800">{selectedPartner.address || '-'}</span>
-              </div>
-              <div className="pt-2 border-t space-y-1.5">
-                <div className="flex justify-between items-center">
+              <div className="pt-2.5 border-t border-slate-100 space-y-2">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-slate-500 block text-[10px]">حد الائتمان بالدينار (IQD)</span>
+                    <span className="text-slate-400 block text-[10px] font-bold">حد الائتمان (دينار)</span>
                     <span className="font-bold text-slate-800">
-                      {selectedPartner.creditLimitIQD ? `${selectedPartner.creditLimitIQD.toLocaleString()} د.ع` : 'غير محدد'}
+                      {selectedPartner.creditLimitIQD ? `${selectedPartner.creditLimitIQD.toLocaleString('en-US')} د.ع` : 'غير محدد'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-[10px]">حد الائتمان بالدولار (USD)</span>
+                    <span className="text-slate-400 block text-[10px] font-bold">حد الائتمان (دولار)</span>
                     <span className="font-bold text-slate-800">
-                      {selectedPartner.creditLimitUSD ? `$ ${selectedPartner.creditLimitUSD.toLocaleString()}` : 'غير محدد'}
+                      {selectedPartner.creditLimitUSD ? `$ ${selectedPartner.creditLimitUSD.toLocaleString('en-US')}` : 'غير محدد'}
                     </span>
                   </div>
                 </div>
                 <Button
                   size="xs"
                   variant="light"
-                  color="emerald"
+                  color="orange"
                   fullWidth
                   leftSection={<IconEdit size={12} />}
+                  className="font-bold"
                   onClick={() => {
                     setNewCreditLimitIQD(selectedPartner.creditLimitIQD ? String(selectedPartner.creditLimitIQD) : '');
                     setNewCreditLimitUSD(selectedPartner.creditLimitUSD ? String(selectedPartner.creditLimitUSD) : '');
                     setCreditModalOpen(true);
                   }}
                 >
-                  تغير حد الائتمان
+                  تغيير حد الائتمان
                 </Button>
               </div>
             </div>
 
-            <div className="pt-2 flex gap-2">
+            {/* Actions */}
+            <div className="pt-1">
               <Button
                 fullWidth
-                color="blue"
-                leftSection={<IconFileText size={16} />}
+                size="xs"
+                color="orange"
+                variant="filled"
+                leftSection={<IconFileText size={14} />}
+                className="font-bold"
                 onClick={() => {
                   setDrawerOpen(false);
                   navigate(`/admin/reports?accountId=${selectedPartner.id}`);
                 }}
               >
-                كشف الحساب 📄
+                عرض كشف الحساب
               </Button>
             </div>
           </div>

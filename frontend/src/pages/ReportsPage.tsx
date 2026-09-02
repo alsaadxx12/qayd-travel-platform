@@ -562,6 +562,26 @@ export const ReportsPage: React.FC = () => {
 
             const rawCurr = (t.currency || 'IQD').toString().toUpperCase();
             const ticketCurr = rawCurr.includes('USD') || rawCurr.includes('$') ? 'USD' : 'IQD';
+            /*
+             * اسم الحركة من نوع خدمتها لا من كونها تذكرة.
+             *
+             * كانت كل حركة تُسمّى «تذكرة طيران» ولو كانت تأشيرة أو حجز فندق، فلا
+             * يفرّق قارئ الكشف بين خدماتنا. والاسترجاع يُكتب «Refund» بالإنجليزية
+             * في اللغتين بطلب صاحب النظام، ليبقى مميّزاً بلمحة عين.
+             */
+            const tripKind = String(t.tripType || '').toUpperCase();
+            const isRefundRow =
+              tripKind === 'REFUND' ||
+              String(t.status || '').toUpperCase() === 'REFUNDED' ||
+              String(t.invoiceNumber || '').startsWith('REF-');
+            const serviceLabel = (amount: number): string => {
+              if (isRefundRow || amount < 0) return 'Refund';
+              if (tripKind === 'VISA') return isAr ? 'مبيعات تأشيرات' : 'Visa Sales';
+              if (tripKind === 'HOTEL') return isAr ? 'حجوزات فنادق' : 'Hotel Booking';
+              if (tripKind === 'GROUP') return isAr ? 'حجوزات جماعية' : 'Group Booking';
+              return isAr ? 'مبيعات تذاكر' : 'Ticket Sales';
+            };
+
             const cleanRoute = (t.fullRouteText || t.route || '').replace(/^—$/, '');
             const issuerEmp = t.employeeName || t.issuerName || t.createdByName || (isAr ? 'موظف الإصدار' : 'Issuing Staff');
             const entryEmp = t.entryEmployee || t.employeeName || issuerEmp;
@@ -575,7 +595,7 @@ export const ReportsPage: React.FC = () => {
                 date: t.issueDate || t.createdAt,
                 entryDate: t.createdAt || t.issueDate,
                 entryNumber: t.invoiceNumber || t.id,
-                docType: sellAmt < 0 ? (isAr ? 'استرجاع تذكرة' : 'Ticket Refund') : (isAr ? 'تذكرة طيران' : 'Flight Ticket'),
+                docType: serviceLabel(sellAmt),
                 voucherNumber: t.invoiceNumber || '-',
                 reference: t.pnr || t.reference || '-',
                 pnr: t.pnr || t.reference || '-',
@@ -630,7 +650,7 @@ export const ReportsPage: React.FC = () => {
                 date: t.issueDate || t.createdAt,
                 entryDate: t.createdAt || t.issueDate,
                 entryNumber: t.invoiceNumber || t.id,
-                docType: isAr ? 'تذكرة طيران (نقدي)' : 'Flight Ticket (Cash)',
+                docType: `${serviceLabel(1)}${isAr ? ' (نقدي)' : ' (Cash)'}`,
                 voucherNumber: t.invoiceNumber || '-',
                 reference: t.pnr || t.reference || '-',
                 pnr: t.pnr || t.reference || '-',
@@ -662,7 +682,7 @@ export const ReportsPage: React.FC = () => {
                 date: t.issueDate || t.createdAt,
                 entryDate: t.createdAt || t.issueDate,
                 entryNumber: t.invoiceNumber || t.id,
-                docType: buyAmt < 0 ? (isAr ? 'استرجاع من مورد' : 'Supplier Refund') : (isAr ? 'تذكرة طيران' : 'Flight Ticket'),
+                docType: buyAmt < 0 ? 'Refund' : serviceLabel(buyAmt),
                 voucherNumber: t.invoiceNumber || '-',
                 reference: t.pnr || t.reference || '-',
                 pnr: t.pnr || t.reference || '-',
