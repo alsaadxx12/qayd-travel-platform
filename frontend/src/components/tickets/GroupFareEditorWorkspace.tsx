@@ -87,6 +87,13 @@ const parseCleanNumber = (val: string | number): number => {
  *
  * الحقول التي لم تُذكر تبقى غير معرَّفة — لا تُخمَّن ولا تُملأ بأصفار.
  */
+export interface ParsedPnrItem {
+  pnr: string;
+  paxCount?: number;
+  buyPrice?: number;
+  sellPrice?: number;
+}
+
 export interface GroupFarePaste {
   travelDate?: Date;
   returnDate?: Date;
@@ -97,6 +104,7 @@ export interface GroupFarePaste {
   sell?: { amount: number; currency: 'USD' | 'IQD'; isTotal: boolean };
   route?: string;
   pnrs: string[];
+  pnrItems: ParsedPnrItem[];
   /** ما فُهم فعلاً، ليُعرض للمستخدم قبل التطبيق. */
   found: string[];
 }
@@ -161,7 +169,7 @@ const isTotalLine = (line: string): boolean =>
  * سطرٍ منه على أنه PNR فيخرج بأحد عشر سطراً لا معنى لها. فيُقرأ الآن بما هو.
  */
 export const parseGroupFareText = (text: string): GroupFarePaste => {
-  const out: GroupFarePaste = { pnrs: [], found: [] };
+  const out: GroupFarePaste = { pnrs: [], pnrItems: [], found: [] };
   const lines = String(text || '')
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -202,14 +210,12 @@ export const parseGroupFareText = (text: string): GroupFarePaste => {
       continue;
     }
 
-    // المقاعد: «24 مقعد» أو «عدد المقاعد: 24»
-    const seats =
-      bare.match(/(?:عدد\s*(?:المقاعد|المسافرين)|seats|pax)\s*[:：]?\s*([\d٠-٩]+)/i) ||
-      // بلا \b بعد الكلمة العربية: حدّ الكلمة في JS معرَّف على الحروف اللاتينية وحدها،
-      // فلو وُضع هنا لما طابق «24 مقعد» أبداً.
-      bare.match(/^([\d٠-٩]+)\s*(?:مقعد|مقاعد|كرسي|seats?|pax)/i);
-    if (seats && !out.seats) {
-      const n = Number(toLatinDigits(seats[1]));
+    // المقاعد العامة: «24 مقعد» أو «عدد المقاعد: 24» (إذا لم تكن مرتبطة برمز PNR)
+    const seatsMatch =
+      bare.match(/^(?:عدد\s*(?:المقاعد|المسافرين)|seats|pax)\s*[:：]?\s*([\d٠-٩]+)/i) ||
+      bare.match(/^([\d٠-٩]+)\s*(?:مقعد|مقاعد|كرسي|seats?|pax)$/i);
+    if (seatsMatch && !out.seats) {
+      const n = Number(toLatinDigits(seatsMatch[1]));
       if (n > 0) {
         out.seats = n;
         out.found.push(`عدد المقاعد: ${n}`);
@@ -250,12 +256,43 @@ export const parseGroupFareText = (text: string): GroupFarePaste => {
       continue;
     }
 
-    // ما بقي: PNR إن كان رمزاً من ستة محارف لاتينية/أرقام وحده في سطره
-    const pnr = bare.toUpperCase().match(/^([A-Z0-9]{5,7})$/);
-    if (pnr && /[A-Z]/.test(pnr[1])) out.pnrs.push(pnr[1]);
+    // فحص أسطر الـ PNR مع العدد الخاص بكل PNR (أمثلة: "HWG83L 10" / "HWG83L: 10" / "HWG83L (10)" / "10 HWG83L" / "1. HWG83L 8")
+    const cleanPnrLine = bare.replace(/^(?:\d+[\.\-\)]\s*|pnr\s*[:：]?\s*|حجز\s*[:：]?\s*)/i, '').trim();
+    const tokenMatches = cleanPnrLine.toUpperCase().match(/\b[A-Z0-9]{5,7}\b/g);
+    
+    if (tokenMatches) {
+      const reservedKeywords = new Set(['TOTAL', 'SEATS', 'DEPT', 'DATE', 'PRICE', 'ROUTE', 'ADULT', 'CHILD', 'INFANT', 'GROUP']);
+      const validPnr = tokenMatches.find((t) => /[A-Z]/.test(t) && !reservedKeywords.has(t) && !/^\d+$/.test(t));
+      
+      if (validPnr) {
+        // البحث عن عدد المقاعد الخاص بهذا الـ PNR في نفس السطر
+        const remainder = cleanPnrLine.toUpperCase().replace(validPnr, ' ').trim();
+        const pnrCountMatch =
+          remainder.match(/(?:عدد\s*(?:المقاعد|المسافرين)?\s*[:：]?\s*|\(\s*|[-–:]\s*|\b|^)([\d٠-٩]{1,3})\s*(?:مقعد|مقاعد|مسافر|ركاب|seats?|pax|\)|\b|$)/i);
+
+        let linePax: number | undefined = undefined;
+        if (pnrCountMatch) {
+          const parsedCount = Number(toLatinDigits(pnrCountMatch[1]));
+          if (parsedCount > 0 && parsedCount < 1000) {
+            linePax = parsedCount;
+          }
+        }
+
+        out.pnrs.push(validPnr);
+        out.pnrItems.push({
+          pnr: validPnr,
+          paxCount: linePax,
+        });
+        continue;
+      }
+    }
   }
 
-  if (out.pnrs.length) out.found.push(`أرقام حجز: ${out.pnrs.length}`);
+  if (out.pnrItems.length > 0) {
+    const pnrSummary = out.pnrItems.map((p) => (p.paxCount ? `${p.pnr} (${p.paxCount})` : p.pnr)).join(' - ');
+    out.found.push(`أرقام الحجز (${out.pnrItems.length}): ${pnrSummary}`);
+  }
+
   return out;
 };
 
@@ -740,45 +777,78 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
       if (match) setSupplierAccount(match.id || match.accountId || info.supplierName);
     }
 
-    const seats = info.seats && info.seats > 0 ? info.seats : undefined;
+    // Calculate total seats: either explicit info.seats or sum of pnr pax counts
+    const explicitPnrSeatsSum = info.pnrItems.reduce((acc, item) => acc + (item.paxCount || 0), 0);
+    const totalSeats = info.seats && info.seats > 0 ? info.seats : (explicitPnrSeatsSum > 0 ? explicitPnrSeatsSum : undefined);
+
     if (info.sell) setCurrency(info.sell.currency);
 
     const perSeat = (p?: { amount: number; isTotal: boolean }) => {
       if (!p) return undefined;
       if (!p.isTotal) return p.amount;
-      if (!seats) return p.amount;
-      return Math.round((p.amount / seats) * 100) / 100;
+      const denom = totalSeats || (info.pnrItems.length > 0 ? info.pnrItems.length : 1);
+      return Math.round((p.amount / denom) * 100) / 100;
     };
 
     const buyEach = perSeat(info.buy);
     const sellEach = perSeat(info.sell);
 
-    if (seats || buyEach !== undefined || sellEach !== undefined) {
+    if (info.pnrItems.length > 0 || totalSeats || buyEach !== undefined || sellEach !== undefined) {
       const stamp = Date.now();
-      const lines: GroupFarePnrLine[] =
-        info.pnrs.length > 0
-          ? info.pnrs.map((pnr, i) => ({
-              id: `pnr-${stamp}-${i}`,
-              selected: true,
-              pnr,
-              ticketNumber: '',
-              route: info.route || '',
-              paxCount: seats ? Math.max(1, Math.round(seats / info.pnrs.length)) : 1,
-              buyPrice: buyEach || 0,
-              sellPrice: sellEach || 0,
-            }))
-          : [
-              {
-                id: `pnr-${stamp}`,
-                selected: true,
-                pnr: '',
-                ticketNumber: '',
-                route: info.route || '',
-                paxCount: seats || 1,
-                buyPrice: buyEach || 0,
-                sellPrice: sellEach || 0,
-              },
-            ];
+      let lines: GroupFarePnrLine[] = [];
+
+      if (info.pnrItems.length > 0) {
+        const hasIndividualCounts = info.pnrItems.some((item) => item.paxCount && item.paxCount > 0);
+        const unspecifiedCount = info.pnrItems.filter((item) => !item.paxCount).length;
+        const remainder = totalSeats && totalSeats > explicitPnrSeatsSum ? totalSeats - explicitPnrSeatsSum : 0;
+        const defaultForUnspecified = unspecifiedCount > 0 ? Math.max(1, Math.floor(remainder / unspecifiedCount)) : 1;
+
+        lines = info.pnrItems.map((item, i) => {
+          let linePax = item.paxCount;
+          if (!linePax || linePax <= 0) {
+            if (hasIndividualCounts && unspecifiedCount > 0) {
+              linePax = defaultForUnspecified;
+            } else if (totalSeats && !hasIndividualCounts) {
+              // Distribute total seats evenly across PNRs
+              linePax = Math.max(1, Math.floor(totalSeats / info.pnrItems.length));
+              // Give any remainder to the last item
+              if (i === info.pnrItems.length - 1) {
+                const alreadyAllocated = linePax * (info.pnrItems.length - 1);
+                if (totalSeats > alreadyAllocated) {
+                  linePax = totalSeats - alreadyAllocated;
+                }
+              }
+            } else {
+              linePax = 1;
+            }
+          }
+
+          return {
+            id: `pnr-${stamp}-${i}`,
+            selected: true,
+            pnr: item.pnr,
+            ticketNumber: '',
+            route: info.route || '',
+            paxCount: linePax,
+            buyPrice: buyEach || 0,
+            sellPrice: sellEach || 0,
+          };
+        });
+      } else {
+        lines = [
+          {
+            id: `pnr-${stamp}`,
+            selected: true,
+            pnr: '',
+            ticketNumber: '',
+            route: info.route || '',
+            paxCount: totalSeats || 1,
+            buyPrice: buyEach || 0,
+            sellPrice: sellEach || 0,
+          },
+        ];
+      }
+
       setPnrLines(lines);
     }
 
@@ -787,8 +857,8 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
 
     const mixed = info.buy && info.sell && info.buy.currency !== info.sell.currency;
     showSuccessNotification(
-      isAr ? 'تم استخراج البيانات' : 'Data extracted',
-      isAr ? `طُبّق ${info.found.length} حقلاً على الرحلة.` : `Applied ${info.found.length} field(s).`,
+      isAr ? 'تم استخراج وتطبيق البيانات' : 'Data extracted & applied',
+      isAr ? `طُبّق ${info.found.length} حقول وحُددت أعداد المسافرين لكل PNR بنجاح.` : `Applied ${info.found.length} field(s) with per-PNR pax counts.`,
     );
     if (mixed) {
       showInfoNotification(
@@ -819,11 +889,12 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const parts = line.includes('\t')
-        ? line.split('\t').map((p) => p.trim())
-        : line.includes(',')
-        ? line.split(',').map((p) => p.trim())
-        : line.split(/\s+/).map((p) => p.trim());
+      const clean = line.replace(/^(?:\d+[\.\-\)]\s*|pnr\s*[:：]?\s*)/i, '').trim();
+      const parts = clean.includes('\t')
+        ? clean.split('\t').map((p) => p.trim())
+        : clean.includes(',')
+        ? clean.split(',').map((p) => p.trim())
+        : clean.split(/\s+/).map((p) => p.trim());
 
       const rawPnr = (parts[0] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (!rawPnr) continue;
@@ -833,21 +904,18 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
       let lineSell = defaultSell;
 
       if (parts.length >= 2) {
-        if (/^\d+$/.test(parts[1]) && parseInt(parts[1], 10) < 100) {
-          linePax = parseInt(parts[1], 10) || 1;
+        const countParsed = Number(toLatinDigits(parts[1]));
+        if (!isNaN(countParsed) && countParsed > 0 && countParsed < 1000) {
+          linePax = countParsed;
         }
       }
 
       if (parts.length >= 3) {
-        if (/^\d+(\.\d+)?$/.test(parts[2].replace(/,/g, ''))) {
-          lineBuy = parseCleanNumber(parts[2]);
-        }
+        lineBuy = parseCleanNumber(parts[2]);
       }
 
       if (parts.length >= 4) {
-        if (/^\d+(\.\d+)?$/.test(parts[3].replace(/,/g, ''))) {
-          lineSell = parseCleanNumber(parts[3]);
-        }
+        lineSell = parseCleanNumber(parts[3]);
       }
 
       parsedLines.push({
