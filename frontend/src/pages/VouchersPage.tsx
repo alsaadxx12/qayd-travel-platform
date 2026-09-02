@@ -1377,8 +1377,6 @@ export const VouchersPage: React.FC = () => {
                     : (isAr ? 'الصندوق / الحساب المالي' : 'Financial Account')}
                 </th>
 
-                {/* 12. Status */}
-                <th className="py-2.5 px-3 text-center w-20">{isAr ? 'الحالة' : 'Status'}</th>
 
                 {/* 13. Created By */}
                 <th className="py-2.5 px-3 text-center w-28">{isAr ? 'المنشئ' : 'Created By'}</th>
@@ -1612,13 +1610,6 @@ export const VouchersPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* 12. Status */}
-                      <td className="py-2 px-3 text-center">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
-                          <span>{isAr ? 'معتمد' : 'Posted'}</span>
-                        </span>
-                      </td>
 
                       {/* 13. Created By */}
                       <td className="py-2 px-3 text-center">
