@@ -17,6 +17,8 @@ export interface ClearingAccountItem {
   phone?: string;
   notes?: string;
   parentId?: string;
+  /** محتسَب ضمن شجرة الحسابات (الميزانية) — تحت الجذر 29؛ وإلا رقابي تحت 9. */
+  countable?: boolean;
 }
 
 export interface StatementRow {
@@ -43,9 +45,11 @@ export const DEFAULT_RATES = {
 
 export function mapAccountToClearingItem(acc: any, customRates?: { iqdRate?: number; tomanRate?: number }): ClearingAccountItem {
   let cat: 'BOURSE' | 'OFFICE' | 'CLIENT' = 'OFFICE';
-  if (acc.code?.startsWith('91')) cat = 'BOURSE';
-  else if (acc.code?.startsWith('92')) cat = 'OFFICE';
-  else if (acc.code?.startsWith('93')) cat = 'CLIENT';
+  const code: string = acc.code || '';
+  // الفرعان متوازيان: 9x رقابي خارج الميزانية، 29x محتسَب ضمنها؛ آخر رقم يحدّد النوع.
+  if (code.startsWith('91') || code.startsWith('291')) cat = 'BOURSE';
+  else if (code.startsWith('92') || code.startsWith('292')) cat = 'OFFICE';
+  else if (code.startsWith('93') || code.startsWith('293')) cat = 'CLIENT';
 
   let balUSD = 0;
   let balIQD = 0;
@@ -99,6 +103,7 @@ export function mapAccountToClearingItem(acc: any, customRates?: { iqdRate?: num
     phone: (acc as any).phone,
     notes: (acc as any).address && !(acc as any).address.startsWith('{') ? (acc as any).address : undefined,
     parentId: acc.parentId,
+    countable: String(acc.code || '').startsWith('29'),
   };
 }
 
@@ -124,9 +129,11 @@ export const clearingsApi = {
     try {
       const allAccounts = prefetchedAccounts || await accountsApi.getFlat();
       // Filter accounts under code 9 / 91
-      const PARENT_CODES = ['9', '91', '92', '93'];
+      const PARENT_CODES = ['9', '91', '92', '93', '29', '291', '292', '293'];
       const clearingAccounts = allAccounts.filter(
-        (acc) => acc.code?.startsWith('9') && !PARENT_CODES.includes(acc.code)
+        (acc) =>
+          (acc.code?.startsWith('9') || acc.code?.startsWith('29')) &&
+          !PARENT_CODES.includes(acc.code),
       );
 
       return clearingAccounts.map(acc => mapAccountToClearingItem(acc, customRates));
@@ -150,11 +157,19 @@ export const clearingsApi = {
     openingBalanceTOMAN?: number;
     iqdRate?: number;
     tomanRate?: number;
+    countable?: boolean;
   }, prefetchedAccounts?: any[]) => {
-    // القاصة الأب حسب النوع — تحت جذر الأطراف الخارجية 9 (خارج الميزانية).
-    let parentCode = '92'; // المكاتب الوسيطة افتراضاً
-    if (payload.category === 'BOURSE') parentCode = '91';
-    else if (payload.category === 'CLIENT') parentCode = '93';
+    /*
+     * الأب حسب النوع وحسب الاحتساب.
+     *
+     * غير محتسَب (الافتراضي): تحت الجذر 9 الرقابي — 91/92/93، خارج الميزانية.
+     * محتسَب: تحت الجذر 29 ضمن الميزانية — 291/292/293، فيظهر في شجرة الحسابات
+     * ويُحتسب في الموجودات/المطلوبات.
+     */
+    const on = payload.countable === true;
+    let parentCode = on ? '292' : '92'; // المكاتب الوسيطة افتراضاً
+    if (payload.category === 'BOURSE') parentCode = on ? '291' : '91';
+    else if (payload.category === 'CLIENT') parentCode = on ? '293' : '93';
 
     // إعادة استعمال قائمة الحسابات المحمّلة في الصفحة — تجنّباً لجلبها من جديد.
     const allAccounts = prefetchedAccounts && prefetchedAccounts.length

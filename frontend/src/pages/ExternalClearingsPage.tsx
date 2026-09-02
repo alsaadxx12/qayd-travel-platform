@@ -9,6 +9,7 @@ import {
   Modal,
   Drawer,
   SegmentedControl,
+  Switch,
   Tooltip,
   ActionIcon,
   Textarea,
@@ -87,6 +88,8 @@ export const ExternalClearingsPage: React.FC = () => {
   const [newContactPerson, setNewContactPerson] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  /** احتساب الحساب ضمن شجرة الحسابات (الميزانية) — الافتراضي: رقابي خارجها. */
+  const [newCountable, setNewCountable] = useState(false);
   const [creating, setCreating] = useState(false);
 
   // Clearing Voucher / Entry Modal Form State
@@ -333,6 +336,7 @@ export const ExternalClearingsPage: React.FC = () => {
     setEditingAccountId(acc.id);
     setEditingAccountCode(acc.code);
     setNewCategory(acc.category);
+    setNewCountable(Boolean((acc as any).countable));
     setNewNameAr(acc.nameAr);
     setNewNameEn(acc.nameEn || '');
     setNewOpeningType('DEBIT');
@@ -366,6 +370,7 @@ export const ExternalClearingsPage: React.FC = () => {
       } else {
         await clearingsApi.create({
           category: newCategory,
+          countable: newCountable,
           nameAr: newNameAr.trim(),
           nameEn: newNameEn.trim() || undefined,
           openingBalanceType: newOpeningType,
@@ -393,6 +398,7 @@ export const ExternalClearingsPage: React.FC = () => {
       setNewContactPerson('');
       setNewPhone('');
       setNewNotes('');
+      setNewCountable(false);
       // تحديث في الخلفية: النافذة أُغلقت والزر تحرّر، فلا يشعر المستخدم بزمن الجلب.
       void loadData();
     } catch (err: any) {
@@ -791,6 +797,15 @@ export const ExternalClearingsPage: React.FC = () => {
                                 >
                                   {isBourse ? 'حساب بورصة' : isOffice ? 'مكتب وسيط' : 'حساب عميل'}
                                 </Badge>
+                                {/* شارة الاحتساب: محتسَب ضمن الميزانية أو رقابي خارجها. */}
+                                <Badge
+                                  size="xs"
+                                  color={(acc as any).countable ? 'teal' : 'slate'}
+                                  variant={(acc as any).countable ? 'filled' : 'outline'}
+                                  className="font-bold text-[10px]"
+                                >
+                                  {(acc as any).countable ? 'محتسَب بالميزانية' : 'خارج الميزانية'}
+                                </Badge>
                               </div>
                             </div>
                           </div>
@@ -1113,9 +1128,30 @@ export const ExternalClearingsPage: React.FC = () => {
             <p className="mt-2 text-[10.5px] font-bold text-slate-500">
               يُدرج تحت الحساب الأب:{' '}
               <span className="text-orange-700">
-                {newCategory === 'BOURSE' ? '91 · مكاتب البورصة' : newCategory === 'OFFICE' ? '92 · المكاتب الوسيطة' : '93 · العملاء الخارجيون'}
-              </span>{' '}— خارج الميزانية.
+                {newCountable
+                  ? (newCategory === 'BOURSE' ? '291 · مكاتب البورصة المحتسبة' : newCategory === 'OFFICE' ? '292 · المكاتب الوسيطة المحتسبة' : '293 · العملاء المحتسبون')
+                  : (newCategory === 'BOURSE' ? '91 · مكاتب البورصة' : newCategory === 'OFFICE' ? '92 · المكاتب الوسيطة' : '93 · العملاء الخارجيون')}
+              </span>{' '}— {newCountable ? 'ضمن الميزانية.' : 'خارج الميزانية.'}
             </p>
+
+            {/* احتساب الحساب ضمن شجرة الحسابات (الميزانية) أو إبقاؤه رقابياً خارجها */}
+            <div className="mt-2.5 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="font-extrabold text-xs text-slate-800">قابل للاحتساب في شجرة الحسابات</div>
+                <div className="text-[10px] font-medium text-slate-500 mt-0.5">
+                  {newCountable
+                    ? 'محتسَب: يظهر في الشجرة ويُحتسب ضمن الموجودات والمطلوبات (جذر 29).'
+                    : 'رقابي: خارج الميزانية، لا يُحتسب في الموجودات ولا المطلوبات (جذر 9).'}
+                </div>
+              </div>
+              <Switch
+                size="md"
+                color="orange"
+                checked={newCountable}
+                onChange={e => setNewCountable(e.currentTarget.checked)}
+                disabled={accountModalMode === 'EDIT'}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
