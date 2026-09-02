@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# مخرجات vite-plugin-pwa في وضع التطوير — تُولَّد ولا تُحفظ
+dev-dist
 *.local
 
 # Editor directories and files

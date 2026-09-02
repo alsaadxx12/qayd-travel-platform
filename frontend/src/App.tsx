@@ -1,4 +1,5 @@
 import React, { Suspense, lazy } from 'react';
+import { PWAInstallPrompt } from './components/common/PWAInstallPrompt';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { PermissionRouteGuard } from './components/auth/PermissionRouteGuard';
@@ -67,6 +68,8 @@ export const App: React.FC = () => {
 
   return (
     <BrowserRouter>
+      {/* PWA Install Prompt — floating banner when browser supports installation */}
+      <PWAInstallPrompt />
       <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
+import { VitePWA } from 'vite-plugin-pwa';
 
 /**
  * A note on the "84 requests" figure: `npm run dev` serves every module as its own
@@ -16,7 +17,93 @@ import path from 'path';
  * initial graph.
  */
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'pwa-192.png', 'pwa-512.png'],
+      manifest: {
+        name: 'QAYD — منصة قيد للمحاسبة والسفر',
+        short_name: 'قيد QAYD',
+        description: 'منظومة قيد المتكاملة لإدارة السندات المحاسبية، حجز التذاكر، الفيزا، والفنادق',
+        start_url: '/',
+        scope: '/',
+        display: 'standalone',
+        orientation: 'any',
+        background_color: '#ffffff',
+        theme_color: '#F45A0A',
+        lang: 'ar',
+        dir: 'rtl',
+        categories: ['business', 'finance', 'productivity'],
+        icons: [
+          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        ],
+        shortcuts: [
+          {
+            name: 'لوحة التحكم',
+            short_name: 'الرئيسية',
+            description: 'فتح لوحة تحكم قيد',
+            url: '/dashboard',
+            icons: [{ src: '/pwa-192.png', sizes: '192x192' }],
+          },
+          {
+            name: 'التذاكر',
+            short_name: 'تذاكر',
+            description: 'إدارة تذاكر الطيران',
+            url: '/tickets',
+            icons: [{ src: '/pwa-192.png', sizes: '192x192' }],
+          },
+          {
+            name: 'الفيزا',
+            short_name: 'فيزا',
+            description: 'إدارة طلبات التأشيرة',
+            url: '/visas',
+            icons: [{ src: '/pwa-192.png', sizes: '192x192' }],
+          },
+        ],
+      },
+      workbox: {
+        // Cache app shell and static assets aggressively — exclude huge images (> 4MB)
+        globPatterns: ['**/*.{js,css,html,ico,svg,woff,woff2}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
+        // Skip SW update popup — just auto-update silently
+        skipWaiting: true,
+        clientsClaim: true,
+        // Runtime caching: API calls go network-first with short timeout
+        runtimeCaching: [
+          {
+            urlPattern: /^\/api\//,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'qayd-api-cache',
+              networkTimeoutSeconds: 10,
+              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 5 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'google-fonts-stylesheets' },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-webfonts',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+        ],
+      },
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname || process.cwd(), './src'),
