@@ -101,7 +101,6 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
   const [pasteDefaultPax, setPasteDefaultPax] = useState<number>(1);
   const [pasteDefaultBuy, setPasteDefaultBuy] = useState<string>('');
   const [pasteDefaultSell, setPasteDefaultSell] = useState<string>('');
-  const [pasteDefaultRoute, setPasteDefaultRoute] = useState<string>('');
 
   // Reference Datasets
   const [customers, setCustomers] = useState<any[]>([]);
@@ -145,7 +144,6 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
   ]);
 
   // Bulk Apply Bar States
-  const [bulkRoute, setBulkRoute] = useState<string>('');
   const [bulkPaxCount, setBulkPaxCount] = useState<string>('');
   const [bulkBuyPrice, setBulkBuyPrice] = useState<string>('');
   const [bulkSellPrice, setBulkSellPrice] = useState<string>('');
@@ -376,12 +374,11 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
     const buyVal = parseCleanNumber(bulkBuyPrice);
     const sellVal = parseCleanNumber(bulkSellPrice);
     const paxVal = parseCleanNumber(bulkPaxCount);
-    const routeVal = bulkRoute.trim();
 
-    if (!buyVal && !sellVal && !paxVal && !routeVal) {
+    if (!buyVal && !sellVal && !paxVal) {
       showErrorNotification(
         isAr ? 'تنبيه' : 'Alert',
-        isAr ? 'يرجى إدخال قيمة واحدة على الأقل لتطبيقها (مسار، عدد مسافرين، سعر شراء، أو سعر بيع).' : 'Please enter at least one value to apply.'
+        isAr ? 'يرجى إدخال قيمة واحدة على الأقل لتطبيقها (عدد مسافرين، سعر شراء، أو سعر بيع).' : 'Please enter at least one value to apply.'
       );
       return;
     }
@@ -391,7 +388,6 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
         if (!l.selected) return l;
         return {
           ...l,
-          route: routeVal ? routeVal : l.route,
           paxCount: paxVal > 0 ? paxVal : l.paxCount,
           buyPrice: buyVal > 0 ? buyVal : l.buyPrice,
           sellPrice: sellVal > 0 ? sellVal : l.sellPrice,
@@ -422,7 +418,6 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
     const parsedLines: GroupFarePnrLine[] = [];
     const defaultBuy = parseCleanNumber(pasteDefaultBuy);
     const defaultSell = parseCleanNumber(pasteDefaultSell);
-    const defaultRoute = pasteDefaultRoute.trim() || generalRoute || '';
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -435,7 +430,6 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
       const rawPnr = (parts[0] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (!rawPnr) continue;
 
-      let lineRoute = defaultRoute;
       let linePax = pasteDefaultPax > 0 ? pasteDefaultPax : 1;
       let lineBuy = defaultBuy;
       let lineSell = defaultSell;
@@ -443,8 +437,6 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
       if (parts.length >= 2) {
         if (/^\d+$/.test(parts[1]) && parseInt(parts[1], 10) < 100) {
           linePax = parseInt(parts[1], 10) || 1;
-        } else if (parts[1].includes('-') || parts[1].includes('/')) {
-          lineRoute = parts[1];
         }
       }
 
@@ -465,7 +457,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
         selected: true,
         pnr: rawPnr,
         ticketNumber: '',
-        route: lineRoute,
+        route: generalRoute || '',
         paxCount: linePax,
         buyPrice: lineBuy,
         sellPrice: lineSell,
@@ -910,17 +902,6 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                     <span>{isAr ? `تطبيق موحد (${activeLines.length}):` : `Bulk Apply:`}</span>
                   </div>
 
-                  {/* Route */}
-                  <input
-                    type="text"
-                    dir="ltr"
-                    placeholder={isAr ? 'المسار' : 'Route'}
-                    value={bulkRoute}
-                    onChange={(e) => setBulkRoute(e.target.value.toUpperCase())}
-                    style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                    className="w-24 h-[28px] px-2 text-center bg-[#FAFAFA] border border-slate-200 rounded-md font-mono font-bold text-xs text-slate-800 outline-none uppercase"
-                  />
-
                   {/* Pax Count */}
                   <input
                     type="text"
@@ -930,7 +911,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                     value={bulkPaxCount}
                     onChange={(e) => setBulkPaxCount(e.target.value.replace(/[^0-9]/g, ''))}
                     style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                    className="w-16 h-[28px] px-2 text-center bg-[#FAFAFA] border border-slate-200 rounded-md font-mono font-bold text-xs text-slate-800 outline-none"
+                    className="w-20 h-[30px] px-2 text-center bg-[#FAFAFA] border border-slate-200 rounded-md font-mono font-bold text-xs text-slate-800 outline-none"
                   />
 
                   {/* Buy Price */}
@@ -942,7 +923,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                     value={bulkBuyPrice}
                     onChange={(e) => setBulkBuyPrice(e.target.value.replace(/[^0-9.]/g, ''))}
                     style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                    className="w-24 h-[28px] px-2 text-center bg-[#FAFAFA] border border-slate-200 rounded-md font-mono font-bold text-xs text-slate-800 outline-none"
+                    className="w-28 h-[30px] px-2 text-center bg-[#FAFAFA] border border-slate-200 rounded-md font-mono font-bold text-xs text-slate-800 outline-none"
                   />
 
                   {/* Sell Price */}
@@ -954,24 +935,24 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                     value={bulkSellPrice}
                     onChange={(e) => setBulkSellPrice(e.target.value.replace(/[^0-9.]/g, ''))}
                     style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                    className="w-24 h-[28px] px-2 text-center bg-[#FAFAFA] border border-slate-200 rounded-md font-mono font-bold text-xs text-slate-800 outline-none"
+                    className="w-28 h-[30px] px-2 text-center bg-[#FAFAFA] border border-slate-200 rounded-md font-mono font-bold text-xs text-slate-800 outline-none"
                   />
 
                   <button
                     type="button"
                     onClick={handleApplyBulk}
-                    className="h-[28px] px-3 rounded-md bg-slate-800 hover:bg-black text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+                    className="h-[30px] px-3.5 rounded-md bg-slate-800 hover:bg-black text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs"
                   >
                     {isAr ? 'تطبيق' : 'Apply'}
                   </button>
                 </div>
               </div>
 
-              {/* Table Canvas */}
-              <div className="overflow-x-auto">
+              {/* Table Canvas with Max 10 Rows scrollable container */}
+              <div className="overflow-x-auto max-h-[460px] overflow-y-auto">
                 <table className={`w-full text-${direction === 'rtl' ? 'right' : 'left'} border-collapse text-xs`}>
-                  <thead>
-                    <tr className="bg-[#F8FAFC] border-b border-[#E5E7EB] text-[#475569] font-bold select-none h-[40px]">
+                  <thead className="sticky top-0 z-10 bg-[#F8FAFC] shadow-2xs">
+                    <tr className="border-b border-[#E5E7EB] text-[#475569] font-bold select-none h-[40px]">
                       <th className="p-2.5 text-center w-10">
                         <Checkbox
                           checked={pnrLines.length > 0 && pnrLines.every((l) => l.selected)}
@@ -985,7 +966,6 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                         />
                       </th>
                       <th className="p-2.5 whitespace-nowrap">{isAr ? 'كود الـ PNR' : 'PNR Code'}</th>
-                      <th className="p-2.5 whitespace-nowrap">{isAr ? 'المسار / Route' : 'Route'}</th>
                       <th className="p-2.5 whitespace-nowrap text-center">{isAr ? 'عدد المسافرين' : 'Pax Count'}</th>
                       <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'سعر الشراء' : 'Buy Price'}</th>
                       <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'سعر البيع' : 'Sell Price'}</th>
@@ -1028,20 +1008,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                               value={l.pnr}
                               onChange={(e) => updatePnrField(l.id, 'pnr', e.target.value.toUpperCase().trim())}
                               style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                              className="h-[36px] px-2.5 text-center font-mono font-bold text-xs uppercase rounded-[8px] bg-[#FAFAFA] border border-[#E5E7EB] text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] w-28"
-                            />
-                          </td>
-
-                          {/* Route */}
-                          <td className="p-2.5">
-                            <input
-                              type="text"
-                              dir="ltr"
-                              placeholder={generalRoute || 'BGW-IST-BGW'}
-                              value={l.route || ''}
-                              onChange={(e) => updatePnrField(l.id, 'route', e.target.value.toUpperCase())}
-                              style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                              className="h-[36px] px-2 font-mono font-bold text-xs uppercase rounded-[8px] bg-white border border-[#E5E7EB] text-slate-800 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] w-32"
+                              className="h-[36px] px-3 text-center font-mono font-bold text-xs uppercase rounded-[8px] bg-[#FAFAFA] border border-[#E5E7EB] text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] w-36"
                             />
                           </td>
 
@@ -1054,7 +1021,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                               value={l.paxCount ? l.paxCount.toLocaleString('en-US') : '1'}
                               onChange={(e) => updatePnrField(l.id, 'paxCount', Math.max(1, parseCleanNumber(e.target.value)))}
                               style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                              className="w-16 h-[36px] px-1 text-center font-mono font-black text-xs text-[#F45A0A] rounded-[8px] bg-[#FFF3E8] border border-orange-200 outline-none focus:border-2 focus:border-[#F45A0A]"
+                              className="w-20 h-[36px] px-1 text-center font-mono font-black text-xs text-[#F45A0A] rounded-[8px] bg-[#FFF3E8] border border-orange-200 outline-none focus:border-2 focus:border-[#F45A0A]"
                             />
                           </td>
 
@@ -1345,18 +1312,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
             <span className="font-bold text-slate-800 block">
               {isAr ? 'إعدادات افتراضية للـ PNRs المُلصقة:' : 'Default values for pasted PNRs:'}
             </span>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div>
-                <label className="text-[11px] text-slate-600 block mb-0.5">{isAr ? 'المسار' : 'Route'}</label>
-                <input
-                  type="text"
-                  dir="ltr"
-                  placeholder={generalRoute || 'BGW-IST'}
-                  value={pasteDefaultRoute}
-                  onChange={(e) => setPasteDefaultRoute(e.target.value.toUpperCase())}
-                  className="w-full h-8 px-2 rounded-md border border-slate-200 text-xs font-mono font-bold uppercase"
-                />
-              </div>
+            <div className="grid grid-cols-3 gap-2.5">
               <div>
                 <label className="text-[11px] text-slate-600 block mb-0.5">{isAr ? 'عدد المسافرين' : 'Pax/PNR'}</label>
                 <input

@@ -82,6 +82,95 @@ interface TicketPassengersTableProps {
 
 // ── Smart Number Parsing Utility (handles 210 -> 210,000 in IQD, 190k, 190,000, ١٩٠٠٠٠, 190000) ──
 /**
+ * صفّ تسعير فئة: بالغ أو طفل أو رضيع.
+ *
+ * يحمل مسوّدته الخاصة أثناء الكتابة ثم يثبّتها عند الخروج أو Enter، فلا يتشاجر
+ * ما تكتبه مع القيمة المشتقّة من المسافرين. وحين تختلف أسعار مسافري الفئة يظهر
+ * الحقل فارغاً بعلامة «مختلف» — لأن عرض سعر أحدهم كأنه سعر الجميع تضليل.
+ */
+const TypePriceRow: React.FC<{
+  label: string;
+  count: number;
+  buyValue: number | null;
+  sellValue: number | null;
+  buyMixed: boolean;
+  sellMixed: boolean;
+  currency: string;
+  isAr: boolean;
+  onCommit: (field: 'fareBuy' | 'fareSell', raw: string) => void;
+}> = ({ label, count, buyValue, sellValue, buyMixed, sellMixed, currency, isAr, onCommit }) => {
+  const [draft, setDraft] = useState<{ buy: string | null; sell: string | null }>({ buy: null, sell: null });
+
+  const shown = (field: 'buy' | 'sell') => {
+    if (draft[field] !== null) return draft[field] as string;
+    const mixed = field === 'buy' ? buyMixed : sellMixed;
+    if (mixed) return '';
+    const v = field === 'buy' ? buyValue : sellValue;
+    return v === null || v === undefined ? '' : v.toLocaleString('en-US');
+  };
+
+  const commit = (field: 'buy' | 'sell') => {
+    const raw = draft[field];
+    setDraft((d) => ({ ...d, [field]: null }));
+    if (raw === null) return;
+    onCommit(field === 'buy' ? 'fareBuy' : 'fareSell', raw);
+  };
+
+  const profit =
+    buyValue !== null && sellValue !== null && !buyMixed && !sellMixed ? sellValue - buyValue : null;
+  const empty = count === 0;
+
+  const field = (name: 'buy' | 'sell') => (
+    <input
+      type="text"
+      dir="ltr"
+      disabled={empty}
+      value={shown(name)}
+      onChange={(e) => setDraft((d) => ({ ...d, [name]: e.target.value }))}
+      onBlur={() => commit(name)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          commit(name);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      placeholder={(name === 'buy' ? buyMixed : sellMixed) ? (isAr ? 'مختلف' : 'mixed') : '0'}
+      className={`w-full h-9 px-2.5 rounded-lg border bg-white font-mono text-xs text-end outline-none transition-all disabled:bg-slate-50 disabled:text-slate-300 disabled:cursor-not-allowed ${
+        name === 'sell' ? 'font-bold text-slate-900' : 'font-semibold text-slate-800'
+      } ${
+        (name === 'buy' ? buyMixed : sellMixed)
+          ? 'border-amber-300 placeholder:text-amber-600 placeholder:font-bold'
+          : 'border-slate-300 hover:border-slate-400 focus:border-[#F45A0A] focus:ring-2 focus:ring-orange-100 placeholder:text-slate-300'
+      }`}
+    />
+  );
+
+  return (
+    <div className={`grid grid-cols-[minmax(96px,1.1fr)_1fr_1fr_minmax(84px,0.9fr)] items-center gap-2 ${empty ? 'opacity-45' : ''}`}>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="text-xs font-bold text-slate-800 truncate">{label}</span>
+        <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded px-1 shrink-0">
+          ×{count}
+        </span>
+      </div>
+      {field('buy')}
+      {field('sell')}
+      <div className="text-end font-mono text-xs font-bold" dir="ltr">
+        {profit === null ? (
+          <span className="text-slate-300">—</span>
+        ) : (
+          <span className={profit > 0 ? 'text-[#078B61]' : profit < 0 ? 'text-red-600' : 'text-slate-600'}>
+            {profit >= 0 ? `+${formatCurrency(profit, currency)}` : formatCurrency(profit, currency)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
  * خانة سعر تُقرأ كنصّ وتُحرَّر كحقل.
  *
  * تبدو رقماً عادياً في الجدول حتى تُنقر، فلا تزدحم الشاشة بمربّعات إدخال؛ وعند
@@ -333,7 +422,8 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
     passengers.forEach((p) => {
       const t = p.ticketType || 'ADULT';
       total[t] = (total[t] || 0) + 1;
-      if (p.batchId && p.fareSell !== null && p.fareSell > 0) {
+      // المسعَّر من له سعر بيع، سواء جاءه من صفّ الفئة أو كُتب في صفّه بيده.
+      if (p.fareSell !== null && p.fareSell !== undefined && p.fareSell > 0) {
         priced[t] = (priced[t] || 0) + 1;
       }
     });
@@ -715,153 +805,46 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
   const isAr = language === 'ar';
 
   /*
-   * سطر التسعير: أمرٌ واحد بدل أربعة حقول.
+   * التسعير حسب الفئة: ثلاثة أسطر جاهزة، لا خطوة إضافة.
    *
-   * كان في الشيفرة محلّلٌ يفهم «2A 100k 150k» لكنه مدفون داخل حقل الشراء بلا أي
-   * إشارة إليه في الواجهة — طريقٌ سريع لا يعرف أحدٌ أنه موجود. وهو هنا ظاهرٌ
-   * بمعاينةٍ حيّة تقول ماذا سيفعل قبل الضغط.
+   * كان التسعير يبدأ بإنشاء «دفعة»: تختار الفئة، وتكتب العدد، وتكتب السعرين، ثم
+   * تضغط Enter لتُنشئ كياناً ثم يُربط بالمسافرين. وهي أربع خطوات لتقول ما يقوله
+   * التاجر في جملة: «البالغ بمئة وخمسين».
    *
-   * ويفهم ما يفكّر به التاجر فعلاً، لا سعر الفرد وحده: الربح للراس (+25k)،
-   * والنسبة (%15)، وإجمالي الملف (t 1200k) مقسوماً على الرؤوس.
+   * فصارت الفئات الثلاث أسطراً حاضرة دائماً — بالغ وطفل ورضيع — يُكتب السعر في
+   * سطر الفئة فيسري على مسافريها فوراً. لا إنشاء، ولا اعتماد، ولا ربط.
    */
-  const parsePricingCommand = (input: string) => {
-    const text = String(input || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    if (!text) return null;
-
-    const unpriced = passengers.filter((p) => p.fareSell === null || p.fareSell === undefined);
-    const targets = unpriced.length > 0 ? unpriced : passengers;
-    const num = (v: string) => parseNumberInput(v, currency);
-
-    // ربح للفرد: «+25k» — البيع = الشراء + الربح
-    const margin = text.match(/^\+\s*([\d.,km]+)$/);
-    if (margin) {
-      const add = num(margin[1]);
-      if (!add) return null;
-      return {
-        kind: 'MARGIN' as const,
-        add,
-        count: targets.filter((p) => p.fareBuy !== null && p.fareBuy !== undefined).length,
-      };
-    }
-
-    // نسبة ربح: «%15»
-    const percent = text.match(/^%\s*([\d.]+)$/) || text.match(/^([\d.]+)\s*%$/);
-    if (percent) {
-      const pct = Number(percent[1]);
-      if (!pct) return null;
-      return {
-        kind: 'PERCENT' as const,
-        pct,
-        count: targets.filter((p) => p.fareBuy !== null && p.fareBuy !== undefined).length,
-      };
-    }
-
-    // إجمالي شراء الملف: «t 1200k» — يُقسَّم على عدد المسافرين
-    const total = text.match(/^(?:t|ت)\s*([\d.,km]+)$/);
-    if (total) {
-      const sum = num(total[1]);
-      if (!sum || targets.length === 0) return null;
-      return { kind: 'TOTAL' as const, perHead: Math.round(sum / targets.length), count: targets.length, sum };
-    }
-
-    // «2a 100k 150k» أو «100k 150k» لكل من بقي
-    const full = text.match(/^(\d+)\s*([aciأطتر])\s+([\d.,km]+)\s+([\d.,km]+)$/);
-    const pair = text.match(/^([\d.,km]+)\s+([\d.,km]+)$/);
-    if (full || pair) {
-      const buy = num(full ? full[3] : pair![1]);
-      const sell = num(full ? full[4] : pair![2]);
-      if (!sell) return null;
-      let type: 'ADULT' | 'CHILD' | 'INFANT' | null = null;
-      let count = targets.length;
-      if (full) {
-        const ch = full[2];
-        type = ch === 'c' || ch === 'ط' ? 'CHILD' : ch === 'i' || ch === 'ت' || ch === 'ر' ? 'INFANT' : 'ADULT';
-        count = Math.min(parseInt(full[1], 10), targets.filter((p) => (p.ticketType || 'ADULT') === type).length);
-      }
-      return { kind: 'PAIR' as const, buy, sell, type, count };
-    }
-
-    return null;
-  };
-
-  const [pricingCommand, setPricingCommand] = useState('');
-  const pricingPreview = useMemo(() => parsePricingCommand(pricingCommand), [pricingCommand, passengers, currency]);
-
-  const runPricingCommand = () => {
-    const plan = parsePricingCommand(pricingCommand);
-    if (!plan) return;
-
-    const unpriced = passengers.filter((p) => p.fareSell === null || p.fareSell === undefined);
-    const useUnpriced = unpriced.length > 0;
-    let applied = 0;
-
+  const priceWholeType = (type: 'ADULT' | 'CHILD' | 'INFANT', field: 'fareBuy' | 'fareSell', raw: string) => {
+    const text = String(raw ?? '').trim();
+    const value = text === '' ? null : parseNumberInput(text, currency);
+    let touched = 0;
     const updated = passengers.map((p) => {
-      const isTarget = useUnpriced ? p.fareSell === null || p.fareSell === undefined : true;
-      if (!isTarget) return p;
-
-      if (plan.kind === 'MARGIN' || plan.kind === 'PERCENT') {
-        if (p.fareBuy === null || p.fareBuy === undefined) return p;
-        applied += 1;
-        const sell =
-          plan.kind === 'MARGIN'
-            ? (p.fareBuy as number) + plan.add
-            : Math.round((p.fareBuy as number) * (1 + plan.pct / 100));
-        return { ...p, fareSell: sell, batchId: undefined };
-      }
-
-      if (plan.kind === 'TOTAL') {
-        applied += 1;
-        return { ...p, fareBuy: plan.perHead, batchId: undefined };
-      }
-
-      if (plan.type && (p.ticketType || 'ADULT') !== plan.type) return p;
-      if (applied >= plan.count) return p;
-      applied += 1;
-      return { ...p, fareBuy: plan.buy || p.fareBuy || 0, fareSell: plan.sell, batchId: undefined };
+      if ((p.ticketType || 'ADULT') !== type) return p;
+      if (p[field] === value) return p;
+      touched += 1;
+      return { ...p, [field]: value, batchId: undefined };
     });
-
-    if (applied === 0) return;
+    if (touched === 0) return;
     onChangePassengers(updated);
-    setPricingCommand('');
-    showSuccessNotification(
-      isAr ? 'تمّ التسعير' : 'Priced',
-      isAr ? `طُبّق على ${applied} مسافراً` : `Applied to ${applied} passenger(s)`,
-    );
   };
 
-  const pricingPreviewText = useMemo(() => {
-    const p = pricingPreview;
-    if (!p) return null;
-    const money = (v: number) => formatCurrency(v, currency);
-    if (p.count === 0) {
-      return isAr
-        ? 'لا مسافر ينطبق عليه هذا الأمر — الربح والنسبة يحتاجان سعر شراء مُدخَلاً أولاً'
-        : 'No passenger matches — margin and percent need a buy price first';
-    }
-    if (p.kind === 'MARGIN') {
-      return isAr
-        ? `ربح ${money(p.add)} للفرد — البيع = الشراء + الربح، على ${p.count} مسافراً لهم سعر شراء`
-        : `Margin ${money(p.add)} per head on ${p.count} passenger(s) that have a buy price`;
-    }
-    if (p.kind === 'PERCENT') {
-      return isAr
-        ? `ربح ${p.pct}% — البيع = الشراء + النسبة، على ${p.count} مسافراً لهم سعر شراء`
-        : `Margin ${p.pct}% on ${p.count} passenger(s) that have a buy price`;
-    }
-    if (p.kind === 'TOTAL') {
-      return isAr
-        ? `إجمالي شراء ${money(p.sum)} على ${p.count} مسافراً = ${money(p.perHead)} للفرد`
-        : `Total buy ${money(p.sum)} over ${p.count} = ${money(p.perHead)} each`;
-    }
-    const who = p.type
-      ? isAr
-        ? p.type === 'CHILD' ? 'أطفال' : p.type === 'INFANT' ? 'رضّع' : 'بالغين'
-        : p.type.toLowerCase()
-      : isAr ? 'مسافراً' : 'passenger(s)';
-    return isAr
-      ? `${p.count} ${who}: شراء ${money(p.buy)} · بيع ${money(p.sell)}`
-      : `${p.count} ${who}: buy ${money(p.buy)} · sell ${money(p.sell)}`;
-  }, [pricingPreview, currency, isAr]);
+  /**
+   * السعر المعروض في سطر الفئة: قيمةُ مسافريها إن اتفقوا، وإلا فراغٌ لأن الفئة
+   * لم يعد لها سعر واحد — وعرضُ أحدهم كأنه سعر الجميع كذبٌ صغير يكلّف كثيراً.
+   */
+  const typeRowValue = (type: 'ADULT' | 'CHILD' | 'INFANT', field: 'fareBuy' | 'fareSell'): number | null => {
+    const group = passengers.filter((p) => (p.ticketType || 'ADULT') === type);
+    if (group.length === 0) return null;
+    const first = group[0][field] ?? null;
+    return group.every((p) => (p[field] ?? null) === first) ? (first as number | null) : null;
+  };
+
+  const typeRowMixed = (type: 'ADULT' | 'CHILD' | 'INFANT', field: 'fareBuy' | 'fareSell'): boolean => {
+    const group = passengers.filter((p) => (p.ticketType || 'ADULT') === type);
+    if (group.length < 2) return false;
+    const first = group[0][field] ?? null;
+    return !group.every((p) => (p[field] ?? null) === first);
+  };
 
   const handleFieldChange = (idx: number, field: keyof PassengerLine, value: any) => {
     const updated = [...passengers];
@@ -1109,373 +1092,63 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
 
       {/* ── 1. PRICE BATCH INPUT BAR (شريط التسعير بالدفعات) ── */}
       <div id="field-price-batch-bar" className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/90 space-y-2.5">
-        {/* Status Line */}
-        <div className="flex items-center justify-between text-xs text-slate-600">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <Zap size={14} className="text-[#F45A0A]" />
-            <span className="font-semibold text-slate-900 text-xs">
-              {editingBatchId
-                ? (isAr ? 'تعديل دفعة السعر المحددة:' : 'Edit Selected Price Batch:')
-                : (isAr ? 'إضافة دفعة سعر جديدة:' : 'Add New Price Batch:')}
+            <span className="font-bold text-slate-900 text-xs">
+              {isAr ? 'التسعير حسب الفئة' : 'Pricing by type'}
             </span>
-            {editingBatchId && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingBatchId(null);
-                  setDraftBuy('');
-                  setDraftSell('');
-                }}
-                className="text-[11px] text-red-600 hover:underline"
-              >
-                {isAr ? '(إلغاء التعديل Esc)' : '(Cancel Edit Esc)'}
-              </button>
-            )}
+            <span className="text-[11px] text-slate-500 font-medium">
+              {isAr
+                ? 'اكتب السعر في سطر الفئة فيسري على مسافريها فوراً'
+                : 'Type a price on the type row and it applies to its passengers at once'}
+            </span>
           </div>
         </div>
 
-        {/*
-          * سطر التسعير الظاهر.
-          *
-          * أعلى الحقول الأربعة لأنه يغني عنها في أغلب الحالات، ومعه أمثلته مكتوبة
-          * — فالطريق السريع لا ينفع إن لم يُرَ. والمعاينة تحته تقول ماذا سيحدث
-          * قبل الضغط، فلا يُسعَّر أحدٌ على غير ما قُصد.
-          */}
-        <div className="rounded-xl border border-orange-200/70 bg-white p-2.5 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                dir="ltr"
-                value={pricingCommand}
-                onChange={(e) => setPricingCommand(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    runPricingCommand();
-                  }
-                }}
-                placeholder="2a 100k 150k   ·   100k 150k   ·   +25k   ·   %15   ·   t 1200k"
-                className="w-full h-9 px-3 rounded-lg border border-slate-300 bg-white font-mono text-xs font-bold text-slate-900 outline-none hover:border-slate-400 focus:border-[#F45A0A] focus:ring-2 focus:ring-orange-100 transition-all placeholder:text-slate-300 placeholder:font-normal"
-              />
-            </div>
-            <button
-              type="button"
-              disabled={!pricingPreview || (pricingPreview as any).count === 0}
-              onClick={runPricingCommand}
-              className="h-9 px-3 rounded-lg bg-[#F45A0A] hover:bg-[#dd4f05] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-[11.5px] font-bold cursor-pointer transition-colors shrink-0"
-            >
-              {isAr ? 'تسعير ↵' : 'Price ↵'}
-            </button>
-          </div>
-
-          {pricingPreviewText ? (
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
-              <Zap size={11} className="text-emerald-600 shrink-0" />
-              <span>{pricingPreviewText}</span>
-            </div>
-          ) : (
-            <div className="text-[10.5px] text-slate-500 font-medium leading-relaxed">
-              {isAr ? (
-                <>
-                  <b className="font-mono text-slate-700">2a 100k 150k</b> بالغان شراءً وبيعاً ·{' '}
-                  <b className="font-mono text-slate-700">100k 150k</b> لكل من بقي بلا سعر ·{' '}
-                  <b className="font-mono text-slate-700">+25k</b> ربح للفرد ·{' '}
-                  <b className="font-mono text-slate-700">%15</b> نسبة ربح ·{' '}
-                  <b className="font-mono text-slate-700">t 1200k</b> إجمالي الشراء مقسوماً على الرؤوس
-                  <span className="block mt-0.5 text-slate-400">
-                    وتقدر تكتب السعر داخل صف المسافر مباشرة — و<b className="font-mono">Ctrl+↓</b> يعبّئ العمود كلّه
-                  </span>
-                </>
-              ) : (
-                <>
-                  <b className="font-mono text-slate-700">2a 100k 150k</b> two adults ·{' '}
-                  <b className="font-mono text-slate-700">100k 150k</b> everyone unpriced ·{' '}
-                  <b className="font-mono text-slate-700">+25k</b> margin per head ·{' '}
-                  <b className="font-mono text-slate-700">%15</b> margin percent ·{' '}
-                  <b className="font-mono text-slate-700">t 1200k</b> total buy split per head
-                  <span className="block mt-0.5 text-slate-400">
-                    Prices are editable straight in the passenger row — <b className="font-mono">Ctrl+↓</b> fills the column
-                  </span>
-                </>
-              )}
-            </div>
-          )}
+        {/* Column headers */}
+        <div className="grid grid-cols-[minmax(96px,1.1fr)_1fr_1fr_minmax(84px,0.9fr)] gap-2 px-0.5">
+          <span className="text-[11px] font-bold text-slate-600">{isAr ? 'الفئة' : 'Type'}</span>
+          <span className="text-[11px] font-bold text-slate-600 text-end">
+            {isAr ? `شراء الفرد (${getCurrencySymbol(currency)})` : `Unit buy (${getCurrencySymbol(currency)})`}
+          </span>
+          <span className="text-[11px] font-bold text-slate-600 text-end">
+            {isAr ? `بيع الفرد (${getCurrencySymbol(currency)}) *` : `Unit sell (${getCurrencySymbol(currency)}) *`}
+          </span>
+          <span className="text-[11px] font-bold text-slate-600 text-end">
+            {isAr ? 'ربح الفرد' : 'Unit profit'}
+          </span>
         </div>
 
-        {/* ── MOBILE 2-COLUMN GRID (sm:hidden) ── */}
-        <div className="grid sm:hidden grid-cols-2 gap-2 font-sans select-none">
-          {/* Type Select */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-              {isAr ? 'النوع' : 'Type'}
-            </label>
-            <Select
-              size="xs"
-              radius="md"
-              value={draftType}
-              onChange={(v) => setDraftType(v as any)}
-              data={dynamicTypeOptions}
-              styles={{
-                input: {
-                  height: 38,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  borderRadius: 8,
-                  borderColor: '#CBD5E1',
-                },
-              }}
+        {/* الفئات الثلاث حاضرة دائماً، وما لا مسافر له يبقى باهتاً لا يُكتب فيه. */}
+        <div className="space-y-1.5">
+          {([
+            { type: 'ADULT' as const, label: isAr ? 'بالغ' : 'Adult' },
+            { type: 'CHILD' as const, label: isAr ? 'طفل' : 'Child' },
+            { type: 'INFANT' as const, label: isAr ? 'رضيع' : 'Infant' },
+          ]).map((row) => (
+            <TypePriceRow
+              key={row.type}
+              label={row.label}
+              count={passengerCounts.total[row.type] || 0}
+              buyValue={typeRowValue(row.type, 'fareBuy')}
+              sellValue={typeRowValue(row.type, 'fareSell')}
+              buyMixed={typeRowMixed(row.type, 'fareBuy')}
+              sellMixed={typeRowMixed(row.type, 'fareSell')}
+              currency={currency}
+              isAr={isAr}
+              onCommit={(field, raw) => priceWholeType(row.type, field, raw)}
             />
-          </div>
-
-          {/* Count Input */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-1 text-center">
-              {isAr ? 'العدد' : 'Count'}
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              dir="ltr"
-              value={draftCount}
-              onChange={(e) => {
-                const cleaned = e.target.value.replace(/[^0-9]/g, '');
-                const num = parseInt(cleaned, 10);
-                setDraftCount(isNaN(num) || num < 1 ? 1 : num);
-              }}
-              placeholder="1"
-              className="w-full h-[38px] px-2.5 rounded-[8px] border border-slate-300 bg-white font-mono font-bold text-center text-xs text-slate-900 outline-none hover:border-slate-400 focus:border-[#F45A0A]"
-            />
-          </div>
-
-          {/* Unit Buy Input */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-              {isAr ? `شراء الفرد (${getCurrencySymbol(currency)})` : `Unit Buy (${getCurrencySymbol(currency)})`}
-            </label>
-            <input
-              type="text"
-              dir="ltr"
-              value={draftBuy}
-              onChange={(e) => {
-                const text = e.target.value;
-                if (!handleCommandShortcut(text)) {
-                  setDraftBuy(text);
-                }
-              }}
-              onBlur={() => {
-                const val = parseNumberInput(draftBuy, currency);
-                if (val > 0) setDraftBuy(val.toLocaleString());
-              }}
-              placeholder="0"
-              className="w-full h-[38px] px-3 rounded-[8px] border border-slate-300 bg-white font-mono font-semibold text-xs text-slate-900 outline-none hover:border-slate-400 focus:border-[#F45A0A]"
-            />
-          </div>
-
-          {/* Unit Sell Input */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-              {isAr ? `بيع الفرد (${getCurrencySymbol(currency)}) *` : `Unit Sell (${getCurrencySymbol(currency)}) *`}
-            </label>
-            <input
-              type="text"
-              dir="ltr"
-              value={draftSell}
-              onChange={(e) => setDraftSell(e.target.value)}
-              onBlur={() => {
-                const sellNum = parseNumberInput(draftSell, currency);
-                if (sellNum > 0) setDraftSell(sellNum.toLocaleString());
-              }}
-              placeholder="0"
-              className="w-full h-[38px] px-3 rounded-[8px] border border-slate-300 bg-white font-mono font-bold text-xs text-slate-900 outline-none hover:border-slate-400 focus:border-[#F45A0A]"
-            />
-          </div>
-
-          {/* Live Profit indicator */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-              {isAr ? 'ربح الفرد' : 'Unit Profit'}
-            </label>
-            <div className="w-full h-[38px] px-2 rounded-[8px] border border-slate-200 bg-white flex items-center justify-center text-xs" dir="ltr">
-              <span
-                className={`font-mono font-bold text-xs truncate ${
-                  draftProfit > 0 ? 'text-[#078B61]' : draftProfit < 0 ? 'text-red-600' : 'text-slate-600'
-                }`}
-              >
-                {draftProfit >= 0 ? `+${formatCurrency(draftProfit, currency)}` : formatCurrency(draftProfit, currency)}
-              </span>
-            </div>
-          </div>
-
-          {/* Save / Enter button */}
-          <div className="flex flex-col justify-end">
-            <Button
-              size="xs"
-              color="orange"
-              variant="filled"
-              radius="md"
-              fullWidth
-              onClick={handleSaveBatch}
-              className="bg-[#F45A0A] hover:bg-orange-600 font-bold text-xs text-white shadow-xs cursor-pointer h-[38px] min-h-[38px] max-h-[38px] rounded-[8px] flex items-center justify-center whitespace-nowrap"
-            >
-              {editingBatchId ? (isAr ? 'تحديث الدفعة' : 'Update') : (isAr ? 'اعتماد الدفعة ↵' : 'Enter ↵')}
-            </Button>
-          </div>
+          ))}
         </div>
 
-        {/* ── DESKTOP SINGLE-LINE GRID (hidden sm:flex) ── */}
-        <div className="hidden sm:flex items-end gap-2.5 overflow-x-auto pb-1 select-none">
-          {/* 1. Type Select (145px) */}
-          <div className="w-[145px] shrink-0">
-            <label className="block text-[12px] font-medium text-slate-700 mb-1 whitespace-nowrap">
-              {isAr ? 'النوع' : 'Type'}
-            </label>
-            <Select
-              size="xs"
-              radius="md"
-              value={draftType}
-              onChange={(v) => setDraftType(v as any)}
-              data={dynamicTypeOptions}
-              styles={{
-                input: {
-                  height: 38,
-                  fontSize: 12.5,
-                  fontWeight: 600,
-                  borderRadius: 8,
-                  borderColor: '#CBD5E1',
-                },
-              }}
-            />
-          </div>
-
-          {/* 2. Count Input (90px) */}
-          <div className="w-[90px] shrink-0">
-            <label className="block text-[12px] font-medium text-slate-700 mb-1 text-center whitespace-nowrap">
-              {isAr ? 'العدد' : 'Count'}
-            </label>
-            <input
-              ref={countInputRef}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              dir="ltr"
-              value={draftCount}
-              onChange={(e) => {
-                const cleaned = e.target.value.replace(/[^0-9]/g, '');
-                const num = parseInt(cleaned, 10);
-                setDraftCount(isNaN(num) || num < 1 ? 1 : num);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === 'Tab') {
-                  e.preventDefault();
-                  buyInputRef.current?.focus();
-                  buyInputRef.current?.select();
-                }
-              }}
-              placeholder="1"
-              style={{
-                fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                fontVariantNumeric: 'lining-nums tabular-nums',
-              }}
-              className="w-full h-[38px] px-2.5 rounded-[8px] border border-slate-300 bg-white font-mono font-bold text-center text-xs text-slate-900 outline-none hover:border-slate-400 focus:border-[#F45A0A]"
-            />
-          </div>
-
-          {/* 3. Buy Fare Input (160px) */}
-          <div className="w-[160px] shrink-0">
-            <label className="block text-[12px] font-medium text-slate-700 mb-1 whitespace-nowrap">
-              {isAr ? `شراء الفرد (${getCurrencySymbol(currency)})` : `Unit Buy (${getCurrencySymbol(currency)})`}
-            </label>
-            <input
-              ref={buyInputRef}
-              type="text"
-              dir="ltr"
-              value={draftBuy}
-              onChange={(e) => {
-                const text = e.target.value;
-                if (!handleCommandShortcut(text)) {
-                  setDraftBuy(text);
-                }
-              }}
-              onBlur={() => {
-                const val = parseNumberInput(draftBuy, currency);
-                if (val > 0) setDraftBuy(val.toLocaleString());
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === 'Tab') {
-                  e.preventDefault();
-                  const val = parseNumberInput(draftBuy, currency);
-                  if (val > 0) setDraftBuy(val.toLocaleString());
-                  sellInputRef.current?.focus();
-                  sellInputRef.current?.select();
-                }
-              }}
-              placeholder="0"
-              className="w-full h-[38px] px-3 rounded-[8px] border border-slate-300 bg-white font-mono font-semibold text-xs text-slate-900 outline-none hover:border-slate-400 focus:border-[#F45A0A]"
-            />
-          </div>
-
-          {/* 4. Sell Fare Input (160px) */}
-          <div className="w-[160px] shrink-0">
-            <label className="block text-[12px] font-medium text-slate-700 mb-1 whitespace-nowrap">
-              {isAr ? `بيع الفرد (${getCurrencySymbol(currency)}) *` : `Unit Sell (${getCurrencySymbol(currency)}) *`}
-            </label>
-            <input
-              ref={sellInputRef}
-              type="text"
-              dir="ltr"
-              value={draftSell}
-              onChange={(e) => setDraftSell(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleSaveBatch();
-                }
-              }}
-              onBlur={() => {
-                const sellNum = parseNumberInput(draftSell, currency);
-                if (sellNum > 0) setDraftSell(sellNum.toLocaleString());
-                if (sellNum > 0 && draftCount > 0) {
-                  handleSaveBatch();
-                }
-              }}
-              placeholder="0"
-              className="w-full h-[38px] px-3 rounded-[8px] border border-slate-300 bg-white font-mono font-bold text-xs text-slate-900 outline-none hover:border-slate-400 focus:border-[#F45A0A]"
-            />
-          </div>
-
-          {/* 5. Live Profit Indicator (130px) */}
-          <div className="w-[130px] shrink-0">
-            <label className="block text-[12px] font-medium text-slate-700 mb-1 whitespace-nowrap">
-              {isAr ? 'ربح الفرد' : 'Unit Profit'}
-            </label>
-            <div className="w-full h-[38px] px-3 rounded-[8px] border border-slate-200 bg-white flex items-center justify-center text-xs" dir="ltr">
-              <span
-                className={`font-mono font-bold text-xs whitespace-nowrap ${
-                  draftProfit > 0 ? 'text-[#078B61]' : draftProfit < 0 ? 'text-red-600' : 'text-slate-600'
-                }`}
-              >
-                {draftProfit >= 0 ? `+${formatCurrency(draftProfit, currency)}` : formatCurrency(draftProfit, currency)}
-              </span>
-            </div>
-          </div>
-
-          {/* 6. Enter Submit Button (48px matching 38px height) */}
-          <Button
-            size="xs"
-            color="orange"
-            variant="filled"
-            radius="md"
-            onClick={handleSaveBatch}
-            className="bg-[#F45A0A] hover:bg-orange-600 font-bold text-xs text-white shadow-xs cursor-pointer h-[38px] min-h-[38px] max-h-[38px] px-4 rounded-[8px] shrink-0 flex items-center justify-center whitespace-nowrap"
-          >
-            {editingBatchId ? (isAr ? 'تحديث' : 'Update') : 'Enter ↵'}
-          </Button>
+        <div className="text-[10.5px] text-slate-500 font-medium pt-0.5 border-t border-slate-200/80">
+          {isAr
+            ? 'ولأي مسافر سعر خاص — اكتبه في صفّه بالجدول أدناه، و Ctrl+↓ يعبّئ بقية العمود.'
+            : 'For a one-off price, type it in the passenger row below — Ctrl+↓ fills the rest of the column.'}
         </div>
 
-        {/* ── CREATED PRICE BATCHES CHIPS & ROWS ── */}
         {batches.length > 0 && (
           <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
             <span className="text-[11.5px] font-semibold text-slate-700 block">
