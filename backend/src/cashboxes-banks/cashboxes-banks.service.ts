@@ -454,6 +454,37 @@ export class CashboxesBanksService {
     });
   }
 
+  /**
+   * صندوق الشركة الرئيسي — بحثٌ متينٌ لا قائمةُ أكوادٍ ثابتة.
+   *
+   * كان يُبحث عنه بأكواد محفوظة في الكود (13411، 11011) واسمٍ مفرد «صندوق حسابات
+   * الشركة»؛ فحين اختلف الترقيم في شركةٍ (قاصتها 181021 باسم «صندوق حسابات
+   * الشركات القاصة») لم يُوجد، فيسقط التحصيل كلّه بخطأ 404 غامض. الآن يُطابَق
+   * الجذر المشترك «حسابات الشرك» (يشمل الشركة والشركات) و«القاصة»، مع بقاء
+   * الأكواد القديمة أولاً — فأي شجرةٍ معقولة تُصيب صندوقها الرئيسي.
+   */
+  private async resolveMainCashbox(companyId?: string) {
+    const scope = companyId ? { companyId } : {};
+    const byCode = await this.prisma.account.findFirst({
+      where: { ...scope, isParent: false, code: { in: ['13411', '1341101', '11011', '181021'] } },
+    });
+    if (byCode) return byCode;
+
+    const byName = await this.prisma.account.findFirst({
+      where: {
+        ...scope,
+        isParent: false,
+        OR: [
+          { nameAr: { contains: 'حسابات الشرك' } },
+          { nameAr: { contains: 'القاصة' } },
+          { nameAr: { contains: 'الصندوق الرئيسي' } },
+        ],
+      },
+      orderBy: { code: 'asc' },
+    });
+    return byName;
+  }
+
   async settleVoucher(
     companyId: string,
     userId: string,
@@ -461,21 +492,11 @@ export class CashboxesBanksService {
   ) {
     const { voucherId, isSettled } = dto;
 
-    // Find main company cashbox (code 13411 or صندوق حسابات الشركة)
-    const mainBoxAcc = await this.prisma.account.findFirst({
-      where: {
-        isParent: false,
-        OR: [
-          { code: '13411' },
-          { code: '1341101' },
-          { code: '11011' },
-          { nameAr: { contains: 'صندوق حسابات الشركة' } },
-        ],
-      },
-    });
-
+    const mainBoxAcc = await this.resolveMainCashbox(companyId);
     if (!mainBoxAcc) {
-      throw new NotFoundException('حساب الصندوق الرئيسي غير موجود في شجرة الحسابات');
+      throw new NotFoundException(
+        'تعذّر تحديد صندوق الشركة الرئيسي في شجرة الحسابات. عيّنه من إعدادات النظام (الحساب المخصص للقاصة الرئيسية) ثم أعد المحاولة.',
+      );
     }
 
     // Find the voucher in ReceiptVoucher or PaymentVoucher

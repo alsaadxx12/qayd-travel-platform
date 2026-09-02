@@ -15,6 +15,7 @@ import {
   Checkbox,
 } from '@mantine/core';
 import {
+  IconAlertTriangle,
   IconSearch,
   IconFilterOff,
   IconPrinter,
@@ -80,8 +81,6 @@ interface SettlementItem {
   isSettled: boolean;
 }
 
-const SETTLED_STORAGE_KEY = 'confirmed_sub_cashboxes_settlements';
-
 export const SubCashboxesSettlementPage: React.FC = () => {
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
@@ -117,21 +116,15 @@ export const SubCashboxesSettlementPage: React.FC = () => {
   const [batchSelectedVoucherIds, setBatchSelectedVoucherIds] = useState<Set<string>>(new Set());
   const [batchSubmitting, setBatchSubmitting] = useState(false);
 
-  // Load persistent settlements map
-  const getSettledMap = (): Record<string, boolean> => {
-    try {
-      const raw = localStorage.getItem(SETTLED_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  };
-
-  const saveSettledMap = (map: Record<string, boolean>) => {
-    try {
-      localStorage.setItem(SETTLED_STORAGE_KEY, JSON.stringify(map));
-    } catch {}
-  };
+  /*
+   * لا localStorage هنا بعد اليوم.
+   *
+   * كانت حالة «تم التحصيل» تُقرأ من خريطة في متصفح الجهاز إلى جانب القاعدة —
+   * فجهازٌ آخر يرى حالات مختلفة، ومسح بيانات المتصفح يمحو التأكيدات مع أن قيود
+   * التوريد موجودة، ورفعُ تحصيلٍ من جهاز لا يظهر على غيره أبداً لأن خريطة الجهاز
+   * الآخر تقول «محصَّل» إلى الأبد. مصدر الحقيقة الوحيد الآن هو قاعدة البيانات:
+   * السند محصَّل ⇔ قيدُ توريده CLR-<رقم السند> موجود في القيود.
+   */
 
   const formatDateEn = (dateVal: any): string => {
     if (!dateVal) return '';
@@ -239,14 +232,21 @@ export const SubCashboxesSettlementPage: React.FC = () => {
         return isCashbox;
       });
 
-      // Find Main Company Cashbox accurately
+      /*
+       * الصندوق الرئيسي — بنفس منطق الخادم حرفاً بحرف (resolveMainCashbox).
+       *
+       * كان اختلاف التعريف بين الطرفين يجعل الواجهة تعرض سنداً على الصندوق
+       * الرئيسي كأنه فرعيّ قابل للتحصيل، فيبدو التبديل ناجحاً ثم لا يصمد لأن
+       * الخادم لا ينشئ قيد توريد لسندٍ هو أصلاً في القاصة الرئيسية.
+       */
+      const MAIN_CODES = ['13411', '1341101', '11011', '181021'];
       const mainBox =
+        cashAccounts.find((a: any) => MAIN_CODES.includes(a.code)) ||
         cashAccounts.find(
           (a: any) =>
-            a.code === '13411' ||
-            a.nameAr?.includes('صندوق حسابات الشركة') ||
-            a.code === '1341101' ||
-            a.code === '11011'
+            a.nameAr?.includes('حسابات الشرك') ||
+            a.nameAr?.includes('القاصة') ||
+            a.nameAr?.includes('الصندوق الرئيسي')
         ) ||
         cashAccounts[0] ||
         null;
@@ -254,18 +254,24 @@ export const SubCashboxesSettlementPage: React.FC = () => {
       setMainCashboxAccount(mainBox);
 
       const cashboxIdsSet = new Set(cashAccounts.map((c: any) => c.id));
-      const settledMap = getSettledMap();
 
       const formatVoucher = (v: any, type: 'RECEIPT' | 'PAYMENT'): SettlementItem => {
         const boxId = v.cashboxOrBankAccountId;
         const boxAcc = accountsMap[boxId];
-        const isMain =
-          mainBox && (boxId === mainBox.id || boxAcc?.code === '13411' || boxAcc?.nameAr?.includes('حسابات الشركة') || boxAcc?.nameAr?.includes('الرئيسي') || boxAcc?.code === mainBox.code);
+        const isMain = Boolean(
+          mainBox &&
+            (boxId === mainBox.id ||
+              boxAcc?.code === mainBox.code ||
+              (boxAcc?.code && MAIN_CODES.includes(boxAcc.code)) ||
+              boxAcc?.nameAr?.includes('حسابات الشرك') ||
+              boxAcc?.nameAr?.includes('القاصة') ||
+              boxAcc?.nameAr?.includes('الصندوق الرئيسي'))
+        );
 
         const vNum = v.voucherNumber || (type === 'RECEIPT' ? `RV-${v.id.slice(0, 6)}` : `PV-${v.id.slice(0, 6)}`);
         const curr = detectCurrency(v);
-        // Source of truth from real DB clearance journal entries
-        const isSettled = settledRefsSet.has(`CLR-${vNum}`) || Boolean(settledMap[v.id]);
+        // Source of truth from real DB clearance journal entries — and nothing else
+        const isSettled = settledRefsSet.has(`CLR-${vNum}`);
 
         return {
           id: v.id,
@@ -388,13 +394,23 @@ export const SubCashboxesSettlementPage: React.FC = () => {
     fetchSettlementData();
   }, []);
 
-  // Handle Toggle Switch (Confirm / Revert Settlement) with 0ms instant UI update
-  const handleToggleSettlement = async (item: SettlementItem, newStatus: boolean) => {
-    // 1. Instant Optimistic UI Update (0ms)
-    const settledMap = getSettledMap();
-    settledMap[item.id] = newStatus;
-    saveSettledMap(settledMap);
+  /**
+   * رفعُ تأكيد التحصيل ليس نقرةً عابرة: سيُحذف قيدُ التوريد المرحَّل وتُعاد
+   * الأرصدة بين الصندوقين — فيُعترض المسار بنافذة تحذير تسمّي العواقب، ولا
+   * يمضي الرفع إلا بتأكيد صريح. التأكيد (الإيجاب) يمرّ مباشرة كما كان.
+   */
+  const [revertTarget, setRevertTarget] = useState<SettlementItem | null>(null);
+  const [revertBusy, setRevertBusy] = useState(false);
 
+  const handleToggleSettlement = (item: SettlementItem, newStatus: boolean) => {
+    if (!newStatus) {
+      setRevertTarget(item);
+      return;
+    }
+    void performToggleSettlement(item, true);
+  };
+
+  const performToggleSettlement = async (item: SettlementItem, newStatus: boolean) => {
     setAllItems((prev) =>
       prev.map((it) => (it.id === item.id ? { ...it, isSettled: newStatus } : it))
     );
@@ -437,7 +453,14 @@ export const SubCashboxesSettlementPage: React.FC = () => {
       );
     }
 
-    // 2. Background Database Transaction via dedicated backend endpoint
+    /*
+     * قيد التوريد يُكتب في القاعدة، والجدول لا يُعاد تحميله.
+     *
+     * كان كل تبديل يستدعي fetchSettlementData فتُجلب خمس قوائم كاملة من جديد
+     * ويرتجّ الجدول كله لأجل صفٍّ واحد سبق تحديثه تفاؤلياً أعلاه. التحديث
+     * التفاؤلي هو الحقيقة الجديدة نفسها، فلا شيء يُستجلب عند النجاح — وعند
+     * الفشل وحده تُستعاد الحقيقة من القاعدة كي لا تكذب الشاشة.
+     */
     setProcessingId(item.id);
     try {
       await apiRequest('/api/cashboxes-banks/settle-voucher', {
@@ -448,10 +471,12 @@ export const SubCashboxesSettlementPage: React.FC = () => {
           isSettled: newStatus,
         }),
       });
-
-      fetchSettlementData(true);
     } catch (err: any) {
-      console.error('Error syncing settlement with backend:', err);
+      showErrorNotification(
+        'تعذر حفظ حالة التحصيل',
+        err?.message || 'لم يصل التغيير إلى قاعدة البيانات — أُعيدت الشاشة إلى الحالة الفعلية.'
+      );
+      fetchSettlementData(true);
     } finally {
       setProcessingId(null);
     }
@@ -506,16 +531,6 @@ export const SubCashboxesSettlementPage: React.FC = () => {
 
     setBatchSubmitting(true);
     try {
-      const settledMap = getSettledMap();
-      const selectedVouchersList = modalUnconfirmedVouchers.filter((v) =>
-        batchSelectedVoucherIds.has(v.id)
-      );
-
-      selectedVouchersList.forEach((v) => {
-        settledMap[v.id] = true;
-      });
-      saveSettledMap(settledMap);
-
       await apiRequest('/api/cashboxes-banks/settle-batch', {
         method: 'POST',
         body: JSON.stringify({
@@ -534,7 +549,8 @@ export const SubCashboxesSettlementPage: React.FC = () => {
       );
 
       setBatchModalOpen(false);
-      fetchSettlementData();
+      // صامتة: تجدّد بطاقات الصناديق بعد الدفعة دون دوّامة تحميل تمسح الشاشة.
+      fetchSettlementData(true);
     } catch (err: any) {
       showErrorNotification('خطأ في التحصيل', err.message || 'حدث خطأ أثناء تأكيد التحصيل.');
     } finally {
@@ -974,23 +990,33 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                       {/* 1. Confirmation Toggle Switch */}
                       <td className="py-2.5 px-3.5 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <Switch
-                            size="sm"
-                            color="emerald"
-                            disabled={isBusy}
-                            checked={isConfirmed}
-                            onChange={(e) => handleToggleSettlement(item, e.currentTarget.checked)}
-                            className="cursor-pointer"
-                          />
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10.5px] font-black ${
-                              isConfirmed
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                : 'bg-slate-100 text-slate-700 border border-slate-200'
-                            }`}
-                          >
-                            {isConfirmed ? (isAr ? 'مؤكد ومستلم' : 'Settled') : (isAr ? 'قيد التحصيل' : 'Pending')}
-                          </span>
+                          {/* سند على القاصة الرئيسية أصلاً لا يُحصَّل — لا قيد توريد له،
+                              فيُعطَّل تبديله ويوسَم «على الرئيسي» بدل تبديلٍ يكذب. */}
+                          {item.isMainCashbox ? (
+                            <span className="px-2 py-0.5 rounded-md text-[10.5px] font-black bg-amber-50 text-amber-800 border border-amber-200">
+                              {isAr ? 'على الصندوق الرئيسي' : 'On main cashbox'}
+                            </span>
+                          ) : (
+                            <>
+                              <Switch
+                                size="sm"
+                                color="emerald"
+                                disabled={isBusy}
+                                checked={isConfirmed}
+                                onChange={(e) => handleToggleSettlement(item, e.currentTarget.checked)}
+                                className="cursor-pointer"
+                              />
+                              <span
+                                className={`px-2 py-0.5 rounded-md text-[10.5px] font-black ${
+                                  isConfirmed
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                    : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                }`}
+                              >
+                                {isConfirmed ? (isAr ? 'مؤكد ومستلم' : 'Settled') : (isAr ? 'قيد التحصيل' : 'Pending')}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </td>
 
@@ -1433,6 +1459,80 @@ export const SubCashboxesSettlementPage: React.FC = () => {
           </div>
         )}
       </Drawer>
+
+      {/* ── تحذير رفع تأكيد التحصيل ── */}
+      <Modal
+        opened={revertTarget !== null}
+        onClose={() => !revertBusy && setRevertTarget(null)}
+        centered
+        radius="lg"
+        withCloseButton={false}
+        size="md"
+      >
+        {revertTarget && (
+          <div className="space-y-4 text-slate-900" dir={isAr ? 'rtl' : 'ltr'}>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
+                <IconAlertTriangle size={22} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm">
+                  {isAr ? 'رفع تأكيد التحصيل؟' : 'Revert this settlement?'}
+                </h3>
+                <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                  {revertTarget.voucherNumber} — {Number(revertTarget.amount).toLocaleString('en-US')}{' '}
+                  {revertTarget.currency}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50/60 border border-rose-200 rounded-xl p-3 text-[11.5px] font-medium leading-relaxed text-rose-900">
+              {isAr ? (
+                <>
+                  سيؤدي هذا إلى <b>حذف قيد التوريد المحاسبي</b> الخاص بهذا السند من القيود
+                  اليومية، و<b>إعادة المبلغ</b> من صندوق الشركة الرئيسي إلى الصندوق الفرعي [
+                  {revertTarget.cashboxName}]، ويعود السند إلى حالة «قيد التحصيل».
+                </>
+              ) : (
+                <>
+                  This deletes the posted clearance journal entry and moves the amount back from
+                  the main cashbox to [{revertTarget.cashboxName}]; the voucher returns to
+                  pending collection.
+                </>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={revertBusy}
+                onClick={() => setRevertTarget(null)}
+                className="h-11 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 font-extrabold text-xs cursor-pointer disabled:opacity-50"
+              >
+                {isAr ? 'إبقاء التحصيل' : 'Keep settled'}
+              </button>
+              <button
+                type="button"
+                disabled={revertBusy}
+                onClick={async () => {
+                  const target = revertTarget;
+                  setRevertBusy(true);
+                  try {
+                    await performToggleSettlement(target, false);
+                  } finally {
+                    setRevertBusy(false);
+                    setRevertTarget(null);
+                  }
+                }}
+                className="h-11 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {revertBusy && <Loader size={14} color="white" />}
+                {isAr ? 'نعم، ارفع التأكيد' : 'Yes, revert'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };
