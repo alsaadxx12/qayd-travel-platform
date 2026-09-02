@@ -950,16 +950,16 @@ export const TicketsPage: React.FC = () => {
       dir={direction}
       style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
     >
-      {/* ── 1. KPI CARDS + LOTTIE ANIMATION (Height 118px) ── */}
-      <div className="flex gap-3 items-stretch h-[118px]">
-        {/* KPI Cards (First in RTL) */}
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 h-full">
+      {/* ── 1. KPI CARDS + LOTTIE ANIMATION (Responsive flex/grid) ── */}
+      <div className="flex flex-col xl:flex-row gap-2.5 sm:gap-3 items-stretch">
+        {/* KPI Cards */}
+        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-3">
           {/* Card 1: Total Sales */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[14px] px-3.5 py-2.5 shadow-2xs flex flex-col justify-between h-full hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-bold text-slate-800">{t('tickets.totalSales')}</span>
-              <div className="w-[32px] h-[32px] rounded-[8px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-                <Banknote size={17} strokeWidth={1.85} />
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3 sm:px-3.5 sm:py-2.5 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all min-h-[92px]">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11.5px] sm:text-[12px] font-bold text-slate-800">{t('tickets.totalSales')}</span>
+              <div className="w-[28px] sm:w-[32px] h-[28px] sm:h-[32px] rounded-[8px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <Banknote size={16} strokeWidth={1.85} />
               </div>
             </div>
             <div>
@@ -977,14 +977,14 @@ export const TicketsPage: React.FC = () => {
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
-                    <span className="text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
+                    <span className="text-[14px] sm:text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
                       ${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
-                    <span className="text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
+                    <span className="text-[13px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
                       {kpis.totalSellIQD.toLocaleString()} <span className="text-[9px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                     </span>
                   </div>
@@ -994,11 +994,11 @@ export const TicketsPage: React.FC = () => {
           </div>
 
           {/* Card 2: Total Buy Cost */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[14px] px-3.5 py-2.5 shadow-2xs flex flex-col justify-between h-full hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-bold text-slate-800">{t('tickets.totalCost')}</span>
-              <div className="w-[32px] h-[32px] rounded-[8px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-                <ReceiptText size={17} strokeWidth={1.85} />
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3 sm:px-3.5 sm:py-2.5 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all min-h-[92px]">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11.5px] sm:text-[12px] font-bold text-slate-800">{t('tickets.totalCost')}</span>
+              <div className="w-[28px] sm:w-[32px] h-[28px] sm:h-[32px] rounded-[8px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <ReceiptText size={16} strokeWidth={1.85} />
               </div>
             </div>
             <div>
@@ -1016,14 +1016,14 @@ export const TicketsPage: React.FC = () => {
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
-                    <span className="text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
+                    <span className="text-[14px] sm:text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
                       ${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
-                    <span className="text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
+                    <span className="text-[13px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
                       {kpis.totalBuyIQD.toLocaleString()} <span className="text-[9px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                     </span>
                   </div>
@@ -1033,11 +1033,11 @@ export const TicketsPage: React.FC = () => {
           </div>
 
           {/* Card 3: Net Profit */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[14px] px-3.5 py-2.5 shadow-2xs flex flex-col justify-between h-full hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-bold text-slate-800">{t('tickets.netProfit')}</span>
-              <div className="w-[32px] h-[32px] rounded-[8px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
-                <TrendingUp size={17} strokeWidth={1.85} />
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3 sm:px-3.5 sm:py-2.5 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all min-h-[92px] sm:col-span-2 md:col-span-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11.5px] sm:text-[12px] font-bold text-slate-800">{t('tickets.netProfit')}</span>
+              <div className="w-[28px] sm:w-[32px] h-[28px] sm:h-[32px] rounded-[8px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
+                <TrendingUp size={16} strokeWidth={1.85} />
               </div>
             </div>
             <div>
@@ -1055,14 +1055,14 @@ export const TicketsPage: React.FC = () => {
               ) : canViewProfits ? (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
-                    <span className={`text-[16px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
+                    <span className={`text-[14px] sm:text-[16px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
                       {kpis.totalProfitUSD > 0 ? `+$${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : kpis.totalProfitUSD < 0 ? `-$${Math.abs(kpis.totalProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `$0.00`}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
-                    <span className={`text-[15px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                    <span className="text-[9.5px] sm:text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
+                    <span className={`text-[13px] sm:text-[15px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
                       {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`} <span className="text-[9px] font-sans font-bold">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                     </span>
                   </div>
@@ -1088,12 +1088,9 @@ export const TicketsPage: React.FC = () => {
           onClick={() => {
             ticketFileInputRef.current?.click();
           }}
-          className="relative hidden lg:flex w-[190px] shrink-0 bg-white border border-[#E5E7EB] hover:border-[#F45A0A] rounded-[14px] shadow-2xs items-center justify-center overflow-hidden p-1 h-full cursor-pointer group transition-all"
+          className="relative hidden xl:flex w-[180px] shrink-0 bg-white border border-[#E5E7EB] hover:border-[#F45A0A] rounded-[14px] shadow-2xs items-center justify-center overflow-hidden p-1 min-h-[92px] cursor-pointer group transition-all"
           onMouseEnter={() => lottieRef.current?.play()}
           onMouseLeave={() => {
-            // lottie-react 3 لا يعرف goToAndStop — كان النداء يرمي استثناءً في كل
-            // مرة يغادر فيها المؤشّر البطاقة. وstop() هنا تفعل الأمرين: توقف وتعود
-            // إلى أول إطار.
             lottieRef.current?.stop();
           }}
           title={language === 'ar' ? '📸 انقر مباشرة لاختيار ملف التذكرة أو الصق لقطة الشاشة (Ctrl+V)' : '📸 Click directly to select ticket file or paste screenshot (Ctrl+V)'}
@@ -1115,12 +1112,12 @@ export const TicketsPage: React.FC = () => {
       </div>
 
       {/* ── 2. FILTERS BAR ── */}
-      <div className="bg-white rounded-[14px] border border-[#E5E7EB] px-4 py-3 shadow-2xs">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 sm:gap-3">
           {/* Right Group: Search + Dates */}
-          <div className="flex items-center gap-3 flex-wrap flex-1 min-w-[300px]">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-1">
             {/* Search Input */}
-            <div className="relative min-w-[200px] max-w-[280px] flex-1">
+            <div className="relative w-full sm:w-auto flex-1 min-w-[180px] sm:max-w-[280px]">
               <Search size={16} className={`absolute ${direction === 'rtl' ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-slate-400`} />
               <input
                 type="text"
@@ -1143,61 +1140,66 @@ export const TicketsPage: React.FC = () => {
               )}
             </div>
 
-            {/* Date From */}
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs font-bold text-slate-700 shrink-0 select-none bg-slate-100 px-2 py-1 rounded-md">{language === 'ar' ? 'من' : 'From'}</span>
-              <div className="w-[220px]">
-                <SegmentedDatePicker
-                  placeholder={language === 'ar' ? 'من تاريخ' : 'From Date'}
-                  value={dateFrom}
-                  onChange={(d) => {
-                    setDateFrom(d);
-                    setCurrentPage(1);
-                  }}
-                  clearable={true}
-                />
+            {/* Date Pickers Container */}
+            <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+              {/* Date From */}
+              <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+                <span className="text-[11px] font-bold text-slate-700 shrink-0 select-none bg-slate-100 px-2 py-1 rounded-md">{language === 'ar' ? 'من' : 'From'}</span>
+                <div className="w-full sm:w-[170px] md:w-[190px]">
+                  <SegmentedDatePicker
+                    placeholder={language === 'ar' ? 'من تاريخ' : 'From Date'}
+                    value={dateFrom}
+                    onChange={(d) => {
+                      setDateFrom(d);
+                      setCurrentPage(1);
+                    }}
+                    clearable={true}
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* Date To */}
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs font-bold text-slate-700 shrink-0 select-none bg-slate-100 px-2 py-1 rounded-md">{language === 'ar' ? 'إلى' : 'To'}</span>
-              <div className="w-[220px]">
-                <SegmentedDatePicker
-                  placeholder={language === 'ar' ? 'إلى تاريخ' : 'To Date'}
-                  value={dateTo}
-                  onChange={(d) => {
-                    setDateTo(d);
-                    setCurrentPage(1);
-                  }}
-                  clearable={true}
-                />
+              {/* Date To */}
+              <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+                <span className="text-[11px] font-bold text-slate-700 shrink-0 select-none bg-slate-100 px-2 py-1 rounded-md">{language === 'ar' ? 'إلى' : 'To'}</span>
+                <div className="w-full sm:w-[170px] md:w-[190px]">
+                  <SegmentedDatePicker
+                    placeholder={language === 'ar' ? 'إلى تاريخ' : 'To Date'}
+                    value={dateTo}
+                    onChange={(d) => {
+                      setDateTo(d);
+                      setCurrentPage(1);
+                    }}
+                    clearable={true}
+                  />
+                </div>
               </div>
             </div>
           </div>
 
           {/* Left Group: Currency + Action Buttons */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap sm:flex-nowrap pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
             {/* Currency Switcher */}
-            <CurrencySegmentedControl
-              value={currencyFilter}
-              onChange={(val) => {
-                setCurrencyFilter(val);
-                setCurrentPage(1);
-              }}
-              showAllOption={true}
-              showLabel={false}
-            />
+            <div className="shrink-0">
+              <CurrencySegmentedControl
+                value={currencyFilter}
+                onChange={(val) => {
+                  setCurrencyFilter(val);
+                  setCurrentPage(1);
+                }}
+                showAllOption={true}
+                showLabel={false}
+              />
+            </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-1 sm:flex-initial">
               <button
                 type="button"
                 onClick={() => {
                   setEditingTicketData(null);
                   setModalOpen(true);
                 }}
-                className="h-[38px] px-4 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-semibold text-[13px] shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                className="flex-1 sm:flex-initial h-[38px] px-3.5 sm:px-4 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-semibold text-[12.5px] sm:text-[13px] shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
               >
                 <Plus size={15} strokeWidth={2.4} />
                 <span>{t('tickets.newInvoice')}</span>
@@ -1207,7 +1209,7 @@ export const TicketsPage: React.FC = () => {
                 type="button"
                 onClick={() => reloadTicketsFromApi(false)}
                 disabled={ticketsLoading}
-                className="h-[38px] px-3 rounded-[9px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold text-[13px] flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                className="h-[38px] px-2.5 sm:px-3 rounded-[9px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold text-[13px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
                 title={t('tickets.refresh')}
               >
                 <RefreshCw size={14} className={ticketsLoading ? 'animate-spin text-[#F45A0A]' : 'text-[#64748B]'} />
@@ -1218,9 +1220,11 @@ export const TicketsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ── 4. DATA TABLE CARD ── */}
+      {/* ── 4. DATA TABLE / MOBILE CARDS CONTAINER ── */}
       <div className="bg-white rounded-[14px] border border-[#E5E7EB] shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
+        
+        {/* DESKTOP / TABLET VIEW (TABLE) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className={`w-full text-${direction === 'rtl' ? 'right' : 'left'} border-collapse text-[13px]`}>
             {/* Table Sticky Header (48px) */}
             <thead>
@@ -1448,7 +1452,7 @@ export const TicketsPage: React.FC = () => {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleTicketAudit(tRow.id, !tRow.isAudited);
+                            toggleTicketAudit(tRow.id || tRow.rawInvoice?.id || tRow.rawInvoice?.invoiceNumber, !tRow.isAudited);
                           }}
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                             tRow.isAudited
@@ -1706,19 +1710,182 @@ export const TicketsPage: React.FC = () => {
           </table>
         </div>
 
+        {/* MOBILE / SMALL WINDOW VIEW (RESPONSIVE CARDS) */}
+        <div className="block md:hidden divide-y divide-slate-100 p-2 sm:p-3 space-y-2.5">
+          {filteredTickets.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs">
+              {language === 'ar' ? 'لا توجد فواتير تذاكر مطابقة' : 'No matching ticket invoices'}
+            </div>
+          ) : viewMode === 'aggregated' ? (
+            paginatedTickets.map((tRow, idx) => {
+              const isUSD = (tRow.currency || '').toUpperCase().includes('USD') || (tRow.currency || '').includes('$');
+              const airlineObj = findAirlineObj(tRow.rawAirlineId || tRow.airline);
+              const isProfitPositive = Number(tRow.profit) > 0;
+              const isProfitNegative = Number(tRow.profit) < 0;
+              const paymentLabel = resolvePaymentLabel(tRow.rawPaymentMethod, tRow.rawPaymentType, language);
+
+              return (
+                <div
+                  key={tRow.id || idx}
+                  onClick={() => {
+                    setEditingTicketData(tRow.rawInvoice || tRow);
+                    setModalOpen(true);
+                  }}
+                  className="bg-white border border-slate-200/90 hover:border-[#F45A0A]/40 rounded-xl p-3 shadow-2xs space-y-2.5 active:bg-orange-50/10 cursor-pointer transition-all"
+                >
+                  {/* Top Header: Invoice No + Status/Audit + Passenger Count */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-black text-slate-900 text-xs">
+                        {tRow.number}
+                      </span>
+                      <span className="font-mono text-[10px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
+                        {tRow.passengersCount} {language === 'ar' ? 'مسافر' : 'Pax'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleTicketAudit(tRow.id || tRow.rawInvoice?.id || tRow.rawInvoice?.invoiceNumber, !tRow.isAudited);
+                        }}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                          tRow.isAudited
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}
+                      >
+                        {tRow.isAudited ? <BadgeCheck size={11} /> : <Clock3 size={11} />}
+                        <span>{tRow.isAudited ? t('status.audited') : t('status.unaudited')}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Middle Row: Airline + Route + PNR */}
+                  <div className="flex items-center justify-between gap-2 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {airlineObj?.logo ? (
+                        <img src={airlineObj.logo} alt={tRow.airline} className="w-5 h-5 object-contain rounded shrink-0" onError={(e) => ((e.target as HTMLElement).style.display = 'none')} />
+                      ) : (
+                        <Plane size={13} className="text-[#F45A0A] shrink-0" />
+                      )}
+                      <span className="font-bold text-slate-800 text-xs truncate">
+                        {tRow.airline}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-mono shrink-0">
+                      <span className="text-slate-600 font-bold">{tRow.route}</span>
+                      {tRow.pnr && (
+                        <span className="font-bold text-[#F45A0A] bg-orange-50 px-1 rounded border border-orange-200/60">
+                          {tRow.pnr}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Customer and Supplier */}
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-[9.5px] text-slate-400 font-medium block">{t('table.customer')}</span>
+                      <span className="font-bold text-slate-800 truncate block">{tRow.customer}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9.5px] text-slate-400 font-medium block">{t('table.supplier')}</span>
+                      <span className="font-bold text-slate-800 truncate block">{tRow.supplier}</span>
+                    </div>
+                  </div>
+
+                  {/* Financial Values Grid (Sell, Buy, Profit) */}
+                  <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-slate-100 text-center">
+                    <div className="p-1.5 bg-slate-50 rounded-lg">
+                      <span className="text-[9px] text-slate-400 font-bold block">{t('table.sellTotal')}</span>
+                      <span className="font-black font-mono text-slate-900 text-xs tabular-nums block">
+                        {isUSD ? `$${Number(tRow.totalSell).toLocaleString('en-US')}` : Number(tRow.totalSell).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="p-1.5 bg-slate-50 rounded-lg">
+                      <span className="text-[9px] text-slate-400 font-bold block">{t('table.buyTotal')}</span>
+                      <span className="font-bold font-mono text-slate-700 text-xs tabular-nums block">
+                        {isUSD ? `$${Number(tRow.totalBuy).toLocaleString('en-US')}` : Number(tRow.totalBuy).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="p-1.5 bg-slate-50 rounded-lg">
+                      <span className="text-[9px] text-slate-400 font-bold block">{t('table.profit')}</span>
+                      {canViewProfits ? (
+                        <span className={`font-black font-mono text-xs tabular-nums block ${isProfitPositive ? 'text-[#078B61]' : isProfitNegative ? 'text-[#DC2626]' : 'text-slate-600'}`}>
+                          {isProfitPositive ? '+' : ''}{isUSD ? `$${Number(tRow.profit).toLocaleString('en-US')}` : Number(tRow.profit).toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 font-mono text-xs">••••</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer Row: Date & Payment Method */}
+                  <div className="flex items-center justify-between text-[10.5px] text-slate-500 pt-1">
+                    <span className="font-mono font-medium">
+                      📅 {tRow.issueDate || tRow.date || formatDateShort(tRow.createdAt) || '—'}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold">
+                      {paymentLabel}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            paginatedDetailedTickets.map((dRow, idx) => {
+              const isUSD = (dRow.currency || '').toUpperCase().includes('USD') || (dRow.currency || '').includes('$');
+              const isProfitPositive = Number(dRow.profit) > 0;
+              const isProfitNegative = Number(dRow.profit) < 0;
+
+              return (
+                <div
+                  key={dRow.rowId || idx}
+                  onClick={() => {
+                    setEditingTicketData(dRow.rawInvoice);
+                    setModalOpen(true);
+                  }}
+                  className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs space-y-2 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-black text-slate-900 text-xs">{dRow.ticketNumber}</span>
+                    <span className="font-mono text-[10px] font-bold text-slate-500">{dRow.invoiceNumber}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                    <span>👤 {dRow.passengerName}</span>
+                    <span className="text-slate-400 font-normal">({dRow.ticketType})</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 font-mono">
+                    <span className="text-slate-600">بيع: {isUSD ? `$${dRow.fareSell}` : dRow.fareSell}</span>
+                    <span className="text-slate-600">شراء: {isUSD ? `$${dRow.fareBuy}` : dRow.fareBuy}</span>
+                    {canViewProfits && (
+                      <span className={`font-bold ${isProfitPositive ? 'text-emerald-700' : isProfitNegative ? 'text-rose-700' : 'text-slate-500'}`}>
+                        ربح: {isUSD ? `$${dRow.profit}` : dRow.profit}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
         {/* ── 5. TOTALS FOOTER BAR ── */}
-        <div className="bg-[#F8FAFC] border-t border-[#E5E7EB] px-5 py-3 flex items-center justify-between flex-wrap gap-4 text-xs font-sans">
-          <div className="flex items-center gap-3 text-slate-600 font-semibold">
+        <div className="bg-[#F8FAFC] border-t border-[#E5E7EB] p-2.5 sm:px-5 sm:py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-4 text-xs font-sans">
+          <div className="flex items-center gap-3 text-slate-600 font-semibold flex-wrap">
             <span>{t('totals.matching')} <strong className="font-mono text-slate-900 font-bold">{filteredTickets.length}</strong> {t('totals.invoices')}</span>
             <span>•</span>
             <span>{t('totals.passengers')} <strong className="font-mono text-slate-900 font-bold">{kpis.totalPassengers}</strong></span>
           </div>
 
-          <div className="flex items-center gap-6 flex-wrap">
+          <div className="flex items-center gap-3 sm:gap-6 flex-wrap w-full sm:w-auto justify-between sm:justify-end">
             {/* Total Buy */}
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-400 font-medium">{t('tickets.totalCost')}:</span>
-              <div className="font-mono font-bold text-slate-800 flex items-center gap-2">
+              <span className="text-slate-400 font-medium text-[11px]">{t('tickets.totalCost')}:</span>
+              <div className="font-mono font-bold text-slate-800 flex items-center gap-1.5 text-xs">
                 {(currencyFilter === 'ALL' || currencyFilter === 'USD') && (
                   <span>${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                 )}
@@ -1730,8 +1897,8 @@ export const TicketsPage: React.FC = () => {
 
             {/* Total Sell */}
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-400 font-medium">{t('tickets.totalSales')}:</span>
-              <div className="font-mono font-bold text-slate-900 flex items-center gap-2">
+              <span className="text-slate-400 font-medium text-[11px]">{t('tickets.totalSales')}:</span>
+              <div className="font-mono font-bold text-slate-900 flex items-center gap-1.5 text-xs">
                 {(currencyFilter === 'ALL' || currencyFilter === 'USD') && (
                   <span>${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                 )}
@@ -1744,8 +1911,8 @@ export const TicketsPage: React.FC = () => {
             {/* Net Profit */}
             {canViewProfits && (
               <div className="flex items-center gap-1.5">
-                <span className="text-slate-400 font-medium">{t('tickets.netProfit')}:</span>
-                <div className="font-mono font-bold text-[#078B61] flex items-center gap-2">
+                <span className="text-slate-400 font-medium text-[11px]">{t('tickets.netProfit')}:</span>
+                <div className="font-mono font-bold text-[#078B61] flex items-center gap-1.5 text-xs">
                   {(currencyFilter === 'ALL' || currencyFilter === 'USD') && (
                     <span>{kpis.totalProfitUSD >= 0 ? '+' : ''}${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                   )}
@@ -1759,16 +1926,16 @@ export const TicketsPage: React.FC = () => {
         </div>
 
         {/* ── 6. PAGINATION BAR ── */}
-        <div className="bg-white px-5 py-3 border-t border-[#E5E7EB] flex items-center justify-between flex-wrap gap-4 text-xs font-sans">
+        <div className="bg-white p-2.5 sm:px-5 sm:py-3 border-t border-[#E5E7EB] flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-4 text-xs font-sans">
           {/* Showing range */}
-          <div className="text-slate-500 font-medium">
+          <div className="text-slate-500 font-medium text-[11px] sm:text-xs text-center sm:text-start">
             {t('pagination.showing')} {filteredTickets.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filteredTickets.length)} {t('pagination.of')} {filteredTickets.length} {t('totals.invoices')}
           </div>
 
           {/* Page Buttons and Size Selector */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
             {/* Page Size Selector */}
-            <div className="flex items-center gap-1 text-slate-500">
+            <div className="flex items-center gap-1 text-slate-500 text-[11px]">
               <span>{t('pagination.pageSize')}</span>
               <select
                 value={pageSize}
@@ -1796,7 +1963,7 @@ export const TicketsPage: React.FC = () => {
                 {direction === 'rtl' ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
               </button>
 
-              <span className="px-3 text-xs font-mono font-bold text-slate-800">
+              <span className="px-2.5 text-xs font-mono font-bold text-slate-800">
                 {currentPage} / {totalPages}
               </span>
 

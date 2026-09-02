@@ -28,12 +28,12 @@ export const AccountingTopBar: React.FC<AccountingTopBarProps> = () => {
 
   return (
     <header
-      className="h-[60px] bg-white px-4 flex items-center justify-between sticky top-0 z-40 no-print shrink-0 text-xs select-none border-b border-[#E5E7EB] font-sans"
+      className="h-[60px] bg-white px-4 flex items-center justify-between sticky top-0 z-40 no-print shrink-0 text-xs select-none border-b border-[#E5E7EB] font-sans relative"
       dir={direction}
       style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
     >
-      {/* Sidebar toggle button */}
-      <div className="flex items-center gap-3 shrink-0">
+      {/* Sidebar toggle button (Left / Start) */}
+      <div className="flex items-center gap-3 shrink-0 z-10">
         <button
           type="button"
           onClick={toggleSidebar}
@@ -44,11 +44,9 @@ export const AccountingTopBar: React.FC<AccountingTopBarProps> = () => {
         </button>
       </div>
 
-      {/* Centered Global Search */}
-      <div className="flex-1 flex justify-center px-4 max-w-xl">
-        <div className="w-full max-w-[500px]">
-          <GlobalSearch />
-        </div>
+      {/* Absolutely Mathematically Centered Global Search (Never pushed by side elements) */}
+      <div className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[460px] px-2 pointer-events-auto z-10">
+        <GlobalSearch />
       </div>
 
       {/* Clean Neutral Exchange Rate Pill + Lottie Calculator + Notifications + User */}

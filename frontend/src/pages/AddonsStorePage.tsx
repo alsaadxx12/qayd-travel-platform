@@ -289,7 +289,7 @@ export const AddonsStorePage: React.FC = () => {
       iconColor: 'text-[#F45A0A]',
       iconBg: 'bg-orange-50 border-orange-200',
       tagType: 'usage' as const,
-      tagLabel: isAr ? 'Brevo نشط' : 'Brevo Active',
+      tagLabel: 'Brevo',
       statLabel1: isAr ? 'الحد اليومي' : 'Daily Limit',
       statVal1: `${brevoInfo?.credits ?? 300} ${isAr ? 'يومياً' : '/ day'}`,
       statLabel2: isAr ? 'المصادقة' : 'Verification',
@@ -440,7 +440,7 @@ export const AddonsStorePage: React.FC = () => {
                         : 'bg-slate-100 text-slate-500 border border-slate-200'
                     }`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${isEnabled ? 'bg-emerald-600 animate-pulse' : 'bg-slate-400'}`}></span>
-                      <span>{isEnabled ? (isAr ? 'متصلة ونشطة' : 'Active') : (isAr ? 'معطلة' : 'Disabled')}</span>
+                      <span>{isEnabled ? (isAr ? 'نشطة' : 'Active') : (isAr ? 'معطلة' : 'Disabled')}</span>
                     </span>
 
                     <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 border ${addon.iconBg}`}>
@@ -486,17 +486,16 @@ export const AddonsStorePage: React.FC = () => {
 
               {/* 3. Bottom Section: Active Switch, Manage Button */}
               <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
-                <div className="flex items-center gap-1.5 bg-slate-100/80 px-1.5 py-0.5 rounded-lg border border-slate-200/80 shrink-0">
+                {/* الحالة مكتوبة في شارة أعلى البطاقة، والمفتاح يُرى وضعُه — فلا نصّ ثالث يقولها. */}
+                <div className="flex items-center bg-slate-100/80 px-1.5 py-0.5 rounded-lg border border-slate-200/80 shrink-0">
                   <Switch
                     size="xs"
                     color="emerald"
                     checked={isEnabled}
                     onChange={() => toggleAddon(addon.id, addon.nameEn)}
                     className="cursor-pointer"
+                    aria-label={isEnabled ? (isAr ? 'مُفعّلة' : 'Enabled') : (isAr ? 'معطّلة' : 'Disabled')}
                   />
-                  <span className="text-[10px] font-black text-slate-700">
-                    {isEnabled ? (isAr ? 'مُفعّلة' : 'Enabled') : (isAr ? 'معطّلة' : 'Disabled')}
-                  </span>
                 </div>
 
                 {addon.isConfigurable ? (

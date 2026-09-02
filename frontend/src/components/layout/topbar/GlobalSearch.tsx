@@ -623,16 +623,16 @@ export const GlobalSearch: React.FC = () => {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="w-full flex items-center justify-between px-3.5 h-[38px] bg-slate-50/90 hover:bg-white hover:border-[#F45A0A]/40 rounded-xl border border-slate-200 text-slate-500 transition-colors cursor-pointer text-xs select-none shadow-2xs group"
+          className="w-full flex items-center justify-between px-3.5 h-[36px] bg-[#F1F3F5] hover:bg-[#E9ECEF] rounded-[9px] border border-transparent hover:border-slate-200 text-slate-500 transition-colors cursor-pointer text-xs select-none group"
         >
           <div className="flex items-center gap-2.5 truncate">
-            <Search size={15} className="text-slate-400 group-hover:text-[#F45A0A] transition-colors shrink-0" />
+            <Search size={14} className="text-slate-400 group-hover:text-[#F45A0A] transition-colors shrink-0" />
             <span className="truncate text-[12.5px] font-medium text-slate-600 group-hover:text-slate-900">
               {isAr ? 'البحث السريع في التذاكر، الفيز، الاسترجاعات، الحسابات...' : 'Search tickets, visas, refunds, accounts, partners...'}
             </span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <kbd className="bg-white border border-slate-200 px-1.5 py-0.5 text-[10.5px] rounded-md font-mono text-slate-500 font-bold shadow-2xs group-hover:text-[#F45A0A] group-hover:border-orange-300 transition-colors">
+            <kbd className="bg-white/80 border border-slate-200/80 px-1.5 py-0.5 text-[10px] rounded font-mono text-slate-500 font-bold shadow-2xs group-hover:text-[#F45A0A] group-hover:border-orange-300 transition-colors">
               Ctrl + K
             </kbd>
           </div>
