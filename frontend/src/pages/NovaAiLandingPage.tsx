@@ -15,12 +15,12 @@ export const NovaAiLandingPage: React.FC = () => {
 
   return (
     <div
-      className="relative nova-ai-root min-h-screen bg-[#0a0a0a] text-white selection:bg-[#F45A0A]/40 overflow-x-hidden font-sans"
+      className="relative nova-ai-root min-h-screen bg-transparent text-white selection:bg-[#F45A0A]/40 overflow-x-hidden font-sans"
       dir="ltr"
     >
       <ScrollVideo />
       <Navbar />
-      <main>
+      <main className="relative z-10">
         <SectionOne />
         <div aria-hidden className="h-[80vh]" />
         <SectionTwo />

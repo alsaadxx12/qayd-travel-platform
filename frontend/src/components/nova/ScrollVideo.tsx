@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const VIDEO_URL =
+const LOCAL_VIDEO_URL = '/nova-bg.mp4';
+const REMOTE_VIDEO_URL =
   'https://res-a.cloneweb.ai/prompt/web-design/prompt-assets/prompt-040505207cb53470/hf-20260611-104107-121bfb5a-b1df-4e0d-8240-25b81f7cc85d.mp4';
 
 export const ScrollVideo: React.FC = () => {
@@ -9,6 +10,7 @@ export const ScrollVideo: React.FC = () => {
 
   const [frames, setFrames] = useState<ImageBitmap[]>([]);
   const [framesReady, setFramesReady] = useState(false);
+  const [videoSrc, setVideoSrc] = useState(LOCAL_VIDEO_URL);
 
   // Animation and progress refs
   const smoothedProgressRef = useRef<number>(0);
@@ -23,7 +25,7 @@ export const ScrollVideo: React.FC = () => {
     framesRef.current = frames;
   }, [frames]);
 
-  // 1. Frame Extraction
+  // 1. Frame Extraction from Video
   useEffect(() => {
     let cancelled = false;
     let objectUrl: string | null = null;
@@ -32,7 +34,10 @@ export const ScrollVideo: React.FC = () => {
 
     const loadAndExtract = async () => {
       try {
-        const response = await fetch(VIDEO_URL);
+        let response = await fetch(LOCAL_VIDEO_URL).catch(() => null);
+        if (!response || !response.ok) {
+          response = await fetch(REMOTE_VIDEO_URL);
+        }
         if (!response.ok) throw new Error('Video fetch failed');
         const blob = await response.blob();
         if (cancelled) return;
@@ -91,8 +96,7 @@ export const ScrollVideo: React.FC = () => {
           setFramesReady(true);
         }
       } catch (err) {
-        // In case of CORS or memory error, smoothly fallback to standard scrubbing
-        console.warn('Frame pre-extraction fallback to video element:', err);
+        console.warn('Frame extraction notice, using fallback video:', err);
       }
     };
 
@@ -139,6 +143,28 @@ export const ScrollVideo: React.FC = () => {
     window.addEventListener('resize', updateCanvasSize);
     updateCanvasSize();
 
+    // Helper to draw a bitmap with cover math
+    const drawBitmap = (bitmap: ImageBitmap) => {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (!canvas || !ctx || !bitmap) return;
+
+      const cw = canvas.width;
+      const ch = canvas.height;
+      const bw = bitmap.width;
+      const bh = bitmap.height;
+
+      // "Cover" math: max ratio, center the overflow
+      const scale = Math.max(cw / bw, ch / bh);
+      const sw = bw * scale;
+      const sh = bh * scale;
+      const sx = (cw - sw) / 2;
+      const sy = (ch - sh) / 2;
+
+      ctx.clearRect(0, 0, cw, ch);
+      ctx.drawImage(bitmap, sx, sy, sw, sh);
+    };
+
     // Render loop
     const renderLoop = () => {
       // Smooth progress: smoothed += (target - smoothed) * 0.1
@@ -156,26 +182,7 @@ export const ScrollVideo: React.FC = () => {
 
         if (frameIndex !== currentFrameIndexRef.current) {
           currentFrameIndexRef.current = frameIndex;
-          const canvas = canvasRef.current;
-          const ctx = canvas?.getContext('2d');
-          const bitmap = activeFrames[frameIndex];
-
-          if (canvas && ctx && bitmap) {
-            const cw = canvas.width;
-            const ch = canvas.height;
-            const bw = bitmap.width;
-            const bh = bitmap.height;
-
-            // "Cover" math: max ratio, center the overflow
-            const scale = Math.max(cw / bw, ch / bh);
-            const sw = bw * scale;
-            const sh = bh * scale;
-            const sx = (cw - sw) / 2;
-            const sy = (ch - sh) / 2;
-
-            ctx.clearRect(0, 0, cw, ch);
-            ctx.drawImage(bitmap, sx, sy, sw, sh);
-          }
+          drawBitmap(activeFrames[frameIndex]);
         }
       } else {
         // Fallback video scrubbing
@@ -204,39 +211,51 @@ export const ScrollVideo: React.FC = () => {
   }, []);
 
   return (
-    <div className="fixed inset-0 -z-10 bg-[#0a0a0a] overflow-hidden">
+    <div className="fixed inset-0 z-0 bg-[#0a0a0a] overflow-hidden pointer-events-none">
       {/* Canvas for pre-extracted ImageBitmap frames */}
       <canvas
         ref={canvasRef}
-        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
           framesReady ? 'opacity-100' : 'opacity-0'
         }`}
       />
 
       {/* Fallback video element while frames are extracting */}
-      {!framesReady && (
-        <video
-          ref={fallbackVideoRef}
-          src={VIDEO_URL}
-          muted
-          playsInline
-          preload="auto"
-          onSeeked={() => {
-            isSeekingRef.current = false;
-          }}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      )}
+      <video
+        ref={fallbackVideoRef}
+        src={videoSrc}
+        muted
+        playsInline
+        autoPlay
+        preload="auto"
+        onLoadedData={(e) => {
+          const v = e.currentTarget;
+          if (v.paused) {
+            v.play().catch(() => undefined);
+          }
+        }}
+        onError={() => {
+          if (videoSrc !== REMOTE_VIDEO_URL) {
+            setVideoSrc(REMOTE_VIDEO_URL);
+          }
+        }}
+        onSeeked={() => {
+          isSeekingRef.current = false;
+        }}
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+          framesReady ? 'opacity-0' : 'opacity-100'
+        }`}
+      />
 
       {/* Contrast Overlay with subtle brand warmth */}
       <div className="absolute inset-0 bg-black/20 pointer-events-none" />
 
-      {/* Brand Color Ambient Glow (Brand Orange warmth) */}
+      {/* Brand Color Ambient Glow (Signature Brand Orange warmth) */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-35 mix-blend-screen"
+        className="absolute inset-0 pointer-events-none opacity-30 mix-blend-screen"
         style={{
           background:
-            'radial-gradient(circle at 80% 20%, rgba(244,90,10,0.18) 0%, transparent 60%), radial-gradient(circle at 20% 80%, rgba(221,79,5,0.12) 0%, transparent 50%)',
+            'radial-gradient(circle at 85% 15%, rgba(244,90,10,0.22) 0%, transparent 60%), radial-gradient(circle at 15% 85%, rgba(221,79,5,0.15) 0%, transparent 55%)',
         }}
       />
     </div>
