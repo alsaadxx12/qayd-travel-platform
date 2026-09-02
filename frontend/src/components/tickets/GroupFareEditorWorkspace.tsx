@@ -847,226 +847,242 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
             </div>
 
             {/* ── TWO SEPARATE CARDS: Customer Details (Left) + Supplier & Flight Details (Right) ── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start font-sans">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch font-sans">
               
               {/* ── CARD 1: CUSTOMER DETAILS (معلومات العميل) ── */}
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 space-y-3.5 shadow-2xs">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-full bg-sky-50 text-sky-700 border border-sky-200 flex items-center justify-center shrink-0">
-                      <User size={16} />
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 shadow-2xs flex flex-col justify-between h-full">
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-sky-50 text-sky-700 border border-sky-200 flex items-center justify-center shrink-0">
+                        <User size={16} />
+                      </div>
+                      <div>
+                        <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
+                          {isAr ? 'معلومات العميل' : 'Customer Details'}
+                        </h4>
+                        <p className="text-[11px] text-[#6B7280]">
+                          {isAr ? 'العميل ونوع البيع وطريقة الاستلام والصندوق' : 'Customer, payment term, receiving method & box'}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
-                        {isAr ? 'معلومات العميل' : 'Customer Details'}
-                      </h4>
-                      <p className="text-[11px] text-[#6B7280]">
-                        {isAr ? 'العميل ونوع البيع وطريقة الاستلام والصندوق' : 'Customer, payment term, receiving method & box'}
-                      </p>
-                    </div>
+
+                    {paymentType === 'آجل' && (
+                      <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full shrink-0">
+                        {isAr ? 'بيع آجل' : 'Credit'}
+                      </span>
+                    )}
                   </div>
 
-                  {paymentType === 'آجل' && (
-                    <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full shrink-0">
-                      {isAr ? 'بيع آجل' : 'Credit'}
-                    </span>
-                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Customer Combobox */}
+                    <div>
+                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'العميل *' : 'Customer *'}
+                      </label>
+                      <SearchableCombobox
+                        value={customerName}
+                        onChange={(val) => setCustomerName(val || '')}
+                        options={customerOptions}
+                        placeholder={isAr ? 'اختر العميل...' : 'Select customer...'}
+                        allowCustomValue
+                      />
+                    </div>
+
+                    {/* Payment Term / Sale Type */}
+                    <div>
+                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'نوع البيع' : 'Sale Type'}
+                      </label>
+                      <SearchableCombobox
+                        value={paymentType}
+                        onChange={(val) => {
+                          setPaymentType(val || 'نقدي');
+                        }}
+                        options={[
+                          { value: 'نقدي', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
+                          { value: 'آجل', label: isAr ? 'آجل (ذمة العميل)' : 'Credit (On Account)' },
+                        ]}
+                        clearable={false}
+                      />
+                    </div>
+
+                    {/* Cash Details: Receiving Method & Cashbox */}
+                    {paymentType === 'نقدي' && (
+                      <>
+                        <div>
+                          <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'طريقة الاستلام *' : 'Receiving Method *'}
+                          </label>
+                          <SearchableCombobox
+                            value={paymentMethod}
+                            onChange={(val) => {
+                              const nextMethod = val || 'CASH_HAND';
+                              setPaymentMethod(nextMethod);
+                              if (employeeName) {
+                                applyEmployeeCashbox(employeeName, availableCashboxes);
+                              }
+                            }}
+                            options={paymentMethodsList}
+                            clearable={false}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                            {isAr ? 'صندوق استلام قيمة البيع *' : 'Receiving Cashbox *'}
+                          </label>
+                          <SearchableCombobox
+                            value={receivingCashbox}
+                            onChange={(val) => setReceivingCashbox(val || '')}
+                            options={formattedCashboxesData}
+                            placeholder={isAr ? 'اختر صندوق التحصيل...' : 'Select cashbox...'}
+                          />
+                          {autoMatchedCashboxName && (
+                            <p className="mt-1 text-[11px] text-emerald-700 font-medium">
+                              {isAr ? `تلقائي من صندوق الموظف: ${autoMatchedCashboxName}` : `Auto from employee box: ${autoMatchedCashboxName}`}
+                            </p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Customer Combobox */}
-                  <div>
-                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'العميل *' : 'Customer *'}
-                    </label>
-                    <SearchableCombobox
-                      value={customerName}
-                      onChange={(val) => setCustomerName(val || '')}
-                      options={customerOptions}
-                      placeholder={isAr ? 'اختر العميل...' : 'Select customer...'}
-                      allowCustomValue
-                    />
-                  </div>
-
-                  {/* Payment Term / Sale Type */}
-                  <div>
-                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'نوع البيع' : 'Sale Type'}
-                    </label>
-                    <SearchableCombobox
-                      value={paymentType}
-                      onChange={(val) => {
-                        setPaymentType(val || 'نقدي');
-                      }}
-                      options={[
-                        { value: 'نقدي', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
-                        { value: 'آجل', label: isAr ? 'آجل (ذمة العميل)' : 'Credit (On Account)' },
-                      ]}
-                      clearable={false}
-                    />
-                  </div>
-
-                  {/* Cash Details: Receiving Method & Cashbox */}
-                  {paymentType === 'نقدي' && (
-                    <>
-                      <div>
-                        <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'طريقة الاستلام *' : 'Receiving Method *'}
-                        </label>
-                        <SearchableCombobox
-                          value={paymentMethod}
-                          onChange={(val) => {
-                            const nextMethod = val || 'CASH_HAND';
-                            setPaymentMethod(nextMethod);
-                            if (employeeName) {
-                              applyEmployeeCashbox(employeeName, availableCashboxes);
-                            }
-                          }}
-                          options={paymentMethodsList}
-                          clearable={false}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'صندوق استلام قيمة البيع *' : 'Receiving Cashbox *'}
-                        </label>
-                        <SearchableCombobox
-                          value={receivingCashbox}
-                          onChange={(val) => setReceivingCashbox(val || '')}
-                          options={formattedCashboxesData}
-                          placeholder={isAr ? 'اختر صندوق التحصيل...' : 'Select cashbox...'}
-                        />
-                        {autoMatchedCashboxName && (
-                          <p className="mt-1 text-[11px] text-emerald-700 font-medium">
-                            {isAr ? `تلقائي من صندوق الموظف: ${autoMatchedCashboxName}` : `Auto from employee box: ${autoMatchedCashboxName}`}
-                          </p>
-                        )}
-                      </div>
-                    </>
-                  )}
+                {/* Bottom Helper Bar in Customer Card to balance card height */}
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="font-semibold">
+                    {paymentType === 'نقدي'
+                      ? (isAr ? '✓ تحصيل فوري وقيد يومية للصندوق' : '✓ Immediate cash receipt posted to cashbox')
+                      : (isAr ? '✓ قيد محاسبي مباشر على حساب ذمة العميل' : '✓ Directly billed to customer account receivable')}
+                  </span>
+                  <span className="text-[10.5px] font-mono text-slate-400">
+                    {customerName ? (isAr ? 'العميل محدد' : 'Customer set') : (isAr ? 'بانتظار التحديد' : 'Pending')}
+                  </span>
                 </div>
               </div>
 
               {/* ── CARD 2: SUPPLIER & FLIGHT DETAILS (معلومات المورد والطيران) ── */}
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 space-y-3.5 shadow-2xs">
-                <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-                  <div className="w-8 h-8 rounded-full bg-violet-50 text-violet-700 border border-violet-200 flex items-center justify-center shrink-0">
-                    <Building2 size={16} />
-                  </div>
-                  <div>
-                    <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
-                      {isAr ? 'معلومات المورد والطيران والرحلة' : 'Supplier & Flight Details'}
-                    </h4>
-                    <p className="text-[11px] text-[#6B7280]">
-                      {isAr ? 'المورد والخطوط ومسار الكروب وموظف الإصدار' : 'Supplier, airline, route, staff & dates'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Supplier */}
-                  <div>
-                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'المورد / جهة الإصدار' : 'Supplier Account'}
-                    </label>
-                    <SearchableCombobox
-                      value={supplierAccount}
-                      onChange={(val) => setSupplierAccount(val || '')}
-                      options={supplierOptions}
-                      placeholder={isAr ? 'اختر المورد...' : 'Select supplier...'}
-                    />
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 sm:p-5 shadow-2xs flex flex-col justify-between h-full space-y-3.5">
+                <div>
+                  <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100 mb-3.5">
+                    <div className="w-8 h-8 rounded-full bg-violet-50 text-violet-700 border border-violet-200 flex items-center justify-center shrink-0">
+                      <Building2 size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
+                        {isAr ? 'معلومات المورد والطيران والرحلة' : 'Supplier & Flight Details'}
+                      </h4>
+                      <p className="text-[11px] text-[#6B7280]">
+                        {isAr ? 'المورد والخطوط ومسار الكروب وموظف الإصدار' : 'Supplier, airline, route, staff & dates'}
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Airline */}
-                  <div>
-                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'شركة الطيران' : 'Airline'}
-                    </label>
-                    <SearchableCombobox
-                      value={airline}
-                      onChange={(val) => setAirline(val || '')}
-                      options={airlineOptions}
-                      placeholder={isAr ? 'اختر شركة الطيران...' : 'Select airline...'}
-                    />
-                  </div>
-
-                  {/* General Route */}
-                  <div>
-                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'مسار الرحلة العام' : 'General Flight Route'}
-                    </label>
-                    <input
-                      type="text"
-                      dir="ltr"
-                      placeholder="e.g. BGW-IST-BGW"
-                      value={generalRoute}
-                      onChange={(e) => setGeneralRoute(e.target.value.toUpperCase())}
-                      style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                      className="w-full h-[38px] px-3 rounded-[9px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-mono font-bold text-slate-900 uppercase outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A]"
-                    />
-                  </div>
-
-                  {/* Issuing Employee */}
-                  <div>
-                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'موظف الإصدار *' : 'Issuing Employee *'}
-                    </label>
-                    <SearchableCombobox
-                      value={employeeName}
-                      onChange={(val) => {
-                        const nextEmp = val || '';
-                        setEmployeeName(nextEmp);
-                        if (nextEmp) {
-                          applyEmployeeCashbox(nextEmp, availableCashboxes);
-                        }
-                      }}
-                      options={employeeOptions}
-                      placeholder={isAr ? 'اختر الموظف...' : 'Select employee...'}
-                    />
-                  </div>
-
-                  {/* Issue Date */}
-                  <div>
-                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'تاريخ الإصدار' : 'Issue Date'}
-                    </label>
-                    <SegmentedDatePicker
-                      value={issueDate}
-                      onChange={(d) => d && setIssueDate(d)}
-                    />
-                  </div>
-
-                  {/* Travel Date */}
-                  <div>
-                    <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'تاريخ السفر' : 'Travel Date'}
-                    </label>
-                    <SegmentedDatePicker
-                      value={travelDate}
-                      onChange={(d) => setTravelDate(d)}
-                      placeholder={isAr ? 'اختياري...' : 'Optional...'}
-                    />
-                  </div>
-
-                  {/* Exchange Rate (if USD) */}
-                  {currency === 'USD' && (
-                    <div className="sm:col-span-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Supplier */}
+                    <div>
                       <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'سعر الصرف (1$ مقابل د.ع)' : 'Exchange Rate'}
+                        {isAr ? 'المورد / جهة الإصدار' : 'Supplier Account'}
+                      </label>
+                      <SearchableCombobox
+                        value={supplierAccount}
+                        onChange={(val) => setSupplierAccount(val || '')}
+                        options={supplierOptions}
+                        placeholder={isAr ? 'اختر المورد...' : 'Select supplier...'}
+                      />
+                    </div>
+
+                    {/* Airline */}
+                    <div>
+                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'شركة الطيران' : 'Airline'}
+                      </label>
+                      <SearchableCombobox
+                        value={airline}
+                        onChange={(val) => setAirline(val || '')}
+                        options={airlineOptions}
+                        placeholder={isAr ? 'اختر شركة الطيران...' : 'Select airline...'}
+                      />
+                    </div>
+
+                    {/* Issuing Employee */}
+                    <div>
+                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'موظف الإصدار *' : 'Issuing Employee *'}
+                      </label>
+                      <SearchableCombobox
+                        value={employeeName}
+                        onChange={(val) => {
+                          const nextEmp = val || '';
+                          setEmployeeName(nextEmp);
+                          if (nextEmp) {
+                            applyEmployeeCashbox(nextEmp, availableCashboxes);
+                          }
+                        }}
+                        options={employeeOptions}
+                        placeholder={isAr ? 'اختر الموظف...' : 'Select employee...'}
+                      />
+                    </div>
+
+                    {/* General Route */}
+                    <div>
+                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'مسار الرحلة العام' : 'General Flight Route'}
                       </label>
                       <input
                         type="text"
-                        inputMode="numeric"
                         dir="ltr"
-                        value={exchangeRate ? exchangeRate.toLocaleString('en-US') : ''}
-                        onChange={(e) => setExchangeRate(parseCleanNumber(e.target.value))}
+                        placeholder="e.g. BGW-IST-BGW"
+                        value={generalRoute}
+                        onChange={(e) => setGeneralRoute(e.target.value.toUpperCase())}
                         style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                        className="w-full h-[38px] px-3 rounded-[9px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A]"
+                        className="w-full h-[46px] px-3.5 rounded-[11px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13px] font-mono font-bold text-slate-900 uppercase outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-colors"
                       />
                     </div>
-                  )}
 
+                    {/* Issue Date */}
+                    <div>
+                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'تاريخ الإصدار' : 'Issue Date'}
+                      </label>
+                      <SegmentedDatePicker
+                        value={issueDate}
+                        onChange={(d) => d && setIssueDate(d)}
+                      />
+                    </div>
+
+                    {/* Travel Date */}
+                    <div>
+                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'تاريخ السفر' : 'Travel Date'}
+                      </label>
+                      <SegmentedDatePicker
+                        value={travelDate}
+                        onChange={(d) => setTravelDate(d)}
+                        placeholder={isAr ? 'اختياري...' : 'Optional...'}
+                      />
+                    </div>
+
+                    {/* Exchange Rate (if USD) */}
+                    {currency === 'USD' && (
+                      <div className="sm:col-span-2">
+                        <label className="text-[12px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'سعر الصرف (1$ مقابل د.ع)' : 'Exchange Rate'}
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          dir="ltr"
+                          value={exchangeRate ? exchangeRate.toLocaleString('en-US') : ''}
+                          onChange={(e) => setExchangeRate(parseCleanNumber(e.target.value))}
+                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                          className="w-full h-[46px] px-3.5 rounded-[11px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13px] font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-colors"
+                        />
+                      </div>
+                    )}
+
+                  </div>
                 </div>
               </div>
 
