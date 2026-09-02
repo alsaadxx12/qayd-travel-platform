@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader, Menu, Tooltip } from '@mantine/core';
+import { Loader, Menu, Modal, Tooltip } from '@mantine/core';
 import {
   X,
   Users,
@@ -20,14 +20,17 @@ import {
   Armchair,
   TrendingUp,
   Calendar,
-  MapPin,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
+  Layers,
   Sparkles,
-  DollarSign,
+  Palette,
+  ShoppingCart,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  ChevronDown,
 } from 'lucide-react';
-import { SearchableCombobox } from '../ui/SearchableCombobox';
+import { SearchableCombobox, type ComboboxOption } from '../ui/SearchableCombobox';
+import { AccountingDatePicker } from '../common/date/AccountingDatePicker';
 import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
 import { ticketsApi, type TicketData } from '../../api/tickets';
 import { partnersApi } from '../../api/partners';
@@ -36,6 +39,8 @@ import { useLanguageStore } from '../../store/useLanguageStore';
 import {
   COMPONENT_KINDS,
   computeGroupTotals,
+  computeTemplateTotals,
+  createDefaultTemplate,
   designFromTicket,
   emptyDesign,
   encodeDesignIntoNotes,
@@ -44,6 +49,7 @@ import {
   type GroupComponentKind,
   type GroupCustomer,
   type GroupDesign,
+  type GroupTemplate,
 } from './groupDesign';
 
 const KIND_ICON: Record<GroupComponentKind, any> = {
@@ -76,12 +82,12 @@ const formatEnglishNumber = (v: number, decimals = 0): string => {
   });
 };
 
-const money = (v: number, currency: string) => {
+const money = (v: number, currency = 'USD') => {
   const isUSD = currency === 'USD';
   return `${isUSD ? '$' : ''}${formatEnglishNumber(Number(v || 0), isUSD ? 2 : 0)}${isUSD ? '' : ' IQD'}`;
 };
 
-const numeric = (raw: string) => {
+const numeric = (raw: any) => {
   const n = Number(String(raw ?? '').replace(/,/g, '').trim());
   return Number.isFinite(n) ? n : 0;
 };
@@ -93,99 +99,189 @@ interface Props {
   initialData?: TicketData | null;
 }
 
-/**
- * مساحة عمل تصميم الكروب السياحي وبيعه — في خطوتين واضحتين واحترافيتين.
- * الخطوة 1: تصميم الكروب وتكاليفه (مكونات المقعد والرحلة)
- * الخطوة 2: توزيع وبيع المقاعد على العملاء والركاب
- */
 export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSuccess, initialData }) => {
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
 
-  const [step, setStep] = useState<1 | 2>(1);
+  // 1: معلومات الكروب وقوالب الأسعار (Group Info & Templates)
+  // 2: بيع وتوزيع المقاعد على المستفيدين (Customers & Seat Sales)
+  const [activeTab, setActiveTab] = useState<1 | 2>(1);
   const [design, setDesign] = useState<GroupDesign>(emptyDesign());
   const [saving, setSaving] = useState(false);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [finder, setFinder] = useState<{ open: boolean; componentId?: string; customerId?: string }>({
+  const [customersList, setCustomersList] = useState<any[]>([]);
+
+  // Prices Template Editor Modal State
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<GroupTemplate | null>(null);
+  const [templateActiveTab, setTemplateActiveTab] = useState<'AUTO' | 'GLOBAL' | 'EXPENSES'>('AUTO');
+  const [componentFilterKind, setComponentFilterKind] = useState<string>('ALL');
+  const [componentFilterSupplier, setComponentFilterSupplier] = useState<string>('');
+
+  // Account Finder Modal State
+  const [finder, setFinder] = useState<{ open: boolean; componentId?: string }>({
     open: false,
   });
 
   useEffect(() => {
     if (!opened) return;
-    setStep(1);
+    setActiveTab(1);
     setDesign(designFromTicket(initialData));
     partnersApi
       .getCustomers()
-      .then((d: any) => setCustomers(Array.isArray(d) ? d : d?.data || []))
+      .then((d: any) => setCustomersList(Array.isArray(d) ? d : d?.data || []))
       .catch(() => undefined);
   }, [opened, initialData]);
 
-  const totals = useMemo(() => computeGroupTotals(design), [design]);
-
   const patch = (changes: Partial<GroupDesign>) => setDesign((d) => ({ ...d, ...changes }));
 
-  const addComponent = (kind: GroupComponentKind) =>
+  // Totals for all templates & customers
+  const totals = useMemo(() => computeGroupTotals(design), [design]);
+
+  // Customer Combobox Options
+  const customerOptions: ComboboxOption[] = useMemo(() => {
+    return customersList.map((c: any) => ({
+      value: c.nameAr || c.name || c.id,
+      label: c.nameAr || c.name || '',
+      code: c.code,
+    }));
+  }, [customersList]);
+
+  // Group Type Options
+  const groupTypeOptions: ComboboxOption[] = useMemo(
+    () => [
+      { value: 'FULL', label: isAr ? 'برنامج كامل (طيران + فندق + خدمات)' : 'Full Package (Flight + Hotel + Services)' },
+      { value: 'LAND', label: isAr ? 'بري فقط (Land Package)' : 'Land Package Only' },
+      { value: 'AIR', label: isAr ? 'طيران فقط (Flight Only)' : 'Flight Only' },
+      { value: 'HOTEL_ONLY', label: isAr ? 'فندق فقط (Hotel Only)' : 'Hotel Only' },
+    ],
+    [isAr],
+  );
+
+  // Currency Options
+  const currencyOptions: ComboboxOption[] = useMemo(
+    () => [
+      { value: 'USD', label: isAr ? '$ دولار أمريكي (USD)' : '$ US Dollar (USD)' },
+      { value: 'IQD', label: isAr ? 'د.ع دينار عراقي (IQD)' : 'IQD Iraqi Dinar' },
+    ],
+    [isAr],
+  );
+
+  // Country / Destination Options
+  const countryOptions: ComboboxOption[] = useMemo(
+    () => [
+      { value: 'العراق', label: isAr ? 'العراق' : 'Iraq' },
+      { value: 'تركيا', label: isAr ? 'تركيا' : 'Turkey' },
+      { value: 'جورجيا', label: isAr ? 'جورجيا' : 'Georgia' },
+      { value: 'أذربيجان', label: isAr ? 'أذربيجان' : 'Azerbaijan' },
+      { value: 'الإمارات', label: isAr ? 'الإمارات' : 'United Arab Emirates' },
+      { value: 'مصر', label: isAr ? 'مصر' : 'Egypt' },
+      { value: 'إيران', label: isAr ? 'إيران' : 'Iran' },
+      { value: 'ماليزيا', label: isAr ? 'ماليزيا' : 'Malaysia' },
+      { value: 'لبنان', label: isAr ? 'لبنان' : 'Lebanon' },
+      { value: 'الأردن', label: isAr ? 'الأردن' : 'Jordan' },
+    ],
+    [isAr],
+  );
+
+  // Template Options for Customers Table
+  const templateComboboxOptions: ComboboxOption[] = useMemo(() => {
+    return (design.templates || []).map((t) => ({
+      value: t.id,
+      label: `${t.name} (${money(t.seatPrice, t.currency)})`,
+    }));
+  }, [design.templates]);
+
+  // ── TEMPLATE MANAGEMENT ──
+  const handleAddNewTemplate = () => {
+    const newTpl = createDefaultTemplate(
+      design.seats || 1,
+      design.currency,
+      design.seatPrice || 0,
+    );
+    newTpl.name = `${isAr ? 'قالب أسعار' : 'Price Template'} #${(design.templates || []).length + 1}`;
     setDesign((d) => ({
       ...d,
-      components: [
-        ...d.components,
-        { id: `cmp-${Date.now()}-${d.components.length}`, kind, supplierName: '', cost: 0, perSeat: kind !== 'EXPENSE' },
-      ],
+      templates: [...(d.templates || []), newTpl],
     }));
+    setEditingTemplate(newTpl);
+    setTemplateModalOpen(true);
+  };
 
-  const patchComponent = (id: string, changes: Partial<GroupComponent>) =>
+  const handleEditTemplate = (tpl: GroupTemplate) => {
+    setEditingTemplate({ ...tpl, components: [...(tpl.components || [])] });
+    setTemplateModalOpen(true);
+  };
+
+  const handleSaveTemplateChanges = (updatedTpl: GroupTemplate) => {
     setDesign((d) => ({
       ...d,
-      components: d.components.map((c) => (c.id === id ? { ...c, ...changes } : c)),
+      templates: (d.templates || []).map((t) => (t.id === updatedTpl.id ? updatedTpl : t)),
     }));
+    setTemplateModalOpen(false);
+    setEditingTemplate(null);
+  };
 
-  const removeComponent = (id: string) =>
-    setDesign((d) => ({ ...d, components: d.components.filter((c) => c.id !== id) }));
+  const handleDeleteTemplate = (tplId: string) => {
+    if ((design.templates || []).length <= 1) {
+      showErrorNotification(
+        isAr ? 'تنبيه' : 'Alert',
+        isAr ? 'يجب أن يحتوي الكروب على قالب أسعار واحد على الأقل.' : 'Group must have at least one price template.',
+      );
+      return;
+    }
+    setDesign((d) => ({
+      ...d,
+      templates: (d.templates || []).filter((t) => t.id !== tplId),
+    }));
+  };
 
-  const addCustomer = () =>
+  // ── CUSTOMER MANAGEMENT ──
+  const handleAddCustomer = (defaultTemplateId?: string) => {
+    const targetTpl = (design.templates || []).find((t) => t.id === defaultTemplateId) || (design.templates || [])[0];
+    const initialSale = targetTpl ? Number(targetTpl.seatPrice) || 0 : Number(design.seatPrice) || 0;
+
     setDesign((d) => ({
       ...d,
       customers: [
-        ...d.customers,
+        ...(d.customers || []),
         {
-          id: `cus-${Date.now()}-${d.customers.length}`,
+          id: `cus-${Date.now()}-${(d.customers || []).length}`,
           name: '',
+          agent: '',
+          templateId: targetTpl?.id,
+          templateName: targetTpl?.name,
           payType: 'CASH',
-          sale: Number(d.seatPrice) || 0,
+          sale: initialSale,
         },
       ],
     }));
+  };
 
-  const patchCustomer = (id: string, changes: Partial<GroupCustomer>) =>
+  const handlePatchCustomer = (id: string, changes: Partial<GroupCustomer>) => {
     setDesign((d) => ({
       ...d,
-      customers: d.customers.map((c) => (c.id === id ? { ...c, ...changes } : c)),
+      customers: (d.customers || []).map((c) => (c.id === id ? { ...c, ...changes } : c)),
     }));
+  };
 
-  const removeCustomer = (id: string) =>
-    setDesign((d) => ({ ...d, customers: d.customers.filter((c) => c.id !== id) }));
+  const handleRemoveCustomer = (id: string) => {
+    setDesign((d) => ({
+      ...d,
+      customers: (d.customers || []).filter((c) => c.id !== id),
+    }));
+  };
 
-  const customerOptions = useMemo(
-    () =>
-      customers.map((c: any) => ({
-        value: c.nameAr || c.name || c.id,
-        label: c.nameAr || c.name || '',
-        code: c.code,
-      })),
-    [customers],
-  );
-
-  const stepOneReady = design.groupName.trim().length > 0 && design.seats > 0;
-
-  const handleSave = async () => {
+  // ── MAIN SAVE ──
+  const handleSaveGroup = async () => {
     if (!design.groupName.trim()) {
       showErrorNotification(
         isAr ? 'اسم الكروب مطلوب' : 'Group name required',
-        isAr ? 'يرجى تحديد اسم الكروب أولاً قبل الحفظ.' : 'Please enter a group name.',
+        isAr ? 'يرجى تحديد اسم الكروب أو الرحلة قبل الحفظ.' : 'Please enter a group name.',
       );
-      setStep(1);
+      setActiveTab(1);
       return;
     }
+
     setSaving(true);
     try {
       const route = [design.routeFrom, design.routeTo].filter(Boolean).join(' - ');
@@ -200,13 +296,13 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
         customerName: design.customers[0]?.name || null,
         notes: encodeDesignIntoNotes(design.notes, design),
         status: 'POSTED',
-        totalBuy: totals.soldCost,
-        netBuy: totals.soldCost,
-        totalSell: totals.salesTotal,
-        netSell: totals.salesTotal,
-        profit: totals.realisedProfit,
-        passengers: design.customers.map((c) => ({
-          name: c.name || (isAr ? 'مقعد' : 'Seat'),
+        totalBuy: totals.sumCost,
+        netBuy: totals.sumCost,
+        totalSell: totals.salesTotal || totals.sumExpectedSale,
+        netSell: totals.salesTotal || totals.sumExpectedSale,
+        profit: totals.realisedProfit || totals.expectedProfit,
+        passengers: (design.customers || []).map((c) => ({
+          name: c.name || (isAr ? 'مسافر' : 'Passenger'),
           ticketType: 'ADULT',
           fareBuy: totals.costPerSeat,
           fareSell: Number(c.sale) || 0,
@@ -222,8 +318,8 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
       showSuccessNotification(
         isAr ? 'تم حفظ الكروب بنجاح' : 'Group saved successfully',
         isAr
-          ? `${design.groupName} — تم بيع ${totals.soldSeats} من إجمالي ${totals.seats} مقعداً.`
-          : `${design.groupName} — ${totals.soldSeats} of ${totals.seats} seats sold.`,
+          ? `${design.groupName} — تم حفظ القوالب ومبيعات المقاعد.`
+          : `${design.groupName} — Templates & seat sales saved.`,
       );
       onSuccess?.();
       onClose();
@@ -239,9 +335,6 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
 
   if (!opened) return null;
 
-  const inputClass =
-    'w-full h-[42px] px-3 rounded-xl border border-[#E5E7EB] bg-white text-[13px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] focus:ring-0 transition-all placeholder:text-slate-300 placeholder:font-normal';
-
   return (
     <div
       className="fixed inset-0 z-9998 bg-[#F8FAFC] flex flex-col font-sans select-none"
@@ -250,18 +343,18 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
     >
       {/* ── 1. HEADER HERO BAR ── */}
       <div className="bg-white border-b border-[#E5E7EB] shadow-2xs shrink-0">
-        <div className="max-w-[1650px] mx-auto w-full px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="max-w-[1720px] mx-auto w-full px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
           
           {/* Identity */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-[#FFF3E8] border border-[#FED7AA] text-[#F45A0A] flex items-center justify-center shadow-2xs shrink-0">
-              <Package size={20} strokeWidth={2.2} />
+              <Package size={22} strokeWidth={2.2} />
             </div>
             <div>
               <h2 className="font-black text-sm sm:text-base text-[#111827] leading-tight">
                 {(initialData as any)?.id
-                  ? isAr ? 'تعديل حزمة الكروب السياحي' : 'Edit Tour Group'
-                  : isAr ? 'تصميم كروب سياحي جديد' : 'New Tour Group Package'}
+                  ? isAr ? 'تعديل الكروب السياحي وقوالب الأسعار' : 'Edit Tour Group & Templates'
+                  : isAr ? 'تصميم وإدارة الكروب السياحي (Design Custom Groups)' : 'Design Custom Groups & Pricing Templates'}
               </h2>
               <p className="text-[11px] font-bold text-slate-500 mt-0.5 font-mono">
                 {design.groupName || (isAr ? '— كروب بدون اسم بعد —' : '— Unnamed Group —')}
@@ -269,26 +362,36 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
             </div>
           </div>
 
-          {/* Stepper (Two intuitive steps) */}
-          <div className="flex items-center gap-2 bg-[#F1F5F9] p-1 rounded-2xl border border-slate-200">
-            {([
-              { n: 1 as const, ar: '١. تصميم الكروب والتكاليف', en: '1. Design & Cost' },
-              { n: 2 as const, ar: '٢. بيع وتوزيع المقاعد', en: '2. Sell Seats' },
-            ]).map((s) => (
-              <button
-                key={s.n}
-                type="button"
-                onClick={() => (s.n === 1 || stepOneReady) && setStep(s.n)}
-                disabled={s.n === 2 && !stepOneReady}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[12px] font-black transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
-                  step === s.n
-                    ? 'bg-[#F45A0A] text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-white hover:text-slate-900'
-                }`}
-              >
-                <span>{isAr ? s.ar : s.en}</span>
-              </button>
-            ))}
+          {/* Stepper / Tabs Bar */}
+          <div className="flex items-center gap-1.5 bg-[#F1F5F9] p-1 rounded-2xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setActiveTab(1)}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] font-black transition-all cursor-pointer ${
+                activeTab === 1
+                  ? 'bg-[#F45A0A] text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+            >
+              <Palette size={14} />
+              <span>{isAr ? '١. معلومات وتصميم الكروب (Group Design)' : '1. Group Info & Design'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab(2)}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] font-black transition-all cursor-pointer ${
+                activeTab === 2
+                  ? 'bg-[#F45A0A] text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+            >
+              <Users size={14} />
+              <span>{isAr ? '٢. المستفيدين وتوزيع المقاعد (Customers & Sale)' : '2. Customers & Seats'}</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10.5px] font-mono font-bold bg-white/20">
+                {(design.customers || []).length}
+              </span>
+            </button>
           </div>
 
           {/* Close Button */}
@@ -302,38 +405,44 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
         </div>
       </div>
 
-      {/* ── 2. WORKSPACE BODY ── */}
+      {/* ── 2. BODY CONTENT ── */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-[1650px] mx-auto w-full px-4 sm:px-6 py-4 pb-32 space-y-4">
+        <div className="max-w-[1720px] mx-auto w-full px-4 sm:px-6 py-4 pb-32 space-y-4">
           
-          {step === 1 ? (
-            /* ── STEP 1: DESIGN & COST COMPONENTS ── */
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,390px)_minmax(0,1fr)] gap-4 items-start">
+          {activeTab === 1 ? (
+            /* ══════════════════════════════════════════════════════════════
+               TAB 1: GROUP INFO & PRICES TEMPLATES TABLE (الصورة 3)
+               ══════════════════════════════════════════════════════════════ */
+            <div className="space-y-4">
               
-              {/* Left Column: Group General Information */}
+              {/* Card A: Group General Information */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
-                <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                  <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
-                    <Users size={15} />
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
+                      <Package size={15} />
+                    </div>
+                    <span className="font-black text-[13.5px] text-slate-900">
+                      {isAr ? 'معلومات وهوية الكروب (Group Info)' : 'Group Information'}
+                    </span>
                   </div>
-                  <span className="font-black text-[13px] text-slate-900">
-                    {isAr ? 'معلومات وهوية الكروب' : 'Group Information'}
-                  </span>
                 </div>
 
-                <div>
-                  <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                    {isAr ? 'اسم الكروب أو الرحلة *' : 'Group / Tour Name *'}
-                  </label>
-                  <input
-                    value={design.groupName}
-                    onChange={(e) => patch({ groupName: e.target.value })}
-                    placeholder={isAr ? 'مثال: كروب طرابزون وإسطنبول 2026' : 'e.g. Istanbul & Trabzon Tour 2026'}
-                    className={inputClass}
-                  />
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                  {/* Group Name */}
+                  <div className="lg:col-span-2">
+                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'اسم الكروب أو الرحلة *' : 'Group Name *'}
+                    </label>
+                    <input
+                      value={design.groupName}
+                      onChange={(e) => patch({ groupName: e.target.value })}
+                      placeholder={isAr ? 'مثال: BGW-TBS 18-09-2026' : 'e.g. BGW-TBS 18-09-2026'}
+                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
+                    />
+                  </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Route From */}
                   <div>
                     <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
                       {isAr ? 'محطة الانطلاق (من)' : 'From'}
@@ -343,9 +452,11 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                       onChange={(e) => patch({ routeFrom: e.target.value.toUpperCase() })}
                       placeholder="BGW"
                       dir="ltr"
-                      className={`${inputClass} font-mono text-center uppercase`}
+                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-mono font-black text-center text-slate-900 uppercase outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
                     />
                   </div>
+
+                  {/* Route To */}
                   <div>
                     <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
                       {isAr ? 'الوجهة (إلى)' : 'To'}
@@ -355,341 +466,281 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                       onChange={(e) => patch({ routeTo: e.target.value.toUpperCase() })}
                       placeholder="IST"
                       dir="ltr"
-                      className={`${inputClass} font-mono text-center uppercase`}
+                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-mono font-black text-center text-slate-900 uppercase outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Travel Date */}
                   <div>
-                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'تاريخ السفر' : 'Travel Date'}
-                    </label>
-                    <input
-                      type="date"
+                    <AccountingDatePicker
+                      label={isAr ? 'تاريخ السفر' : 'Travel Date'}
                       value={design.travelDate}
-                      onChange={(e) => patch({ travelDate: e.target.value })}
-                      className={`${inputClass} font-mono`}
+                      onChange={(val) => patch({ travelDate: val })}
+                      placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
                     />
                   </div>
+
+                  {/* Buy/Booking Date */}
                   <div>
-                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'تاريخ الشراء / الحجز' : 'Booking Date'}
-                    </label>
-                    <input
-                      type="date"
+                    <AccountingDatePicker
+                      label={isAr ? 'تاريخ الشراء / الحجز' : 'Booking Date'}
                       value={design.buyDate}
-                      onChange={(e) => patch({ buyDate: e.target.value })}
-                      className={`${inputClass} font-mono`}
+                      onChange={(val) => patch({ buyDate: val })}
+                      placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Group Type (SearchableCombobox) */}
                   <div>
-                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'نوع الكروب' : 'Group Type'}
-                    </label>
-                    <select
+                    <SearchableCombobox
+                      label={isAr ? 'نوع الكروب' : 'Group Type'}
                       value={design.groupType}
-                      onChange={(e) => patch({ groupType: e.target.value })}
-                      className={`${inputClass} cursor-pointer`}
-                    >
-                      <option value="FULL">{isAr ? 'برنامج كامل (Full)' : 'Full Package'}</option>
-                      <option value="LAND">{isAr ? 'بري فقط (Land)' : 'Land Only'}</option>
-                      <option value="AIR">{isAr ? 'طيران فقط (Air)' : 'Flight Only'}</option>
-                      <option value="HOTEL_ONLY">{isAr ? 'فندق فقط' : 'Hotel Only'}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'الدولة / الوجهة' : 'Country'}
-                    </label>
-                    <input
-                      value={design.country}
-                      onChange={(e) => patch({ country: e.target.value })}
-                      placeholder={isAr ? 'تركيا، جورجيا...' : 'Turkey, Georgia...'}
-                      className={inputClass}
+                      onChange={(val) => patch({ groupType: val || 'FULL' })}
+                      options={groupTypeOptions}
+                      placeholder={isAr ? 'اختر نوع الكروب...' : 'Select type...'}
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Destination Country (SearchableCombobox) */}
+                  <div>
+                    <SearchableCombobox
+                      label={isAr ? 'الوجهة / الدولة' : 'Destination Country'}
+                      value={design.country}
+                      onChange={(val) => patch({ country: val || 'العراق' })}
+                      options={countryOptions}
+                      placeholder={isAr ? 'اختر الدولة...' : 'Select country...'}
+                      allowCustomValue
+                    />
+                  </div>
+
+                  {/* Currency (SearchableCombobox) */}
+                  <div>
+                    <SearchableCombobox
+                      label={isAr ? 'العملة المعتمدة' : 'Currency'}
+                      value={design.currency}
+                      onChange={(val) => patch({ currency: (val as 'IQD' | 'USD') || 'USD' })}
+                      options={currencyOptions}
+                      placeholder={isAr ? 'العملة...' : 'Currency...'}
+                    />
+                  </div>
+
+                  {/* Total Seats */}
                   <div>
                     <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'عدد المقاعد الإجمالي *' : 'Total Seats *'}
+                      {isAr ? 'المقاعد الإجمالية *' : 'Total Seats *'}
                     </label>
                     <input
                       value={design.seats}
                       onChange={(e) => patch({ seats: Math.max(1, Math.round(numeric(e.target.value))) })}
                       dir="ltr"
-                      className={`${inputClass} font-mono text-center font-black`}
+                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[14px] font-mono font-black text-center text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
                     />
                   </div>
-                  <div>
-                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'العملة المعتمدة' : 'Currency'}
-                    </label>
-                    <select
-                      value={design.currency}
-                      onChange={(e) => patch({ currency: e.target.value as 'IQD' | 'USD' })}
-                      className={`${inputClass} cursor-pointer font-bold`}
-                    >
-                      <option value="USD">$ دولار أمريكي (USD)</option>
-                      <option value="IQD">د.ع دينار عراقي (IQD)</option>
-                    </select>
-                  </div>
-                </div>
 
-                <div>
-                  <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                    {isAr ? 'ملاحظات وتفاصيل إضافية' : 'Notes'}
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={design.notes}
-                    onChange={(e) => patch({ notes: e.target.value })}
-                    placeholder={isAr ? 'أي شروط أو تفاصيل تخص البرنامج...' : 'Any program notes...'}
-                    className="w-full p-3 rounded-xl border border-[#E5E7EB] bg-white text-[12px] font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
-                  />
+                  {/* Notes */}
+                  <div className="lg:col-span-2">
+                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
+                      {isAr ? 'ملاحظات وتفاصيل الكروب' : 'Group Notes'}
+                    </label>
+                    <input
+                      value={design.notes}
+                      onChange={(e) => patch({ notes: e.target.value })}
+                      placeholder={isAr ? 'أي شروط أو تفاصيل تخص برنامج الرحلة...' : 'Any details or conditions...'}
+                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Right Column: Cost Components & Seat Price */}
+              {/* Card B: Prices Templates Table (تيمبلت الأسعار - الصورة 3) */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
-                
-                {/* Header & Add Button */}
-                <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
                   <div>
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
-                        <Coins size={15} />
+                        <Palette size={15} />
                       </div>
-                      <span className="font-black text-[13px] text-slate-900">
-                        {isAr ? 'مكوّنات كلفة المقعد والرحلة' : 'Seat Cost Components'}
+                      <span className="font-black text-[13.5px] text-slate-900">
+                        {isAr ? 'قوالب الأسعار وتكاليف المقاعد (Prices Templates)' : 'Prices Templates'}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500 font-medium mt-0.5">
                       {isAr
-                        ? 'تذكرة طيران · حجز فندقي · تأشيرة · نقل سياحي · مرشد · تأمين...'
-                        : 'Flight ticket · Hotel · Visa · Transport · Guide · Insurance...'}
+                        ? 'أضف قالباً أو أكثر لتخصيص أسعار وتكاليف المشتريات (طيران، فندق، فيزا، خدمات) وبيعها للمستفيدين'
+                        : 'Add templates with distinct purchasing costs (flights, hotels, visas) and seat prices'}
                     </p>
                   </div>
 
-                  <Menu position="bottom-end" shadow="lg" radius="xl" width={220} withinPortal zIndex={10060}>
-                    <Menu.Target>
-                      <button
-                        type="button"
-                        className="h-[38px] px-3.5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
-                      >
-                        <Plus size={15} strokeWidth={2.4} />
-                        <span>{isAr ? 'إضافة مكوّن كلفة' : 'Add Cost Item'}</span>
-                      </button>
-                    </Menu.Target>
-                    <Menu.Dropdown className="p-1.5" style={{ direction }}>
-                      {COMPONENT_KINDS.map((k) => {
-                        const Icon = KIND_ICON[k.kind];
-                        const tone = KIND_TONE[k.kind];
-                        return (
-                          <Menu.Item
-                            key={k.kind}
-                            className="rounded-xl py-2"
-                            leftSection={
-                              <span className={`w-7 h-7 rounded-lg border flex items-center justify-center ${tone.bg} ${tone.border} ${tone.text}`}>
-                                <Icon size={14} />
-                              </span>
-                            }
-                            onClick={() => addComponent(k.kind)}
-                          >
-                            <span className="text-[12.5px] font-bold text-slate-800">{isAr ? k.ar : k.en}</span>
-                          </Menu.Item>
-                        );
-                      })}
-                    </Menu.Dropdown>
-                  </Menu>
+                  <button
+                    type="button"
+                    onClick={handleAddNewTemplate}
+                    className="h-[38px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+                  >
+                    <Plus size={16} strokeWidth={2.4} />
+                    <span>{isAr ? 'إضافة تيمبلت جديد (Add Template)' : 'Add Template (+)'}</span>
+                  </button>
                 </div>
 
-                {/* Empty State */}
-                {design.components.length === 0 ? (
-                  <div className="py-12 text-center rounded-2xl border border-dashed border-slate-200 bg-[#FAFAFA]">
-                    <Package size={32} className="mx-auto text-slate-300 mb-2" />
-                    <p className="text-[13px] font-bold text-slate-600">
-                      {isAr ? 'لم تتم إضافة أي مكوّن كلفة بعد' : 'No cost components added yet'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      {isAr
-                        ? 'اضغط على «إضافة مكوّن كلفة» لإدخال تذكرة الطيران أو الفندق أو التأشيرة واحتساب سعر المقعد تلقائياً'
-                        : 'Click "Add Cost Item" to add flights, hotels, or visas and compute seat cost automatically'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {design.components.map((c) => {
-                      const Icon = KIND_ICON[c.kind];
-                      const tone = KIND_TONE[c.kind];
-                      return (
-                        <div
-                          key={c.id}
-                          className="grid grid-cols-[auto_minmax(0,1.5fr)_minmax(0,1fr)_auto_auto] items-center gap-2.5 p-3 rounded-2xl border border-[#E5E7EB] bg-[#FAFAFA] hover:border-slate-300 transition-all shadow-2xs"
-                        >
-                          {/* Kind Icon */}
-                          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${tone.bg} ${tone.border} ${tone.text}`}>
-                            <Icon size={17} />
-                          </div>
+                {/* Templates Grid / Table */}
+                <div className="overflow-x-auto rounded-xl border border-[#E5E7EB]">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-[#0284C7] text-white text-[11.5px] font-black divide-x divide-white/20">
+                        <th className="p-2.5 w-12 text-center">ID</th>
+                        <th className="p-2.5 text-start">{isAr ? 'اسم التيمبلت' : 'Template Name'}</th>
+                        <th className="p-2.5 w-20 text-center">{isAr ? 'المقاعد*' : 'Seats*'}</th>
+                        <th className="p-2.5 w-20 text-center">{isAr ? 'المستفيدون' : 'Customers'}</th>
+                        <th className="p-2.5 w-28 text-end">{isAr ? 'كلفة مفرد' : 'Single Buy'}</th>
+                        <th className="p-2.5 w-28 text-end">{isAr ? 'بيع مفرد' : 'Single Sale'}</th>
+                        <th className="p-2.5 w-28 text-end">{isAr ? 'المشتريات' : 'Purchase'}</th>
+                        <th className="p-2.5 w-24 text-end">{isAr ? 'المصاريف' : 'Expenses'}</th>
+                        <th className="p-2.5 w-28 text-end">{isAr ? 'التكلفة' : 'Cost'}</th>
+                        <th className="p-2.5 w-28 text-end">{isAr ? 'المبيعات' : 'Sales'}</th>
+                        <th className="p-2.5 w-28 text-end">{isAr ? 'الربح' : 'Profit'}</th>
+                        <th className="p-2.5 w-40 text-center">{isAr ? 'الإجراءات' : 'Actions'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {(design.templates || []).map((tpl, idx) => {
+                        const tplTotals = computeTemplateTotals(tpl);
+                        const assignedCustomers = (design.customers || []).filter(
+                          (c) => c.templateId === tpl.id,
+                        ).length;
 
-                          {/* Supplier Name & Account Finder */}
-                          <div className="min-w-0">
-                            <span className="text-[10px] font-black text-slate-500 block mb-0.5">
-                              {kindLabel(c.kind, isAr)}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                value={c.supplierName}
-                                onChange={(e) => patchComponent(c.id, { supplierName: e.target.value })}
-                                placeholder={isAr ? 'اسم المورد أو شركة الطيران...' : 'Supplier name...'}
-                                className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900 outline-none focus:border-[#F45A0A]"
-                              />
-                              <Tooltip label={isAr ? 'بحث متقدّم في دليل الحسابات' : 'Search accounts'} withArrow position="top">
+                        return (
+                          <tr key={tpl.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-2.5 text-center font-mono font-bold text-slate-500">
+                              {idx + 1}
+                            </td>
+                            <td className="p-2.5 font-bold text-slate-900">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-[#F45A0A]" />
+                                <span>{tpl.name}</span>
+                              </div>
+                            </td>
+                            <td className="p-2.5 text-center font-mono font-black text-slate-900" dir="ltr">
+                              {tplTotals.seats}
+                            </td>
+                            <td className="p-2.5 text-center font-mono font-bold text-indigo-700" dir="ltr">
+                              {assignedCustomers}
+                            </td>
+                            <td className="p-2.5 text-end font-mono font-black text-slate-800" dir="ltr">
+                              {money(tplTotals.costPerSeat, tpl.currency)}
+                            </td>
+                            <td className="p-2.5 text-end font-mono font-black text-slate-900" dir="ltr">
+                              {money(tplTotals.seatPrice, tpl.currency)}
+                            </td>
+                            <td className="p-2.5 text-end font-mono font-bold text-slate-800" dir="ltr">
+                              {money(tplTotals.autoBuy + tplTotals.globalBuy, tpl.currency)}
+                            </td>
+                            <td className="p-2.5 text-end font-mono font-bold text-slate-500" dir="ltr">
+                              {money(tplTotals.globalExpenses, tpl.currency)}
+                            </td>
+                            <td className="p-2.5 text-end font-mono font-black text-slate-900" dir="ltr">
+                              {money(tplTotals.totalCost, tpl.currency)}
+                            </td>
+                            <td className="p-2.5 text-end font-mono font-black text-slate-900" dir="ltr">
+                              {money(tplTotals.totalSale, tpl.currency)}
+                            </td>
+                            <td className="p-2.5 text-end font-mono font-black text-[#078B61]" dir="ltr">
+                              {tplTotals.totalProfit >= 0 ? '+' : ''}
+                              {money(tplTotals.totalProfit, tpl.currency)}
+                            </td>
+                            <td className="p-2.5 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                {/* Design Button (Cyan button like legacy Image 3) */}
                                 <button
                                   type="button"
-                                  onClick={() => setFinder({ open: true, componentId: c.id })}
-                                  className="h-8 w-8 rounded-lg border border-orange-200 bg-orange-50 text-[#F45A0A] hover:bg-orange-100 flex items-center justify-center cursor-pointer shrink-0 transition-colors"
+                                  onClick={() => handleEditTemplate(tpl)}
+                                  className="px-2.5 py-1 rounded-lg bg-[#0284C7] hover:bg-[#0369A1] text-white text-[11px] font-black cursor-pointer flex items-center gap-1 shadow-2xs transition-colors"
                                 >
-                                  <Search size={14} />
+                                  <Palette size={12} />
+                                  <span>{isAr ? 'تصميم' : 'Design'}</span>
                                 </button>
-                              </Tooltip>
-                            </div>
-                          </div>
 
-                          {/* Cost Input */}
-                          <div>
-                            <span className="text-[10px] font-black text-slate-500 block mb-0.5">
-                              {isAr ? `الكلفة (${design.currency})` : `Cost (${design.currency})`}
-                            </span>
-                            <input
-                              value={c.cost ? c.cost.toLocaleString('en-US') : ''}
-                              onChange={(e) => patchComponent(c.id, { cost: numeric(e.target.value) })}
-                              placeholder="0"
-                              dir="ltr"
-                              className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12.5px] font-mono font-black text-slate-900 text-end outline-none focus:border-[#F45A0A]"
-                            />
-                          </div>
+                                {/* Sale Button (Magenta button like legacy Image 3) */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleAddCustomer(tpl.id);
+                                    setActiveTab(2);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-[#BE185D] hover:bg-[#9D174D] text-white text-[11px] font-black cursor-pointer flex items-center gap-1 shadow-2xs transition-colors"
+                                >
+                                  <ShoppingCart size={12} />
+                                  <span>{isAr ? 'بيع' : 'Sale'}</span>
+                                </button>
 
-                          {/* Per Seat vs Whole Group Toggle */}
-                          <Tooltip
-                            label={
-                              c.perSeat
-                                ? isAr ? 'الكلفة تحسب لكل مقعد/مسافر' : 'Cost applies per individual seat'
-                                : isAr ? 'الكلفة إجمالية للكروب كامل وتقسّم على المقاعد' : 'Cost applies to the entire group'
-                            }
-                            withArrow
-                            position="top"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => patchComponent(c.id, { perSeat: !c.perSeat })}
-                              className={`h-8 px-2.5 rounded-lg border text-[11px] font-black cursor-pointer whitespace-nowrap transition-colors ${
-                                c.perSeat
-                                  ? 'bg-indigo-50 border-indigo-200 text-indigo-800 hover:bg-indigo-100'
-                                  : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
-                              }`}
-                            >
-                              {c.perSeat ? (isAr ? 'للمقعد' : 'Per seat') : isAr ? 'للكروب كامل' : 'Whole group'}
-                            </button>
-                          </Tooltip>
-
-                          {/* Delete Component */}
-                          <button
-                            type="button"
-                            onClick={() => removeComponent(c.id)}
-                            className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-200 flex items-center justify-center cursor-pointer shrink-0 transition-colors"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Seat Cost & Suggested Sale Price Summary Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
-                  
-                  {/* Card 1: Computed Seat Cost */}
-                  <div className="rounded-2xl border border-slate-200 bg-[#FAFAFA] p-3.5 flex flex-col justify-between">
-                    <span className="text-[11px] font-bold text-slate-500 block">
-                      {isAr ? 'كلفة المقعد الواحد (محسوبة)' : 'Seat Cost (Calculated)'}
-                    </span>
-                    <span className="font-mono font-black text-base text-slate-900 block mt-1 tabular-nums" dir="ltr">
-                      {money(totals.costPerSeat, design.currency)}
-                    </span>
-                  </div>
-
-                  {/* Card 2: Seat Sale Price (Editable) */}
-                  <div className="rounded-2xl border border-orange-200 bg-[#FFF3E8]/40 p-3.5">
-                    <label className="text-[11px] font-bold text-[#F45A0A] block mb-1">
-                      {isAr ? 'سعر بيع المقعد المقترح *' : 'Seat Sale Price *'}
-                    </label>
-                    <input
-                      value={design.seatPrice ? design.seatPrice.toLocaleString('en-US') : ''}
-                      onChange={(e) => patch({ seatPrice: numeric(e.target.value) })}
-                      placeholder="0"
-                      dir="ltr"
-                      className="w-full h-8 px-2.5 rounded-lg border border-orange-300 bg-white text-[13px] font-mono font-black text-slate-900 text-end outline-none focus:border-[#F45A0A]"
-                    />
-                  </div>
-
-                  {/* Card 3: Profit Per Seat */}
-                  <div
-                    className={`rounded-2xl border p-3.5 flex flex-col justify-between ${
-                      totals.profitPerSeat >= 0
-                        ? 'border-emerald-200 bg-emerald-50/70'
-                        : 'border-rose-200 bg-rose-50/70'
-                    }`}
-                  >
-                    <span className="text-[11px] font-bold text-slate-600 block">
-                      {isAr ? 'ربح المقعد الواحد' : 'Profit Per Seat'}
-                    </span>
-                    <span
-                      className={`font-mono font-black text-base block mt-1 tabular-nums ${
-                        totals.profitPerSeat >= 0 ? 'text-[#078B61]' : 'text-rose-700'
-                      }`}
-                      dir="ltr"
-                    >
-                      {totals.profitPerSeat >= 0 ? '+' : ''}
-                      {money(totals.profitPerSeat, design.currency)}
-                    </span>
-                  </div>
-
+                                {/* Delete */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTemplate(tpl.id)}
+                                  className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
+                                  title={isAr ? 'حذف القالب' : 'Delete'}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {/* Summary Row at bottom of table (Image 3) */}
+                    <tfoot>
+                      <tr className="bg-[#F8FAFC] border-t-2 border-[#E5E7EB] font-black text-[12px] text-slate-900">
+                        <td colSpan={6} className="p-2.5 text-start font-sans">
+                          {isAr ? 'إجمالي مجاميع القوالب (Summary):' : 'Templates Summary:'}
+                        </td>
+                        <td className="p-2.5 text-end font-mono text-slate-800" dir="ltr">
+                          {money(totals.sumBuy, design.currency)}
+                        </td>
+                        <td className="p-2.5 text-end font-mono text-slate-500" dir="ltr">
+                          {money(totals.sumExpenses, design.currency)}
+                        </td>
+                        <td className="p-2.5 text-end font-mono text-slate-900" dir="ltr">
+                          {money(totals.sumCost, design.currency)}
+                        </td>
+                        <td className="p-2.5 text-end font-mono text-slate-900" dir="ltr">
+                          {money(totals.sumExpectedSale, design.currency)}
+                        </td>
+                        <td className="p-2.5 text-end font-mono text-[#078B61]" dir="ltr">
+                          +{money(totals.expectedProfit, design.currency)}
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-
               </div>
 
             </div>
           ) : (
-            /* ── STEP 2: SELL SEATS TO CUSTOMERS ── */
+            /* ══════════════════════════════════════════════════════════════
+               TAB 2: BENEFICIARIES & SEAT SALES (المستفيدين والبيع)
+               ══════════════════════════════════════════════════════════════ */
             <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
               
-              {/* Header & Seat Progress */}
-              <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
+              {/* Header with Seat Progress */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
                 <div>
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
                       <Armchair size={15} />
                     </div>
-                    <span className="font-black text-[13px] text-slate-900">
-                      {isAr ? 'توزيع وبيع مقاعد الكروب' : 'Seat Sales & Allocation'}
+                    <span className="font-black text-[13.5px] text-slate-900">
+                      {isAr ? 'توزيع مقاعد الكروب على المستفيدين والعملاء (Customers & Sales)' : 'Seat Sales & Customers'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <span
-                      className={`inline-flex items-center gap-1 text-[11.5px] font-black px-2.5 py-0.5 rounded-full border ${
+                      className={`inline-flex items-center gap-1.5 text-[11.5px] font-black px-3 py-0.5 rounded-full border ${
                         totals.remainingSeats === 0
                           ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                           : 'bg-amber-50 border-amber-200 text-amber-800'
                       }`}
                     >
-                      {totals.remainingSeats === 0 ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                      {totals.remainingSeats === 0 ? <CheckCircle2 size={13} /> : <Clock size={13} />}
                       <span>
                         {isAr
                           ? `تم بيع ${totals.soldSeats} من إجمالي ${totals.seats} مقعداً — المتبقي: ${totals.remainingSeats} مقعد`
@@ -701,45 +752,50 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
 
                 <button
                   type="button"
-                  onClick={addCustomer}
-                  disabled={totals.remainingSeats === 0}
-                  className="h-[38px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+                  onClick={() => handleAddCustomer()}
+                  className="h-[38px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
                 >
-                  <Plus size={15} strokeWidth={2.4} />
-                  <span>{isAr ? 'إضافة مشتري / عميل' : 'Add Passenger / Buyer'}</span>
+                  <Plus size={16} strokeWidth={2.4} />
+                  <span>{isAr ? 'إضافة مستفيد / مشتري' : 'Add Passenger / Buyer'}</span>
                 </button>
               </div>
 
-              {/* Customers List Table */}
-              {design.customers.length === 0 ? (
+              {/* Customers Table */}
+              {(design.customers || []).length === 0 ? (
                 <div className="py-14 text-center rounded-2xl border border-dashed border-slate-200 bg-[#FAFAFA]">
-                  <Armchair size={34} className="mx-auto text-slate-300 mb-2" />
-                  <p className="text-[13px] font-bold text-slate-600">
-                    {isAr ? 'لم يتم بيع أو تخصيص أي مقعد بعد' : 'No seats allocated yet'}
+                  <Armchair size={36} className="mx-auto text-slate-300 mb-2" />
+                  <p className="text-[13.5px] font-bold text-slate-700">
+                    {isAr ? 'لم يتم تسجيل أي مستفيد أو بيع أي مقعد بعد' : 'No customers or seats registered yet'}
                   </p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[11.5px] text-slate-400 mt-0.5">
                     {isAr
-                      ? 'اضغط على «إضافة مشتري / عميل» لاختيار العميل وتحديد سعر المقعد وطريقة الدفع'
-                      : 'Click "Add Passenger / Buyer" to select customer, sale price, and payment method'}
+                      ? 'اضغط على «إضافة مستفيد / مشتري» لاختيار العميل وتحديد التيمبلت وسعر البيع'
+                      : 'Click "Add Passenger / Buyer" to select customer, price template, and sale price'}
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-2xl border border-[#E5E7EB]">
+                <div className="overflow-x-auto rounded-xl border border-[#E5E7EB]">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-[#F8FAFC] text-slate-700 text-[11.5px] font-black border-b border-[#E5E7EB]">
                         <th className="p-2.5 w-12 text-center">#</th>
-                        <th className="p-2.5 text-start">{isAr ? 'العميل / المستفيد' : 'Customer'}</th>
+                        <th className="p-2.5 text-start">{isAr ? 'المستفيد / العميل' : 'Customer'}</th>
                         <th className="p-2.5 text-start w-40">{isAr ? 'الوكيل' : 'Agent'}</th>
-                        <th className="p-2.5 w-32 text-center">{isAr ? 'نوع المبيع' : 'Payment'}</th>
+                        <th className="p-2.5 text-start w-52">{isAr ? 'القالب المخصص (Template)' : 'Template'}</th>
+                        <th className="p-2.5 w-36 text-center">{isAr ? 'نوع المبيع / الدفع' : 'Payment Type'}</th>
                         <th className="p-2.5 w-36 text-end">{isAr ? 'سعر البيع' : 'Sale Price'}</th>
                         <th className="p-2.5 w-36 text-end">{isAr ? 'صافي الربح' : 'Profit'}</th>
                         <th className="p-2.5 w-12 text-center" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
-                      {design.customers.map((c, idx) => {
-                        const profit = (Number(c.sale) || 0) - totals.costPerSeat;
+                      {(design.customers || []).map((c, idx) => {
+                        const assignedTpl = (design.templates || []).find((t) => t.id === c.templateId);
+                        const seatCost = assignedTpl
+                          ? computeTemplateTotals(assignedTpl).costPerSeat
+                          : totals.costPerSeat;
+                        const profit = (Number(c.sale) || 0) - seatCost;
+
                         return (
                           <tr key={c.id} className="hover:bg-orange-50/30 transition-colors">
                             <td className="p-2.5 text-center">
@@ -750,7 +806,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                             <td className="p-2.5">
                               <SearchableCombobox
                                 value={c.name}
-                                onChange={(val) => patchCustomer(c.id, { name: val || '' })}
+                                onChange={(val) => handlePatchCustomer(c.id, { name: val || '' })}
                                 options={customerOptions}
                                 placeholder={isAr ? 'اختر العميل أو اكتب اسماً...' : 'Customer...'}
                                 allowCustomValue
@@ -759,31 +815,47 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                             <td className="p-2.5">
                               <input
                                 value={c.agent || ''}
-                                onChange={(e) => patchCustomer(c.id, { agent: e.target.value })}
+                                onChange={(e) => handlePatchCustomer(c.id, { agent: e.target.value })}
                                 placeholder={isAr ? 'اسم الوكيل' : 'Agent'}
-                                className="w-full h-9 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold outline-none focus:border-[#F45A0A]"
+                                className="w-full h-[46px] px-3 rounded-[11px] border border-[#E5E7EB] bg-white text-[12px] font-bold outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
                               />
                             </td>
                             <td className="p-2.5">
-                              <select
+                              <SearchableCombobox
+                                value={c.templateId}
+                                onChange={(val) => {
+                                  const tpl = (design.templates || []).find((t) => t.id === val);
+                                  handlePatchCustomer(c.id, {
+                                    templateId: val,
+                                    templateName: tpl?.name,
+                                    sale: tpl ? Number(tpl.seatPrice) || 0 : c.sale,
+                                  });
+                                }}
+                                options={templateComboboxOptions}
+                                placeholder={isAr ? 'اختر القالب...' : 'Template...'}
+                              />
+                            </td>
+                            <td className="p-2.5">
+                              <SearchableCombobox
                                 value={c.payType}
-                                onChange={(e) => patchCustomer(c.id, { payType: e.target.value as 'CASH' | 'CREDIT' })}
-                                className="w-full h-9 px-2 rounded-lg border border-slate-200 bg-white text-[11.5px] font-bold cursor-pointer outline-none focus:border-[#F45A0A]"
-                              >
-                                <option value="CASH">{isAr ? 'نقدي' : 'Cash'}</option>
-                                <option value="CREDIT">{isAr ? 'آجل' : 'Credit'}</option>
-                              </select>
+                                onChange={(val) => handlePatchCustomer(c.id, { payType: (val as 'CASH' | 'CREDIT') || 'CASH' })}
+                                options={[
+                                  { value: 'CASH', label: isAr ? 'نقدي (Cash)' : 'Cash' },
+                                  { value: 'CREDIT', label: isAr ? 'آجل (Credit)' : 'Credit' },
+                                ]}
+                                placeholder={isAr ? 'الدفع...' : 'Payment...'}
+                              />
                             </td>
                             <td className="p-2.5">
                               <input
                                 value={c.sale ? c.sale.toLocaleString('en-US') : ''}
-                                onChange={(e) => patchCustomer(c.id, { sale: numeric(e.target.value) })}
+                                onChange={(e) => handlePatchCustomer(c.id, { sale: numeric(e.target.value) })}
                                 dir="ltr"
                                 placeholder="0"
-                                className="w-full h-9 px-2.5 rounded-lg border border-slate-200 bg-white text-[12.5px] font-mono font-black text-end outline-none focus:border-[#F45A0A]"
+                                className="w-full h-[46px] px-3 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-mono font-black text-end text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
                               />
                             </td>
-                            <td className="p-2.5 text-end font-mono font-black text-[12.5px]" dir="ltr">
+                            <td className="p-2.5 text-end font-mono font-black text-[13px]" dir="ltr">
                               <span className={profit >= 0 ? 'text-[#078B61]' : 'text-rose-600'}>
                                 {profit >= 0 ? '+' : ''}
                                 {money(profit, design.currency)}
@@ -792,7 +864,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                             <td className="p-2.5 text-center">
                               <button
                                 type="button"
-                                onClick={() => removeCustomer(c.id)}
+                                onClick={() => handleRemoveCustomer(c.id)}
                                 className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-200 inline-flex items-center justify-center cursor-pointer transition-colors"
                               >
                                 <Trash2 size={14} />
@@ -812,9 +884,9 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
         </div>
       </div>
 
-      {/* ── 3. BOTTOM SUMMARY & NAVIGATION DOCK ── */}
+      {/* ── 3. BOTTOM STICKY SUMMARY & NAVIGATION DOCK ── */}
       <div className="bg-white border-t border-[#E5E7EB] shadow-lg shrink-0">
-        <div className="max-w-[1650px] mx-auto w-full px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="max-w-[1720px] mx-auto w-full px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap">
           
           {/* Quick Metrics Bar */}
           <div className="flex items-center gap-2.5 flex-wrap text-[11.5px]">
@@ -826,7 +898,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
             </div>
 
             <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
-              <span className="text-[10px] font-bold text-slate-500 block">{isAr ? 'كلفة المقعد' : 'Seat Cost'}</span>
+              <span className="text-[10px] font-bold text-slate-500 block">{isAr ? 'متوسط كلفة المقعد' : 'Avg Seat Cost'}</span>
               <span className="font-mono font-black text-slate-900 text-[12.5px]" dir="ltr">
                 {money(totals.costPerSeat, design.currency)}
               </span>
@@ -835,69 +907,103 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
             <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1">
               <span className="text-[10px] font-bold text-slate-500 block">{isAr ? 'إجمالي المبيعات' : 'Total Sales'}</span>
               <span className="font-mono font-black text-slate-900 text-[12.5px]" dir="ltr">
-                {money(totals.salesTotal, design.currency)}
+                {money(totals.salesTotal || totals.sumExpectedSale, design.currency)}
               </span>
             </div>
 
             <div
               className={`rounded-xl px-3 py-1 border ${
-                totals.realisedProfit >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'
+                (totals.realisedProfit || totals.expectedProfit) >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'
               }`}
             >
               <span className="text-[10px] font-bold text-slate-600 block flex items-center gap-1">
                 <TrendingUp size={12} />
-                <span>{isAr ? 'الربح المحقق' : 'Realised Profit'}</span>
+                <span>{isAr ? 'صافي الربح' : 'Net Profit'}</span>
               </span>
               <span
                 className={`font-mono font-black text-[12.5px] ${
-                  totals.realisedProfit >= 0 ? 'text-[#078B61]' : 'text-rose-700'
+                  (totals.realisedProfit || totals.expectedProfit) >= 0 ? 'text-[#078B61]' : 'text-rose-700'
                 }`}
                 dir="ltr"
               >
-                {totals.realisedProfit >= 0 ? '+' : ''}
-                {money(totals.realisedProfit, design.currency)}
+                {(totals.realisedProfit || totals.expectedProfit) >= 0 ? '+' : ''}
+                {money(totals.realisedProfit || totals.expectedProfit, design.currency)}
               </span>
             </div>
           </div>
 
           {/* Navigation & Action Buttons */}
           <div className="flex items-center gap-2">
-            {step === 2 && (
+            {activeTab === 2 ? (
               <button
                 type="button"
-                onClick={() => setStep(1)}
-                className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer flex items-center gap-1.5 transition-colors"
+                onClick={() => setActiveTab(1)}
+                className="h-[42px] px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer flex items-center gap-1.5 transition-colors"
               >
-                {direction === 'rtl' ? <ArrowRight size={14} /> : <ArrowLeft size={14} />}
-                <span>{isAr ? 'رجوع للتصميم' : 'Back to Design'}</span>
-              </button>
-            )}
-
-            {step === 1 ? (
-              <button
-                type="button"
-                disabled={!stepOneReady}
-                onClick={() => setStep(2)}
-                className="h-9 px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
-              >
-                <span>{isAr ? 'التالي: بيع المقاعد' : 'Next: Sell Seats'}</span>
-                {direction === 'rtl' ? <ArrowLeft size={14} /> : <ArrowRight size={14} />}
+                {direction === 'rtl' ? <ArrowRight size={15} /> : <ArrowLeft size={15} />}
+                <span>{isAr ? 'رجوع لتصميم الكروب' : 'Back to Design'}</span>
               </button>
             ) : (
               <button
                 type="button"
-                disabled={saving}
-                onClick={handleSave}
-                className="h-9 px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:opacity-60 text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+                onClick={() => setActiveTab(2)}
+                className="h-[42px] px-5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
               >
-                {saving ? <Loader size={14} color="white" /> : <Save size={15} />}
-                <span>{isAr ? 'حفظ الكروب' : 'Save Group'}</span>
+                <span>{isAr ? 'التالي: توزيع المقاعد للمستفيدين' : 'Next: Customers & Seats'}</span>
+                {direction === 'rtl' ? <ArrowLeft size={15} /> : <ArrowRight size={15} />}
               </button>
             )}
+
+            <button
+              type="button"
+              disabled={saving}
+              onClick={handleSaveGroup}
+              className="h-[42px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:opacity-60 text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+            >
+              {saving ? <Loader size={15} color="white" /> : <Save size={16} />}
+              <span>{isAr ? 'حفظ الكروب' : 'Save Group'}</span>
+            </button>
           </div>
 
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════
+          4. PRICES TEMPLATE MODAL (قالب الأسعار - الصورة 2 و 4)
+         ══════════════════════════════════════════════════════════════ */}
+      <Modal
+        opened={templateModalOpen}
+        onClose={() => {
+          setTemplateModalOpen(false);
+          setEditingTemplate(null);
+        }}
+        size="90%"
+        centered
+        radius="2xl"
+        withCloseButton={false}
+        overlayProps={{ backgroundOpacity: 0.45, blur: 3 }}
+        styles={{ body: { padding: 0 } }}
+      >
+        {editingTemplate && (
+          <PricesTemplateModalContent
+            template={editingTemplate}
+            groupCurrency={design.currency}
+            isAr={isAr}
+            direction={direction}
+            onSave={(updated) => handleSaveTemplateChanges(updated)}
+            onOpenSale={(updated) => {
+              handleSaveTemplateChanges(updated);
+              handleAddCustomer(updated.id);
+              setActiveTab(2);
+            }}
+            onClose={() => {
+              setTemplateModalOpen(false);
+              setEditingTemplate(null);
+            }}
+            onOpenAccountFinder={(componentId) => setFinder({ open: true, componentId })}
+          />
+        )}
+      </Modal>
 
       {/* Account Finder Modal */}
       <AccountFinderModal
@@ -905,14 +1011,418 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
         initialScope="SUPPLIER"
         onClose={() => setFinder({ open: false })}
         onSelect={(account: AccountFinderResult) => {
-          if (finder.componentId) {
-            patchComponent(finder.componentId, {
-              supplierName: account.name,
-              supplierAccountId: account.id,
-            });
+          if (finder.componentId && editingTemplate) {
+            const updatedComponents = (editingTemplate.components || []).map((c) =>
+              c.id === finder.componentId
+                ? { ...c, supplierName: account.name, supplierAccountId: account.id }
+                : c,
+            );
+            setEditingTemplate({ ...editingTemplate, components: updatedComponents });
           }
         }}
       />
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+// PRICES TEMPLATE EDITOR MODAL COMPONENT (قالب الأسعار - الصورة 2 و 4)
+// ══════════════════════════════════════════════════════════════
+interface TemplateModalProps {
+  template: GroupTemplate;
+  groupCurrency: 'IQD' | 'USD';
+  isAr: boolean;
+  direction: 'rtl' | 'ltr';
+  onSave: (tpl: GroupTemplate) => void;
+  onOpenSale: (tpl: GroupTemplate) => void;
+  onClose: () => void;
+  onOpenAccountFinder: (componentId: string) => void;
+}
+
+const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
+  template: initialTemplate,
+  groupCurrency,
+  isAr,
+  direction,
+  onSave,
+  onOpenSale,
+  onClose,
+  onOpenAccountFinder,
+}) => {
+  const [tpl, setTpl] = useState<GroupTemplate>(initialTemplate);
+  const [tab, setTab] = useState<'AUTO' | 'GLOBAL' | 'EXPENSES'>('AUTO');
+  const [filterType, setFilterType] = useState<string>('ALL');
+  const [filterSupplier, setFilterSupplier] = useState<string>('');
+
+  const patchTpl = (changes: Partial<GroupTemplate>) => setTpl((t) => ({ ...t, ...changes }));
+
+  const addComponent = (kind: GroupComponentKind) => {
+    const newComp: GroupComponent = {
+      id: `cmp-${Date.now()}-${(tpl.components || []).length}`,
+      kind,
+      supplierName: '',
+      cost: 0,
+      perSeat: kind !== 'EXPENSE' && tab === 'AUTO',
+    };
+    patchTpl({ components: [...(tpl.components || []), newComp] });
+  };
+
+  const patchComponent = (id: string, changes: Partial<GroupComponent>) => {
+    patchTpl({
+      components: (tpl.components || []).map((c) => (c.id === id ? { ...c, ...changes } : c)),
+    });
+  };
+
+  const removeComponent = (id: string) => {
+    patchTpl({
+      components: (tpl.components || []).filter((c) => c.id !== id),
+    });
+  };
+
+  const tplTotals = useMemo(() => computeTemplateTotals(tpl), [tpl]);
+
+  // Components filtered by active tab
+  const tabComponents = useMemo(() => {
+    return (tpl.components || []).filter((c) => {
+      if (tab === 'EXPENSES') return c.kind === 'EXPENSE';
+      if (tab === 'GLOBAL') return c.kind !== 'EXPENSE' && !c.perSeat;
+      // tab === 'AUTO'
+      return c.kind !== 'EXPENSE' && c.perSeat;
+    });
+  }, [tpl.components, tab]);
+
+  return (
+    <div className="flex flex-col h-[85vh] bg-[#F8FAFC] font-sans" dir={direction}>
+      
+      {/* ── Top Bar (Image 2: Template Name, Seats, Currency, Price Sale, Open Sale) ── */}
+      <div className="bg-white border-b border-[#E5E7EB] p-4 shadow-2xs shrink-0">
+        <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
+              <Palette size={17} />
+            </div>
+            <div>
+              <h3 className="font-black text-sm text-slate-900 leading-tight">
+                {isAr ? 'قالب الأسعار والمشتريات (Prices Template)' : 'Prices Template Designer'}
+              </h3>
+              <span className="text-[11px] font-bold text-slate-400 font-mono">{tpl.name}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Green Open Sale Button (Image 2: Open Sale) */}
+            <button
+              type="button"
+              onClick={() => onOpenSale(tpl)}
+              className="h-[38px] px-4 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+            >
+              <ShoppingCart size={15} />
+              <span>{isAr ? 'فتح البيع للعملاء (Open Sale)' : 'Open Sale'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 flex items-center justify-center cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Inputs Row (Image 2) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 items-end">
+          {/* Template Name */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-600 block mb-1">
+              {isAr ? 'اسم القالب (Template Name)' : 'Template Name'}
+            </label>
+            <input
+              value={tpl.name}
+              onChange={(e) => patchTpl({ name: e.target.value })}
+              className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+            />
+          </div>
+
+          {/* Seats* */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-600 block mb-1">
+              {isAr ? 'عدد المقاعد (Seats*)' : 'Seats*'}
+            </label>
+            <input
+              value={tpl.seats}
+              onChange={(e) => patchTpl({ seats: Math.max(1, Math.round(numeric(e.target.value))) })}
+              dir="ltr"
+              className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-mono font-black text-center text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+            />
+          </div>
+
+          {/* Currency (SearchableCombobox) */}
+          <div>
+            <SearchableCombobox
+              label={isAr ? 'العملة (Currency)' : 'Currency'}
+              value={tpl.currency}
+              onChange={(val) => patchTpl({ currency: (val as 'IQD' | 'USD') || groupCurrency })}
+              options={[
+                { value: 'USD', label: isAr ? '$ دولار أمريكي (USD)' : '$ US Dollar (USD)' },
+                { value: 'IQD', label: isAr ? 'د.ع دينار عراقي (IQD)' : 'IQD Iraqi Dinar' },
+              ]}
+              placeholder={isAr ? 'العملة...' : 'Currency...'}
+            />
+          </div>
+
+          {/* Price Sale (Image 2) */}
+          <div>
+            <label className="text-[11px] font-bold text-[#F45A0A] block mb-1">
+              {isAr ? 'سعر البيع المقترح (Price Sale)' : 'Price Sale'}
+            </label>
+            <input
+              value={tpl.seatPrice ? tpl.seatPrice.toLocaleString('en-US') : ''}
+              onChange={(e) => patchTpl({ seatPrice: numeric(e.target.value) })}
+              placeholder="0.00"
+              dir="ltr"
+              className="w-full h-[46px] px-3.5 rounded-[11px] border border-orange-300 bg-white text-[13.5px] font-mono font-black text-end text-slate-900 outline-none hover:border-orange-400 focus:border-2 focus:border-[#F45A0A] transition-all"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3 Tabs (Image 2: Auto Purchases, Global Purchases, Global Expenses) ── */}
+      <div className="bg-white border-b border-[#E5E7EB] px-4 pt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setTab('AUTO')}
+          className={`px-4 py-2 text-[12px] font-black border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+            tab === 'AUTO'
+              ? 'border-[#F45A0A] text-[#F45A0A]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Ticket size={14} />
+          <span>{isAr ? 'المشتريات التلقائية للمقعد (Auto Purchases)' : 'Auto Purchases'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTab('GLOBAL')}
+          className={`px-4 py-2 text-[12px] font-black border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+            tab === 'GLOBAL'
+              ? 'border-[#F45A0A] text-[#F45A0A]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Package size={14} />
+          <span>{isAr ? 'المشتريات العامة الشاملة (Global Purchases)' : 'Global Purchases'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTab('EXPENSES')}
+          className={`px-4 py-2 text-[12px] font-black border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+            tab === 'EXPENSES'
+              ? 'border-[#F45A0A] text-[#F45A0A]'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Coins size={14} />
+          <span>{isAr ? 'المصاريف العامة (Global Expenses)' : 'Global Expenses'}</span>
+        </button>
+      </div>
+
+      {/* ── Components List & Filter Bar ── */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        
+        {/* Actions Bar with Kind Selector Dropdown */}
+        <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-[#E5E7EB] flex-wrap">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+            <span>{isAr ? 'عناصر هذا القسم:' : 'Items:'}</span>
+            <span className="px-2 py-0.5 rounded-full bg-slate-100 font-mono">
+              {tabComponents.length}
+            </span>
+          </div>
+
+          {/* Yellow (+) Button Menu as in Image 2 & 4 */}
+          <Menu position="bottom-end" shadow="lg" radius="xl" width={220} withinPortal zIndex={10080}>
+            <Menu.Target>
+              <button
+                type="button"
+                className="h-[36px] px-3.5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all"
+              >
+                <Plus size={15} strokeWidth={2.4} />
+                <span>{isAr ? 'إضافة مكوّن جديد (+)' : 'Add Component (+)'}</span>
+              </button>
+            </Menu.Target>
+            <Menu.Dropdown className="p-1.5" style={{ direction }}>
+              {COMPONENT_KINDS.map((k) => {
+                const Icon = KIND_ICON[k.kind];
+                const tone = KIND_TONE[k.kind];
+                return (
+                  <Menu.Item
+                    key={k.kind}
+                    className="rounded-xl py-2"
+                    leftSection={
+                      <span className={`w-7 h-7 rounded-lg border flex items-center justify-center ${tone.bg} ${tone.border} ${tone.text}`}>
+                        <Icon size={14} />
+                      </span>
+                    }
+                    onClick={() => addComponent(k.kind)}
+                  >
+                    <span className="text-[12.5px] font-bold text-slate-800">{isAr ? k.ar : k.en}</span>
+                  </Menu.Item>
+                );
+              })}
+            </Menu.Dropdown>
+          </Menu>
+        </div>
+
+        {/* Components Rows */}
+        {tabComponents.length === 0 ? (
+          <div className="py-12 text-center rounded-xl border border-dashed border-slate-200 bg-white">
+            <Package size={30} className="mx-auto text-slate-300 mb-2" />
+            <p className="text-[12.5px] font-bold text-slate-600">
+              {isAr ? 'لا توجد عناصر مضافة في هذا التبويب' : 'No items added in this tab yet'}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {isAr
+                ? 'اضغط على «إضافة مكوّن جديد (+)» لإضافة تذكرة، فندق، فيزا، أو نقل'
+                : 'Click "Add Component (+)" to add tickets, hotels, visas, or transports'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {tabComponents.map((c) => {
+              const Icon = KIND_ICON[c.kind];
+              const tone = KIND_TONE[c.kind];
+              return (
+                <div
+                  key={c.id}
+                  className="grid grid-cols-[auto_minmax(0,1.5fr)_minmax(0,1fr)_auto_auto] items-center gap-2.5 p-3 rounded-xl border border-[#E5E7EB] bg-white hover:border-slate-300 transition-all shadow-2xs"
+                >
+                  <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${tone.bg} ${tone.border} ${tone.text}`}>
+                    <Icon size={17} />
+                  </div>
+
+                  {/* Supplier & Account Finder */}
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-black text-slate-500 block mb-0.5">
+                      {kindLabel(c.kind, isAr)}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        value={c.supplierName}
+                        onChange={(e) => patchComponent(c.id, { supplierName: e.target.value })}
+                        placeholder={isAr ? 'اسم المورد أو شركة الطيران...' : 'Supplier name...'}
+                        className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900 outline-none focus:border-[#F45A0A]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onOpenAccountFinder(c.id)}
+                        className="h-8 w-8 rounded-lg border border-orange-200 bg-orange-50 text-[#F45A0A] hover:bg-orange-100 flex items-center justify-center cursor-pointer shrink-0 transition-colors"
+                        title={isAr ? 'بحث في الحسابات' : 'Search accounts'}
+                      >
+                        <Search size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Cost Input */}
+                  <div>
+                    <span className="text-[10px] font-black text-slate-500 block mb-0.5">
+                      {isAr ? `الكلفة (${tpl.currency})` : `Cost (${tpl.currency})`}
+                    </span>
+                    <input
+                      value={c.cost ? c.cost.toLocaleString('en-US') : ''}
+                      onChange={(e) => patchComponent(c.id, { cost: numeric(e.target.value) })}
+                      placeholder="0"
+                      dir="ltr"
+                      className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12.5px] font-mono font-black text-slate-900 text-end outline-none focus:border-[#F45A0A]"
+                    />
+                  </div>
+
+                  {/* Scope Toggle: per seat vs whole group */}
+                  <button
+                    type="button"
+                    onClick={() => patchComponent(c.id, { perSeat: !c.perSeat })}
+                    className={`h-8 px-2.5 rounded-lg border text-[11px] font-black cursor-pointer whitespace-nowrap transition-colors ${
+                      c.perSeat
+                        ? 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                        : 'bg-amber-50 border-amber-200 text-amber-800'
+                    }`}
+                  >
+                    {c.perSeat ? (isAr ? 'للمقعد' : 'Per seat') : isAr ? 'للكروب كامل' : 'Whole group'}
+                  </button>
+
+                  {/* Delete */}
+                  <button
+                    type="button"
+                    onClick={() => removeComponent(c.id)}
+                    className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-200 flex items-center justify-center cursor-pointer shrink-0 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Bottom Summary Row (Image 2: Buy, Global Buy, Expenses, Cost, Sale) ── */}
+      <div className="bg-white border-t border-[#E5E7EB] p-3 shadow-md shrink-0">
+        <div className="flex items-center justify-between gap-3 flex-wrap text-xs">
+          
+          <div className="flex items-center gap-3 font-mono font-bold flex-wrap" dir="ltr">
+            <span className="text-slate-600">
+              <span className="font-sans text-slate-400 font-semibold">{isAr ? 'مشتريات المقاعد: ' : 'Buy: '}</span>
+              {money(tplTotals.autoBuy, tpl.currency)}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-600">
+              <span className="font-sans text-slate-400 font-semibold">{isAr ? 'شاملة: ' : 'Global Buy: '}</span>
+              {money(tplTotals.globalBuy, tpl.currency)}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-600">
+              <span className="font-sans text-slate-400 font-semibold">{isAr ? 'مصاريف: ' : 'Expenses: '}</span>
+              {money(tplTotals.globalExpenses, tpl.currency)}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-900 font-black">
+              <span className="font-sans text-slate-500">{isAr ? 'الكلفة الكلية: ' : 'Cost: '}</span>
+              {money(tplTotals.totalCost, tpl.currency)}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-slate-900 font-black">
+              <span className="font-sans text-slate-500">{isAr ? 'المبيعات: ' : 'Sale: '}</span>
+              {money(tplTotals.totalSale, tpl.currency)}
+            </span>
+            <span className="text-slate-300">•</span>
+            <span className="text-[#078B61] font-black">
+              <span className="font-sans text-emerald-800">{isAr ? 'صافي الربح: ' : 'Profit: '}</span>
+              +{money(tplTotals.totalProfit, tpl.currency)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-[36px] px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+            >
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onSave(tpl)}
+              className="h-[36px] px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black cursor-pointer shadow-xs transition-all"
+            >
+              {isAr ? 'حفظ تعديلات القالب' : 'Save Template'}
+            </button>
+          </div>
+
+        </div>
+      </div>
+
     </div>
   );
 };

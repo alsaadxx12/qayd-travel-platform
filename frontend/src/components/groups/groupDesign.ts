@@ -38,10 +38,21 @@ export interface GroupComponent {
   note?: string;
 }
 
+export interface GroupTemplate {
+  id: string;
+  name: string;
+  seats: number;
+  currency: 'IQD' | 'USD';
+  seatPrice: number;
+  components: GroupComponent[];
+}
+
 export interface GroupCustomer {
   id: string;
   name: string;
   agent?: string;
+  templateId?: string;
+  templateName?: string;
   /** نقدي أو آجل. */
   payType: 'CASH' | 'CREDIT';
   sale: number;
@@ -63,80 +74,150 @@ export interface GroupDesign {
   seatPrice: number;
   active: boolean;
   notes: string;
+  templates: GroupTemplate[];
   components: GroupComponent[];
   customers: GroupCustomer[];
 }
 
 export const COMPONENT_KINDS: Array<{ kind: GroupComponentKind; ar: string; en: string }> = [
-  { kind: 'TICKET', ar: 'تذكرة', en: 'Ticket' },
-  { kind: 'HOTEL', ar: 'فندق', en: 'Hotel' },
-  { kind: 'VISA', ar: 'تأشيرة', en: 'Visa' },
-  { kind: 'INSURANCE', ar: 'تأمين', en: 'Insurance' },
-  { kind: 'TRANSPORT', ar: 'نقل', en: 'Transport' },
-  { kind: 'GUIDE', ar: 'مرشد', en: 'Guide' },
-  { kind: 'PACKAGE', ar: 'باكج', en: 'Package' },
-  { kind: 'EXPENSE', ar: 'مصروف عام', en: 'Expense' },
+  { kind: 'TICKET', ar: 'تذكرة طيران', en: 'Flight Ticket' },
+  { kind: 'HOTEL', ar: 'حجز فندق', en: 'Hotel Booking' },
+  { kind: 'VISA', ar: 'تأشيرة فيزا', en: 'Visa' },
+  { kind: 'INSURANCE', ar: 'تأمين سفر', en: 'Insurance' },
+  { kind: 'TRANSPORT', ar: 'نقل وباصات', en: 'Transport' },
+  { kind: 'GUIDE', ar: 'مرشد سياحي', en: 'Tour Guide' },
+  { kind: 'PACKAGE', ar: 'باقة سياحية', en: 'Package' },
+  { kind: 'EXPENSE', ar: 'مصروف عام', en: 'Global Expense' },
 ];
 
 export const kindLabel = (kind: GroupComponentKind, isAr: boolean) =>
   COMPONENT_KINDS.find((k) => k.kind === kind)?.[isAr ? 'ar' : 'en'] || kind;
 
-export const emptyDesign = (): GroupDesign => ({
-  groupName: '',
-  groupType: 'FULL',
-  country: 'العراق',
-  routeFrom: '',
-  routeTo: '',
-  travelDate: '',
-  buyDate: new Date().toISOString().slice(0, 10),
-  seats: 1,
-  currency: 'IQD',
-  seatPrice: 0,
-  active: true,
-  notes: '',
+export const createDefaultTemplate = (seats = 1, currency: 'IQD' | 'USD' = 'USD', seatPrice = 0): GroupTemplate => ({
+  id: `tpl-${Date.now()}`,
+  name: 'قالب الأسعار الرئيسي (Standard)',
+  seats,
+  currency,
+  seatPrice,
   components: [],
-  customers: [],
 });
 
-/**
- * ما يُحسب من التصميم.
- *
- * المكوّن إمّا للمقعد أو للمجموعة، فيُوحَّد إلى كلفة المقعد قبل الجمع — وإلا
- * اختلط ثمنُ حافلةٍ واحدة بثمن تذكرةٍ لكل راكب.
- */
-export const computeGroupTotals = (design: GroupDesign) => {
-  const seats = Math.max(1, Number(design.seats) || 1);
+export const emptyDesign = (): GroupDesign => {
+  const defaultTpl = createDefaultTemplate(1, 'USD', 0);
+  return {
+    groupName: '',
+    groupType: 'FULL',
+    country: 'العراق',
+    routeFrom: '',
+    routeTo: '',
+    travelDate: '',
+    buyDate: new Date().toISOString().slice(0, 10),
+    seats: 1,
+    currency: 'USD',
+    seatPrice: 0,
+    active: true,
+    notes: '',
+    templates: [defaultTpl],
+    components: [],
+    customers: [],
+  };
+};
 
-  let costPerSeat = 0;
-  let costTotal = 0;
-  design.components.forEach((c) => {
-    const value = Number(c.cost) || 0;
-    if (c.perSeat) {
-      costPerSeat += value;
-      costTotal += value * seats;
+/**
+ * حساب تكاليف وأرباح القالب الفردي.
+ */
+export const computeTemplateTotals = (tpl: GroupTemplate) => {
+  const seats = Math.max(1, Number(tpl.seats) || 1);
+  let autoBuy = 0;
+  let globalBuy = 0;
+  let globalExpenses = 0;
+
+  (tpl.components || []).forEach((c) => {
+    const cost = Number(c.cost) || 0;
+    if (c.kind === 'EXPENSE') {
+      globalExpenses += cost;
+    } else if (c.perSeat) {
+      autoBuy += cost * seats;
     } else {
-      costPerSeat += value / seats;
-      costTotal += value;
+      globalBuy += cost;
     }
   });
 
-  const soldSeats = design.customers.length;
-  const salesTotal = design.customers.reduce((sum, c) => sum + (Number(c.sale) || 0), 0);
-  const expectedSales = (Number(design.seatPrice) || 0) * seats;
+  const totalCost = autoBuy + globalBuy + globalExpenses;
+  const costPerSeat = Math.round((totalCost / seats) * 100) / 100;
+  const totalSale = (Number(tpl.seatPrice) || 0) * seats;
+  const profitPerSeat = (Number(tpl.seatPrice) || 0) - costPerSeat;
+  const totalProfit = totalSale - totalCost;
 
   return {
     seats,
-    soldSeats,
-    remainingSeats: Math.max(0, seats - soldSeats),
+    autoBuy,
+    globalBuy,
+    globalExpenses,
+    totalCost,
     costPerSeat,
-    costTotal,
-    /** كلفة ما بيع فعلاً — وهي أساس الربح المحقق. */
+    seatPrice: Number(tpl.seatPrice) || 0,
+    totalSale,
+    profitPerSeat,
+    totalProfit,
+  };
+};
+
+/**
+ * ما يُحسب من التصميم لجميع القوالب والمستفيدين.
+ */
+export const computeGroupTotals = (design: GroupDesign) => {
+  // Ensure templates exist
+  const templates = design.templates && design.templates.length > 0
+    ? design.templates
+    : [
+        {
+          id: 'tpl-fallback',
+          name: 'القالب الرئيسي',
+          seats: design.seats || 1,
+          currency: design.currency || 'USD',
+          seatPrice: design.seatPrice || 0,
+          components: design.components || [],
+        },
+      ];
+
+  let sumSeats = 0;
+  let sumBuy = 0;
+  let sumExpenses = 0;
+  let sumCost = 0;
+  let sumExpectedSale = 0;
+
+  templates.forEach((tpl) => {
+    const tplTotals = computeTemplateTotals(tpl);
+    sumSeats += tplTotals.seats;
+    sumBuy += tplTotals.autoBuy + tplTotals.globalBuy;
+    sumExpenses += tplTotals.globalExpenses;
+    sumCost += tplTotals.totalCost;
+    sumExpectedSale += tplTotals.totalSale;
+  });
+
+  const effectiveSeats = Math.max(design.seats, sumSeats) || 1;
+  const costPerSeat = Math.round((sumCost / effectiveSeats) * 100) / 100;
+
+  const soldSeats = (design.customers || []).length;
+  const salesTotal = (design.customers || []).reduce((sum, c) => sum + (Number(c.sale) || 0), 0);
+
+  return {
+    seats: effectiveSeats,
+    soldSeats,
+    remainingSeats: Math.max(0, effectiveSeats - soldSeats),
+    costPerSeat,
+    costTotal: sumCost,
+    sumBuy,
+    sumExpenses,
+    sumCost,
+    sumExpectedSale,
     soldCost: costPerSeat * soldSeats,
     salesTotal,
-    expectedSales,
+    expectedSales: sumExpectedSale,
     profitPerSeat: (Number(design.seatPrice) || 0) - costPerSeat,
     realisedProfit: salesTotal - costPerSeat * soldSeats,
-    expectedProfit: expectedSales - costTotal,
+    expectedProfit: sumExpectedSale - sumCost,
   };
 };
 
@@ -155,6 +236,7 @@ const MARKER_CLOSE = ':GROUP_DESIGN>>>';
 
 export const encodeDesignIntoNotes = (userNotes: string, design: GroupDesign): string => {
   const payload = {
+    templates: design.templates,
     components: design.components,
     customers: design.customers,
     groupType: design.groupType,
@@ -201,6 +283,19 @@ export const designFromTicket = (ticket?: TicketData | null): GroupDesign => {
     Number(payload?.customers?.length) ||
     1;
 
+  const restoredTemplates: GroupTemplate[] = Array.isArray(payload?.templates) && payload.templates.length > 0
+    ? payload.templates
+    : [
+        {
+          id: 'tpl-default',
+          name: 'قالب الأسعار الرئيسي',
+          seats: Math.max(seats, 1),
+          currency: (String(ticket.currency || 'USD').toUpperCase() === 'IQD' ? 'IQD' : 'USD') as 'IQD' | 'USD',
+          seatPrice: Number(payload?.seatPrice) || 0,
+          components: Array.isArray(payload?.components) ? payload.components : [],
+        },
+      ];
+
   return {
     ...base,
     groupName: (ticket as any).groupName || ticket.reference || ticket.invoiceNumber || '',
@@ -211,11 +306,12 @@ export const designFromTicket = (ticket?: TicketData | null): GroupDesign => {
     travelDate: ticket.travelDate ? String(ticket.travelDate).slice(0, 10) : '',
     buyDate: payload?.buyDate || (ticket.issueDate ? String(ticket.issueDate).slice(0, 10) : base.buyDate),
     seats: Math.max(seats, Number(payload?.customers?.length) || 1),
-    currency: (String(ticket.currency || 'IQD').toUpperCase() === 'USD' ? 'USD' : 'IQD') as 'IQD' | 'USD',
+    currency: (String(ticket.currency || 'USD').toUpperCase() === 'IQD' ? 'IQD' : 'USD') as 'IQD' | 'USD',
     seatPrice: Number(payload?.seatPrice) || 0,
     active: payload?.active !== false,
     notes: userNotes,
-    components: Array.isArray(payload?.components) ? payload.components : [],
+    templates: restoredTemplates,
+    components: Array.isArray(payload?.components) ? payload.components : (restoredTemplates[0]?.components || []),
     customers: Array.isArray(payload?.customers)
       ? payload.customers
       : (ticket.passengers || []).map((p: any, i: number) => ({
