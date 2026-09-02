@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { apiRequest } from '../api/client';
+import { matchesSearchTokens } from '../components/ui/SearchableCombobox';
 import { Button, Badge, Drawer, SegmentedControl, Tooltip } from '@mantine/core';
 import {
   IconPlus,
@@ -68,6 +69,15 @@ export const PartnersPage: React.FC = () => {
   const [onlyWithEmail, setOnlyWithEmail] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  /*
+   * الجدول يُرقَّم صفحات.
+   *
+   * كانت الشاشة ترسم 2368 صفاً دفعةً واحدة — نحو تسعة عشر ألف خانة ومربّع اختيار
+   * لكل صف — فتثقل في المتصفح وتتأخّر في الاستجابة للكتابة والتصفية. والصفحة
+   * الواحدة تكفي العين.
+   */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
 
   // Fetch Accounts from Backend (Real Database)
   const fetchPartners = async () => {
@@ -173,18 +183,28 @@ export const PartnersPage: React.FC = () => {
 
       // Search Query
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesName = (p.nameAr || '').toLowerCase().includes(q) || (p.nameEn || '').toLowerCase().includes(q);
-        const matchesCode = (p.code || '').toLowerCase().includes(q);
-        const matchesPhone = (p.phone || '').toLowerCase().includes(q);
-        const matchesEmail = (p.email || '').toLowerCase().includes(q);
-        const matchesAddress = (p.address || '').toLowerCase().includes(q);
-        return matchesName || matchesCode || matchesPhone || matchesEmail || matchesAddress;
+        // كل كلمة ترد في مكانٍ ما، بأي ترتيب — فيجد «قريش كربلاء» صاحبَ «قمر قريش / كربلاء».
+        const haystack = [p.nameAr, p.nameEn, p.code, p.phone, p.email, p.address]
+          .filter(Boolean)
+          .join(' ');
+        return matchesSearchTokens(haystack, searchQuery);
       }
 
       return true;
     });
   }, [partners, typeFilter, onlyWithEmail, searchQuery]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredPartners.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedPartners = useMemo(
+    () => filteredPartners.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [filteredPartners, currentPage, pageSize]
+  );
+
+  // أي تغيير في التصفية يعيدنا إلى الصفحة الأولى، وإلا وقفنا على صفحة لم تعد موجودة.
+  useEffect(() => {
+    setPage(1);
+  }, [typeFilter, onlyWithEmail, searchQuery, pageSize]);
 
   // Copy helper
   const handleCopyText = (text: string, id: string, label: string) => {
@@ -377,7 +397,7 @@ export const PartnersPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredPartners.map((partner, idx) => {
+                pagedPartners.map((partner, idx) => {
                   const isSelected = selectedIds.includes(partner.id);
                   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                   const hasValidEmail = partner.email && emailRegex.test(partner.email.trim());
@@ -531,9 +551,53 @@ export const PartnersPage: React.FC = () => {
         </div>
 
         {/* Directory Footer */}
-        <div className="bg-slate-50/80 border-t border-slate-200 px-5 py-3 flex items-center justify-between text-xs text-slate-500 font-medium">
-          <div>
-            عرض <strong className="font-mono text-slate-800">{filteredPartners.length}</strong> من أصل <strong className="font-mono text-slate-800">{partners.length}</strong> طرف
+        <div className="bg-slate-50/80 border-t border-slate-200 px-5 py-3 flex items-center justify-between gap-3 flex-wrap text-xs text-slate-500 font-medium">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div>
+              عرض{' '}
+              <strong className="font-mono text-slate-800">
+                {filteredPartners.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–
+                {Math.min(currentPage * pageSize, filteredPartners.length)}
+              </strong>{' '}
+              من <strong className="font-mono text-slate-800">{filteredPartners.length}</strong>
+              {filteredPartners.length !== partners.length && (
+                <> (الكل <strong className="font-mono text-slate-800">{partners.length}</strong>)</>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-2 py-1 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              >
+                السابق
+              </button>
+              <span className="font-mono font-bold text-slate-700 px-1.5">
+                {currentPage} / {pageCount}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                className="px-2 py-1 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              >
+                التالي
+              </button>
+            </div>
+
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="px-2 py-1 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 cursor-pointer outline-none focus:border-[#F45A0A]"
+            >
+              {[25, 50, 100, 200].map((n) => (
+                <option key={n} value={n}>
+                  {n} لكل صفحة
+                </option>
+              ))}
+            </select>
           </div>
           {selectedIds.length > 0 && (
             <div className="text-[#F45A0A] font-bold">
