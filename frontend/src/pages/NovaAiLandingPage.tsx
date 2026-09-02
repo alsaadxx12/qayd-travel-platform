@@ -41,6 +41,7 @@ import {
   Wifi,
   ExternalLink,
 } from 'lucide-react';
+import { InteractiveGdsCopilot } from '../components/nova/InteractiveGdsCopilot';
 
 export const NovaAiLandingPage: React.FC = () => {
   const [isAr, setIsAr] = useState(true);
@@ -185,9 +186,12 @@ export const NovaAiLandingPage: React.FC = () => {
             </div>
           </Link>
 
-          {/* Nav Links */}
-          <nav className="hidden lg:flex items-center gap-8 text-[13px] font-bold text-slate-700">
+          <nav className="hidden lg:flex items-center gap-7 text-[13px] font-bold text-slate-700">
             <a href="#flow" className="hover:text-[#F45A0A] transition-colors">{isAr ? 'محاكاة حركة الأموال' : 'Money Flow'}</a>
+            <a href="#gds-copilot" className="hover:text-[#F45A0A] transition-colors flex items-center gap-1">
+              <Sparkles size={13} className="text-[#F45A0A]" />
+              <span>{isAr ? 'كونسول الذكاء الاصطناعي' : 'AI GDS Copilot'}</span>
+            </a>
             <a href="#checkout" className="hover:text-[#F45A0A] transition-colors">{isAr ? 'بوابة الدفع والإصدار' : 'Checkout Terminal'}</a>
             <a href="#analytics" className="hover:text-[#F45A0A] transition-colors">{isAr ? 'الرسوم والتحليلات' : 'Analytics'}</a>
             <a href="#solutions" className="hover:text-[#F45A0A] transition-colors">{isAr ? 'الحلول السياحية' : 'Solutions'}</a>
@@ -584,6 +588,11 @@ export const NovaAiLandingPage: React.FC = () => {
 
         </div>
       </section>
+
+      {/* ── 5.5 AI GDS COPILOT & DECOMPILER CONSOLE ── */}
+      <div id="gds-copilot">
+        <InteractiveGdsCopilot isAr={isAr} />
+      </div>
 
       {/* ── 6. STRIPE CHECKOUT TERMINAL & TICKETING WIDGET ── */}
       <section id="checkout" className="py-20 bg-[#FAFAFC] border-b border-slate-200">
