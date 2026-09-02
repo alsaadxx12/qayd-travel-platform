@@ -591,6 +591,23 @@ export const SubCashboxesSettlementPage: React.FC = () => {
     });
   }, [allItems, showMainCashbox, activeCardFilter, typeFilter, statusFilter, startDate, endDate, searchQuery]);
 
+  /** عدد سندات القبض والدفع ضمن الفلاتر القائمة — يُظهرها التبويب دون النوع نفسه. */
+  const typeCounts = useMemo(() => {
+    let receipt = 0;
+    let payment = 0;
+    allItems.forEach((item) => {
+      if (!showMainCashbox && item.isMainCashbox && activeCardFilter !== item.cashboxAccountId) return;
+      if (activeCardFilter !== 'ALL' && item.cashboxAccountId !== activeCardFilter) return;
+      if (statusFilter === 'SETTLED' && !item.isSettled) return;
+      if (statusFilter === 'PENDING' && item.isSettled) return;
+      if (startDate && item.dateFormatted < startDate) return;
+      if (endDate && item.dateFormatted > endDate) return;
+      if (item.type === 'RECEIPT') receipt++;
+      else payment++;
+    });
+    return { receipt, payment, all: receipt + payment };
+  }, [allItems, showMainCashbox, activeCardFilter, statusFilter, startDate, endDate]);
+
   // Overall KPI Calculations across all items
   const stats = useMemo(() => {
     let pendingIQD = 0;
@@ -860,6 +877,36 @@ export const SubCashboxesSettlementPage: React.FC = () => {
         </div>
       </div>
 
+      {/* ── تبويبات فصل القبض عن الدفع ── */}
+      <div className="flex items-center gap-2 no-print">
+        {([
+          { key: 'ALL', label: isAr ? 'الكل' : 'All', count: typeCounts.all, active: 'bg-slate-800 text-white', dot: 'bg-white' },
+          { key: 'RECEIPT', label: isAr ? 'سندات القبض' : 'Receipts', count: typeCounts.receipt, active: 'bg-emerald-600 text-white', dot: 'bg-white' },
+          { key: 'PAYMENT', label: isAr ? 'سندات الدفع' : 'Payments', count: typeCounts.payment, active: 'bg-rose-600 text-white', dot: 'bg-white' },
+        ] as const).map((t) => {
+          const on = (typeFilter || 'ALL') === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTypeFilter(t.key)}
+              className={`flex items-center gap-2 px-4 h-10 rounded-xl font-extrabold text-xs transition-all cursor-pointer border ${
+                on ? `${t.active} border-transparent shadow-sm` : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {t.key === 'RECEIPT' && <IconArrowDownLeft size={15} className={on ? 'text-white' : 'text-emerald-600'} />}
+              {t.key === 'PAYMENT' && <IconArrowUpRight size={15} className={on ? 'text-white' : 'text-rose-600'} />}
+              <span>{t.label}</span>
+              <span className={`min-w-[20px] px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                on ? 'bg-white/25' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {t.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── 4. TOOLBAR & FILTERS ── */}
       <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3 no-print">
         <div className="flex flex-wrap items-center gap-2.5 flex-1">
@@ -882,21 +929,6 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                 ✕
               </button>
             )}
-          </div>
-
-          {/* Type Filter */}
-          <div className="w-44">
-            <Select
-              size="xs"
-              radius="md"
-              data={[
-                { value: 'ALL', label: isAr ? 'جميع العمليات' : 'All Types' },
-                { value: 'RECEIPT', label: isAr ? 'سندات القبض فقط' : 'Receipts' },
-                { value: 'PAYMENT', label: isAr ? 'سندات الصرف فقط' : 'Payments' },
-              ]}
-              value={typeFilter}
-              onChange={(val) => setTypeFilter(val || 'ALL')}
-            />
           </div>
 
           {/* Status Filter */}
