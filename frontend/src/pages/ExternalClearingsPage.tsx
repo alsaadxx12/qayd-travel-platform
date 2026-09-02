@@ -528,10 +528,10 @@ export const ExternalClearingsPage: React.FC = () => {
   return (
     <div className="space-y-3 w-full select-none text-slate-800 font-['IBM_Plex_Sans_Arabic',sans-serif]">
       {/* ═══════════════ 1. رأس الصفحة والأزرار الرئيسية ═══════════════ */}
-      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-gradient-to-l from-white to-orange-50/40 border border-slate-200 rounded-2xl px-4 py-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center shrink-0">
-            <IconScale size={22} />
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#F45A0A] to-orange-400 text-white flex items-center justify-center shrink-0 shadow-md shadow-orange-500/25">
+            <IconScale size={22} stroke={1.9} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -598,68 +598,64 @@ export const ExternalClearingsPage: React.FC = () => {
       </div>
 
       {/* ═══════════════ 2. بطاقات الإحصائيات ═══════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* 1. إجمالي التقييم الشامل بالدولار */}
-        <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
-            <span>إجمالي التصفية الشامل بالدولار</span>
-            <Badge size="xs" color="orange" variant="light" className="font-mono font-bold">
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 pt-5">
+          <span className="absolute top-0 inset-x-0 h-1 bg-gradient-to-l from-[#F45A0A] to-orange-400" />
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] text-slate-500 font-bold">إجمالي التصفية الشامل</span>
+            <span className="text-[10px] font-mono font-black text-orange-700 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
               {totals.totalCount} حساب
-            </Badge>
+            </span>
           </div>
-          <div className="text-lg font-black text-slate-900 font-mono tracking-tight">
+          <div className="text-2xl font-black text-slate-900 font-mono tracking-tight tabular-nums" dir="ltr">
             ${totals.grandTotalUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[10px] font-medium text-slate-400 mt-1">
-            مجموع أرصدة العملات الثلاث مقومة بالدولار
-          </div>
-        </Paper>
+          <div className="text-[10px] font-medium text-slate-400 mt-1">العملات الثلاث مقوّمة بالدولار</div>
+        </div>
 
-        {/* 2. الأرصدة بالدولار الصافي */}
-        <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
-            <span>الأرصدة بالدولار ($ USD)</span>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">USD</span>
+        {/* 2. الأرصدة بالدولار */}
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 pt-5">
+          <span className="absolute top-0 inset-x-0 h-1 bg-emerald-500" />
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] text-slate-500 font-bold">الأرصدة بالدولار</span>
+            <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">USD</span>
           </div>
-          <div className="text-lg font-black text-emerald-900 font-mono">
+          <div className="text-2xl font-black text-emerald-800 font-mono tabular-nums" dir="ltr">
             ${totals.sumUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[10px] font-medium text-slate-400 mt-1">
-            إجمالي رصيد الدولار المباشر
-          </div>
-        </Paper>
+          <div className="text-[10px] font-medium text-slate-400 mt-1">رصيد الدولار المباشر</div>
+        </div>
 
-        {/* 3. الأرصدة بالدينار العراقي */}
-        <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
-            <span>الأرصدة بالدينار (IQD)</span>
-            <span className="text-[10px] font-mono font-bold text-slate-500">
+        {/* 3. الأرصدة بالدينار */}
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 pt-5">
+          <span className="absolute top-0 inset-x-0 h-1 bg-sky-500" />
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] text-slate-500 font-bold">الأرصدة بالدينار</span>
+            <span className="text-[10px] font-mono font-bold text-slate-400" dir="ltr">
               ≈ ${(totals.sumIQD / (iqdRate || 1530)).toLocaleString('en-US', { maximumFractionDigits: 0 })}
             </span>
           </div>
-          <div className="text-lg font-black text-slate-900 font-mono">
-            {totals.sumIQD.toLocaleString()} <span className="text-xs font-sans font-bold text-slate-500">د.ع</span>
+          <div className="text-2xl font-black text-slate-900 font-mono tabular-nums">
+            {totals.sumIQD.toLocaleString()} <span className="text-xs font-sans font-bold text-slate-400">د.ع</span>
           </div>
-          <div className="text-[10px] font-medium text-slate-400 mt-1">
-            سعر الصرف المرجعي: {iqdRate.toLocaleString()} د.ع
-          </div>
-        </Paper>
+          <div className="text-[10px] font-medium text-slate-400 mt-1">سعر الصرف: {iqdRate.toLocaleString()}</div>
+        </div>
 
-        {/* 4. الأرصدة بالتومان الإيراني */}
-        <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
-            <span>الأرصدة بالتومان (TOMAN)</span>
-            <span className="text-[10px] font-mono font-bold text-slate-500">
+        {/* 4. الأرصدة بالتومان */}
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xs p-4 pt-5">
+          <span className="absolute top-0 inset-x-0 h-1 bg-violet-500" />
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] text-slate-500 font-bold">الأرصدة بالتومان</span>
+            <span className="text-[10px] font-mono font-bold text-slate-400" dir="ltr">
               ≈ ${(totals.sumTOMAN / (tomanRate || 92000)).toLocaleString('en-US', { maximumFractionDigits: 0 })}
             </span>
           </div>
-          <div className="text-lg font-black text-slate-900 font-mono">
-            {totals.sumTOMAN.toLocaleString()} <span className="text-xs font-sans font-bold text-slate-500">تومان</span>
+          <div className="text-2xl font-black text-slate-900 font-mono tabular-nums">
+            {totals.sumTOMAN.toLocaleString()} <span className="text-xs font-sans font-bold text-slate-400">تومان</span>
           </div>
-          <div className="text-[10px] font-medium text-slate-400 mt-1">
-            سعر الصرف المرجعي: {tomanRate.toLocaleString()} تومان
-          </div>
-        </Paper>
+          <div className="text-[10px] font-medium text-slate-400 mt-1">سعر الصرف: {tomanRate.toLocaleString()}</div>
+        </div>
       </div>
 
       {/* ═══════════════ 3. التبويبات وجدول الحسابات ═══════════════ */}
@@ -1059,8 +1055,8 @@ export const ExternalClearingsPage: React.FC = () => {
         onClose={() => setCreateModalOpen(false)}
         title={
           <div className="flex items-center gap-2.5 text-slate-900 font-bold text-sm">
-            <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200 text-orange-700 flex items-center justify-center shrink-0">
-              {accountModalMode === 'CREATE' ? <IconPlus size={16} /> : <IconEdit size={16} />}
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#F45A0A] to-orange-400 text-white flex items-center justify-center shrink-0 shadow-sm shadow-orange-500/25">
+              {accountModalMode === 'CREATE' ? <IconPlus size={17} /> : <IconEdit size={17} />}
             </div>
             <span>
               {accountModalMode === 'CREATE'
@@ -1074,10 +1070,10 @@ export const ExternalClearingsPage: React.FC = () => {
         radius="lg"
       >
         <div className="space-y-3.5 text-xs select-none">
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 font-medium text-[11px] leading-relaxed">
+          <div className="rounded-xl p-3 ps-3.5 text-slate-700 font-medium text-[11px] leading-relaxed bg-orange-50/60 border border-orange-200/70" style={{ borderInlineStartWidth: 3, borderInlineStartColor: '#F45A0A' }}>
             {accountModalMode === 'CREATE'
-              ? 'هذا الحساب يدعم العملات الثلاث تلقائياً (الدولار، الدينار، والتومان) تحت جذر «الأطراف الخارجية» (الدليل 9، خارج الميزانية)، دون أن يختلط بالموجودات أو المطلوبات أو الأرباح والخسائر.'
-              : 'يمكنك تعديل المسميات وجهات الاتصال والملاحظات. الأرصدة الافتتاحية مقفلة ولا يمكن تعديلها مباشرة حفاظاً على دقة القيود.'}
+              ? 'يدعم العملات الثلاث (دولار، دينار، تومان) تحت جذر «الأطراف الخارجية» (الدليل 9، خارج الميزانية) — لا يُحتسب ضمن الموجودات أو المطلوبات.'
+              : 'يمكنك تعديل المسميات وجهات الاتصال والملاحظات. الأرصدة الافتتاحية مقفلة وتُعدَّل حصراً عبر السندات والقيود.'}
           </div>
 
           <div>
@@ -1238,17 +1234,17 @@ export const ExternalClearingsPage: React.FC = () => {
             size="xs"
           />
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <Button size="xs" variant="default" onClick={() => setCreateModalOpen(false)}>
+          <div className="flex items-center justify-end gap-2 pt-3 mt-1 border-t border-slate-100">
+            <Button size="sm" variant="default" radius="md" onClick={() => setCreateModalOpen(false)} className="font-bold px-5">
               إلغاء
             </Button>
             <Button
-              size="xs"
-              color="orange"
+              size="sm"
+              radius="md"
               loading={creating}
               onClick={handleSaveAccount}
-              leftSection={<IconCheck size={14} />}
-              className="font-bold bg-orange-600 hover:bg-orange-700 text-white"
+              leftSection={<IconCheck size={16} />}
+              className="font-black px-6 bg-gradient-to-l from-[#F45A0A] to-orange-500 hover:from-[#DD4F05] hover:to-orange-600 text-white shadow-md shadow-orange-500/25 border-0"
             >
               {accountModalMode === 'CREATE' ? 'حفظ وفتح الحساب' : 'حفظ التعديلات'}
             </Button>
