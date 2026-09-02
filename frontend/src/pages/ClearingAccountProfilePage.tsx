@@ -801,7 +801,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
                 </Badge>
               ) : (
                 <Badge size="xs" color="gray" variant="light" className="font-bold">
-                  مقاصة
+                  حساب عميل
                 </Badge>
               )}
             </div>
@@ -1260,10 +1260,10 @@ export const ClearingAccountProfilePage: React.FC = () => {
                     <Table.Th className="w-40">الجهة المحول لها / المستفيد</Table.Th>
                     <Table.Th className="w-36">الملاحظات</Table.Th>
                     <Table.Th className="text-center w-20">العملة</Table.Th>
-                    <Table.Th className="text-center w-28">مدين ($)</Table.Th>
-                    <Table.Th className="text-center w-28">دائن ($)</Table.Th>
-                    <Table.Th className="text-center w-32 font-black text-slate-900 bg-slate-200/50">
-                      الرصيد التراكمي ($)
+                    <Table.Th className="text-center w-28 whitespace-nowrap">مدين {isClientAccount ? '(د.ع)' : '($)'}</Table.Th>
+                    <Table.Th className="text-center w-28 whitespace-nowrap">دائن {isClientAccount ? '(د.ع)' : '($)'}</Table.Th>
+                    <Table.Th className="text-center w-32 font-black text-slate-900 bg-slate-200/50 whitespace-nowrap">
+                      الرصيد التراكمي {isClientAccount ? '(د.ع)' : '($)'}
                     </Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -1369,19 +1369,29 @@ export const ClearingAccountProfilePage: React.FC = () => {
                           {row.currency}
                         </Table.Td>
 
-                        {/* مدين */}
-                        <Table.Td className="text-center font-mono font-bold text-rose-700">
-                          {row.debit > 0 ? `$${row.debit.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
+                        {/* مدين — بالدينار لحساب العميل، وإلا بالدولار */}
+                        <Table.Td className="text-center font-mono font-bold text-rose-700 whitespace-nowrap">
+                          {row.debit > 0
+                            ? isClientAccount
+                              ? `${Math.round(row.debit * iqdRate).toLocaleString('en-US')} د.ع`
+                              : `$${row.debit.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                            : '—'}
                         </Table.Td>
 
                         {/* دائن */}
-                        <Table.Td className="text-center font-mono font-bold text-emerald-800">
-                          {row.credit > 0 ? `$${row.credit.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}
+                        <Table.Td className="text-center font-mono font-bold text-emerald-800 whitespace-nowrap">
+                          {row.credit > 0
+                            ? isClientAccount
+                              ? `${Math.round(row.credit * iqdRate).toLocaleString('en-US')} د.ع`
+                              : `$${row.credit.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                            : '—'}
                         </Table.Td>
 
                         {/* الرصيد التراكمي */}
-                        <Table.Td className="text-center font-mono font-black text-slate-900 bg-slate-50/70">
-                          ${row.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <Table.Td className="text-center font-mono font-black text-slate-900 bg-slate-50/70 whitespace-nowrap">
+                          {isClientAccount
+                            ? `${Math.round(row.balance * iqdRate).toLocaleString('en-US')} د.ع`
+                            : `$${row.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         </Table.Td>
                       </Table.Tr>
                     );
@@ -1620,13 +1630,15 @@ export const ClearingAccountProfilePage: React.FC = () => {
                   </div>
                 )}
 
-                {/* المعادل المباشر بالدولار */}
+                {/* المعادل بالدولار — يُخفى لحساب العميل: يُتابَع بعملته لا بمعادل. */}
+                {!isClientAccount && (
                 <div className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center justify-between font-mono">
                   <span className="text-slate-700 font-bold text-xs">المعادل بالدولار:</span>
                   <span className="text-base font-black text-emerald-900">
                     ${voucherConvertedUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
+                )}
 
                 {/* البيان التلقائي المولّد */}
                 <div className="space-y-1.5">
