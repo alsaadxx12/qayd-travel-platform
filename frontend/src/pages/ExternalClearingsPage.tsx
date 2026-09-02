@@ -1077,39 +1077,45 @@ export const ExternalClearingsPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block font-bold text-slate-700 mb-1">نوع الطرف الخارجي</label>
-            <SegmentedControl
-              fullWidth
-              size="xs"
-              value={newCategory}
-              onChange={v => setNewCategory(v as any)}
-              disabled={accountModalMode === 'EDIT'}
-              data={[
-                { label: 'مكتب بورصة', value: 'BOURSE' },
-                { label: 'مكتب وسيط', value: 'OFFICE' },
-                { label: 'عميل', value: 'CLIENT' },
-              ]}
-              color="orange"
-              className="bg-slate-100 font-bold"
-            />
-            {/* يُظهر تحت أي حساب أب سيُدرج — تحت جذر «الأطراف الخارجية» خارج الميزانية. */}
-            <p className="mt-1.5 text-[10.5px] font-bold text-slate-500">
-              يُدرج تلقائياً تحت الحساب الأب:{' '}
+            <label className="block font-bold text-slate-700 mb-1.5">نوع الطرف الخارجي</label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { key: 'BOURSE', label: 'مكتب بورصة', parent: '91 · مكاتب البورصة', Icon: IconBuildingBank },
+                { key: 'OFFICE', label: 'مكتب وسيط', parent: '92 · المكاتب الوسيطة', Icon: IconBriefcase },
+                { key: 'CLIENT', label: 'عميل', parent: '93 · العملاء الخارجيون', Icon: IconUser },
+              ] as const).map(t => {
+                const on = newCategory === t.key;
+                const disabled = accountModalMode === 'EDIT';
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => setNewCategory(t.key as any)}
+                    className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                      on
+                        ? 'border-[#F45A0A] bg-orange-50 text-orange-800 shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-500 hover:border-orange-200 hover:bg-orange-50/40'
+                    }`}
+                  >
+                    <t.Icon size={22} stroke={1.8} className={on ? 'text-[#F45A0A]' : 'text-slate-400'} />
+                    <span className="font-extrabold text-xs">{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[10.5px] font-bold text-slate-500">
+              يُدرج تحت الحساب الأب:{' '}
               <span className="text-orange-700">
-                {newCategory === 'BOURSE'
-                  ? '91 · مكاتب البورصة'
-                  : newCategory === 'OFFICE'
-                  ? '92 · المكاتب الوسيطة'
-                  : '93 · العملاء الخارجيون'}
-              </span>{' '}
-              — ضمن جذر «الأطراف الخارجية (خارج الميزانية)».
+                {newCategory === 'BOURSE' ? '91 · مكاتب البورصة' : newCategory === 'OFFICE' ? '92 · المكاتب الوسيطة' : '93 · العملاء الخارجيون'}
+              </span>{' '}— خارج الميزانية.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <TextInput
               label="اسم الحساب / المكتب بالعربية *"
-              placeholder="مثال: بورصة السوري / مكتب الكرادة..."
+              placeholder=""
               value={newNameAr}
               onChange={e => setNewNameAr(e.target.value)}
               required
@@ -1119,7 +1125,7 @@ export const ExternalClearingsPage: React.FC = () => {
 
             <TextInput
               label="English Name (اختياري)"
-              placeholder="e.g. Al-Souri Bourse"
+              placeholder=""
               value={newNameEn}
               onChange={e => setNewNameEn(e.target.value)}
               size="xs"
@@ -1129,7 +1135,7 @@ export const ExternalClearingsPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <TextInput
               label="الشخص المسؤول / المندوب"
-              placeholder="مثال: السيد أحمد..."
+              placeholder=""
               value={newContactPerson}
               onChange={e => setNewContactPerson(e.target.value)}
               size="xs"
@@ -1137,7 +1143,7 @@ export const ExternalClearingsPage: React.FC = () => {
 
             <TextInput
               label="رقم الهاتف للتواصل"
-              placeholder="مثال: 07701234567"
+              placeholder=""
               value={newPhone}
               onChange={e => setNewPhone(e.target.value)}
               size="xs"
@@ -1227,7 +1233,7 @@ export const ExternalClearingsPage: React.FC = () => {
 
           <Textarea
             label="ملاحظات الحساب"
-            placeholder="ملاحظات حول طبيعة التعامل، نسب العمولات، أو حسابات التحويل..."
+            placeholder=""
             rows={2}
             value={newNotes}
             onChange={e => setNewNotes(e.target.value)}

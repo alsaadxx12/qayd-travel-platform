@@ -879,6 +879,26 @@ export const SystemSettingsPage: React.FC = () => {
     ];
   }, [accountsList]);
 
+  /*
+   * خيارات الحسابات تُبنى مرة واحدة لا في كل تصيير.
+   *
+   * كانت كل قائمة Select تستدعي accountsList.map(...) داخلياً، وهي عشرات القوائم
+   * على مئات الحسابات — فكل ضغطة مفتاح أو تغيّر حالة يعيد بناء آلاف الخيارات،
+   * وهو سبب ثقل الصفحة وتعليقها. الآن مصفوفتان محفوظتان: عادية، وبعلامة الأب.
+   */
+  const accountOptions = useMemo(
+    () => (accountsList || []).map((a: any) => ({ value: a.id, label: `${a.code} - ${a.nameAr}` })),
+    [accountsList],
+  );
+  const accountOptionsWithParent = useMemo(
+    () =>
+      (accountsList || []).map((a: any) => ({
+        value: a.id,
+        label: `${a.code} - ${a.nameAr}${a.isParent ? ' (أب)' : ''}`,
+      })),
+    [accountsList],
+  );
+
   const handleBranchChange = (branchId: string) => {
     const b = branches.find((item) => item.id === branchId);
     const code = b?.code || 'BGD';
@@ -915,7 +935,6 @@ export const SystemSettingsPage: React.FC = () => {
         { id: 'currencies', label: 'العملات وأسعار الصرف', icon: IconCoin },
         { id: 'sequences', label: 'التسلسلات والترقيم', icon: IconNumbers },
         { id: 'accounting', label: 'طرق الدفع وربط الصناديق', icon: IconBook2 },
-        { id: 'services', label: 'حسابات الخدمات الافتراضية', icon: IconReceipt },
       ],
     },
     {
@@ -928,7 +947,7 @@ export const SystemSettingsPage: React.FC = () => {
     },
   ];
 
-  const isAccountingSection = ['core_accounts', 'currencies', 'sequences', 'accounting', 'services'].includes(activeSection);
+  const isAccountingSection = ['core_accounts', 'currencies', 'sequences', 'accounting'].includes(activeSection);
 
   const sequenceItemsMeta = [
     { key: 'tickets', icon: IconPlane, color: 'blue', tag: 'تذاكر الطيران' },
@@ -1018,7 +1037,7 @@ export const SystemSettingsPage: React.FC = () => {
                     مجموعة الإعدادات المحاسبية والمالية
                   </span>
                   <span className="text-[10px] text-orange-800/80">
-                    العملات وأسعار الصرف، التسلسلات والترقيم، طرق الدفع والصناديق، حسابات الخدمات
+                    الحسابات الأساسية، العملات وأسعار الصرف، التسلسلات والترقيم، طرق الدفع والصناديق
                   </span>
                 </div>
               </div>
@@ -1058,16 +1077,6 @@ export const SystemSettingsPage: React.FC = () => {
                   <span>طرق الدفع والصناديق</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveSection('services')}
-                  className={`px-2.5 py-1 rounded transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    activeSection === 'services' ? 'bg-orange-600 text-white shadow-2xs' : 'text-slate-600 hover:text-orange-800 hover:bg-orange-50'
-                  }`}
-                >
-                  <IconReceipt size={13} />
-                  <span>حسابات الخدمات</span>
-                </button>
               </div>
             </div>
           )}
@@ -1700,7 +1709,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr}` }))}
+                      data={accountOptions}
                       value={coreAccounts.defaultCashCustomerId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, defaultCashCustomerId: val || '' }))}
                       searchable
@@ -1724,7 +1733,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr}` }))}
+                      data={accountOptions}
                       value={coreAccounts.capitalAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, capitalAccountId: val || '' }))}
                       searchable
@@ -1748,7 +1757,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr} ${a.isParent ? '(أب)' : ''}` }))}
+                      data={accountOptionsWithParent}
                       value={coreAccounts.partnersParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, partnersParentAccountId: val || '' }))}
                       searchable
@@ -1772,7 +1781,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr} ${a.isParent ? '(أب)' : ''}` }))}
+                      data={accountOptionsWithParent}
                       value={coreAccounts.cashboxesParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, cashboxesParentAccountId: val || '' }))}
                       searchable
@@ -1796,7 +1805,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr} ${a.isParent ? '(أب)' : ''}` }))}
+                      data={accountOptionsWithParent}
                       value={coreAccounts.customersParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, customersParentAccountId: val || '' }))}
                       searchable
@@ -1820,7 +1829,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr} ${a.isParent ? '(أب)' : ''}` }))}
+                      data={accountOptionsWithParent}
                       value={coreAccounts.suppliersParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, suppliersParentAccountId: val || '' }))}
                       searchable
@@ -1844,7 +1853,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr}` }))}
+                      data={accountOptions}
                       value={coreAccounts.dividendsPayableAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, dividendsPayableAccountId: val || '' }))}
                       searchable
@@ -1868,7 +1877,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr}` }))}
+                      data={accountOptions}
                       value={coreAccounts.commissionsParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, commissionsParentAccountId: val || '' }))}
                       searchable
@@ -1892,7 +1901,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr} ${a.isParent ? '(أب)' : ''}` }))}
+                      data={accountOptionsWithParent}
                       value={coreAccounts.otherRevenuesParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, otherRevenuesParentAccountId: val || '' }))}
                       searchable
@@ -1916,7 +1925,7 @@ export const SystemSettingsPage: React.FC = () => {
                     </div>
                     <Select
                       size="xs"
-                      data={accountsList.map(a => ({ value: a.id, label: `${a.code} - ${a.nameAr} ${a.isParent ? '(أب)' : ''}` }))}
+                      data={accountOptionsWithParent}
                       value={coreAccounts.externalPartiesParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, externalPartiesParentAccountId: val || '' }))}
                       searchable
@@ -2317,383 +2326,6 @@ export const SystemSettingsPage: React.FC = () => {
                   <Checkbox label="منع تعديل أو إلغاء القيود المرحّلة إطلاقاً" defaultChecked />
                   <Checkbox label="السماح بالإنشاء والترحيل بتاريخ سابق (Backdated)" />
                   <Checkbox label="حساب فروقات العملة تلقائياً عند التجميع" defaultChecked />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Section 3: Default Service Accounts */}
-          {activeSection === 'services' && (
-            <div className="space-y-5 text-xs">
-              {/* Header & Save Actions */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-200 shrink-0">
-                      <IconReceipt size={18} />
-                    </div>
-                    <div>
-                      <h3 className="font-black text-sm text-slate-900 leading-tight">
-                        ربط الحسابات الافتراضية للخدمات والسندات (Services & Vouchers Mapping)
-                      </h3>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        تحديد وتوجيه حسابات الإيرادات والتكاليف للخدمات وسندات القبض والصرف وحسابات المصاريف والمشتريات
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="xs"
-                    variant="light"
-                    color="orange"
-                    onClick={handleApplyServicesSuggestions}
-                    leftSection={<IconSparkles size={14} />}
-                  >
-                    اقتراح وتعبئة تلقائية ذكية
-                  </Button>
-
-                  <Button
-                    size="xs"
-                    color="orange"
-                    loading={isSavingServicesAccounts}
-                    onClick={handleSaveServicesAccounts}
-                    leftSection={<IconDeviceFloppy size={14} />}
-                  >
-                    حفظ حسابات الخدمات والسندات
-                  </Button>
-                </div>
-              </div>
-
-              {/* ── CARD 1: Vouchers, Expenses & Purchases Defaults ── */}
-              <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-orange-600"></div>
-                    <span className="text-xs font-black text-slate-900">
-                      1. ربط الحسابات الافتراضية للسندات والمصروفات والمشتريات
-                    </span>
-                  </div>
-                  <Badge color="orange" variant="light" size="xs" className="font-bold">
-                    حسابات حاكمة وتلقائية
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Default Receipt Voucher Account */}
-                  <div>
-                    <label className="font-bold text-slate-700 text-xs block mb-1">
-                      الحساب الافتراضي لسندات القبض (Receipt Vouchers Default)
-                    </label>
-                    <Select
-                      size="xs"
-                      searchable
-                      clearable
-                      placeholder="بدون حساب افتراضي — (اختيار إجباري عند كل سند)"
-                      data={accountsList.map((a: any) => ({
-                        value: a.id,
-                        label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                      }))}
-                      value={servicesAccounts.receiptVouchersDefaultAccountId}
-                      onChange={(val) =>
-                        setServicesAccounts((prev) => ({ ...prev, receiptVouchersDefaultAccountId: val || '' }))
-                      }
-                      styles={{ input: { fontWeight: 600 } }}
-                    />
-                  </div>
-
-                  {/* Default Payment Voucher Account */}
-                  <div>
-                    <label className="font-bold text-slate-700 text-xs block mb-1">
-                      الحساب الافتراضي لسندات الصرف (Payment Vouchers Default)
-                    </label>
-                    <Select
-                      size="xs"
-                      searchable
-                      clearable
-                      placeholder="بدون حساب افتراضي — (اختيار إجباري عند كل سند)"
-                      data={accountsList.map((a: any) => ({
-                        value: a.id,
-                        label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                      }))}
-                      value={servicesAccounts.paymentVouchersDefaultAccountId}
-                      onChange={(val) =>
-                        setServicesAccounts((prev) => ({ ...prev, paymentVouchersDefaultAccountId: val || '' }))
-                      }
-                      styles={{ input: { fontWeight: 600 } }}
-                    />
-                  </div>
-
-                  {/* Expenses Parent Account */}
-                  <div>
-                    <label className="font-bold text-slate-700 text-xs block mb-1">
-                      حساب المصاريف الرئيسي (أب المصاريف / الاستخدامات)
-                    </label>
-                    <Select
-                      size="xs"
-                      searchable
-                      clearable
-                      placeholder="اختر الحساب الأب للمصاريف التشغيلية (3 - الاستخدامات)..."
-                      data={accountsList.map((a: any) => ({
-                        value: a.id,
-                        label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                      }))}
-                      value={servicesAccounts.expensesParentAccountId}
-                      onChange={(val) =>
-                        setServicesAccounts((prev) => ({ ...prev, expensesParentAccountId: val || '' }))
-                      }
-                      styles={{ input: { fontWeight: 600 } }}
-                    />
-                  </div>
-
-                  {/* Purchases / Cost of Services Account */}
-                  <div>
-                    <label className="font-bold text-slate-700 text-xs block mb-1">
-                      حساب المشتريات وكلفة الخدمات المشتراة بغرض البيع
-                    </label>
-                    <Select
-                      size="xs"
-                      searchable
-                      clearable
-                      placeholder="اختر حساب المشتريات وكلفة الخدمات (34 - كلفة الخدمات المشتراة)..."
-                      data={accountsList.map((a: any) => ({
-                        value: a.id,
-                        label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                      }))}
-                      value={servicesAccounts.purchasesCostAccountId}
-                      onChange={(val) =>
-                        setServicesAccounts((prev) => ({ ...prev, purchasesCostAccountId: val || '' }))
-                      }
-                      styles={{ input: { fontWeight: 600 } }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* ── CARD 2: Travel & Ticketing Services ── */}
-              <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div>
-                    <span className="text-xs font-black text-slate-900">
-                      2. ربط حسابات الخدمات الأساسية (تذاكر الطيران، التأشيرات، الفنادق، الكروبات)
-                    </span>
-                  </div>
-                  <Badge color="blue" variant="light" size="xs" className="font-bold">
-                    إيرادات وتكاليف
-                  </Badge>
-                </div>
-
-                <div className="space-y-3">
-                  {/* Flight Tickets */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                    <div>
-                      <label className="font-bold text-slate-700 text-xs block mb-1">
-                        ✈️ حساب إيرادات تذاكر الطيران
-                      </label>
-                      <Select
-                        size="xs"
-                        searchable
-                        clearable
-                        data={accountsList.map((a: any) => ({
-                          value: a.id,
-                          label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                        }))}
-                        value={servicesAccounts.flightRevenueAccountId}
-                        onChange={(val) =>
-                          setServicesAccounts((prev) => ({ ...prev, flightRevenueAccountId: val || '' }))
-                        }
-                        styles={{ input: { fontWeight: 600 } }}
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-slate-700 text-xs block mb-1">
-                        ✈️ حساب تكلفة تذاكر الطيران
-                      </label>
-                      <Select
-                        size="xs"
-                        searchable
-                        clearable
-                        data={accountsList.map((a: any) => ({
-                          value: a.id,
-                          label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                        }))}
-                        value={servicesAccounts.flightCostAccountId}
-                        onChange={(val) =>
-                          setServicesAccounts((prev) => ({ ...prev, flightCostAccountId: val || '' }))
-                        }
-                        styles={{ input: { fontWeight: 600 } }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Visas */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                    <div>
-                      <label className="font-bold text-slate-700 text-xs block mb-1">
-                        🛂 حساب إيرادات التأشيرات (Visas)
-                      </label>
-                      <Select
-                        size="xs"
-                        searchable
-                        clearable
-                        data={accountsList.map((a: any) => ({
-                          value: a.id,
-                          label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                        }))}
-                        value={servicesAccounts.visaRevenueAccountId}
-                        onChange={(val) =>
-                          setServicesAccounts((prev) => ({ ...prev, visaRevenueAccountId: val || '' }))
-                        }
-                        styles={{ input: { fontWeight: 600 } }}
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-slate-700 text-xs block mb-1">
-                        🛂 حساب تكلفة التأشيرات (Visas)
-                      </label>
-                      <Select
-                        size="xs"
-                        searchable
-                        clearable
-                        data={accountsList.map((a: any) => ({
-                          value: a.id,
-                          label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                        }))}
-                        value={servicesAccounts.visaCostAccountId}
-                        onChange={(val) =>
-                          setServicesAccounts((prev) => ({ ...prev, visaCostAccountId: val || '' }))
-                        }
-                        styles={{ input: { fontWeight: 600 } }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Hotels & Groups */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-                    <div>
-                      <label className="font-bold text-slate-700 text-xs block mb-1">
-                        🏨 حساب إيراد حجوزات الفنادق
-                      </label>
-                      <Select
-                        size="xs"
-                        searchable
-                        clearable
-                        data={accountsList.map((a: any) => ({
-                          value: a.id,
-                          label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                        }))}
-                        value={servicesAccounts.hotelRevenueAccountId}
-                        onChange={(val) =>
-                          setServicesAccounts((prev) => ({ ...prev, hotelRevenueAccountId: val || '' }))
-                        }
-                        styles={{ input: { fontWeight: 600 } }}
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bold text-slate-700 text-xs block mb-1">
-                        🏨 حساب تكلفة حجوزات الفنادق
-                      </label>
-                      <Select
-                        size="xs"
-                        searchable
-                        clearable
-                        data={accountsList.map((a: any) => ({
-                          value: a.id,
-                          label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                        }))}
-                        value={servicesAccounts.hotelCostAccountId}
-                        onChange={(val) =>
-                          setServicesAccounts((prev) => ({ ...prev, hotelCostAccountId: val || '' }))
-                        }
-                        styles={{ input: { fontWeight: 600 } }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── CARD 3: Changes, Reissues & Returns ── */}
-              <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-teal-600"></div>
-                    <span className="text-xs font-black text-slate-900">
-                      3. ربط حسابات التغييرات وإعادة الإصدار ومردودات المبيعات
-                    </span>
-                  </div>
-                  <Badge color="teal" variant="light" size="xs" className="font-bold">
-                    تعديلات واسترجاع
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* Reissue Revenue */}
-                  <div>
-                    <label className="font-bold text-slate-700 text-xs block mb-1">
-                      🔄 حساب إيرادات تغيير وتعديل التذاكر
-                    </label>
-                    <Select
-                      size="xs"
-                      searchable
-                      clearable
-                      placeholder="4103 - إيرادات تغيير التذاكر..."
-                      data={accountsList.map((a: any) => ({
-                        value: a.id,
-                        label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                      }))}
-                      value={servicesAccounts.reissueRevenueAccountId}
-                      onChange={(val) =>
-                        setServicesAccounts((prev) => ({ ...prev, reissueRevenueAccountId: val || '' }))
-                      }
-                      styles={{ input: { fontWeight: 600 } }}
-                    />
-                  </div>
-
-                  {/* Reissue Cost */}
-                  <div>
-                    <label className="font-bold text-slate-700 text-xs block mb-1">
-                      🔄 حساب كلفة تغيير وإعادة إصدار التذاكر
-                    </label>
-                    <Select
-                      size="xs"
-                      searchable
-                      clearable
-                      placeholder="342 - كلفة تغيير وإعادة إصدار..."
-                      data={accountsList.map((a: any) => ({
-                        value: a.id,
-                        label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                      }))}
-                      value={servicesAccounts.reissueCostAccountId}
-                      onChange={(val) =>
-                        setServicesAccounts((prev) => ({ ...prev, reissueCostAccountId: val || '' }))
-                      }
-                      styles={{ input: { fontWeight: 600 } }}
-                    />
-                  </div>
-
-                  {/* Sales Returns & Refunds */}
-                  <div>
-                    <label className="font-bold text-slate-700 text-xs block mb-1">
-                      ↩️ حساب مردودات المبيعات والاسترجاع
-                    </label>
-                    <Select
-                      size="xs"
-                      searchable
-                      clearable
-                      placeholder="4108 - مردودات المبيعات والخدمات..."
-                      data={accountsList.map((a: any) => ({
-                        value: a.id,
-                        label: `${a.code ? a.code + ' - ' : ''}${a.nameAr || a.name || 'حساب'}`,
-                      }))}
-                      value={servicesAccounts.refundsAccountId}
-                      onChange={(val) =>
-                        setServicesAccounts((prev) => ({ ...prev, refundsAccountId: val || '' }))
-                      }
-                      styles={{ input: { fontWeight: 600 } }}
-                    />
-                  </div>
                 </div>
               </div>
             </div>
