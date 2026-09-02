@@ -36,11 +36,12 @@ import { ticketsApi, type TicketData } from '../../api/tickets';
 import { airlinesApi, type AirlineItem } from '../../api/airlines';
 import { partnersApi } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
+import { employeesApi, type Employee } from '../../api/employees';
 import { SearchableCombobox, ComboboxOption } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
 import { InvoiceAuditLogModal } from '../tickets/InvoiceAuditLogModal';
 import { TicketAttachmentsSection, type AttachmentItem } from '../tickets/TicketAttachmentsSection';
-import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
+import { showSuccessNotification, showErrorNotification, showInfoNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
@@ -121,6 +122,10 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [cashboxes, setCashboxes] = useState<any[]>([]);
   const [airlinesList, setAirlinesList] = useState<AirlineItem[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+
+  // Refund Type: Full Refund (100% no penalty) vs Refund with Penalty
+  const [refundType, setRefundType] = useState<'FULL' | 'WITH_PENALTY'>('WITH_PENALTY');
 
   // Workspace Form State
   const [refundNumber, setRefundNumber] = useState<string>('');
@@ -318,6 +323,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
       partnersApi.getCustomers().then((data) => setCustomers(data || [])).catch(() => {});
       partnersApi.getSuppliers().then((data) => setSuppliers(data || [])).catch(() => {});
       airlinesApi.getAll().then((data) => setAirlinesList(data || [])).catch(() => {});
+      employeesApi.getAll().then((data) => setEmployees(data || [])).catch(() => {});
       
       accountsApi.getFlat('ASSET', 'CASH').then((data) => {
         const boxList = data || [];
@@ -548,6 +554,38 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
       };
     });
   }, [suppliers, isAr]);
+
+  // Employee options for Combobox
+  const employeeOptions: ComboboxOption[] = useMemo(() => {
+    return employees.map((e) => {
+      const label = e.fullName || e.username || (e as any).name || '';
+      return {
+        value: label,
+        label: label,
+        subtitle: e.jobTitle || e.departmentName || undefined,
+      };
+    });
+  }, [employees]);
+
+  // Handle Refund Type Change (Full vs With Penalty)
+  const handleRefundTypeChange = (type: 'FULL' | 'WITH_PENALTY') => {
+    setRefundType(type);
+    if (type === 'FULL') {
+      setPassengers((prev) =>
+        prev.map((p) => ({
+          ...p,
+          airlinePenalty: 0,
+          agencyRetention: 0,
+        }))
+      );
+      setBulkAirlinePenalty('');
+      setBulkAgencyRetention('');
+      showInfoNotification(
+        isAr ? 'استرجاع كامل' : 'Full Refund',
+        isAr ? 'تم تصفير جميع الغرامات والاستقطاعات ليتم استرجاع المبلغ كاملاً للعميل.' : 'All penalties zeroed out for 100% full refund.'
+      );
+    }
+  };
 
   // Add a new manual passenger line
   const handleAddPassenger = () => {
@@ -788,763 +826,759 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
 
       {/* ── 2. Scrollable Workspace Body Canvas ── */}
       <div
-        className="flex-1 overflow-y-auto overflow-x-hidden p-5 md:p-6 space-y-5 max-w-[1720px] mx-auto w-full pb-48 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-5 md:p-6 max-w-[1760px] mx-auto w-full pb-28 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
-        
-        {/* ── A. Fast Ticket Lookup Bar / Mode Switcher ── */}
-        <div className="p-4 bg-white rounded-[14px] border border-[#E5E7EB] shadow-2xs space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center">
-                <Sparkles size={16} />
+        {/* ── 2-COLUMN MAIN LAYOUT (Fluid Stack on Mobile, 360px Sticky Sidebar on Desktop) ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
+          
+          {/* ── MAIN LEADING COLUMN ── */}
+          <div className="space-y-4 min-w-0">
+            
+            {/* ── A. Fast Ticket Lookup Bar / Mode Switcher ── */}
+            <div className="p-4 bg-white rounded-[14px] border border-[#E5E7EB] shadow-2xs space-y-3 font-sans">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center">
+                    <Sparkles size={16} />
+                  </div>
+                  <span className="text-[13px] font-bold text-[#111827]">
+                    {isAr ? 'نوع وطريقة إنشاء الاسترجاع' : 'Refund Creation Mode'}
+                  </span>
+                </div>
+
+                {/* Mode Switcher */}
+                <SegmentedControl
+                  value={refundMode}
+                  onChange={(val) => setRefundMode(val as any)}
+                  data={[
+                    { label: isAr ? 'استرجاع من تذكرة مسجلة 🎫' : 'From Issued Ticket', value: 'FROM_TICKET' },
+                    { label: isAr ? 'نيو ريفاوند (استرجاع يدوي مباشر) ✍️' : 'New Direct Refund', value: 'MANUAL' },
+                  ]}
+                  radius="md"
+                  size="xs"
+                  styles={{
+                    root: { backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' },
+                    label: { fontWeight: 700, fontSize: '11.5px', padding: '5px 12px' },
+                  }}
+                />
               </div>
-              <span className="text-[13px] font-bold text-[#111827]">
-                {isAr ? 'نوع وطريقة إنشاء الاسترجاع' : 'Refund Creation Mode'}
-              </span>
-            </div>
 
-            {/* Mode Switcher */}
-            <SegmentedControl
-              value={refundMode}
-              onChange={(val) => setRefundMode(val as any)}
-              data={[
-                { label: isAr ? 'استرجاع من تذكرة مسجلة 🎫' : 'From Issued Ticket', value: 'FROM_TICKET' },
-                { label: isAr ? 'نيو ريفاوند (استرجاع يدوي مباشر) ✍️' : 'New Direct Refund', value: 'MANUAL' },
-              ]}
-              radius="md"
-              size="xs"
-              styles={{
-                root: { backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' },
-                label: { fontWeight: 700, fontSize: '11.5px', padding: '5px 12px' },
-              }}
-            />
-          </div>
+              {refundMode === 'FROM_TICKET' ? (
+                <div className="relative">
+                  <Search size={17} className={`absolute ${direction === 'rtl' ? 'right-3.5' : 'left-3.5'} top-1/2 -translate-y-1/2 text-[#F45A0A]`} />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={isAr ? 'اكتب رقم التذكرة، كود الحجز PNR، اسم المسافر أو العميل لاستدعاء التذكرة فورياً...' : 'Search by ticket #, PNR, passenger or customer name...'}
+                    className={`w-full h-[44px] ${direction === 'rtl' ? 'pr-11 pl-3.5' : 'pl-11 pr-3.5'} rounded-[10px] bg-[#FFFDF9] border border-[#FED7AA] text-[13px] text-[#111827] placeholder-[#9CA3AF] outline-none hover:border-[#F45A0A] focus:border-2 focus:border-[#F45A0A] transition-colors`}
+                  />
 
-          {refundMode === 'FROM_TICKET' ? (
-            <div className="relative">
-              <Search size={17} className={`absolute ${direction === 'rtl' ? 'right-3.5' : 'left-3.5'} top-1/2 -translate-y-1/2 text-[#F45A0A]`} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={isAr ? 'اكتب رقم التذكرة، كود الحجز PNR، اسم المسافر أو العميل لاستدعاء التذكرة فورياً...' : 'Search by ticket #, PNR, passenger or customer name...'}
-                className={`w-full h-[46px] ${direction === 'rtl' ? 'pr-11 pl-3.5' : 'pl-11 pr-3.5'} rounded-[10px] bg-[#FFFDF9] border border-[#FED7AA] text-[13.5px] text-[#111827] placeholder-[#9CA3AF] outline-none hover:border-[#F45A0A] focus:border-2 focus:border-[#F45A0A] transition-colors`}
-              />
+                  {filteredSearchTickets.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white rounded-[14px] shadow-xl border border-slate-200 overflow-hidden divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                      {filteredSearchTickets.map((t) => (
+                        <button
+                          key={t.id || t.invoiceNumber}
+                          type="button"
+                          onClick={() => handleSelectTicket(t)}
+                          className="w-full p-3.5 text-right hover:bg-[#FFF3E8]/80 transition-colors flex items-center justify-between text-xs cursor-pointer"
+                        >
+                          <div>
+                            <div className="font-bold text-slate-900 flex items-center gap-2 text-[13px]">
+                              <span>{t.invoiceNumber}</span>
+                              {t.pnr && <span className="px-2 py-0.5 rounded bg-orange-100 text-[#F45A0A] font-mono text-xs font-bold">{t.pnr}</span>}
+                            </div>
+                            <div className="text-slate-500 mt-1 font-medium text-xs">
+                              {t.passengers?.map((p) => `${p.name} (${p.ticketType || 'بالغ'})`).join(', ') || resolveCustomerDisplay(t.customerName)} • {t.airline || 'طيران'} • {t.route || 'مسار الرحلة'}
+                            </div>
+                          </div>
 
-              {filteredSearchTickets.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white rounded-[14px] shadow-xl border border-slate-200 overflow-hidden divide-y divide-slate-100 max-h-72 overflow-y-auto">
-                  {filteredSearchTickets.map((t) => (
-                    <button
-                      key={t.id || t.invoiceNumber}
-                      type="button"
-                      onClick={() => handleSelectTicket(t)}
-                      className="w-full p-4 text-right hover:bg-[#FFF3E8]/80 transition-colors flex items-center justify-between text-xs cursor-pointer"
-                    >
-                      <div>
-                        <div className="font-bold text-slate-900 flex items-center gap-2 text-[13px]">
-                          <span>{t.invoiceNumber}</span>
-                          {t.pnr && <span className="px-2 py-0.5 rounded bg-orange-100 text-[#F45A0A] font-mono text-xs font-bold">{t.pnr}</span>}
-                        </div>
-                        <div className="text-slate-500 mt-1 font-medium text-xs">
-                          {t.passengers?.map((p) => `${p.name} (${p.ticketType || 'بالغ'})`).join(', ') || resolveCustomerDisplay(t.customerName)} • {t.airline || 'طيران'} • {t.route || 'مسار الرحلة'}
-                        </div>
-                      </div>
+                          <div className="text-left font-mono" dir="ltr">
+                            <div className="font-bold text-slate-900 text-sm">
+                              {formatNumberEnglish(t.totalSell || 0)} {t.currency || 'IQD'}
+                            </div>
+                            <div className="text-[11px] text-slate-400">
+                              Buy: {formatNumberEnglish(t.totalBuy || 0)} {t.currency || 'IQD'}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-[10px] text-xs text-amber-900 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Edit3 size={16} className="text-[#F45A0A] shrink-0" />
+                    <span className="font-semibold">
+                      {isAr
+                        ? 'وضع الاسترجاع اليدوي المباشر (نيو ريفاوند): يمكنك إدخال التذكرة غير المسجلة مسبقاً، وتحديد العميل والمورد والمبالغ، وإضافة مسافرين بحرية.'
+                        : 'Direct/Manual refund mode: create a refund for non-issued tickets and add passengers freely.'}
+                    </span>
+                  </div>
+                </div>
+              )}
 
-                      <div className="text-left font-mono" dir="ltr">
-                        <div className="font-bold text-slate-900 text-sm">
-                          {formatNumberEnglish(t.totalSell || 0)} {t.currency || 'IQD'}
-                        </div>
-                        <div className="text-[11px] text-slate-400">
-                          Buy: {formatNumberEnglish(t.totalBuy || 0)} {t.currency || 'IQD'}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+              {selectedOriginalTicket && refundMode === 'FROM_TICKET' && (
+                <div className="p-3 rounded-[10px] bg-[#FFF3E8]/70 border border-[#FED7AA] text-xs flex items-center justify-between flex-wrap gap-2 text-slate-800 font-medium">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>التذكرة الأصلية: <b className="font-mono font-bold text-slate-900">{selectedOriginalTicket.invoiceNumber}</b></span>
+                    <span>• المسار: <b className="font-mono font-bold text-slate-900">{selectedOriginalTicket.route || '—'}</b></span>
+                    <span>• المسافرون: <b className="font-bold text-slate-900">{selectedOriginalTicket.passengers?.length || 1} مسافر</b></span>
+                  </div>
+                  <div className="text-[#F45A0A] font-bold text-xs">
+                    ✓ تم جلب بيانات ومسافري التذكرة بالكامل
+                  </div>
                 </div>
               )}
             </div>
-          ) : (
-            <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-[10px] text-xs text-amber-900 flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <Edit3 size={16} className="text-[#F45A0A] shrink-0" />
-                <span className="font-semibold">
-                  {isAr
-                    ? 'وضع الاسترجاع اليدوي المباشر (نيو ريفاوند): يمكنك إدخال التذكرة غير المسجلة مسبقاً، وتحديد العميل والمورد والمبالغ، وإضافة مسافرين بحرية.'
-                    : 'Direct/Manual refund mode: create a refund for non-issued tickets and add passengers freely.'}
+
+            {/* ── B. Main Metadata Form Grid ── */}
+            <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-4 sm:p-5 shadow-2xs space-y-4 font-sans">
+              {/* Header with Title, Refund Type Switcher, and Currency */}
+              <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold text-xs shrink-0">
+                    <Plane size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-[15px] text-[#111827] leading-tight">
+                      {isAr ? 'بيانات التذكرة ونوع الاسترجاع' : 'Ticket & Refund Details'}
+                    </h3>
+                    <span className="text-[11px] text-[#6B7280]">
+                      {isAr ? 'حدد نوع الاسترجاع، التواريخ، وموظف العملية' : 'Refund type, dates, and issuing staff'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {/* Refund Type Switcher (استرجاع كامل vs استرجاع بغرامة) */}
+                  <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-[10px] border border-slate-200">
+                    <span className="text-[11px] font-bold text-slate-600 px-1">
+                      {isAr ? 'نوع الاسترجاع:' : 'Type:'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRefundTypeChange('FULL')}
+                      className={`h-[30px] px-3 rounded-[7px] text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        refundType === 'FULL'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-slate-600 hover:bg-slate-200/70'
+                      }`}
+                    >
+                      <Check size={13} strokeWidth={2.4} />
+                      <span>{isAr ? 'استرجاع كامل (100%)' : 'Full Refund (100%)'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRefundTypeChange('WITH_PENALTY')}
+                      className={`h-[30px] px-3 rounded-[7px] text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        refundType === 'WITH_PENALTY'
+                          ? 'bg-[#F45A0A] text-white shadow-xs'
+                          : 'text-slate-600 hover:bg-slate-200/70'
+                      }`}
+                    >
+                      <Coins size={13} />
+                      <span>{isAr ? 'استرجاع بغرامة' : 'With Penalty'}</span>
+                    </button>
+                  </div>
+
+                  {/* Currency Switcher */}
+                  <div className="h-[36px] p-0.5 rounded-[9px] bg-slate-100 border border-slate-200 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrency('IQD');
+                        setExchangeRate(1);
+                      }}
+                      className={`h-full px-2.5 rounded-[7px] text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        currency === 'IQD'
+                          ? 'bg-[#F45A0A] text-white shadow-xs'
+                          : 'text-slate-600 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      <span>د.ع IQD</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCurrency('USD');
+                        setExchangeRate(adoptedEx.adoptedRate || 1550);
+                      }}
+                      className={`h-full px-2.5 rounded-[7px] text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                        currency === 'USD'
+                          ? 'bg-[#F45A0A] text-white shadow-xs'
+                          : 'text-slate-600 hover:bg-slate-200/60'
+                      }`}
+                    >
+                      <span>$ USD</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {/* Refund Date with SegmentedDatePicker */}
+                <div>
+                  <label className="text-[12px] font-semibold text-[#334155] block mb-1">
+                    {isAr ? 'تاريخ الاسترجاع' : 'Refund Date'}
+                  </label>
+                  <SegmentedDatePicker
+                    value={issueDate}
+                    onChange={(d) => d && setIssueDate(d)}
+                  />
+                </div>
+
+                {/* Airline Selector */}
+                <div>
+                  <label className="text-[12px] font-semibold text-[#334155] block mb-1">
+                    {isAr ? 'شركة الطيران' : 'Airline'}
+                  </label>
+                  <SearchableCombobox
+                    options={airlineOptions}
+                    value={airline}
+                    onChange={setAirline}
+                    placeholder={isAr ? 'اختر أو اكتب شركة الطيران' : 'Select airline'}
+                  />
+                </div>
+
+                {/* PNR Code */}
+                <div>
+                  <label className="text-[12px] font-semibold text-[#334155] block mb-1">
+                    {isAr ? 'كود الحجز PNR *' : 'PNR Code *'}
+                  </label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    placeholder="e.g. PRMCK"
+                    value={pnr}
+                    onChange={(e) => setPnr(e.target.value.toUpperCase())}
+                    style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                    className="w-full h-[40px] px-3.5 rounded-[9px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13px] font-mono font-bold text-[#111827] uppercase outline-none hover:border-[#D1D5DB] focus:border-2 focus:border-[#F45A0A] transition-colors"
+                  />
+                </div>
+
+                {/* Customer Account */}
+                <div>
+                  <label className="text-[12px] font-semibold text-[#334155] block mb-1">
+                    {isAr ? 'العميل / الحساب' : 'Customer Account'}
+                  </label>
+                  <SearchableCombobox
+                    options={customerOptions}
+                    value={customerName}
+                    onChange={setCustomerName}
+                    placeholder={isAr ? 'اختر العميل' : 'Select customer'}
+                  />
+                </div>
+
+                {/* Supplier Account */}
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <label className="text-[12px] font-semibold text-[#334155]">
+                      {isAr ? 'المورد / جهة الإصدار' : 'Supplier Account'}
+                    </label>
+                    <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5">
+                      <span className={`text-[10px] font-extrabold ${isSupplierRefunded ? 'text-emerald-700' : 'text-rose-600'}`}>
+                        {isSupplierRefunded ? (isAr ? 'أرجع المورد' : 'Refunded') : (isAr ? 'لم يرجع' : 'Not refunded')}
+                      </span>
+                      <Switch
+                        checked={isSupplierRefunded}
+                        onChange={(event) => setIsSupplierRefunded(event.currentTarget.checked)}
+                        color="teal"
+                        size="xs"
+                      />
+                    </div>
+                  </div>
+                  <SearchableCombobox
+                    options={supplierOptions}
+                    value={supplierAccount}
+                    onChange={(val) => {
+                      setSupplierAccount(val);
+                      if (!val) {
+                        setSupplierAccountName('');
+                        return;
+                      }
+                      const found = suppliers.find((s) =>
+                        [s.id, s.accountId, s.account?.id, s.code, s.nameAr, s.nameEn, s.name].includes(val)
+                      );
+                      setSupplierAccountName(found ? (found.nameAr || found.nameEn || found.name || found.code) : '');
+                    }}
+                    placeholder={isAr ? 'اختر المورد' : 'Select supplier'}
+                  />
+                </div>
+
+                {/* Issuer Employee: Compact Dropdown */}
+                <div>
+                  <label className="text-[12px] font-semibold text-[#334155] block mb-1">
+                    {isAr ? 'موظف الاسترجاع *' : 'Refund Employee *'}
+                  </label>
+                  <div className="w-full max-w-[240px]">
+                    <SearchableCombobox
+                      options={employeeOptions}
+                      value={employeeName}
+                      onChange={(val) => setEmployeeName(val || '')}
+                      placeholder={isAr ? 'اختر موظف الاسترجاع' : 'Select employee'}
+                      allowCustomValue
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── C. Dedicated Multi-Passenger Refund Table (Simple, Clear & Intuitive) ── */}
+            <div className="bg-white rounded-[14px] border border-[#E5E7EB] shadow-2xs overflow-hidden font-sans">
+              
+              {/* Table Top Header with Clean Bulk Quick-Apply Bar */}
+              <div className="p-3.5 bg-[#F8FAFC] border-b border-[#E5E7EB] flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-[9px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
+                    <Users size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-[14px] text-[#111827]">
+                      {isAr ? 'تحديد المسافرين واحتساب الفروقات والخصومات' : 'Passenger Refunds & Deductions'}
+                    </h3>
+                    <p className="text-[11.5px] text-slate-500">
+                      {refundType === 'FULL'
+                        ? (isAr ? 'استرجاع كامل: تم تصفير كافة الخصومات تلقائياً.' : 'Full refund: all deductions zeroed out.')
+                        : (isAr ? 'أدخل غرامة الطيران أو استقطاع الشركة لتحديث صافي المبلغ للعميل فورياً.' : 'Enter airline penalties or company retention.')}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {/* Add Passenger Button */}
+                  <button
+                    type="button"
+                    onClick={handleAddPassenger}
+                    className="h-[36px] px-3.5 rounded-[9px] bg-white border border-[#FED7AA] hover:bg-[#FFF3E8] text-[#F45A0A] font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Plus size={14} strokeWidth={2.4} />
+                    <span>{isAr ? 'إضافة مسافر' : 'Add Passenger'}</span>
+                  </button>
+
+                  {/* Clean Quick Bulk Applicator (Only active if WITH_PENALTY) */}
+                  {refundType === 'WITH_PENALTY' && (
+                    <div className="flex items-center gap-2 flex-wrap bg-white p-1 rounded-[10px] border border-slate-200 shadow-2xs">
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 px-1">
+                        <Sparkles size={14} className="text-[#F45A0A]" />
+                        <span>{isAr ? `تطبيق موحد (${activePassengers.length}):` : `Bulk Apply:`}</span>
+                      </div>
+
+                      {/* Bulk Airline Penalty */}
+                      <div className="flex items-center gap-1 bg-[#FFF5F5] border border-rose-200 px-2 py-0.5 rounded-[7px]">
+                        <span className="text-[11px] font-bold text-rose-700">{isAr ? 'غرامة طيران:' : 'Penalty:'}</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          dir="ltr"
+                          placeholder="0"
+                          value={bulkAirlinePenalty}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+                            const clean = raw.replace(/[٠-٩]/g, (d) => arabicDigits.indexOf(d).toString()).replace(/[^0-9]/g, '');
+                            setBulkAirlinePenalty(clean);
+                          }}
+                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                          className="w-16 h-[26px] px-1.5 text-center bg-white border border-rose-200 rounded font-mono font-bold text-xs text-rose-800 outline-none"
+                        />
+                      </div>
+
+                      {/* Bulk Agency Retention */}
+                      <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-[7px]">
+                        <span className="text-[11px] font-bold text-emerald-800">{isAr ? 'استقطاع شركة:' : 'Retention:'}</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          dir="ltr"
+                          placeholder="0"
+                          value={bulkAgencyRetention}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+                            const clean = raw.replace(/[٠-٩]/g, (d) => arabicDigits.indexOf(d).toString()).replace(/[^0-9]/g, '');
+                            setBulkAgencyRetention(clean);
+                          }}
+                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                          className="w-16 h-[26px] px-1.5 text-center bg-white border border-emerald-200 rounded font-mono font-bold text-xs text-emerald-800 outline-none"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleApplyBulkPenalty}
+                        className="h-[28px] px-2.5 rounded-[7px] bg-slate-800 hover:bg-black text-white font-bold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                      >
+                        {isAr ? 'تطبيق' : 'Apply'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Table Body */}
+              <div className="overflow-x-auto">
+                <table className={`w-full text-${direction === 'rtl' ? 'right' : 'left'} border-collapse text-xs`}>
+                  <thead>
+                    <tr className="bg-[#F8FAFC] border-b border-[#E5E7EB] text-[#475569] font-bold select-none h-[42px]">
+                      <th className="p-2.5 text-center w-10">
+                        <Checkbox
+                          checked={passengers.length > 0 && passengers.every((p) => p.selected)}
+                          indeterminate={passengers.some((p) => p.selected) && !passengers.every((p) => p.selected)}
+                          onChange={(e) => {
+                            const val = e.currentTarget.checked;
+                            setPassengers((prev) => prev.map((p) => ({ ...p, selected: val })));
+                          }}
+                          color="orange"
+                          size="xs"
+                        />
+                      </th>
+                      <th className="p-2.5 whitespace-nowrap">{isAr ? 'اسم المسافر والنوع' : 'Passenger & Type'}</th>
+                      <th className="p-2.5 whitespace-nowrap">{isAr ? 'رقم التذكرة / PNR' : 'Ticket / PNR'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'مسترجع الشراء (المورد)' : 'Buy Refund'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'مسترجع البيع (الأساس)' : 'Sell Refund'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left text-rose-700 bg-rose-50/40">{isAr ? 'غرامة الطيران (-)' : 'Airline Penalty'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left text-emerald-800 bg-emerald-50/40">{isAr ? 'استقطاع الشركة (+)' : 'Agency Retention'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left text-[#F45A0A]">{isAr ? 'الصافي للعميل' : 'Net to Customer'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left text-emerald-700">{isAr ? 'الربح المحقق' : 'Profit'}</th>
+                      <th className="p-2.5 text-center w-10">{isAr ? 'حذف' : 'Del'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F5F9]">
+                    {passengers.map((p, idx) => {
+                      const netSell = Math.max(0, p.sellRefund - (p.airlinePenalty || 0) - (p.agencyRetention || 0));
+                      const profit = p.agencyRetention || 0;
+
+                      return (
+                        <tr
+                          key={p.id}
+                          className={`transition-colors ${
+                            p.selected ? 'bg-white hover:bg-orange-50/30' : 'bg-slate-50/60 opacity-60'
+                          }`}
+                        >
+                          {/* Selection Checkbox */}
+                          <td className="p-2.5 text-center">
+                            <Checkbox
+                              checked={p.selected}
+                              onChange={(e) => updatePassenger(p.id, 'selected', e.currentTarget.checked)}
+                              color="orange"
+                              size="xs"
+                            />
+                          </td>
+
+                          {/* Passenger Name & Type */}
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder={isAr ? 'اسم المسافر...' : 'Passenger name...'}
+                                value={p.name}
+                                onChange={(e) => updatePassenger(p.id, 'name', e.target.value)}
+                                className="h-[36px] px-2.5 rounded-[8px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-semibold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] w-full min-w-[140px]"
+                              />
+                              <Select
+                                value={p.type || 'ADULT'}
+                                onChange={(val) => updatePassenger(p.id, 'type', val || 'ADULT')}
+                                data={[
+                                  { value: 'ADULT', label: isAr ? 'بالغ' : 'Adult' },
+                                  { value: 'CHILD', label: isAr ? 'طفل' : 'Child' },
+                                  { value: 'INFANT', label: isAr ? 'رضيع' : 'Infant' },
+                                ]}
+                                size="xs"
+                                className="w-20 shrink-0"
+                                comboboxProps={{ withinPortal: true, zIndex: 9999 }}
+                              />
+                            </div>
+                          </td>
+
+                          {/* Ticket Number & PNR */}
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                dir="ltr"
+                                placeholder="Ticket #"
+                                value={p.ticketNumber}
+                                onChange={(e) => updatePassenger(p.id, 'ticketNumber', e.target.value)}
+                                style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                                className="h-[36px] px-2 rounded-[8px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-mono font-bold text-slate-800 outline-none w-28"
+                              />
+                              <input
+                                type="text"
+                                dir="ltr"
+                                placeholder="PNR"
+                                value={p.pnr || ''}
+                                onChange={(e) => updatePassenger(p.id, 'pnr', e.target.value.toUpperCase())}
+                                style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                                className="h-[36px] px-1.5 text-center uppercase rounded-[8px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-mono font-bold text-slate-800 outline-none w-16"
+                              />
+                            </div>
+                          </td>
+
+                          {/* Buy Refund (Cost from Supplier) */}
+                          <td className="p-2.5 text-left">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              dir="ltr"
+                              value={p.buyRefund ? p.buyRefund.toLocaleString('en-US') : ''}
+                              onChange={(e) => updatePassenger(p.id, 'buyRefund', parseCleanNumber(e.target.value))}
+                              style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                              className="w-24 h-[36px] px-2.5 rounded-[8px] border border-slate-200 text-xs font-mono font-bold text-slate-900 text-left outline-none hover:border-slate-400 focus:border-2 focus:border-[#F45A0A] bg-white"
+                            />
+                          </td>
+
+                          {/* Sell Refund (Original Sell Price) */}
+                          <td className="p-2.5 text-left">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              dir="ltr"
+                              value={p.sellRefund ? p.sellRefund.toLocaleString('en-US') : ''}
+                              onChange={(e) => updatePassenger(p.id, 'sellRefund', parseCleanNumber(e.target.value))}
+                              style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                              className="w-24 h-[36px] px-2.5 rounded-[8px] border border-slate-200 text-xs font-mono font-bold text-slate-900 text-left outline-none hover:border-slate-400 focus:border-2 focus:border-[#F45A0A] bg-white"
+                            />
+                          </td>
+
+                          {/* Airline Penalty */}
+                          <td className="p-2.5 text-left bg-rose-50/20">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              dir="ltr"
+                              disabled={refundType === 'FULL'}
+                              placeholder="0"
+                              value={p.airlinePenalty ? p.airlinePenalty.toLocaleString('en-US') : ''}
+                              onChange={(e) => updatePassenger(p.id, 'airlinePenalty', parseCleanNumber(e.target.value))}
+                              style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                              className={`w-24 h-[36px] px-2.5 rounded-[8px] border border-rose-200 text-xs font-mono font-bold text-rose-800 text-left outline-none hover:border-rose-400 focus:border-2 focus:border-rose-500 bg-rose-50/40 ${
+                                refundType === 'FULL' ? 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400' : ''
+                              }`}
+                            />
+                          </td>
+
+                          {/* Agency Retention Fee */}
+                          <td className="p-2.5 text-left bg-emerald-50/20">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              dir="ltr"
+                              disabled={refundType === 'FULL'}
+                              placeholder="0"
+                              value={p.agencyRetention ? p.agencyRetention.toLocaleString('en-US') : ''}
+                              onChange={(e) => updatePassenger(p.id, 'agencyRetention', parseCleanNumber(e.target.value))}
+                              style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
+                              className={`w-24 h-[36px] px-2.5 rounded-[8px] border border-emerald-200 text-xs font-mono font-bold text-emerald-800 text-left outline-none hover:border-emerald-400 focus:border-2 focus:border-emerald-500 bg-emerald-50/40 ${
+                                refundType === 'FULL' ? 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400' : ''
+                              }`}
+                            />
+                          </td>
+
+                          {/* Net Customer */}
+                          <td className="p-2.5 text-left font-mono font-black text-[#F45A0A] text-[13px] tabular-nums" dir="ltr">
+                            {formatNumberEnglish(netSell)}
+                          </td>
+
+                          {/* Profit */}
+                          <td className="p-2.5 text-left font-mono font-bold text-[#078B61] text-[13px] tabular-nums" dir="ltr">
+                            {profit > 0 ? `+${formatNumberEnglish(profit)}` : formatNumberEnglish(profit)}
+                          </td>
+
+                          {/* Delete */}
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePassenger(p.id)}
+                              className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center mx-auto transition-colors cursor-pointer"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Table Footer Count */}
+              <div className="p-2.5 bg-[#F8FAFC] border-t border-[#E5E7EB] flex items-center justify-between">
+                <span className="text-[11.5px] font-bold text-slate-600">
+                  {isAr ? `إجمالي المسافرين المحددين للاسترجاع: ${activePassengers.length} من أصل ${passengers.length}` : `Selected for refund: ${activePassengers.length} of ${passengers.length}`}
                 </span>
               </div>
             </div>
-          )}
 
-          {selectedOriginalTicket && refundMode === 'FROM_TICKET' && (
-            <div className="p-3.5 rounded-[10px] bg-[#FFF3E8]/70 border border-[#FED7AA] text-xs flex items-center justify-between flex-wrap gap-2 text-slate-800 font-medium">
-              <div className="flex items-center gap-3">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>التذكرة الأصلية: <b className="font-mono font-bold text-slate-900">{selectedOriginalTicket.invoiceNumber}</b></span>
-                <span>• المسار: <b className="font-mono font-bold text-slate-900">{selectedOriginalTicket.route || '—'}</b></span>
-                <span>• المسافرون: <b className="font-bold text-slate-900">{selectedOriginalTicket.passengers?.length || 1} مسافر</b></span>
-              </div>
-              <div className="text-[#F45A0A] font-bold text-xs">
-                ✓ تم جلب بيانات ومسافري التذكرة بالكامل
-              </div>
-            </div>
-          )}
-        </div>
+            {/* ── E. Remarks & Attachments Section (Clean Full-Width Box) ── */}
+            <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-4 sm:p-5 space-y-3.5 shadow-2xs font-sans">
+              <h3 className="font-bold text-[13.5px] text-[#111827] flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                <Receipt size={16} className="text-[#F45A0A]" />
+                <span>{isAr ? 'الملاحظات والوصل المرفق' : 'Remarks & Receipt Attachment'}</span>
+              </h3>
 
-        {/* ── B. Main Metadata Form Grid (Spacious 44px Inputs with Currency) ── */}
-        <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-5 shadow-2xs space-y-4">
-          <h3 className="font-bold text-[14px] text-[#111827] flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Plane size={18} className="text-[#F45A0A]" />
-            <span>{isAr ? 'بيانات التذكرة والحسابات' : 'Ticket Details & Accounts'}</span>
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            {/* Refund Date with SegmentedDatePicker */}
-            <div>
-              <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5">
-                {isAr ? 'تاريخ الاسترجاع' : 'Refund Date'}
-              </label>
-              <SegmentedDatePicker
-                value={issueDate}
-                onChange={(d) => d && setIssueDate(d)}
-              />
-            </div>
-
-            {/* Airline Selector */}
-            <div>
-              <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5">
-                {isAr ? 'شركة الطيران' : 'Airline'}
-              </label>
-              <SearchableCombobox
-                options={airlineOptions}
-                value={airline}
-                onChange={setAirline}
-                placeholder={isAr ? 'اختر أو اكتب شركة الطيران' : 'Select airline'}
-              />
-            </div>
-
-            {/* PNR Code */}
-            <div>
-              <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5">
-                {isAr ? 'كود الحجز PNR *' : 'PNR Code *'}
-              </label>
-              <input
-                type="text"
-                dir="ltr"
-                placeholder="e.g. PRMCK"
-                value={pnr}
-                onChange={(e) => setPnr(e.target.value.toUpperCase())}
-                style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                className="w-full h-[44px] px-3.5 rounded-[10px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13.5px] font-mono font-bold text-[#111827] uppercase outline-none hover:border-[#D1D5DB] focus:border-2 focus:border-[#F45A0A] transition-colors"
-              />
-            </div>
-
-            {/* Currency Selection Field (44px Height) */}
-            <div>
-              <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5">
-                {isAr ? 'العملة' : 'Currency'}
-              </label>
-              <div className="h-[44px] p-1 rounded-[10px] bg-[#FAFAFA] border border-[#E5E7EB] flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrency('IQD');
-                    setExchangeRate(1);
-                  }}
-                  className={`flex-1 h-full rounded-[7px] text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                    currency === 'IQD'
-                      ? 'bg-[#F45A0A] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-200/60'
-                  }`}
-                >
-                  <span>د.ع IQD</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrency('USD');
-                    setExchangeRate(adoptedEx.adoptedRate || 1550);
-                  }}
-                  className={`flex-1 h-full rounded-[7px] text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
-                    currency === 'USD'
-                      ? 'bg-[#F45A0A] text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-200/60'
-                  }`}
-                >
-                  <span>$ USD</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Customer Account */}
-            <div>
-              <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5">
-                {isAr ? 'العميل / الحساب' : 'Customer Account'}
-              </label>
-              <SearchableCombobox
-                options={customerOptions}
-                value={customerName}
-                onChange={setCustomerName}
-                placeholder={isAr ? 'اختر العميل' : 'Select customer'}
-              />
-            </div>
-
-            {/* Supplier Account */}
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <label className="text-[12.5px] font-semibold text-[#334155]">
-                  {isAr ? 'المورد / جهة الإصدار' : 'Supplier Account'}
-                </label>
-                <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5">
-                  <span className={`text-[10.5px] font-extrabold ${isSupplierRefunded ? 'text-emerald-700' : 'text-rose-600'}`}>
-                    {isSupplierRefunded
-                      ? (isAr ? 'أرجع المورد' : 'Supplier refunded')
-                      : (isAr ? 'لم يرجع المورد' : 'Not refunded')}
-                  </span>
-                  <Switch
-                    checked={isSupplierRefunded}
-                    onChange={(event) => setIsSupplierRefunded(event.currentTarget.checked)}
-                    color="teal"
-                    size="xs"
-                  />
-                </div>
-              </div>
-              <SearchableCombobox
-                options={supplierOptions}
-                value={supplierAccount}
-                onChange={(val) => {
-                  setSupplierAccount(val);
-                  if (!val) {
-                    setSupplierAccountName('');
-                    return;
-                  }
-                  const found = suppliers.find((s) =>
-                    [s.id, s.accountId, s.account?.id, s.code, s.nameAr, s.nameEn, s.name].includes(val)
-                  );
-                  setSupplierAccountName(found ? (found.nameAr || found.nameEn || found.name || found.code) : '');
-                }}
-                placeholder={isAr ? 'اختر المورد' : 'Select supplier'}
-              />
-            </div>
-
-            {/* Issuer Employee */}
-            <div className="lg:col-span-2">
-              <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5">
-                {isAr ? 'موظف الإدخال والاعتماد' : 'Issuer / Created By'}
-              </label>
-              <input
-                type="text"
-                value={employeeName}
-                onChange={(e) => setEmployeeName(e.target.value)}
-                className="w-full h-[44px] px-3.5 rounded-[10px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13.5px] font-semibold text-[#111827] outline-none hover:border-[#D1D5DB] focus:border-2 focus:border-[#F45A0A] transition-colors"
-              />
-            </div>
-
-          </div>
-        </div>
-
-        {/* ── C. Dedicated Multi-Passenger Refund Table (Simple, Clear & Intuitive) ── */}
-        <div className="bg-white rounded-[14px] border border-[#E5E7EB] shadow-2xs overflow-hidden">
-          
-          {/* Table Top Header with Clean Bulk Quick-Apply Bar */}
-          <div className="p-4 bg-[#F8FAFC] border-b border-[#E5E7EB] flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
-                <Users size={20} />
-              </div>
-              <div>
-                <h3 className="font-bold text-[14.5px] text-[#111827]">
-                  {isAr ? 'تحديد المسافرين واحتساب الفروقات والخصومات' : 'Passenger Refunds & Deductions'}
-                </h3>
-                <p className="text-[12px] text-slate-500 mt-0.5">
-                  {isAr
-                    ? 'حدد المسافرين المسترجعين، وأدخل غرامة الطيران أو استقطاع الشركة لتحديث صافي المبلغ للعميل فورياً'
-                    : 'Select refunded passengers and enter airline penalties or company retention'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Add Passenger Button */}
-              <button
-                type="button"
-                onClick={handleAddPassenger}
-                className="h-[38px] px-3.5 rounded-[9px] bg-white border border-[#FED7AA] hover:bg-[#FFF3E8] text-[#F45A0A] font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-              >
-                <Plus size={15} strokeWidth={2.4} />
-                <span>{isAr ? 'إضافة مسافر' : 'Add Passenger'}</span>
-              </button>
-
-              {/* Clean Quick Bulk Applicator */}
-              <div className="flex items-center gap-2 flex-wrap bg-white p-1.5 rounded-[12px] border border-slate-200 shadow-2xs">
-                <div className="flex items-center gap-1 text-xs font-bold text-slate-700 px-1">
-                  <Sparkles size={15} className="text-[#F45A0A]" />
-                  <span>{isAr ? `تطبيق موحد (${activePassengers.length}):` : `Bulk Apply (${activePassengers.length}):`}</span>
-                </div>
-
-                {/* Bulk Airline Penalty */}
-                <div className="flex items-center gap-1 bg-[#FFF5F5] border border-rose-200 px-2.5 py-1 rounded-[8px]">
-                  <span className="text-xs font-bold text-rose-700">{isAr ? 'غرامة طيران:' : 'Penalty:'}</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    dir="ltr"
-                    placeholder="0"
-                    value={bulkAirlinePenalty}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
-                      const clean = raw.replace(/[٠-٩]/g, (d) => arabicDigits.indexOf(d).toString()).replace(/[^0-9]/g, '');
-                      setBulkAirlinePenalty(clean ? Number(clean).toLocaleString('en-US') : '');
-                    }}
-                    style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                    className="w-24 h-[28px] bg-transparent text-sm font-mono font-bold text-rose-700 text-left outline-none"
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                {/* Attachments Section */}
+                <div>
+                  <TicketAttachmentsSection
+                    attachments={attachments}
+                    onChange={setAttachments}
                   />
                 </div>
 
-                {/* Bulk Agency Retention */}
-                <div className="flex items-center gap-1 bg-[#FFFBEB] border border-amber-200 px-2.5 py-1 rounded-[8px]">
-                  <span className="text-xs font-bold text-amber-800">{isAr ? 'استقطاع شركة:' : 'Retention:'}</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    dir="ltr"
-                    placeholder="0"
-                    value={bulkAgencyRetention}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
-                      const clean = raw.replace(/[٠-٩]/g, (d) => arabicDigits.indexOf(d).toString()).replace(/[^0-9]/g, '');
-                      setBulkAgencyRetention(clean ? Number(clean).toLocaleString('en-US') : '');
-                    }}
-                    style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                    className="w-24 h-[28px] bg-transparent text-sm font-mono font-bold text-amber-800 text-left outline-none"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleApplyBulkPenalty}
-                  className="h-[34px] px-4 rounded-[8px] bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-                >
-                  <Check size={14} strokeWidth={2.4} />
-                  <span>{isAr ? 'تطبيق' : 'Apply'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Clean Streamlined Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-right border-collapse">
-              <thead>
-                <tr className="bg-[#F8FAFC] text-slate-700 font-bold border-b border-[#E5E7EB] h-[46px] select-none text-[12.5px]">
-                  <th className="p-3 text-center w-12">
-                    <Checkbox
-                      checked={passengers.length > 0 && passengers.every((p) => p.selected)}
-                      indeterminate={passengers.some((p) => p.selected) && !passengers.every((p) => p.selected)}
-                      onChange={(e) => {
-                        const checked = e.currentTarget.checked;
-                        setPassengers((prev) => prev.map((p) => ({ ...p, selected: checked })));
-                      }}
+                {/* Remarks / Notes */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[12px] font-semibold text-[#334155] block mb-1">
+                      {isAr ? 'ملاحظات وتفاصيل الاسترجاع' : 'Refund Remarks & Notes'}
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder={isAr ? 'أسباب الاسترجاع، تفاصيل التذكرة، توجيهات...' : 'Refund reason, policy notes...'}
+                      className="w-full p-2.5 rounded-[8px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-medium text-[#111827] outline-none hover:border-[#D1D5DB] focus:border-2 focus:border-[#F45A0A] transition-colors"
                     />
-                  </th>
-                  <th className="p-3 w-10 text-center">#</th>
-                  <th className="p-3 min-w-[170px]">{isAr ? 'اسم المسافر *' : 'Passenger Name *'}</th>
-                  <th className="p-3 min-w-[110px]">{isAr ? 'نوع المسافر' : 'Pax Type'}</th>
-                  <th className="p-3 min-w-[140px]">{isAr ? 'رقم التذكرة' : 'Ticket Number'}</th>
-                  <th className="p-3 min-w-[130px] font-mono text-left">{isAr ? 'مبلغ الشراء' : 'Buy Refund'}</th>
-                  <th className="p-3 min-w-[130px] font-mono text-left text-rose-700">{isAr ? 'غرامة الطيران (-)' : 'Airline Penalty (-)'}</th>
-                  <th className="p-3 min-w-[130px] font-mono text-left text-slate-800">{isAr ? 'صافي المورد' : 'Net Supplier'}</th>
-                  <th className="p-3 min-w-[130px] font-mono text-left">{isAr ? 'مبلغ المبيع' : 'Sell Refund'}</th>
-                  <th className="p-3 min-w-[130px] font-mono text-left text-amber-800">{isAr ? 'استقطاع الشركة (-)' : 'Agency Retention (-)'}</th>
-                  <th className="p-3 min-w-[140px] font-mono text-left text-[#F45A0A]">{isAr ? 'الصافي للعميل' : 'Net Customer'}</th>
-                  <th className="p-3 min-w-[120px] font-mono text-left text-[#078B61]">{isAr ? 'صافي الربح' : 'Profit'}</th>
-                  <th className="p-3 text-center w-12">{isAr ? 'حذف' : 'Del'}</th>
-                </tr>
-              </thead>
+                  </div>
 
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                {passengers.map((p, index) => {
-                  const netBuy = Math.max(0, (Number(p.buyRefund) || 0) - (Number(p.airlinePenalty) || 0));
-                  const netSell = Math.max(0, (Number(p.sellRefund) || 0) - (Number(p.airlinePenalty) || 0) - (Number(p.agencyRetention) || 0));
-                  const profit = Number(p.agencyRetention) || 0;
-
-                  return (
-                    <tr
-                      key={p.id}
-                      className={`transition-colors ${p.selected ? 'bg-white hover:bg-[#FFF8F3]' : 'bg-slate-50/70 opacity-60 hover:opacity-100'}`}
-                    >
-                      {/* Checkbox */}
-                      <td className="p-3 text-center">
-                        <Checkbox
-                          checked={p.selected}
-                          onChange={(e) => updatePassenger(p.id, 'selected', e.currentTarget.checked)}
-                        />
-                      </td>
-
-                      {/* Index */}
-                      <td className="p-3 text-center font-mono font-bold text-slate-400 text-xs">
-                        {index + 1}
-                      </td>
-
-                      {/* Passenger Name */}
-                      <td className="p-2.5">
-                        <input
-                          type="text"
-                          value={p.name}
-                          onChange={(e) => updatePassenger(p.id, 'name', e.target.value)}
-                          placeholder={isAr ? 'اسم المسافر' : 'Passenger Name'}
-                          className="w-full h-[40px] px-3 rounded-[8px] border border-slate-200 text-[13px] font-bold text-[#111827] outline-none focus:border-[#F45A0A]"
-                        />
-                      </td>
-
-                      {/* Passenger Type (Mantine Select) */}
-                      <td className="p-2.5">
-                        <Select
-                          size="sm"
-                          radius="md"
-                          value={p.type || 'ADULT'}
-                          onChange={(val) => updatePassenger(p.id, 'type', val || 'ADULT')}
-                          data={[
-                            { value: 'ADULT', label: isAr ? 'بالغ' : 'Adult' },
-                            { value: 'CHILD', label: isAr ? 'طفل' : 'Child' },
-                            { value: 'INFANT', label: isAr ? 'رضيع' : 'Infant' },
-                          ]}
-                          comboboxProps={{ withinPortal: true, zIndex: 9999, transitionProps: { duration: 150, transition: 'pop' } }}
-                          styles={{
-                            input: {
-                              height: 40,
-                              fontSize: 12.5,
-                              fontWeight: 700,
-                              borderRadius: 8,
-                              borderColor: '#E2E8F0',
-                              backgroundColor: '#FAFAFA',
-                              width: '100%',
-                            },
-                          }}
-                        />
-                      </td>
-
-                      {/* Ticket # */}
-                      <td className="p-2.5">
-                        <input
-                          type="text"
-                          dir="ltr"
-                          value={p.ticketNumber}
-                          onChange={(e) => updatePassenger(p.id, 'ticketNumber', e.target.value)}
-                          placeholder={isAr ? 'رقم التذكرة' : 'Ticket number'}
-                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          className="w-full h-[40px] px-3 rounded-[8px] border border-slate-200 text-xs font-mono font-bold text-[#111827] outline-none focus:border-[#F45A0A]"
-                        />
-                      </td>
-
-                      {/* Buy Refund (Original from Ticket - Read Only) */}
-                      <td className="p-2.5">
-                        <div
-                          className="w-full h-[40px] px-3 rounded-[8px] bg-[#F8FAFC] border border-slate-200 text-sm font-mono font-bold text-slate-800 flex items-center justify-start tabular-nums select-none"
-                          dir="ltr"
-                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          title={isAr ? 'مبلغ الشراء الأصلي من التذكرة (غير قابل للتعديل)' : 'Original Buy Amount'}
-                        >
-                          {formatNumberEnglish(p.buyRefund)}
-                        </div>
-                      </td>
-
-                      {/* Airline Penalty (Editable) */}
-                      <td className="p-2.5">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          dir="ltr"
-                          placeholder="0"
-                          value={p.airlinePenalty ? p.airlinePenalty.toLocaleString('en-US') : ''}
-                          onChange={(e) => updatePassenger(p.id, 'airlinePenalty', parseCleanNumber(e.target.value))}
-                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          className="w-full h-[40px] px-3 rounded-[8px] border border-rose-200 text-sm font-mono font-bold text-rose-700 text-left outline-none hover:border-rose-400 focus:border-2 focus:border-rose-500 bg-rose-50/20"
-                        />
-                      </td>
-
-                      {/* Net Supplier */}
-                      <td className="p-3 text-left font-mono font-bold text-slate-800 text-sm tabular-nums" dir="ltr" style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}>
-                        {formatNumberEnglish(netBuy)}
-                      </td>
-
-                      {/* Sell Refund (Original from Ticket - Read Only) */}
-                      <td className="p-2.5">
-                        <div
-                          className="w-full h-[40px] px-3 rounded-[8px] bg-[#F8FAFC] border border-slate-200 text-sm font-mono font-bold text-slate-800 flex items-center justify-start tabular-nums select-none"
-                          dir="ltr"
-                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          title={isAr ? 'مبلغ المبيع الأصلي من التذكرة (غير قابل للتعديل)' : 'Original Sell Amount'}
-                        >
-                          {formatNumberEnglish(p.sellRefund)}
-                        </div>
-                      </td>
-
-                      {/* Agency Retention (Editable) */}
-                      <td className="p-2.5">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          dir="ltr"
-                          placeholder="0"
-                          value={p.agencyRetention ? p.agencyRetention.toLocaleString('en-US') : ''}
-                          onChange={(e) => updatePassenger(p.id, 'agencyRetention', parseCleanNumber(e.target.value))}
-                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          className="w-full h-[40px] px-3 rounded-[8px] border border-amber-200 text-sm font-mono font-bold text-amber-800 text-left outline-none hover:border-amber-400 focus:border-2 focus:border-amber-500 bg-amber-50/20"
-                        />
-                      </td>
-
-                      {/* Net Customer */}
-                      <td className="p-3 text-left font-mono font-extrabold text-[#F45A0A] text-sm tabular-nums" dir="ltr" style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}>
-                        {formatNumberEnglish(netSell)}
-                      </td>
-
-                      {/* Profit */}
-                      <td className="p-3 text-left font-mono font-extrabold text-[#078B61] text-sm tabular-nums" dir="ltr" style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}>
-                        {profit > 0 ? `+${formatNumberEnglish(profit)}` : formatNumberEnglish(profit)}
-                      </td>
-
-                      {/* Delete */}
-                      <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleRemovePassenger(p.id)}
-                          className="w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center mx-auto transition-colors cursor-pointer"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Table Footer Count */}
-          <div className="p-3 bg-[#F8FAFC] border-t border-[#E5E7EB] flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-600">
-              {isAr ? `إجمالي المسافرين المحددين للاسترجاع: ${activePassengers.length} من أصل ${passengers.length}` : `Selected for refund: ${activePassengers.length} of ${passengers.length}`}
-            </span>
-          </div>
-        </div>
-
-        {/* ── D. Crystal Clear Financial Summary Cards ── */}
-        <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-5 shadow-2xs space-y-4">
-          <h3 className="font-bold text-[14px] text-[#111827] flex items-center gap-2 border-b border-slate-100 pb-3">
-            <TrendingUp size={18} className="text-[#F45A0A]" />
-            <span>{isAr ? 'ملخص مبالغ الاسترجاع الإجمالية' : 'Refund Financial Summary'}</span>
-          </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            {/* 1. Buy Refund (From Supplier) */}
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
-              <span className="text-[11.5px] font-bold text-slate-500 block mb-1">
-                {isAr ? 'مسترجع الشراء (من المورد)' : 'Gross Buy Refund'}
-              </span>
-              <span className="text-lg font-black font-mono text-slate-900 tabular-nums block" dir="ltr">
-                {formatNumberEnglish(isSupplierRefunded ? totalBuyRefund : 0)} <span className="text-xs font-sans font-bold text-slate-400">{currency}</span>
-              </span>
-              <span className={`text-[10px] font-bold block mt-1 ${isSupplierRefunded ? 'text-emerald-700' : 'text-rose-600'}`}>
-                {isSupplierRefunded ? (isAr ? '✓ المورد أرجع المبلغ' : '✓ Supplier Refunded') : (isAr ? '✗ لم يرجع المورد (0)' : '✗ No Supplier Return')}
-              </span>
-            </div>
-
-            {/* 2. Airline Penalty */}
-            <div className="p-3.5 rounded-xl bg-rose-50/60 border border-rose-200">
-              <span className="text-[11.5px] font-bold text-rose-700 block mb-1">
-                {isAr ? 'غرامات الطيران (-)' : 'Airline Penalties (-)'}
-              </span>
-              <span className="text-lg font-black font-mono text-rose-700 tabular-nums block" dir="ltr">
-                -{formatNumberEnglish(totalAirlinePenalty)} <span className="text-xs font-sans font-bold text-rose-400">{currency}</span>
-              </span>
-              <span className="text-[10px] text-rose-600 font-bold block mt-1">
-                {isAr ? `صافي من المورد: ${formatNumberEnglish(totalNetBuyReturn)}` : `Net from supplier: ${formatNumberEnglish(totalNetBuyReturn)}`}
-              </span>
-            </div>
-
-            {/* 3. Agency Retention Fee / Profit */}
-            <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200">
-              <span className="text-[11.5px] font-bold text-emerald-800 block mb-1">
-                {isAr ? 'رسوم وربح الوكالة (+)' : 'Agency Retention Fee (+)'}
-              </span>
-              <span className="text-lg font-black font-mono text-emerald-700 tabular-nums block" dir="ltr">
-                +{formatNumberEnglish(totalAgencyRetention)} <span className="text-xs font-sans font-bold text-emerald-500">{currency}</span>
-              </span>
-              <span className="text-[10px] text-emerald-600 font-bold block mt-1">
-                {isAr ? 'ربح صافي للشركة من الاسترجاع' : 'Agency Net Realized Profit'}
-              </span>
-            </div>
-
-            {/* 4. Net Refund to Customer */}
-            <div className="p-3.5 rounded-xl bg-[#FFF3E8] border border-[#FFD8B2]">
-              <span className="text-[11.5px] font-bold text-[#F45A0A] block mb-1">
-                {isAr ? 'الصافي المستحق للعميل' : 'Net Paid to Customer'}
-              </span>
-              <span className="text-xl font-black font-mono text-[#F45A0A] tabular-nums block" dir="ltr">
-                {formatNumberEnglish(totalNetRefundToCustomer)} <span className="text-xs font-sans font-bold text-[#F45A0A]">{currency}</span>
-              </span>
-              <span className="text-[10px] text-slate-500 font-bold block mt-1">
-                {isAr ? `(مسترجع البيع ${formatNumberEnglish(totalSellRefund)} - الخصومات)` : `(Sell ${formatNumberEnglish(totalSellRefund)} - Deductions)`}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* ── E. Settlement & Attachments Section ── */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-          
-          {/* Payment Mode Box */}
-          <div className="md:col-span-6 bg-white rounded-[14px] border border-[#E5E7EB] p-5 space-y-4 shadow-2xs">
-            <h3 className="font-bold text-[14px] text-[#111827] flex items-center gap-2 border-b border-slate-100 pb-2.5">
-              <Coins size={18} className="text-[#F45A0A]" />
-              <span>{isAr ? 'طريقة التسوية وصرف المبلغ' : 'Settlement Mode'}</span>
-            </h3>
-
-            <div className="flex items-center gap-5 flex-wrap">
-              <Radio
-                checked={paymentType === 'CASH_HAND'}
-                onChange={() => setPaymentType('CASH_HAND')}
-                label={isAr ? 'نقدي (صرف من الصندوق)' : 'Cash Refund'}
-                className="font-bold text-xs"
-              />
-              <Radio
-                checked={paymentType === 'MASTER_CARD'}
-                onChange={() => setPaymentType('MASTER_CARD')}
-                label={isAr ? 'ماستركارد / دفع إلكتروني' : 'Mastercard / Electronic'}
-                className="font-bold text-xs"
-              />
-              <Radio
-                checked={paymentType === 'ON_ACCOUNT'}
-                onChange={() => setPaymentType('ON_ACCOUNT')}
-                label={isAr ? 'قيد آجل في حساب العميل' : 'Credit on Account'}
-                className="font-bold text-xs"
-              />
-            </div>
-
-            {paymentType === 'CASH_HAND' && (
-              <div>
-                <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5 flex items-center justify-between">
-                  <span>{isAr ? 'الصندوق المنفذ للصرف' : 'Cashbox'}</span>
-                  <span className="text-[11px] font-bold text-emerald-600">✓ تم تحديد صندوق الموظف تلقائياً</span>
-                </label>
-                <Select
-                  value={cashboxId}
-                  onChange={(val) => val && setCashboxId(val)}
-                  data={cashboxes.map((c) => ({
-                    value: c.id || c.code,
-                    label: c.nameAr || c.name || 'الصندوق الرئيسي',
-                  }))}
-                  comboboxProps={{ withinPortal: true, zIndex: 9999 }}
-                  styles={{
-                    input: {
-                      height: 44,
-                      fontSize: 13.5,
-                      fontWeight: 600,
-                      borderRadius: 10,
-                      borderColor: '#E5E7EB',
-                      backgroundColor: '#FAFAFA',
-                    },
-                  }}
-                />
+                  <div className="p-2.5 rounded-[8px] bg-[#F8FAFC] border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
+                    <ShieldCheck size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                    <p className="leading-relaxed">
+                      {isAr
+                        ? 'سيقوم النظام بتوليد قيد اليومية المزدوج، وتحديث أرصدة العملاء والموردين تلقائياً.'
+                        : 'Automatic double-entry journal vouchers will be generated and account balances updated instantly.'}
+                    </p>
+                  </div>
+                </div>
               </div>
-            )}
-
-            {paymentType === 'MASTER_CARD' && (
-              <div>
-                <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5">
-                  {isAr ? 'حساب الماستركارد / البنك المنفذ للصرف' : 'Mastercard / Bank Account'}
-                </label>
-                <Select
-                  value={bankAccountId}
-                  onChange={(val) => val && setBankAccountId(val)}
-                  data={bankAccounts.map((b) => ({
-                    value: b.id || b.code,
-                    label: b.nameAr || b.name || 'حساب الماستر كارد',
-                  }))}
-                  comboboxProps={{ withinPortal: true, zIndex: 9999 }}
-                  styles={{
-                    input: {
-                      height: 44,
-                      fontSize: 13.5,
-                      fontWeight: 600,
-                      borderRadius: 10,
-                      borderColor: '#E5E7EB',
-                      backgroundColor: '#FAFAFA',
-                    },
-                  }}
-                />
-              </div>
-            )}
-
-            <div>
-              <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5">
-                {isAr ? 'رقم الوصل الورقي / مرجع التحويل' : 'Receipt / Transfer Reference #'}
-              </label>
-              <input
-                type="text"
-                dir="ltr"
-                placeholder="e.g. 10245 / TX-99218"
-                value={paperReceiptNumber}
-                onChange={(e) => setPaperReceiptNumber(e.target.value)}
-                style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                className="w-full h-[44px] px-3.5 rounded-[10px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13.5px] font-mono font-bold text-[#111827] outline-none hover:border-[#D1D5DB] focus:border-2 focus:border-[#F45A0A] transition-colors"
-              />
             </div>
+
           </div>
 
-          {/* Remarks & Attachments */}
-          <div className="md:col-span-6 bg-white rounded-[14px] border border-[#E5E7EB] p-5 space-y-3.5 shadow-2xs">
-            <h3 className="font-bold text-[14px] text-[#111827] flex items-center gap-2 border-b border-slate-100 pb-2.5">
-              <Receipt size={18} className="text-[#F45A0A]" />
-              <span>{isAr ? 'الملاحظات والوصل المرفق' : 'Remarks & Receipt Attachment'}</span>
-            </h3>
+          {/* ── STICKY SIDEBAR (360px) - Match Ticket Invoice Style ── */}
+          <div className="xl:sticky xl:top-0 space-y-4 font-sans">
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-5 space-y-4">
+              
+              {/* Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
+                    <TrendingUp size={16} strokeWidth={2} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[15px] text-[#111827] leading-tight">
+                      {isAr ? 'الملخص المالي للاسترجاع' : 'Financial Summary'}
+                    </h4>
+                    <span className="text-[11px] text-[#6B7280]">
+                      {isAr ? 'الصافي والأرباح والغرامات' : 'Net refund, profit & penalties'}
+                    </span>
+                  </div>
+                </div>
 
-            {/* Attachments Section */}
-            <div>
-              <TicketAttachmentsSection
-                attachments={attachments}
-                onChange={setAttachments}
-              />
-            </div>
+                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono font-bold text-[11px]">
+                  {currency}
+                </span>
+              </div>
 
-            <div>
-              <label className="text-[12.5px] font-semibold text-[#334155] block mb-1.5">
-                {isAr ? 'ملاحظات وتفاصيل الاسترجاع' : 'Refund Remarks & Notes'}
-              </label>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={isAr ? 'أسباب الاسترجاع، تفاصيل التذكرة، توجيهات...' : 'Refund reason, policy notes...'}
-                className="w-full p-3 rounded-[10px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13px] font-medium text-[#111827] outline-none hover:border-[#D1D5DB] focus:border-2 focus:border-[#F45A0A] transition-colors"
-              />
-            </div>
+              {/* KPI Breakdown List */}
+              <div className="space-y-2.5">
+                {/* 1. Buy Refund from Supplier */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-[12px] font-semibold text-slate-600">
+                    {isAr ? 'مسترجع الشراء (المورد)' : 'Gross Buy Refund'}
+                  </span>
+                  <span className="font-mono font-bold text-slate-900 text-sm tabular-nums" dir="ltr">
+                    {formatNumberEnglish(isSupplierRefunded ? totalBuyRefund : 0)} <span className="text-[10px] text-slate-400 font-sans">{currency}</span>
+                  </span>
+                </div>
 
-            <div className="p-3 rounded-[10px] bg-[#F8FAFC] border border-slate-200 text-xs text-slate-600 flex items-start gap-2.5">
-              <ShieldCheck size={18} className="text-emerald-600 shrink-0 mt-0.5" />
-              <p className="leading-relaxed">
-                {isAr
-                  ? 'سيقوم النظام بتوليد قيد اليومية المزدوج، وتحديث أرصدة العملاء والموردين والصناديق تلقائياً.'
-                  : 'Automatic double-entry journal vouchers will be generated and account balances updated instantly.'}
-              </p>
+                {/* 2. Airline Penalty */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-rose-50/70 border border-rose-100">
+                  <span className="text-[12px] font-semibold text-rose-700">
+                    {isAr ? 'غرامات الطيران (-)' : 'Airline Penalty (-)'}
+                  </span>
+                  <span className="font-mono font-bold text-rose-700 text-sm tabular-nums" dir="ltr">
+                    -{formatNumberEnglish(totalAirlinePenalty)} <span className="text-[10px] text-rose-400 font-sans">{currency}</span>
+                  </span>
+                </div>
+
+                {/* 3. Agency Retention Fee / Profit */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-100">
+                  <span className="text-[12px] font-semibold text-emerald-800">
+                    {isAr ? 'استقطاع الوكالة / الأرباح (+)' : 'Agency Retention (+)'}
+                  </span>
+                  <span className="font-mono font-bold text-emerald-700 text-sm tabular-nums" dir="ltr">
+                    +{formatNumberEnglish(totalAgencyRetention)} <span className="text-[10px] text-emerald-500 font-sans">{currency}</span>
+                  </span>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-dashed border-slate-200 my-1" />
+
+                {/* 4. Net Refund to Customer (Prominent Big Hero Card) */}
+                <div className="p-3.5 rounded-xl bg-[#FFF3E8] border border-[#FFD8B2] space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#F45A0A]">
+                      {isAr ? 'الصافي المستحق للعميل' : 'Net Paid to Customer'}
+                    </span>
+                    <span className="text-[10.5px] font-mono text-orange-600 font-bold">
+                      ({activePassengers.length} {isAr ? 'مسافر' : 'pax'})
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black font-mono text-[#F45A0A] tabular-nums" dir="ltr">
+                    {formatNumberEnglish(totalNetRefundToCustomer)} <span className="text-xs font-sans font-bold text-[#F45A0A]">{currency}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    {isAr
+                      ? `مسترجع البيع (${formatNumberEnglish(totalSellRefund)}) - الغرامات (${formatNumberEnglish(totalAirlinePenalty + totalAgencyRetention)})`
+                      : `Sell (${formatNumberEnglish(totalSellRefund)}) - Deductions`}
+                  </div>
+                </div>
+
+                {/* 5. Net from Supplier */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
+                  <span className="text-slate-500 font-medium">
+                    {isAr ? 'صافي الاسترداد من المورد:' : 'Net from supplier:'}
+                  </span>
+                  <span className="font-mono font-bold text-slate-800 tabular-nums" dir="ltr">
+                    {formatNumberEnglish(totalNetBuyReturn)} {currency}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons in Sidebar */}
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleSaveRefund}
+                  className="w-full h-[44px] rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-bold text-[13.5px] shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Check size={18} strokeWidth={2.4} />
+                  <span>{isAr ? 'حفظ وترحيل الاسترجاع' : 'Save & Post Refund'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full h-[38px] rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  {isAr ? 'إلغاء ومغادرة' : 'Cancel'}
+                </button>
+              </div>
+
             </div>
           </div>
 
         </div>
-
-        {/* Bottom clearance spacer */}
-        <div className="h-20 shrink-0 select-none" />
 
       </div>
 
-      {/* ── 3. Bottom Slim Sticky Bar (Compact Height & Sleek Layout) ── */}
-            {/* 🔹 3. White Modern Sticky Bottom Bar with Real-time KPIs 🔹 */}
+      {/* ── 3. Bottom Slim Sticky Bar ── */}
       <footer className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md text-slate-900 border-t border-slate-200 px-6 py-2.5 z-50 flex items-center justify-between flex-wrap gap-4 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] font-sans text-xs">
         {/* Left / Leading Stats */}
         <div className="flex items-center gap-4 flex-wrap">

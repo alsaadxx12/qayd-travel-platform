@@ -160,6 +160,22 @@ export const RefundsPage: React.FC = () => {
     }
   };
 
+  // Copy PNR helper
+  const handleCopyPnr = (pnrCode?: string | null) => {
+    if (!pnrCode || pnrCode === '—') {
+      showInfoNotification(
+        isAr ? 'لا يوجد PNR' : 'No PNR',
+        isAr ? 'لا يوجد كود PNR مسجل لهذا الاسترجاع' : 'No PNR code for this refund'
+      );
+      return;
+    }
+    navigator.clipboard.writeText(pnrCode);
+    showInfoNotification(
+      isAr ? 'تم النسخ' : 'Copied',
+      isAr ? `تم نسخ كود PNR (${pnrCode}) إلى الحافظة` : `PNR (${pnrCode}) copied to clipboard`
+    );
+  };
+
   // Delete Refund Document
   const handleDeleteRefund = async (ticket: TicketData) => {
     if (!ticket.id) return;
@@ -848,6 +864,12 @@ export const RefundsPage: React.FC = () => {
                               }}
                             >
                               {isAr ? 'تعديل / تفاصيل الاسترجاع' : 'Edit / View Refund'}
+                            </Menu.Item>
+                            <Menu.Item
+                              leftSection={<Copy size={14} className="text-[#F45A0A]" />}
+                              onClick={() => handleCopyPnr(r.pnr)}
+                            >
+                              {isAr ? 'نسخ PNR' : 'Copy PNR'}
                             </Menu.Item>
                             <Menu.Item
                               leftSection={<History size={14} className="text-blue-600" />}

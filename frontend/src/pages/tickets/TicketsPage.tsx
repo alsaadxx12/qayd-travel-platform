@@ -594,6 +594,24 @@ export const TicketsPage: React.FC = () => {
     };
   }, [reloadTicketsFromApi]);
 
+  // Copy PNR helper
+  const handleCopyPnr = (pnrCode?: string) => {
+    if (!pnrCode || pnrCode === '—') {
+      showInfoNotification(
+        language === 'ar' ? 'لا يوجد PNR' : 'No PNR',
+        language === 'ar' ? 'لا يوجد كود PNR مسجل لهذه التذكرة' : 'No PNR code for this ticket',
+      );
+      return;
+    }
+    navigator.clipboard.writeText(pnrCode);
+    setCopiedTicketId(pnrCode);
+    setTimeout(() => setCopiedTicketId(null), 2000);
+    showInfoNotification(
+      language === 'ar' ? 'تم النسخ' : 'Copied',
+      language === 'ar' ? `تم نسخ كود PNR (${pnrCode}) إلى الحافظة` : `PNR (${pnrCode}) copied to clipboard`,
+    );
+  };
+
   // Copy Invoice Number helper
   const handleCopyInvoiceNumber = (num: string) => {
     navigator.clipboard.writeText(num);
@@ -2197,13 +2215,14 @@ export const TicketsPage: React.FC = () => {
             <button
               type="button"
               onClick={() => {
-                handleCopyInvoiceNumber(contextMenu.ticket.number);
+                const pnrVal = contextMenu.ticket.pnr || contextMenu.ticket.rawInvoice?.pnr || '';
+                handleCopyPnr(pnrVal);
                 setContextMenu(null);
               }}
-              className="w-full px-3.5 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer text-start font-mono"
+              className="w-full px-3.5 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer text-start font-mono font-bold"
             >
-              <Copy size={15} className="text-slate-500" />
-              <span>{language === 'ar' ? 'نسخ رقم الفاتورة' : 'Copy Invoice No'}</span>
+              <Copy size={15} className="text-[#F45A0A]" />
+              <span>{language === 'ar' ? 'نسخ PNR' : 'Copy PNR'}</span>
             </button>
           </div>
 
