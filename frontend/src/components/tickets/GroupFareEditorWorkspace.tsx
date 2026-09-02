@@ -81,6 +81,184 @@ const parseCleanNumber = (val: string | number): number => {
   return isNaN(num) ? 0 : num;
 };
 
+
+/**
+ * ما يُفهم من نصٍّ ملصوق يصف رحلة كروب.
+ *
+ * الحقول التي لم تُذكر تبقى غير معرَّفة — لا تُخمَّن ولا تُملأ بأصفار.
+ */
+export interface GroupFarePaste {
+  travelDate?: Date;
+  returnDate?: Date;
+  supplierName?: string;
+  customerName?: string;
+  seats?: number;
+  buy?: { amount: number; currency: 'USD' | 'IQD'; isTotal: boolean };
+  sell?: { amount: number; currency: 'USD' | 'IQD'; isTotal: boolean };
+  route?: string;
+  pnrs: string[];
+  /** ما فُهم فعلاً، ليُعرض للمستخدم قبل التطبيق. */
+  found: string[];
+}
+
+const AR_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+const toLatinDigits = (s: string) => String(s || '').replace(/[٠-٩]/g, (d) => String(AR_DIGITS.indexOf(d)));
+
+/**
+ * رقمٌ كما يكتبه الناس: 2,304,000 و2.304.000 و1.296 و٢٤.
+ *
+ * النقطة تفصل الآلاف في أغلب ما يُلصق هنا («$1.296» تعني ألفاً ومئتين وستّة
+ * وتسعين)، فتُعامل فاصلةَ آلاف إلا حين تسبق رقمين فأقلّ في آخر العدد — وتلك
+ * كسورٌ حقيقية مثل 54.50.
+ */
+const parsePastedAmount = (raw: string): number => {
+  let s = toLatinDigits(raw).replace(/[^\d.,]/g, '').trim();
+  if (!s) return 0;
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+  const decimalSep = lastDot > lastComma ? '.' : lastComma > -1 ? ',' : '';
+  if (decimalSep) {
+    const tail = s.slice(s.lastIndexOf(decimalSep) + 1);
+    const isDecimal = tail.length > 0 && tail.length <= 2 && !/[.,]/.test(tail);
+    if (isDecimal) {
+      const head = s.slice(0, s.lastIndexOf(decimalSep)).replace(/[.,]/g, '');
+      return Number(`${head}.${tail}`) || 0;
+    }
+  }
+  return Number(s.replace(/[.,]/g, '')) || 0;
+};
+
+/** يوم/شهر/سنة كما يُكتب هنا، لا الشهر أولاً. */
+const parsePastedDate = (raw: string): Date | undefined => {
+  const s = toLatinDigits(raw).trim();
+  const m = s.match(/(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})/);
+  if (!m) return undefined;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  let year = Number(m[3]);
+  if (year < 100) year += 2000;
+  if (!day || !month || month > 12 || day > 31) return undefined;
+  const d = new Date(year, month - 1, day);
+  return isNaN(d.getTime()) ? undefined : d;
+};
+
+const currencyOf = (line: string): 'USD' | 'IQD' | undefined => {
+  const s = line.toLowerCase();
+  if (s.includes('$') || /\busd\b/.test(s) || s.includes('دولار')) return 'USD';
+  if (/\biqd\b/.test(s) || s.includes('دينار') || s.includes('د.ع')) return 'IQD';
+  return undefined;
+};
+
+/** «توتل» و«اجمالي» و«total» تعني أن الرقم للمجموعة كلها لا للمقعد. */
+const isTotalLine = (line: string): boolean =>
+  /توتل|إجمالي|اجمالي|الكلي|total/i.test(line);
+
+/**
+ * قراءة نصّ الكروب الملصوق.
+ *
+ * ما يصل من الموردين ليس جدولاً بل وصفٌ بالعربية: تاريخ، ومورد، ومستفيد، وعدد
+ * مقاعد، وسعران غالباً بعملتين مختلفتين و«توتل» للمجموعة. وكان المستورد يقرأ كل
+ * سطرٍ منه على أنه PNR فيخرج بأحد عشر سطراً لا معنى لها. فيُقرأ الآن بما هو.
+ */
+export const parseGroupFareText = (text: string): GroupFarePaste => {
+  const out: GroupFarePaste = { pnrs: [], found: [] };
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const bare = line.replace(/^[•\-*]\s*/, '');
+
+    // التواريخ: «ذهاب: 5/9/2026» و«عودة: …»
+    if (/ذهاب|مغادرة|departure|outbound/i.test(bare)) {
+      const d = parsePastedDate(bare);
+      if (d && !out.travelDate) {
+        out.travelDate = d;
+        out.found.push(`تاريخ الذهاب: ${d.toLocaleDateString('en-GB')}`);
+        continue;
+      }
+    }
+    if (/عودة|رجوع|return|inbound/i.test(bare)) {
+      const d = parsePastedDate(bare);
+      if (d && !out.returnDate) {
+        out.returnDate = d;
+        out.found.push(`تاريخ العودة: ${d.toLocaleDateString('en-GB')}`);
+        continue;
+      }
+    }
+
+    // الأطراف
+    const supplier = bare.match(/(?:المورد|المجهز|المزود|supplier)\s*[:：]\s*(.+)$/i);
+    if (supplier && !out.supplierName) {
+      out.supplierName = supplier[1].trim();
+      out.found.push(`المورد: ${out.supplierName}`);
+      continue;
+    }
+    const customer = bare.match(/(?:المستفيد|العميل|الزبون|customer|client)\s*[:：]\s*(.+)$/i);
+    if (customer && !out.customerName) {
+      out.customerName = customer[1].trim();
+      out.found.push(`المستفيد: ${out.customerName}`);
+      continue;
+    }
+
+    // المقاعد: «24 مقعد» أو «عدد المقاعد: 24»
+    const seats =
+      bare.match(/(?:عدد\s*(?:المقاعد|المسافرين)|seats|pax)\s*[:：]?\s*([\d٠-٩]+)/i) ||
+      // بلا \b بعد الكلمة العربية: حدّ الكلمة في JS معرَّف على الحروف اللاتينية وحدها،
+      // فلو وُضع هنا لما طابق «24 مقعد» أبداً.
+      bare.match(/^([\d٠-٩]+)\s*(?:مقعد|مقاعد|كرسي|seats?|pax)/i);
+    if (seats && !out.seats) {
+      const n = Number(toLatinDigits(seats[1]));
+      if (n > 0) {
+        out.seats = n;
+        out.found.push(`عدد المقاعد: ${n}`);
+        continue;
+      }
+    }
+
+    // الأسعار
+    const isBuy = /(?:سعر\s*)?(?:الشراء|شراء|buy|cost)/i.test(bare);
+    const isSell = /(?:سعر\s*)?(?:المبيع|البيع|بيع|sell|sale)/i.test(bare);
+    if (isBuy || isSell) {
+      const amount = parsePastedAmount(bare.replace(/[\d٠-٩]{1,2}\s*[\/\-.]\s*[\d٠-٩]{1,2}\s*[\/\-.]\s*[\d٠-٩]{2,4}/g, ''));
+      if (amount > 0) {
+        const entry = {
+          amount,
+          currency: currencyOf(bare) || 'IQD',
+          isTotal: isTotalLine(bare),
+        } as const;
+        const label = `${entry.amount.toLocaleString('en-US')} ${entry.currency}${entry.isTotal ? ' (توتل)' : ''}`;
+        if (isBuy && !out.buy) {
+          out.buy = { ...entry };
+          out.found.push(`سعر الشراء: ${label}`);
+          continue;
+        }
+        if (isSell && !out.sell) {
+          out.sell = { ...entry };
+          out.found.push(`سعر البيع: ${label}`);
+          continue;
+        }
+      }
+    }
+
+    // المسار: «BGW - IST» أو «بغداد - اسطنبول»
+    const route = bare.match(/^\s*([A-Z]{3})\s*[-–>/]+\s*([A-Z]{3})\s*$/);
+    if (route && !out.route) {
+      out.route = `${route[1]} - ${route[2]}`;
+      out.found.push(`المسار: ${out.route}`);
+      continue;
+    }
+
+    // ما بقي: PNR إن كان رمزاً من ستة محارف لاتينية/أرقام وحده في سطره
+    const pnr = bare.toUpperCase().match(/^([A-Z0-9]{5,7})$/);
+    if (pnr && /[A-Z]/.test(pnr[1])) out.pnrs.push(pnr[1]);
+  }
+
+  if (out.pnrs.length) out.found.push(`أرقام حجز: ${out.pnrs.length}`);
+  return out;
+};
+
 export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> = ({
   opened,
   onClose,
@@ -526,6 +704,102 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
   };
 
   // Parse and process pasted multi-line PNRs
+  /** ما يفهمه النظام من النص المُلصق الآن — يُحسب أثناء الكتابة ليُعرض قبل التطبيق. */
+  const pastedUnderstanding = useMemo(() => parseGroupFareText(pastedText), [pastedText]);
+
+  /*
+   * تطبيق ما فُهم على الرحلة.
+   *
+   * «توتل» تعني أن السعر للمجموعة كلّها، فيُقسَّم على المقاعد ليصير سعر المقعد —
+   * وهو ما تحتاجه أسطر الحجز. وحين تختلف عملة الشراء عن عملة البيع لا يُخترع سعر
+   * صرف: تُملأ القيمتان كما وردتا ويُقال للمستخدم صراحةً أن العملتين مختلفتان،
+   * لأن تحويلاً بسعرٍ لم يذكره أحد أسوأ من تنبيهٍ يقرأه.
+   */
+  const handleApplyUnderstanding = () => {
+    const info = pastedUnderstanding;
+    if (info.found.length === 0) {
+      showErrorNotification(
+        isAr ? 'لم يُفهم النص' : 'Nothing recognised',
+        isAr ? 'لم يُعثر على تاريخ أو مورد أو سعر أو عدد مقاعد في النص الملصوق.' : 'No date, supplier, price or seat count found.',
+      );
+      return;
+    }
+
+    if (info.travelDate) setTravelDate(info.travelDate);
+    if (info.returnDate) setReturnDate(info.returnDate);
+    if (info.customerName) setCustomerName(info.customerName);
+    if (info.route) setGeneralRoute(info.route);
+
+    if (info.supplierName) {
+      setSupplierAccountName(info.supplierName);
+      const needle = info.supplierName.trim().toLowerCase();
+      const match =
+        suppliers.find((s: any) => String(s.nameAr || s.name || '').trim().toLowerCase() === needle) ||
+        suppliers.find((s: any) => String(s.nameAr || s.name || '').toLowerCase().includes(needle)) ||
+        accountsList.find((a: any) => String(a.nameAr || '').toLowerCase().includes(needle));
+      if (match) setSupplierAccount(match.id || match.accountId || info.supplierName);
+    }
+
+    const seats = info.seats && info.seats > 0 ? info.seats : undefined;
+    if (info.sell) setCurrency(info.sell.currency);
+
+    const perSeat = (p?: { amount: number; isTotal: boolean }) => {
+      if (!p) return undefined;
+      if (!p.isTotal) return p.amount;
+      if (!seats) return p.amount;
+      return Math.round((p.amount / seats) * 100) / 100;
+    };
+
+    const buyEach = perSeat(info.buy);
+    const sellEach = perSeat(info.sell);
+
+    if (seats || buyEach !== undefined || sellEach !== undefined) {
+      const stamp = Date.now();
+      const lines: GroupFarePnrLine[] =
+        info.pnrs.length > 0
+          ? info.pnrs.map((pnr, i) => ({
+              id: `pnr-${stamp}-${i}`,
+              selected: true,
+              pnr,
+              ticketNumber: '',
+              route: info.route || '',
+              paxCount: seats ? Math.max(1, Math.round(seats / info.pnrs.length)) : 1,
+              buyPrice: buyEach || 0,
+              sellPrice: sellEach || 0,
+            }))
+          : [
+              {
+                id: `pnr-${stamp}`,
+                selected: true,
+                pnr: '',
+                ticketNumber: '',
+                route: info.route || '',
+                paxCount: seats || 1,
+                buyPrice: buyEach || 0,
+                sellPrice: sellEach || 0,
+              },
+            ];
+      setPnrLines(lines);
+    }
+
+    setPasteModalOpen(false);
+    setPastedText('');
+
+    const mixed = info.buy && info.sell && info.buy.currency !== info.sell.currency;
+    showSuccessNotification(
+      isAr ? 'تم استخراج البيانات' : 'Data extracted',
+      isAr ? `طُبّق ${info.found.length} حقلاً على الرحلة.` : `Applied ${info.found.length} field(s).`,
+    );
+    if (mixed) {
+      showInfoNotification(
+        isAr ? 'العملتان مختلفتان' : 'Two currencies',
+        isAr
+          ? `الشراء بـ${info.buy!.currency} والبيع بـ${info.sell!.currency} — عملة الفاتورة ضُبطت على ${info.sell!.currency}، فراجع سعر الشراء أو حوّله بسعر الصرف المعتمد.`
+          : `Buy is in ${info.buy!.currency} while sell is in ${info.sell!.currency}. The invoice currency was set to ${info.sell!.currency}; review the buy price.`,
+      );
+    }
+  };
+
   const handleProcessPastedPnrs = () => {
     if (!pastedText.trim()) {
       showErrorNotification(isAr ? 'تنبيه' : 'Alert', isAr ? 'يرجى لصق قائمة الـ PNRs أولاً.' : 'Please paste PNRs list.');
@@ -1064,24 +1338,6 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                       />
                     </div>
 
-                    {/* Exchange Rate (if USD) */}
-                    {currency === 'USD' && (
-                      <div className="sm:col-span-2">
-                        <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                          {isAr ? 'سعر الصرف (1$ مقابل د.ع)' : 'Exchange Rate'}
-                        </label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          dir="ltr"
-                          value={exchangeRate ? exchangeRate.toLocaleString('en-US') : ''}
-                          onChange={(e) => setExchangeRate(parseCleanNumber(e.target.value))}
-                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          className="w-full h-[46px] px-3.5 rounded-[11px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13px] font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-colors"
-                        />
-                      </div>
-                    )}
-
                   </div>
                 </div>
               </div>
@@ -1536,7 +1792,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
         title={
           <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
             <ClipboardPaste size={18} className="text-[#F45A0A]" />
-            <span>{isAr ? 'لصق سريع واستيراد قائمة PNRs' : 'Fast Paste & Import PNRs'}</span>
+            <span>{isAr ? 'لصق ذكي — يقرأ نصّ الكروب ويستخرج بياناته' : 'Smart paste — reads the group text'}</span>
           </div>
         }
         size="lg"
@@ -1602,11 +1858,72 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
             />
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+          {/*
+            * ما فُهم يُعرض قبل أن يُطبَّق.
+            *
+            * النص الملصوق يأتي بصياغات الموردين لا بصيغة واحدة، فقد يُقرأ حقلٌ
+            * خطأً. وعرضُ ما فُهم — ومعه سعر المقعد محسوباً — يجعل الخطأ مرئياً
+            * قبل أن يدخل الفاتورة، لا بعدها.
+            */}
+          {pastedUnderstanding.found.length > 0 && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 space-y-1.5">
+              <div className="flex items-center gap-1.5 text-[11.5px] font-black text-emerald-900">
+                <Sparkles size={13} className="text-emerald-700" />
+                <span>{isAr ? 'ما فهمه النظام من النص:' : 'Understood from the text:'}</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {pastedUnderstanding.found.map((f, i) => (
+                  <span
+                    key={i}
+                    className="text-[11px] font-bold bg-white border border-emerald-200 text-emerald-900 rounded-lg px-2 py-0.5"
+                  >
+                    {f}
+                  </span>
+                ))}
+              </div>
+              {(() => {
+                const u = pastedUnderstanding;
+                if (!u.seats || (!u.buy && !u.sell)) return null;
+                const each = (p?: { amount: number; isTotal: boolean }) =>
+                  !p ? null : p.isTotal ? Math.round((p.amount / u.seats!) * 100) / 100 : p.amount;
+                const b = each(u.buy);
+                const s = each(u.sell);
+                return (
+                  <div className="text-[11px] font-bold text-slate-700 bg-white border border-emerald-200 rounded-lg px-2 py-1" dir="rtl">
+                    {isAr ? 'للمقعد الواحد: ' : 'Per seat: '}
+                    {b !== null && (
+                      <span className="font-mono" dir="ltr">
+                        {isAr ? 'شراء ' : 'buy '}{b.toLocaleString('en-US')} {u.buy!.currency}
+                      </span>
+                    )}
+                    {b !== null && s !== null && <span className="text-slate-400"> · </span>}
+                    {s !== null && (
+                      <span className="font-mono" dir="ltr">
+                        {isAr ? 'بيع ' : 'sell '}{s.toLocaleString('en-US')} {u.sell!.currency}
+                      </span>
+                    )}
+                    {u.buy && u.sell && u.buy.currency !== u.sell.currency && (
+                      <span className="block mt-0.5 text-amber-700 font-bold">
+                        {isAr
+                          ? '⚠ الشراء والبيع بعملتين مختلفتين — راجع سعر الشراء بعد التطبيق'
+                          : '⚠ Buy and sell are in different currencies — review the buy price'}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-100">
             <span className="text-[11.5px] font-bold text-slate-500">
-              {isAr
-                ? `الأسطر المكتشفة: ${pastedText.split(/\r?\n/).filter((l) => l.trim()).length}`
-                : `Detected Lines: ${pastedText.split(/\r?\n/).filter((l) => l.trim()).length}`}
+              {pastedUnderstanding.found.length > 0
+                ? isAr
+                  ? `فُهم ${pastedUnderstanding.found.length} حقلاً`
+                  : `${pastedUnderstanding.found.length} field(s) understood`
+                : isAr
+                ? `الأسطر: ${pastedText.split(/\r?\n/).filter((l) => l.trim()).length}`
+                : `Lines: ${pastedText.split(/\r?\n/).filter((l) => l.trim()).length}`}
             </span>
 
             <div className="flex items-center gap-2">
@@ -1618,13 +1935,34 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
 
-              <button
-                type="button"
-                onClick={handleProcessPastedPnrs}
-                className="px-4 py-2 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs"
-              >
-                {isAr ? 'إدراج الـ PNRs في الجدول' : 'Import PNRs'}
-              </button>
+              {/* حين يُفهم النص يكون التطبيق هو الإجراء الأول؛ وإلا بقي الاستيراد سطراً سطراً. */}
+              {pastedUnderstanding.found.length > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleProcessPastedPnrs}
+                    className="px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs cursor-pointer"
+                  >
+                    {isAr ? 'استيراد كأسطر PNR فقط' : 'Import as PNR lines'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApplyUnderstanding}
+                    className="px-4 py-2 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Sparkles size={13} />
+                    {isAr ? 'تطبيق البيانات على الرحلة' : 'Apply to the trip'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleProcessPastedPnrs}
+                  className="px-4 py-2 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs shadow-xs cursor-pointer"
+                >
+                  {isAr ? 'إدراج الـ PNRs في الجدول' : 'Import PNRs'}
+                </button>
+              )}
             </div>
           </div>
         </div>
