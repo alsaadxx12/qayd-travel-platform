@@ -58,9 +58,11 @@ export interface RefundPassengerLine {
   ticketNumber: string;
   pnr?: string;
   buyRefund: number;
-  airlinePenalty: number;
   sellRefund: number;
-  agencyRetention: number;
+  airlineRefund: number;
+  companyRefund: number;
+  airlinePenalty?: number;
+  agencyRetention?: number;
 }
 
 interface TicketRefundEditorWorkspaceProps {
@@ -154,15 +156,17 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
       ticketNumber: '',
       pnr: '',
       buyRefund: 0,
-      airlinePenalty: 0,
       sellRefund: 0,
+      airlineRefund: 0,
+      companyRefund: 0,
+      airlinePenalty: 0,
       agencyRetention: 0,
     },
   ]);
 
-  // Bulk Apply Penalties to All Selected Passengers
-  const [bulkAirlinePenalty, setBulkAirlinePenalty] = useState<string>('');
-  const [bulkAgencyRetention, setBulkAgencyRetention] = useState<string>('');
+  // Bulk Apply Amounts to All Selected Passengers
+  const [bulkAirlineRefund, setBulkAirlineRefund] = useState<string>('');
+  const [bulkCompanyRefund, setBulkCompanyRefund] = useState<string>('');
   const [childWarningModalOpen, setChildWarningModalOpen] = useState<boolean>(false);
   const [isSupplierRefunded, setIsSupplierRefunded] = useState<boolean>(true);
 
@@ -184,7 +188,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
     return found ? (found.nameAr || found.name || raw) : raw;
   }, [customers]);
 
-  // ── Financial Calculation Logic (Clear & Simple) ──
+  // ── Financial Calculation Logic (Clear & Intuitive) ──
   const activePassengers = useMemo(() => passengers.filter((p) => p.selected), [passengers]);
 
   // 1. Total Original Sell & Buy
@@ -197,32 +201,42 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
     [activePassengers]
   );
 
-  // 2. Penalties & Retention
-  const totalAirlinePenalty = useMemo(
-    () => activePassengers.reduce((sum, p) => sum + (Number(p.airlinePenalty) || 0), 0),
+  // 2. Total Airline Refund & Total Company Refund
+  const totalAirlineRefund = useMemo(
+    () => activePassengers.reduce((sum, p) => sum + (Number(p.airlineRefund !== undefined ? p.airlineRefund : p.buyRefund) || 0), 0),
     [activePassengers]
+  );
+  const totalCompanyRefund = useMemo(
+    () => activePassengers.reduce((sum, p) => sum + (Number(p.companyRefund !== undefined ? p.companyRefund : p.sellRefund) || 0), 0),
+    [activePassengers]
+  );
+
+  // 3. Profit = Airline Refund - Company Refund (الربح هو الفرق بين استرجاع الطيران واسترجاع الشركة)
+  const totalRealizedProfit = useMemo(() => {
+    return totalAirlineRefund - totalCompanyRefund;
+  }, [totalAirlineRefund, totalCompanyRefund]);
+
+  // 4. Net Refund Paid to Customer = Company Refund
+  const totalNetRefundToCustomer = useMemo(
+    () => totalCompanyRefund,
+    [totalCompanyRefund]
+  );
+
+  // 5. Net Refund Recovered from Supplier = Airline Refund (if supplier refunded)
+  const totalNetBuyReturn = useMemo(
+    () => (isSupplierRefunded ? totalAirlineRefund : 0),
+    [isSupplierRefunded, totalAirlineRefund]
+  );
+
+  // Backward compatibility
+  const totalAirlinePenalty = useMemo(
+    () => Math.max(0, totalBuyRefund - totalAirlineRefund),
+    [totalBuyRefund, totalAirlineRefund]
   );
   const totalAgencyRetention = useMemo(
-    () => activePassengers.reduce((sum, p) => sum + (Number(p.agencyRetention) || 0), 0),
-    [activePassengers]
+    () => totalRealizedProfit,
+    [totalRealizedProfit]
   );
-
-  // 3. Net Refund Paid Back to Customer = Sell - Airline Penalty - Agency Retention
-  const totalNetRefundToCustomer = useMemo(
-    () => Math.max(0, totalSellRefund - totalAirlinePenalty - totalAgencyRetention),
-    [totalSellRefund, totalAirlinePenalty, totalAgencyRetention]
-  );
-
-  // 4. Net Refund Recovered from Supplier = Buy - Airline Penalty (or 0 if supplier did not refund)
-  const totalNetBuyReturn = useMemo(
-    () => (isSupplierRefunded ? Math.max(0, totalBuyRefund - totalAirlinePenalty) : 0),
-    [isSupplierRefunded, totalBuyRefund, totalAirlinePenalty]
-  );
-
-  // 5. Agency Profit from Refund = Agency Retention Fee
-  const totalRealizedProfit = useMemo(() => {
-    return totalAgencyRetention;
-  }, [totalAgencyRetention]);
 
   // Load Base Datasets
   useEffect(() => {
@@ -268,8 +282,12 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
 
           setPassengers(
             activePaxToLoad.map((p: any, idx: number) => {
+              const origBuy = Math.abs(p.fareBuy || 0);
+              const origSell = Math.abs(p.fareSell || 0);
               const airlinePen = (p.tax1 !== undefined && p.tax1 !== null && p.tax1 > 0) ? p.tax1 : fallbackAirlinePenalty;
               const agencyRet = (p.charge !== undefined && p.charge !== null && p.charge > 0) ? p.charge : fallbackAgencyRetention;
+              const airlineRef = Math.max(0, origBuy - airlinePen);
+              const companyRef = Math.max(0, origSell - airlinePen - agencyRet);
               return {
                 id: p.id || `p-${idx}-${Date.now()}`,
                 selected: true,
@@ -277,14 +295,18 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                 type: normalizePassengerType(p.ticketType || (p as any).type || (p as any).passengerType),
                 ticketNumber: p.ticketNumber || (p as any).documentNumber || (p as any).eTicketNumber || '',
                 pnr: p.pnr || initialData.pnr || '',
-                buyRefund: Math.abs(p.fareBuy || 0),
+                buyRefund: origBuy,
+                sellRefund: origSell,
+                airlineRefund: airlineRef,
+                companyRefund: companyRef,
                 airlinePenalty: airlinePen,
-                sellRefund: Math.abs(p.fareSell || 0),
                 agencyRetention: agencyRet,
               };
             })
           );
         } else {
+          const origBuy = Math.abs(initialData.totalBuy || 0);
+          const origSell = Math.abs(initialData.totalSell || 0);
           setPassengers([
             {
               id: `p-${Date.now()}`,
@@ -293,9 +315,11 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
               type: 'ADULT',
               ticketNumber: initialData.invoiceNumber || '',
               pnr: initialData.pnr || '',
-              buyRefund: Math.abs(initialData.totalBuy || 0),
+              buyRefund: origBuy,
+              sellRefund: origSell,
+              airlineRefund: origBuy,
+              companyRefund: origSell,
               airlinePenalty: 0,
-              sellRefund: Math.abs(initialData.totalSell || 0),
               agencyRetention: 0,
             },
           ]);
@@ -312,8 +336,10 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
             ticketNumber: '',
             pnr: '',
             buyRefund: 0,
-            airlinePenalty: 0,
             sellRefund: 0,
+            airlineRefund: 0,
+            companyRefund: 0,
+            airlinePenalty: 0,
             agencyRetention: 0,
           },
         ]);
@@ -414,18 +440,24 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
 
     if (paxToPopulate && paxToPopulate.length > 0) {
       setPassengers(
-        paxToPopulate.map((p: any, idx: number) => ({
-          id: p.id || `p-${idx}-${Date.now()}`,
-          selected: true,
-          name: p.name || '',
-          type: normalizePassengerType(p.ticketType || (p as any).type || (p as any).passengerType),
-          ticketNumber: p.ticketNumber || (p as any).documentNumber || (p as any).eTicketNumber || t.invoiceNumber || '',
-          pnr: p.pnr || t.pnr || '',
-          buyRefund: Math.abs(p.fareBuy || (t.totalBuy || 0) / (t.passengers?.length || 1) || 0),
-          airlinePenalty: 0,
-          sellRefund: Math.abs(p.fareSell || (t.totalSell || 0) / (t.passengers?.length || 1) || 0),
-          agencyRetention: 0,
-        }))
+        paxToPopulate.map((p: any, idx: number) => {
+          const buyAmt = Math.abs(p.fareBuy || (t.totalBuy || 0) / (t.passengers?.length || 1) || 0);
+          const sellAmt = Math.abs(p.fareSell || (t.totalSell || 0) / (t.passengers?.length || 1) || 0);
+          return {
+            id: p.id || `p-${idx}-${Date.now()}`,
+            selected: true,
+            name: p.name || '',
+            type: normalizePassengerType(p.ticketType || (p as any).type || (p as any).passengerType),
+            ticketNumber: p.ticketNumber || (p as any).documentNumber || (p as any).eTicketNumber || t.invoiceNumber || '',
+            pnr: p.pnr || t.pnr || '',
+            buyRefund: buyAmt,
+            sellRefund: sellAmt,
+            airlineRefund: buyAmt,
+            companyRefund: sellAmt,
+            airlinePenalty: 0,
+            agencyRetention: 0,
+          };
+        })
       );
     } else {
       const origSell = Math.abs(t.totalSell || t.netSell || 0);
@@ -439,8 +471,10 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
           ticketNumber: t.invoiceNumber || '',
           pnr: t.pnr || '',
           buyRefund: origBuy,
-          airlinePenalty: 0,
           sellRefund: origSell,
+          airlineRefund: origBuy,
+          companyRefund: origSell,
+          airlinePenalty: 0,
           agencyRetention: 0,
         },
       ]);
@@ -468,15 +502,15 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
     [passengers]
   );
 
-  // Bulk Apply Penalty & Retention with Child Protection Warning
-  const handleApplyBulkPenalty = () => {
-    const penaltyVal = parseCleanNumber(bulkAirlinePenalty);
-    const retentionVal = parseCleanNumber(bulkAgencyRetention);
+  // Bulk Apply Airline & Company Refund Amounts
+  const handleApplyBulkAmounts = () => {
+    const airlineRefVal = parseCleanNumber(bulkAirlineRefund);
+    const companyRefVal = parseCleanNumber(bulkCompanyRefund);
 
-    if (penaltyVal === 0 && retentionVal === 0) {
+    if (airlineRefVal === 0 && companyRefVal === 0) {
       showErrorNotification(
         isAr ? 'تنبيه' : 'Alert',
-        isAr ? 'يرجى إدخال مبلغ غرامة الطيران أو استقطاع الشركة لتطبيقه.' : 'Please enter airline penalty or agency retention.'
+        isAr ? 'يرجى إدخال مبلغ استرجاع الطيران أو استرجاع الشركة لتطبيقه.' : 'Please enter airline or company refund amount.'
       );
       return;
     }
@@ -489,8 +523,8 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
   };
 
   const executeBulkApply = (includeChildren: boolean) => {
-    const penaltyVal = parseCleanNumber(bulkAirlinePenalty);
-    const retentionVal = parseCleanNumber(bulkAgencyRetention);
+    const airlineRefVal = parseCleanNumber(bulkAirlineRefund);
+    const companyRefVal = parseCleanNumber(bulkCompanyRefund);
 
     setPassengers((prev) =>
       prev.map((p) => {
@@ -500,8 +534,8 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
 
         return {
           ...p,
-          airlinePenalty: penaltyVal >= 0 ? penaltyVal : p.airlinePenalty,
-          agencyRetention: retentionVal >= 0 ? retentionVal : p.agencyRetention,
+          airlineRefund: airlineRefVal > 0 ? airlineRefVal : p.airlineRefund,
+          companyRefund: companyRefVal > 0 ? companyRefVal : p.companyRefund,
         };
       })
     );
@@ -510,8 +544,8 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
     showSuccessNotification(
       isAr ? 'تم تطبيق المبالغ' : 'Applied',
       includeChildren
-        ? (isAr ? 'تم تطبيق المبالغ المحددة على جميع المسافرين المختارين بنجاح.' : 'Applied penalties to all selected passengers.')
-        : (isAr ? 'تم تطبيق المبالغ على المسافرين البالغين فقط واستثناء الأطفال.' : 'Applied penalties to adults only.')
+        ? (isAr ? 'تم تطبيق مبالغ الاسترجاع المحددة على جميع المسافرين المختارين بنجاح.' : 'Applied refund amounts to all selected passengers.')
+        : (isAr ? 'تم تطبيق المبالغ على المسافرين البالغين فقط واستثناء الأطفال.' : 'Applied refund amounts to adults only.')
     );
   };
 
@@ -577,16 +611,14 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
       setPassengers((prev) =>
         prev.map((p) => ({
           ...p,
+          airlineRefund: p.buyRefund,
+          companyRefund: p.sellRefund,
           airlinePenalty: 0,
           agencyRetention: 0,
         }))
       );
-      setBulkAirlinePenalty('');
-      setBulkAgencyRetention('');
-      showInfoNotification(
-        isAr ? 'استرجاع كامل' : 'Full Refund',
-        isAr ? 'تم تصفير جميع الغرامات والاستقطاعات ليتم استرجاع المبلغ كاملاً للعميل.' : 'All penalties zeroed out for 100% full refund.'
-      );
+      setBulkAirlineRefund('');
+      setBulkCompanyRefund('');
     }
   };
 
@@ -602,8 +634,10 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
         ticketNumber: '',
         pnr: pnr || '',
         buyRefund: 0,
-        airlinePenalty: 0,
         sellRefund: 0,
+        airlineRefund: 0,
+        companyRefund: 0,
+        airlinePenalty: 0,
         agencyRetention: 0,
       },
     ]);
@@ -633,16 +667,8 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
       showErrorNotification(isAr ? 'اسم المسافر مطلوب' : 'Passenger name required', isAr ? 'أدخل اسم كل مسافر محدد للاسترجاع.' : 'Enter a name for every selected passenger.');
       return;
     }
-    if (totalSellRefund <= 0 || totalNetRefundToCustomer <= 0) {
-      showErrorNotification(isAr ? 'مبلغ الاسترجاع غير صحيح' : 'Invalid refund amount', isAr ? 'يجب أن يكون المبلغ المسترجع للعميل أكبر من صفر.' : 'The customer refund must be greater than zero.');
-      return;
-    }
-    if (totalAirlinePenalty + totalAgencyRetention > totalSellRefund) {
-      showErrorNotification(isAr ? 'الاستقطاعات تتجاوز المبلغ' : 'Deductions exceed refund', isAr ? 'مجموع غرامة الطيران ورسوم الشركة لا يجوز أن يتجاوز مسترجع البيع.' : 'Airline penalty and agency retention cannot exceed the sales refund.');
-      return;
-    }
-    if (isSupplierRefunded && totalAirlinePenalty > totalBuyRefund) {
-      showErrorNotification(isAr ? 'غرامة المورد غير صحيحة' : 'Invalid supplier penalty', isAr ? 'غرامة الطيران لا يجوز أن تتجاوز مسترجع الشراء من المورد.' : 'The airline penalty cannot exceed the supplier refund.');
+    if (totalCompanyRefund < 0) {
+      showErrorNotification(isAr ? 'مبلغ الاسترجاع غير صحيح' : 'Invalid refund amount', isAr ? 'يجب أن يكون المبلغ المسترجع للعميل أكبر من أو يساوي صفر.' : 'The customer refund must be valid.');
       return;
     }
     if (!employeeName.trim()) {
@@ -706,13 +732,13 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
         tripType: 'REFUND',
         airline: airline || selectedOriginalTicket?.airline || undefined,
         route,
-        totalSell: -Math.abs(totalSellRefund),
-        totalBuy: isSupplierRefunded ? -Math.abs(totalBuyRefund) : 0,
+        totalSell: -Math.abs(totalCompanyRefund),
+        totalBuy: isSupplierRefunded ? -Math.abs(totalAirlineRefund) : 0,
         netSell: -Math.abs(totalNetRefundToCustomer),
         netBuy: isSupplierRefunded ? -Math.abs(totalNetBuyReturn) : 0,
         profit: totalRealizedProfit,
         transferImage: attachments[0]?.url || undefined,
-        notes: `[استرجاع ${activePassengers.length} مسافر] غرامة طيران: ${totalAirlinePenalty} ${currency} | استقطاع شركة: ${totalAgencyRetention} ${currency} | ${notes || ''}`,
+        notes: `[استرجاع ${activePassengers.length} مسافر] استرجاع طيران: ${totalAirlineRefund} ${currency} | استرجاع شركة: ${totalCompanyRefund} ${currency} | ربح: ${totalRealizedProfit} ${currency} | ${notes || ''}`,
         reference: originalReference,
         status: 'REFUNDED',
         passengers: activePassengers.map((p) => ({
@@ -720,10 +746,10 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
           ticketType: p.type || 'ADULT',
           ticketNumber: p.ticketNumber || undefined,
           pnr: p.pnr || pnr || undefined,
-          fareBuy: -Math.abs(p.buyRefund),
-          fareSell: -Math.abs(p.sellRefund),
-          tax1: Number(p.airlinePenalty) || 0,
-          charge: Number(p.agencyRetention) || 0,
+          fareBuy: -Math.abs(p.airlineRefund !== undefined ? p.airlineRefund : p.buyRefund),
+          fareSell: -Math.abs(p.companyRefund !== undefined ? p.companyRefund : p.sellRefund),
+          tax1: Math.max(0, (p.buyRefund || 0) - (p.airlineRefund || 0)),
+          charge: (p.airlineRefund || 0) - (p.companyRefund || 0),
           status: 'مسترجع',
         })),
       };
@@ -1157,50 +1183,50 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                         <span>{isAr ? `تطبيق موحد (${activePassengers.length}):` : `Bulk Apply:`}</span>
                       </div>
 
-                      {/* Bulk Airline Penalty */}
-                      <div className="flex items-center gap-1 bg-[#FFF5F5] border border-rose-200 px-2 py-0.5 rounded-[7px]">
-                        <span className="text-[11px] font-bold text-rose-700">{isAr ? 'غرامة طيران:' : 'Penalty:'}</span>
+                      {/* Bulk Airline Refund */}
+                      <div className="flex items-center gap-1.5 bg-[#FFF5F5] border border-rose-200 px-2 py-0.5 rounded-[7px]">
+                        <span className="text-[11px] font-bold text-rose-700">{isAr ? 'استرجاع الطيران:' : 'Airline Refund:'}</span>
                         <input
                           type="text"
                           inputMode="numeric"
                           dir="ltr"
                           placeholder="0"
-                          value={bulkAirlinePenalty}
+                          value={bulkAirlineRefund}
                           onChange={(e) => {
                             const raw = e.target.value;
                             const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
                             const clean = raw.replace(/[٠-٩]/g, (d) => arabicDigits.indexOf(d).toString()).replace(/[^0-9]/g, '');
-                            setBulkAirlinePenalty(clean);
+                            setBulkAirlineRefund(clean);
                           }}
                           style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          className="w-16 h-[26px] px-1.5 text-center bg-white border border-rose-200 rounded font-mono font-bold text-xs text-rose-800 outline-none"
+                          className="w-28 h-[26px] px-2 text-center bg-white border border-rose-200 rounded font-mono font-bold text-xs text-rose-800 outline-none"
                         />
                       </div>
 
-                      {/* Bulk Agency Retention */}
-                      <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-[7px]">
-                        <span className="text-[11px] font-bold text-emerald-800">{isAr ? 'استقطاع شركة:' : 'Retention:'}</span>
+                      {/* Bulk Company Refund */}
+                      <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-[7px]">
+                        <span className="text-[11px] font-bold text-emerald-800">{isAr ? 'استرجاع الشركة:' : 'Company Refund:'}</span>
                         <input
                           type="text"
                           inputMode="numeric"
                           dir="ltr"
                           placeholder="0"
-                          value={bulkAgencyRetention}
+                          value={bulkCompanyRefund}
                           onChange={(e) => {
                             const raw = e.target.value;
                             const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
                             const clean = raw.replace(/[٠-٩]/g, (d) => arabicDigits.indexOf(d).toString()).replace(/[^0-9]/g, '');
-                            setBulkAgencyRetention(clean);
+                            setBulkCompanyRefund(clean);
                           }}
                           style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          className="w-16 h-[26px] px-1.5 text-center bg-white border border-emerald-200 rounded font-mono font-bold text-xs text-emerald-800 outline-none"
+                          className="w-28 h-[26px] px-2 text-center bg-white border border-emerald-200 rounded font-mono font-bold text-xs text-emerald-800 outline-none"
                         />
                       </div>
 
                       <button
                         type="button"
-                        onClick={handleApplyBulkPenalty}
-                        className="h-[28px] px-2.5 rounded-[7px] bg-slate-800 hover:bg-black text-white font-bold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                        onClick={handleApplyBulkAmounts}
+                        className="h-[28px] px-3 rounded-[7px] bg-slate-800 hover:bg-black text-white font-bold text-[11px] transition-colors cursor-pointer shadow-2xs"
                       >
                         {isAr ? 'تطبيق' : 'Apply'}
                       </button>
@@ -1228,10 +1254,10 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                       </th>
                       <th className="p-2.5 whitespace-nowrap">{isAr ? 'اسم المسافر والنوع' : 'Passenger & Type'}</th>
                       <th className="p-2.5 whitespace-nowrap">{isAr ? 'رقم التذكرة / PNR' : 'Ticket / PNR'}</th>
-                      <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'مسترجع الشراء (المورد)' : 'Buy Refund'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'مسترجع الشراء (الأساس)' : 'Buy Refund'}</th>
                       <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'مسترجع البيع (الأساس)' : 'Sell Refund'}</th>
-                      <th className="p-2.5 whitespace-nowrap text-left text-rose-700 bg-rose-50/40">{isAr ? 'غرامة الطيران (-)' : 'Airline Penalty'}</th>
-                      <th className="p-2.5 whitespace-nowrap text-left text-emerald-800 bg-emerald-50/40">{isAr ? 'استقطاع الشركة (+)' : 'Agency Retention'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left text-rose-700 bg-rose-50/40">{isAr ? 'استرجاع الطيران' : 'Airline Refund'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left text-emerald-800 bg-emerald-50/40">{isAr ? 'استرجاع الشركة (العميل)' : 'Company Refund'}</th>
                       <th className="p-2.5 whitespace-nowrap text-left text-[#F45A0A]">{isAr ? 'الصافي للعميل' : 'Net to Customer'}</th>
                       <th className="p-2.5 whitespace-nowrap text-left text-emerald-700">{isAr ? 'الربح المحقق' : 'Profit'}</th>
                       <th className="p-2.5 text-center w-10">{isAr ? 'حذف' : 'Del'}</th>
@@ -1239,8 +1265,10 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                   </thead>
                   <tbody className="divide-y divide-[#F1F5F9]">
                     {passengers.map((p, idx) => {
-                      const netSell = Math.max(0, p.sellRefund - (p.airlinePenalty || 0) - (p.agencyRetention || 0));
-                      const profit = p.agencyRetention || 0;
+                      const pAirlineRef = p.airlineRefund !== undefined ? p.airlineRefund : p.buyRefund;
+                      const pCompanyRef = p.companyRefund !== undefined ? p.companyRefund : p.sellRefund;
+                      const netSell = pCompanyRef;
+                      const profit = pAirlineRef - pCompanyRef;
 
                       return (
                         <tr
@@ -1334,7 +1362,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                             />
                           </td>
 
-                          {/* Airline Penalty */}
+                          {/* Airline Refund (What Airline Returns) */}
                           <td className="p-2.5 text-left bg-rose-50/20">
                             <input
                               type="text"
@@ -1342,16 +1370,16 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                               dir="ltr"
                               disabled={refundType === 'FULL'}
                               placeholder="0"
-                              value={p.airlinePenalty ? p.airlinePenalty.toLocaleString('en-US') : ''}
-                              onChange={(e) => updatePassenger(p.id, 'airlinePenalty', parseCleanNumber(e.target.value))}
+                              value={p.airlineRefund !== undefined ? (p.airlineRefund ? p.airlineRefund.toLocaleString('en-US') : '0') : (p.buyRefund ? p.buyRefund.toLocaleString('en-US') : '0')}
+                              onChange={(e) => updatePassenger(p.id, 'airlineRefund', parseCleanNumber(e.target.value))}
                               style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                              className={`w-24 h-[36px] px-2.5 rounded-[8px] border border-rose-200 text-xs font-mono font-bold text-rose-800 text-left outline-none hover:border-rose-400 focus:border-2 focus:border-rose-500 bg-rose-50/40 ${
+                              className={`w-32 h-[36px] px-2.5 rounded-[8px] border border-rose-200 text-xs font-mono font-bold text-rose-800 text-left outline-none hover:border-rose-400 focus:border-2 focus:border-rose-500 bg-rose-50/40 ${
                                 refundType === 'FULL' ? 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400' : ''
                               }`}
                             />
                           </td>
 
-                          {/* Agency Retention Fee */}
+                          {/* Company Refund to Customer */}
                           <td className="p-2.5 text-left bg-emerald-50/20">
                             <input
                               type="text"
@@ -1359,10 +1387,10 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                               dir="ltr"
                               disabled={refundType === 'FULL'}
                               placeholder="0"
-                              value={p.agencyRetention ? p.agencyRetention.toLocaleString('en-US') : ''}
-                              onChange={(e) => updatePassenger(p.id, 'agencyRetention', parseCleanNumber(e.target.value))}
+                              value={p.companyRefund !== undefined ? (p.companyRefund ? p.companyRefund.toLocaleString('en-US') : '0') : (p.sellRefund ? p.sellRefund.toLocaleString('en-US') : '0')}
+                              onChange={(e) => updatePassenger(p.id, 'companyRefund', parseCleanNumber(e.target.value))}
                               style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                              className={`w-24 h-[36px] px-2.5 rounded-[8px] border border-emerald-200 text-xs font-mono font-bold text-emerald-800 text-left outline-none hover:border-emerald-400 focus:border-2 focus:border-emerald-500 bg-emerald-50/40 ${
+                              className={`w-32 h-[36px] px-2.5 rounded-[8px] border border-emerald-200 text-xs font-mono font-bold text-emerald-800 text-left outline-none hover:border-emerald-400 focus:border-2 focus:border-emerald-500 bg-emerald-50/40 ${
                                 refundType === 'FULL' ? 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400' : ''
                               }`}
                             />
@@ -1373,7 +1401,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                             {formatNumberEnglish(netSell)}
                           </td>
 
-                          {/* Profit */}
+                          {/* Profit = Airline Refund - Company Refund */}
                           <td className="p-2.5 text-left font-mono font-bold text-[#078B61] text-[13px] tabular-nums" dir="ltr">
                             {profit > 0 ? `+${formatNumberEnglish(profit)}` : formatNumberEnglish(profit)}
                           </td>
@@ -1459,33 +1487,33 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
 
               {/* KPI Breakdown List */}
               <div className="space-y-2.5">
-                {/* 1. Buy Refund from Supplier */}
+                {/* 1. Airline Refund (What Supplier/Airline returns) */}
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-[12px] font-semibold text-slate-600">
-                    {isAr ? 'مسترجع الشراء (المورد)' : 'Gross Buy Refund'}
+                  <span className="text-[12px] font-semibold text-slate-700">
+                    {isAr ? 'استرجاع الطيران (المورد)' : 'Airline Refund (Supplier)'}
                   </span>
                   <span className="font-mono font-bold text-slate-900 text-sm tabular-nums" dir="ltr">
-                    {formatNumberEnglish(isSupplierRefunded ? totalBuyRefund : 0)} <span className="text-[10px] text-slate-400 font-sans">{currency}</span>
+                    {formatNumberEnglish(isSupplierRefunded ? totalAirlineRefund : 0)} <span className="text-[10px] text-slate-400 font-sans">{currency}</span>
                   </span>
                 </div>
 
-                {/* 2. Airline Penalty */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-rose-50/70 border border-rose-100">
-                  <span className="text-[12px] font-semibold text-rose-700">
-                    {isAr ? 'غرامات الطيران (-)' : 'Airline Penalty (-)'}
-                  </span>
-                  <span className="font-mono font-bold text-rose-700 text-sm tabular-nums" dir="ltr">
-                    -{formatNumberEnglish(totalAirlinePenalty)} <span className="text-[10px] text-rose-400 font-sans">{currency}</span>
-                  </span>
-                </div>
-
-                {/* 3. Agency Retention Fee / Profit */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-100">
+                {/* 2. Company Refund to Customer */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100">
                   <span className="text-[12px] font-semibold text-emerald-800">
-                    {isAr ? 'استقطاع الوكالة / الأرباح (+)' : 'Agency Retention (+)'}
+                    {isAr ? 'استرجاع الشركة (للعميل)' : 'Company Refund (Customer)'}
                   </span>
-                  <span className="font-mono font-bold text-emerald-700 text-sm tabular-nums" dir="ltr">
-                    +{formatNumberEnglish(totalAgencyRetention)} <span className="text-[10px] text-emerald-500 font-sans">{currency}</span>
+                  <span className="font-mono font-bold text-emerald-800 text-sm tabular-nums" dir="ltr">
+                    {formatNumberEnglish(totalCompanyRefund)} <span className="text-[10px] text-emerald-500 font-sans">{currency}</span>
+                  </span>
+                </div>
+
+                {/* 3. Realized Profit (Difference between Airline and Company Refund) */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <span className="text-[12px] font-bold text-emerald-900">
+                    {isAr ? 'صافي ربح الاسترجاع (+)' : 'Realized Profit (+)'}
+                  </span>
+                  <span className="font-mono font-black text-emerald-700 text-sm tabular-nums" dir="ltr">
+                    {totalRealizedProfit > 0 ? `+${formatNumberEnglish(totalRealizedProfit)}` : formatNumberEnglish(totalRealizedProfit)} <span className="text-[10px] text-emerald-600 font-sans">{currency}</span>
                   </span>
                 </div>
 
@@ -1503,12 +1531,12 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                     </span>
                   </div>
                   <div className="text-2xl font-black font-mono text-[#F45A0A] tabular-nums" dir="ltr">
-                    {formatNumberEnglish(totalNetRefundToCustomer)} <span className="text-xs font-sans font-bold text-[#F45A0A]">{currency}</span>
+                    {formatNumberEnglish(totalCompanyRefund)} <span className="text-xs font-sans font-bold text-[#F45A0A]">{currency}</span>
                   </div>
                   <div className="text-[10px] text-slate-500">
                     {isAr
-                      ? `مسترجع البيع (${formatNumberEnglish(totalSellRefund)}) - الغرامات (${formatNumberEnglish(totalAirlinePenalty + totalAgencyRetention)})`
-                      : `Sell (${formatNumberEnglish(totalSellRefund)}) - Deductions`}
+                      ? `استرجاع الطيران (${formatNumberEnglish(totalAirlineRefund)}) - ربح الوكالة (${formatNumberEnglish(totalRealizedProfit)})`
+                      : `Airline Refund (${formatNumberEnglish(totalAirlineRefund)}) - Profit (${formatNumberEnglish(totalRealizedProfit)})`}
                   </div>
                 </div>
 
@@ -1567,27 +1595,23 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
           {/* Quick KPI stats */}
           <div className="hidden lg:flex items-center gap-4 font-mono text-xs" dir="ltr">
             <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'مسترجع الشراء: ' : 'Buy: '}</span>
-              <span className="font-bold text-slate-800">{formatNumberEnglish(isSupplierRefunded ? totalBuyRefund : 0)}</span>
+              <span className="text-slate-400 font-sans">{isAr ? 'استرجاع الطيران: ' : 'Airline: '}</span>
+              <span className="font-bold text-slate-800">{formatNumberEnglish(isSupplierRefunded ? totalAirlineRefund : 0)}</span>
             </div>
             <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'غرامة الطيران: ' : 'Penalty: '}</span>
-              <span className="font-bold text-rose-600">{formatNumberEnglish(totalAirlinePenalty)}</span>
+              <span className="text-slate-400 font-sans">{isAr ? 'استرجاع الشركة: ' : 'Company: '}</span>
+              <span className="font-bold text-slate-800">{formatNumberEnglish(totalCompanyRefund)}</span>
             </div>
             <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'مسترجع البيع: ' : 'Sell: '}</span>
-              <span className="font-bold text-slate-800">{formatNumberEnglish(totalSellRefund)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'رسوم الوكالة: ' : 'Fee: '}</span>
-              <span className="font-bold text-emerald-700">+{formatNumberEnglish(totalAgencyRetention)}</span>
+              <span className="text-slate-400 font-sans">{isAr ? 'الربح المحقق: ' : 'Profit: '}</span>
+              <span className="font-bold text-emerald-700">{totalRealizedProfit > 0 ? `+${formatNumberEnglish(totalRealizedProfit)}` : formatNumberEnglish(totalRealizedProfit)}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-orange-50 border border-orange-200">
             <span className="text-[#F45A0A] font-bold font-sans text-xs">{isAr ? 'الصافي للعميل: ' : 'Net Customer: '}</span>
             <span className="font-black font-mono text-sm text-[#F45A0A]" dir="ltr">
-              {formatNumberEnglish(totalNetRefundToCustomer)} <span className="text-[11px] font-sans font-bold">{currency}</span>
+              {formatNumberEnglish(totalCompanyRefund)} <span className="text-[11px] font-sans font-bold">{currency}</span>
             </span>
           </div>
         </div>
