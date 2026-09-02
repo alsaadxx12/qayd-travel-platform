@@ -108,9 +108,10 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
   const { user } = useAuthStore();
   const currentUserName = user?.name || (isAr ? 'الموظف الحالي' : 'Current User');
 
-  // 1: معلومات الكروب وقوالب الأسعار (Group Info & Templates)
-  // 2: بيع وتوزيع المقاعد على المستفيدين (Customers & Seat Sales)
-  const [activeTab, setActiveTab] = useState<1 | 2>(1);
+  // 1: معلومات الكروب (Group Info)
+  // 2: قالب الأسعار والمشتريات (Prices Template & Purchases)
+  // 3: بيع وتوزيع المقاعد على المستفيدين (Customers & Seat Sales)
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
   const [design, setDesign] = useState<GroupDesign>(emptyDesign());
   const [saving, setSaving] = useState(false);
   const [customersList, setCustomersList] = useState<any[]>([]);
@@ -142,7 +143,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
 
   useEffect(() => {
     if (!opened) return;
-    setActiveTab(1);
+    setActiveStep(1);
     const loaded = designFromTicket(initialData);
     setDesign(loaded);
     if (loaded.templates && loaded.templates.length > 0) {
@@ -228,7 +229,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
     }
     setSaleModalOpen(false);
     setEditingCustomer(null);
-    setActiveTab(2);
+    setActiveStep(3);
   };
 
   // Totals for all templates & customers
@@ -455,7 +456,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
         isAr ? 'اسم الكروب مطلوب' : 'Group name required',
         isAr ? 'يرجى تحديد اسم الكروب أو الرحلة قبل الحفظ.' : 'Please enter a group name.',
       );
-      setActiveTab(1);
+      setActiveStep(1);
       return;
     }
 
@@ -541,32 +542,66 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
             </div>
           </div>
 
-          {/* Stepper / Tabs Bar */}
+          {/* Stepper Wizard Bar (3 Steps: Group Info -> Prices & Purchases -> Seats & Sales) */}
           <div className="flex items-center gap-1.5 bg-[#F1F5F9] p-1 rounded-2xl border border-slate-200">
+            {/* Step 1 */}
             <button
               type="button"
-              onClick={() => setActiveTab(1)}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] font-black transition-all cursor-pointer ${
-                activeTab === 1
+              onClick={() => setActiveStep(1)}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[12px] font-black transition-all cursor-pointer ${
+                activeStep === 1
                   ? 'bg-[#F45A0A] text-white shadow-xs'
                   : 'text-slate-600 hover:bg-white hover:text-slate-900'
               }`}
             >
-              <Palette size={14} />
-              <span>{isAr ? '١. معلومات وتصميم الكروب' : '1. Group Info & Design'}</span>
+              <span
+                className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black ${
+                  activeStep === 1 ? 'bg-white text-[#F45A0A]' : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                1
+              </span>
+              <span>{isAr ? 'معلومات الكروب' : 'Group Info'}</span>
             </button>
 
+            {/* Step 2 */}
             <button
               type="button"
-              onClick={() => setActiveTab(2)}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-[12px] font-black transition-all cursor-pointer ${
-                activeTab === 2
+              onClick={() => setActiveStep(2)}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[12px] font-black transition-all cursor-pointer ${
+                activeStep === 2
                   ? 'bg-[#F45A0A] text-white shadow-xs'
                   : 'text-slate-600 hover:bg-white hover:text-slate-900'
               }`}
             >
-              <Users size={14} />
-              <span>{isAr ? '٢. المستفيدين وتوزيع المقاعد' : '2. Customers & Seats'}</span>
+              <span
+                className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black ${
+                  activeStep === 2 ? 'bg-white text-[#F45A0A]' : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                2
+              </span>
+              <span>{isAr ? 'قالب الأسعار والمشتريات' : 'Prices & Purchases'}</span>
+            </button>
+
+            {/* Step 3 */}
+            <button
+              type="button"
+              onClick={() => setActiveStep(3)}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[12px] font-black transition-all cursor-pointer ${
+                activeStep === 3
+                  ? 'bg-[#F45A0A] text-white shadow-xs'
+                  : 'text-slate-600 hover:bg-white hover:text-slate-900'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black ${
+                  activeStep === 3 ? 'bg-white text-[#F45A0A]' : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                3
+              </span>
+              <span>{isAr ? 'المستفيدين وتوزيع المقاعد' : 'Seats & Sales'}</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10.5px] font-mono font-bold bg-white/20">
                 {(design.customers || []).length}
               </span>
@@ -588,28 +623,34 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-[1720px] mx-auto w-full px-4 sm:px-6 py-4 pb-32 space-y-4">
           
-          {activeTab === 1 ? (
+          {activeStep === 1 ? (
             /* ══════════════════════════════════════════════════════════════
-               TAB 1: GROUP INFO & PRICES TEMPLATES TABLE
+               STEP 1: GROUP GENERAL INFORMATION (معلومات وهوية الكروب)
                ══════════════════════════════════════════════════════════════ */
             <div className="space-y-4">
               
               {/* Card A: Group General Information */}
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-6 space-y-5">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
-                      <Package size={15} />
+                    <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
+                      <Package size={17} />
                     </div>
-                    <span className="font-black text-[13.5px] text-slate-900">
-                      {isAr ? 'معلومات وهوية الكروب' : 'Group Information'}
-                    </span>
+                    <div>
+                      <span className="font-black text-[14px] text-slate-900 block leading-tight">
+                        {isAr ? 'الخطوة الأولى: معلومات وهوية الكروب الأساسية' : 'Step 1: Group Identity & Information'}
+                      </span>
+                      <span className="text-[11px] text-slate-500 font-medium block mt-0.5">
+                        {isAr ? 'حدد بيانات الرحلة والمسار ومواعيد السفر والعملة' : 'Specify trip name, route, travel dates, and currency'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {/* Grid Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Group Name */}
-                  <div className="lg:col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
                       {isAr ? 'اسم الكروب أو الرحلة *' : 'Group Name *'}
                     </label>
@@ -688,7 +729,6 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                       onChange={(val) => patch({ country: val || 'العراق' })}
                       options={countryOptions}
                       placeholder={isAr ? 'اختر الدولة...' : 'Select country...'}
-                      allowCustomValue
                     />
                   </div>
 
@@ -699,11 +739,11 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                       value={design.currency}
                       onChange={(val) => patch({ currency: (val as 'IQD' | 'USD') || 'USD' })}
                       options={currencyOptions}
-                      placeholder={isAr ? 'العملة...' : 'Currency...'}
+                      placeholder={isAr ? 'اختر العملة...' : 'Currency...'}
                     />
                   </div>
 
-                  {/* Total Seats */}
+                  {/* Seats Total */}
                   <div>
                     <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
                       {isAr ? 'المقاعد الإجمالية *' : 'Total Seats *'}
@@ -729,8 +769,27 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                     />
                   </div>
                 </div>
+
+                {/* Bottom Step 1 Action */}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setActiveStep(2)}
+                    className="h-[44px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[13px] font-black cursor-pointer flex items-center gap-2 shadow-xs transition-all active:scale-[0.98]"
+                  >
+                    <span>{isAr ? 'التالي: قالب الأسعار والمشتريات (الخطوة 2)' : 'Next: Prices & Purchases (Step 2)'}</span>
+                    {direction === 'rtl' ? <ArrowLeft size={16} /> : <ArrowRight size={16} />}
+                  </button>
+                </div>
               </div>
 
+            </div>
+          ) : activeStep === 2 ? (
+            /* ══════════════════════════════════════════════════════════════
+               STEP 2: FULL INTERACTIVE PRICES TEMPLATE & PURCHASES (قالب الأسعار)
+               ══════════════════════════════════════════════════════════════ */
+            <div className="space-y-4">
+              
               {/* Card B: Full Interactive Prices Template & Purchases (قالب الأسعار والمشتريات) */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-5">
                 
@@ -882,7 +941,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                           type="button"
                           onClick={() => {
                             handleOpenSaleModal(currentActiveTemplate.id);
-                            setActiveTab(2);
+                            setActiveStep(3);
                           }}
                           className="w-full h-[46px] px-4 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-[12.5px] font-black cursor-pointer flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
                         >
@@ -1318,12 +1377,33 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                   </div>
                 </div>
 
+                {/* Bottom Step 2 Action Buttons */}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveStep(1)}
+                    className="h-[44px] px-5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[12.5px] font-bold cursor-pointer flex items-center gap-1.5 transition-colors"
+                  >
+                    {direction === 'rtl' ? <ArrowRight size={15} /> : <ArrowLeft size={15} />}
+                    <span>{isAr ? 'السابق: معلومات الكروب' : 'Back: Group Info'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveStep(3)}
+                    className="h-[44px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[13px] font-black cursor-pointer flex items-center gap-2 shadow-xs transition-all active:scale-[0.98]"
+                  >
+                    <span>{isAr ? 'التالي: توزيع المقاعد وتعيين المستفيدين (الخطوة 3)' : 'Next: Seats & Sales (Step 3)'}</span>
+                    {direction === 'rtl' ? <ArrowLeft size={16} /> : <ArrowRight size={16} />}
+                  </button>
+                </div>
+
               </div>
 
             </div>
           ) : (
             /* ══════════════════════════════════════════════════════════════
-               TAB 2: BENEFICIARIES & SEAT SALES (المستفيدين والبيع)
+               STEP 3: BENEFICIARIES & SEAT SALES (المستفيدين وتوزيع المقاعد)
                ══════════════════════════════════════════════════════════════ */
             <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
               
@@ -1588,35 +1668,61 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
 
           {/* Navigation & Action Buttons */}
           <div className="flex items-center gap-2">
-            {activeTab === 2 ? (
+            {activeStep === 1 && (
               <button
                 type="button"
-                onClick={() => setActiveTab(1)}
-                className="h-[42px] px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer flex items-center gap-1.5 transition-colors"
+                onClick={() => setActiveStep(2)}
+                className="h-[42px] px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
               >
-                {direction === 'rtl' ? <ArrowRight size={15} /> : <ArrowLeft size={15} />}
-                <span>{isAr ? 'رجوع للتصميم' : 'Back to Design'}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setActiveTab(2)}
-                className="h-[42px] px-5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
-              >
-                <span>{isAr ? 'التالي: توزيع المقاعد' : 'Next: Customers & Seats'}</span>
+                <span>{isAr ? 'التالي: قالب الأسعار والمشتريات' : 'Next: Prices & Purchases'}</span>
                 {direction === 'rtl' ? <ArrowLeft size={15} /> : <ArrowRight size={15} />}
               </button>
             )}
 
-            <button
-              type="button"
-              disabled={saving}
-              onClick={handleSaveGroup}
-              className="h-[42px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:opacity-60 text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
-            >
-              {saving ? <Loader size={15} color="white" /> : <Save size={16} />}
-              <span>{isAr ? 'حفظ الكروب' : 'Save Group'}</span>
-            </button>
+            {activeStep === 2 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveStep(1)}
+                  className="h-[42px] px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer flex items-center gap-1.5 transition-colors"
+                >
+                  {direction === 'rtl' ? <ArrowRight size={15} /> : <ArrowLeft size={15} />}
+                  <span>{isAr ? 'السابق: معلومات الكروب' : 'Back: Group Info'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveStep(3)}
+                  className="h-[42px] px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+                >
+                  <span>{isAr ? 'التالي: توزيع المقاعد وتعيين المستفيدين' : 'Next: Customers & Seats'}</span>
+                  {direction === 'rtl' ? <ArrowLeft size={15} /> : <ArrowRight size={15} />}
+                </button>
+              </>
+            )}
+
+            {activeStep === 3 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveStep(2)}
+                  className="h-[42px] px-4 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer flex items-center gap-1.5 transition-colors"
+                >
+                  {direction === 'rtl' ? <ArrowRight size={15} /> : <ArrowLeft size={15} />}
+                  <span>{isAr ? 'السابق: قالب الأسعار' : 'Back: Prices Template'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleSaveGroup}
+                  className="h-[42px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:opacity-60 text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+                >
+                  {saving ? <Loader size={15} color="white" /> : <Save size={16} />}
+                  <span>{isAr ? 'حفظ الكروب والترحيل' : 'Save Group & Post'}</span>
+                </button>
+              </>
+            )}
           </div>
 
         </div>
