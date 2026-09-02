@@ -37,6 +37,7 @@ import { accountsApi } from '../../api/accounts';
 import { employeesApi, type Employee } from '../../api/employees';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { SearchableCombobox, ComboboxOption } from '../ui/SearchableCombobox';
+import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
 import { CurrencySegmentedControl } from '../ui/CurrencySegmentedControl';
 import { InvoiceAuditLogModal } from './InvoiceAuditLogModal';
@@ -313,6 +314,11 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
   // Bulk PNR Paste Modal State
   const [pasteModalOpen, setPasteModalOpen] = useState(false);
   const [pastedText, setPastedText] = useState('');
+  const [accountFinder, setAccountFinder] = useState<{
+    open: boolean;
+    scope: 'SUPPLIER' | 'CUSTOMER';
+    query: string;
+  }>({ open: false, scope: 'SUPPLIER', query: '' });
   const [pasteDefaultPax, setPasteDefaultPax] = useState<number>(1);
   const [pasteDefaultBuy, setPasteDefaultBuy] = useState<string>('');
   const [pasteDefaultSell, setPasteDefaultSell] = useState<string>('');
@@ -1219,9 +1225,26 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* Customer Combobox */}
                     <div>
-                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'العميل *' : 'Customer *'}
-                      </label>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <label className="text-[12px] font-bold text-slate-700">
+                          {isAr ? 'العميل *' : 'Customer *'}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAccountFinder({
+                              open: true,
+                              scope: 'CUSTOMER',
+                              query: /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(customerName || '') ? '' : customerName || '',
+                            })
+                          }
+                          title={isAr ? 'البحث في كل حسابات العملاء والموردين' : 'Search every customer and supplier account'}
+                          className="h-[18px] text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50/70 hover:bg-orange-100/80 px-1.5 rounded-md border border-orange-200/60 transition-colors leading-none"
+                        >
+                          <Search size={11} className="stroke-[2.5]" />
+                          <span>{isAr ? 'بحث متقدّم' : 'Advanced'}</span>
+                        </button>
+                      </div>
                       <SearchableCombobox
                         value={customerName}
                         onChange={(val) => setCustomerName(val || '')}
@@ -1324,13 +1347,38 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* Supplier */}
                     <div>
-                      <label className="text-[12px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'المورد / جهة الإصدار' : 'Supplier Account'}
-                      </label>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <label className="text-[12px] font-bold text-slate-700">
+                          {isAr ? 'المورد / جهة الإصدار' : 'Supplier Account'}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setAccountFinder({
+                              open: true,
+                              scope: 'SUPPLIER',
+                              query: /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(supplierAccount || '')
+                                ? supplierAccountName || ''
+                                : supplierAccount || supplierAccountName || '',
+                            })
+                          }
+                          title={isAr ? 'البحث في كل حسابات الموردين والعملاء' : 'Search every supplier and customer account'}
+                          className="h-[18px] text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50/70 hover:bg-orange-100/80 px-1.5 rounded-md border border-orange-200/60 transition-colors leading-none"
+                        >
+                          <Search size={11} className="stroke-[2.5]" />
+                          <span>{isAr ? 'بحث متقدّم' : 'Advanced'}</span>
+                        </button>
+                      </div>
                       <SearchableCombobox
                         value={supplierAccount}
-                        onChange={(val) => setSupplierAccount(val || '')}
+                        onChange={(val) => {
+                          setSupplierAccount(val || '');
+                          const opt = supplierOptions.find((o: any) => o.value === val);
+                          if (opt) setSupplierAccountName(opt.label);
+                        }}
                         options={supplierOptions}
+                        /* حسابٌ خارج قائمة الموردين يُعرض باسمه المحفوظ بدل معرّفٍ لا يُقرأ. */
+                        displayValue={supplierAccountName}
                         placeholder={isAr ? 'اختر المورد...' : 'Select supplier...'}
                       />
                     </div>
@@ -2035,6 +2083,26 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
           </div>
         </div>
       </Modal>
+
+      {/*
+        * البحث المتقدّم في كل الحسابات — نفسه المستعمل في نافذة التذاكر.
+        * والمختار يُكتب بمعرّفه واسمه معاً كي لا يبقى الحقل فارغاً حين لا يكون
+        * الحساب ضمن قائمة الموردين أصلاً.
+        */}
+      <AccountFinderModal
+        opened={accountFinder.open}
+        initialQuery={accountFinder.query}
+        initialScope={accountFinder.scope}
+        onClose={() => setAccountFinder((prev) => ({ ...prev, open: false }))}
+        onSelect={(account: AccountFinderResult) => {
+          if (accountFinder.scope === 'SUPPLIER') {
+            setSupplierAccount(account.id);
+            setSupplierAccountName(account.name);
+          } else {
+            setCustomerName(account.name);
+          }
+        }}
+      />
 
       {/* ── 5. Audit Log Modal ── */}
       <InvoiceAuditLogModal

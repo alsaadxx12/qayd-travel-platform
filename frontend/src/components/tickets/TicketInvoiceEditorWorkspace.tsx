@@ -483,13 +483,18 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
   }, [allCustomerCandidates, isAr]);
 
   const formattedSuppliersData = useMemo(() => {
-    return allSupplierCandidates.map((s) => ({
+    const list = allSupplierCandidates.map((s) => ({
       value: s.id || s.nameAr,
       label: (isAr ? (s.nameAr || s.name) : (s.nameEn || s.nameAr || s.name)) || s.code || '',
       code: s.code,
       phone: s.phone || undefined,
     }));
-  }, [allSupplierCandidates, isAr]);
+    // ما اختير من البحث المتقدّم يُضاف خياراً، فيظهر محدَّداً حين تُفتح القائمة ثانيةً.
+    if (supplierAccount && supplierAccountName && !list.some((o) => o.value === supplierAccount)) {
+      list.unshift({ value: supplierAccount, label: supplierAccountName, code: undefined, phone: undefined });
+    }
+    return list;
+  }, [allSupplierCandidates, isAr, supplierAccount, supplierAccountName]);
 
   // Format airline dropdown data cleanly
   const formattedAirlinesData = useMemo(() => {
@@ -1949,6 +1954,13 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                         markDirty();
                       }}
                       options={formattedSuppliersData}
+                      /*
+                       * الحساب المختار من البحث المتقدّم قد لا يكون في قائمة الموردين
+                       * أصلاً — وهذا هو سبب وجود البحث المتقدّم. والقائمة المنسدلة تعرض
+                       * المعرّف الخام حين لا تجد له خياراً، فيبدو الحقل فارغاً. اسمُه
+                       * المحفوظ هو ما يُعرض حينها.
+                       */
+                      displayValue={supplierAccountName}
                       error={errors.supplierAccount}
                     />
                     <div id="field-airline">
