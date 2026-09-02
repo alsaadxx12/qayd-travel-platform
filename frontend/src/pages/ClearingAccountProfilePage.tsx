@@ -304,6 +304,26 @@ export const ClearingAccountProfilePage: React.FC = () => {
         await journalEntriesApi.delete(entryId);
       }
 
+      /*
+       * مزامنة رصيد التصفية بعد الحذف — العلّة التي جعلت الحذف يبدو بلا أثر.
+       *
+       * رصيد حساب التصفية يُخزَّن في JSON منفصل (usd/iqd/toman) لا في حقل balance
+       * وحده؛ وحذف القيد يعكس حقل balance فقط، فيبقى JSON على قيمته القديمة
+       * فتظل بطاقة الرصيد كما هي وكأن الحذف لم يحدث. فنُعيد بناء JSON من الحركات
+       * الباقية (المصدر الوحيد للحقيقة) ونحفظه على الحساب.
+       */
+      if (account) {
+        const remaining = await clearingsApi.getStatement(account.id).catch(() => [] as StatementRow[]);
+        const totals = { usd: 0, iqd: 0, toman: 0, note: '' };
+        remaining.forEach((r) => {
+          const nativeSigned = r.debit - r.credit; // رصيد الطرف = مجموع (مدين − دائن)
+          if (r.currency === 'USD') totals.usd += nativeSigned;
+          else if (r.currency === 'IQD') totals.iqd += Math.round(nativeSigned * iqdRate);
+          else if (r.currency === 'TOMAN') totals.toman += Math.round(nativeSigned * tomanRate);
+        });
+        await accountsApi.update(account.id, { address: JSON.stringify(totals) }).catch(() => {});
+      }
+
       showSuccessNotification(
         'تم الحذف بنجاح',
         `تم حذف ${entryIdsToDelete.length} حركة محاسبية وتحديث الأرصدة تلقائياً`
@@ -770,9 +790,9 @@ export const ClearingAccountProfilePage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-3.5 w-full select-none text-slate-800 font-['IBM_Plex_Sans_Arabic',sans-serif]">
+    <div className="space-y-3 w-full select-none text-slate-800 font-['IBM_Plex_Sans_Arabic',sans-serif]">
       {/* ═══════════════ 1. رأس الصفحة والبروفايل وأزرار الحركات ═══════════════ */}
-      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white border border-slate-200 rounded-xl px-5 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Tooltip label="العودة إلى الدليل الرئيسي" withArrow>
             <ActionIcon
@@ -787,7 +807,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
 
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-black text-slate-900 leading-tight">{account.nameAr}</h1>
+              <h1 className="text-sm font-black text-slate-900 leading-tight">{account.nameAr}</h1>
               <Badge color="orange" variant="light" size="sm" className="font-mono font-bold">
                 {account.code}
               </Badge>
@@ -914,7 +934,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
       </div>
 
       {/* ═══════════════ 2. بطاقات أرصدة العملات الثلاث والمعادل بالدولار لهذا الحساب ═══════════════ */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2.5 ${isClientAccount ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${isClientAccount ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
         {/* 1. إجمالي التقييم الشامل بالدولار — يُخفى لحساب العميل */}
         {!isClientAccount && (
         <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
@@ -983,9 +1003,9 @@ export const ClearingAccountProfilePage: React.FC = () => {
       </div>
 
       {/* ═══════════════ 3. كشف الحساب وسجل الحركات المحاسبية مع الفلترة المتقدمة ═══════════════ */}
-      <Paper radius="md" withBorder className="bg-white border-slate-200 shadow-2xs overflow-hidden p-3.5 space-y-3">
+      <Paper radius="lg" withBorder className="bg-white border-slate-200 shadow-2xs overflow-hidden p-3 space-y-2.5">
         {/* ─── شريط الفلترة والبحث المتقدم الذكي ─── */}
-        <div className="bg-slate-50/80 border border-slate-200 rounded-xl p-3 space-y-2.5">
+        <div className="bg-slate-50/80 border border-slate-200 rounded-lg p-2.5 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
               <IconFilter size={15} className="text-orange-600" />
@@ -1009,7 +1029,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
             {/* 1. البحث النصي */}
             <div className="lg:col-span-2">
               <label className="block text-[11px] font-bold text-slate-700 mb-1">بحث بالبيان / الملاحظة / المستفيد</label>
@@ -1052,10 +1072,10 @@ export const ClearingAccountProfilePage: React.FC = () => {
                 onChange={v => setFilterType(v || 'ALL')}
                 data={[
                   { value: 'ALL', label: 'كل الأنواع' },
-                  { value: 'RECEIPT', label: '🟢 سندات قبض' },
-                  { value: 'PAYMENT', label: '🔴 سندات دفع' },
-                  { value: 'OPENING', label: '🔷 رصيد افتتاحي' },
-                  { value: 'EXCHANGE', label: '🔄 صرافة عملات' },
+                  { value: 'RECEIPT', label: 'سندات قبض' },
+                  { value: 'PAYMENT', label: 'سندات دفع' },
+                  { value: 'OPENING', label: 'رصيد افتتاحي' },
+                  { value: 'EXCHANGE', label: 'صرافة عملات' },
                 ]}
                 className="font-medium"
               />
@@ -1101,7 +1121,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
             </Button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {/* شريط الإحصائيات السريع للكشف */}
             <div className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
               <div className="flex items-center gap-2">
