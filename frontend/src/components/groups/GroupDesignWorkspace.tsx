@@ -34,6 +34,8 @@ import { AccountingDatePicker } from '../common/date/AccountingDatePicker';
 import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
 import { ticketsApi, type TicketData } from '../../api/tickets';
 import { partnersApi } from '../../api/partners';
+import { accountsApi } from '../../api/accounts';
+import { useAuthStore } from '../../store/useAuthStore';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import {
@@ -103,6 +105,9 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
 
+  const { user } = useAuthStore();
+  const currentUserName = user?.name || (isAr ? 'الموظف الحالي' : 'Current User');
+
   // 1: معلومات الكروب وقوالب الأسعار (Group Info & Templates)
   // 2: بيع وتوزيع المقاعد على المستفيدين (Customers & Seat Sales)
   const [activeTab, setActiveTab] = useState<1 | 2>(1);
@@ -113,12 +118,21 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
   // Prices Template Editor Modal State
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<GroupTemplate | null>(null);
-  const [templateActiveTab, setTemplateActiveTab] = useState<'AUTO' | 'GLOBAL' | 'EXPENSES'>('AUTO');
-  const [componentFilterKind, setComponentFilterKind] = useState<string>('ALL');
-  const [componentFilterSupplier, setComponentFilterSupplier] = useState<string>('');
+
+  // Sale CustomGroup Modal State (Image 2)
+  const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<GroupCustomer | null>(null);
+  const [selectedTemplateForSale, setSelectedTemplateForSale] = useState<string>('');
+
+  // Cashboxes List
+  const [cashboxOptions, setCashboxOptions] = useState<ComboboxOption[]>([
+    { value: 'صندوق الشركات والقاصة', label: isAr ? 'صندوق الشركات والقاصة' : 'Box Cash' },
+    { value: 'القاصة الرئيسية', label: isAr ? 'القاصة الرئيسية' : 'Main Cash' },
+    { value: 'صندوق الفرع', label: isAr ? 'صندوق الفرع' : 'Branch Cash' },
+  ]);
 
   // Account Finder Modal State
-  const [finder, setFinder] = useState<{ open: boolean; componentId?: string }>({
+  const [finder, setFinder] = useState<{ open: boolean; onSelectCallback?: (acc: AccountFinderResult) => void }>({
     open: false,
   });
 
@@ -130,9 +144,84 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
       .getCustomers()
       .then((d: any) => setCustomersList(Array.isArray(d) ? d : d?.data || []))
       .catch(() => undefined);
+
+    accountsApi
+      .getTree(true)
+      .then((tree) => {
+        if (Array.isArray(tree)) {
+          const findAccounts = (nodes: any[]): ComboboxOption[] => {
+            let accs: ComboboxOption[] = [];
+            for (const n of nodes) {
+              if (
+                n.type === 'CASH' ||
+                n.category === 'CASH' ||
+                n.category === 'BANK' ||
+                (n.code && String(n.code).startsWith('18'))
+              ) {
+                accs.push({
+                  value: n.nameAr || n.name || n.id,
+                  label: n.nameAr || n.name || String(n.code || ''),
+                });
+              }
+              if (n.children && n.children.length > 0) {
+                accs = accs.concat(findAccounts(n.children));
+              }
+            }
+            return accs;
+          };
+          const found = findAccounts(tree);
+          if (found.length > 0) setCashboxOptions(found);
+        }
+      })
+      .catch(() => undefined);
   }, [opened, initialData]);
 
   const patch = (changes: Partial<GroupDesign>) => setDesign((d) => ({ ...d, ...changes }));
+
+  // Open Sale Modal (Image 2)
+  const handleOpenSaleModal = (templateId?: string, customer?: GroupCustomer) => {
+    const tpl = (design.templates || []).find((t) => t.id === templateId) || (design.templates || [])[0];
+    setSelectedTemplateForSale(tpl?.id || '');
+    if (customer) {
+      setEditingCustomer({ ...customer });
+    } else {
+      setEditingCustomer({
+        id: `cus-${Date.now()}-${(design.customers || []).length}`,
+        name: '',
+        agent: '',
+        templateId: tpl?.id,
+        templateName: tpl?.name,
+        payType: 'CASH',
+        sale: tpl ? Number(tpl.seatPrice) || 0 : Number(design.seatPrice) || 0,
+        boxCash: cashboxOptions[0]?.value || 'صندوق الشركات والقاصة',
+        date: new Date().toISOString().slice(0, 10),
+        state: 'MR',
+        passport: '',
+        voucher: '',
+        fCode: '',
+        notes: '',
+      });
+    }
+    setSaleModalOpen(true);
+  };
+
+  const handleSaveCustomerFromModal = (savedCustomer: GroupCustomer) => {
+    const exists = (design.customers || []).some((c) => c.id === savedCustomer.id);
+    if (exists) {
+      setDesign((d) => ({
+        ...d,
+        customers: (d.customers || []).map((c) => (c.id === savedCustomer.id ? savedCustomer : c)),
+      }));
+    } else {
+      setDesign((d) => ({
+        ...d,
+        customers: [...(d.customers || []), savedCustomer],
+      }));
+    }
+    setSaleModalOpen(false);
+    setEditingCustomer(null);
+    setActiveTab(2);
+  };
 
   // Totals for all templates & customers
   const totals = useMemo(() => computeGroupTotals(design), [design]);
@@ -663,10 +752,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                                 {/* Sale Button (Magenta button like legacy Image 3) */}
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    handleAddCustomer(tpl.id);
-                                    setActiveTab(2);
-                                  }}
+                                  onClick={() => handleOpenSaleModal(tpl.id)}
                                   className="px-2.5 py-1 rounded-lg bg-[#BE185D] hover:bg-[#9D174D] text-white text-[11px] font-black cursor-pointer flex items-center gap-1 shadow-2xs transition-colors"
                                 >
                                   <ShoppingCart size={12} />
@@ -762,11 +848,11 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
 
                   <button
                     type="button"
-                    onClick={() => handleAddCustomer()}
+                    onClick={() => handleOpenSaleModal()}
                     className="h-[40px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
                   >
                     <Plus size={16} strokeWidth={2.4} />
-                    <span>{isAr ? 'إضافة مستفيد / مشتري' : 'Add Passenger / Buyer'}</span>
+                    <span>{isAr ? 'إضافة مستفيد / بيع مقعد' : 'Add Passenger / Seat Sale'}</span>
                   </button>
                 </div>
               </div>
@@ -780,8 +866,8 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                   </p>
                   <p className="text-[11.5px] text-slate-400 mt-0.5">
                     {isAr
-                      ? 'اضغط على «إضافة مستفيد / مشتري» لاختيار العميل وتحديد التيمبلت وسعر البيع'
-                      : 'Click "Add Passenger / Buyer" to select customer, price template, and sale price'}
+                      ? 'اضغط على «إضافة مستفيد / بيع مقعد» لفتح نافذة بيع الكروب وتحديد القالب وسعر البيع'
+                      : 'Click "Add Passenger / Seat Sale" to open sale profile and assign seats'}
                   </p>
                 </div>
               ) : (
@@ -814,7 +900,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                             )}
                           </div>
 
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2.5">
                             <div className="flex items-center gap-1.5 font-mono text-xs font-black">
                               <span className="text-slate-500 font-sans text-[11px] font-bold">
                                 {isAr ? 'صافي الربح:' : 'Profit:'}
@@ -824,6 +910,17 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                                 {money(profit, design.currency)}
                               </span>
                             </div>
+
+                            {/* Full Sale Profile Modal Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSaleModal(c.templateId, c)}
+                              className="px-2.5 py-1 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 text-[11px] font-black flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              title={isAr ? 'فتح نافذة بيع الكروب الكاملة (Sale CustomGroup)' : 'Sale CustomGroup Profile'}
+                            >
+                              <ShoppingCart size={13} />
+                              <span>{isAr ? 'ملف البيع' : 'Sale Profile'}</span>
+                            </button>
 
                             <button
                               type="button"
@@ -1032,14 +1129,48 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
             onSave={(updated) => handleSaveTemplateChanges(updated)}
             onOpenSale={(updated) => {
               handleSaveTemplateChanges(updated);
-              handleAddCustomer(updated.id);
-              setActiveTab(2);
+              handleOpenSaleModal(updated.id);
             }}
             onClose={() => {
               setTemplateModalOpen(false);
               setEditingTemplate(null);
             }}
-            onOpenAccountFinder={(componentId) => setFinder({ open: true, componentId })}
+            onOpenAccountFinder={(callback) => setFinder({ open: true, onSelectCallback: callback })}
+          />
+        )}
+      </Modal>
+
+      {/* ══════════════════════════════════════════════════════════════
+          5. SALE CUSTOMGROUP MODAL (نافذة بيع الكروب للمستفيد - الصورة 2)
+         ══════════════════════════════════════════════════════════════ */}
+      <Modal
+        opened={saleModalOpen}
+        onClose={() => {
+          setSaleModalOpen(false);
+          setEditingCustomer(null);
+        }}
+        size="880px"
+        centered
+        radius="2xl"
+        withCloseButton={false}
+        overlayProps={{ backgroundOpacity: 0.45, blur: 3 }}
+        styles={{ body: { padding: 0 } }}
+      >
+        {editingCustomer && (
+          <SaleCustomGroupModalContent
+            customer={editingCustomer}
+            groupDesign={design}
+            selectedTemplateId={selectedTemplateForSale || editingCustomer.templateId}
+            cashboxOptions={cashboxOptions}
+            customerOptions={customerOptions}
+            currentUserName={currentUserName}
+            isAr={isAr}
+            direction={direction}
+            onSave={(saved) => handleSaveCustomerFromModal(saved)}
+            onClose={() => {
+              setSaleModalOpen(false);
+              setEditingCustomer(null);
+            }}
           />
         )}
       </Modal>
@@ -1050,14 +1181,8 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
         initialScope="SUPPLIER"
         onClose={() => setFinder({ open: false })}
         onSelect={(account: AccountFinderResult) => {
-          if (finder.componentId && editingTemplate) {
-            const updatedComponents = (editingTemplate.components || []).map((c) =>
-              c.id === finder.componentId
-                ? { ...c, supplierName: account.name, supplierAccountId: account.id }
-                : c,
-            );
-            setEditingTemplate({ ...editingTemplate, components: updatedComponents });
-          }
+          finder.onSelectCallback?.(account);
+          setFinder({ open: false });
         }}
       />
     </div>
@@ -1065,7 +1190,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
 };
 
 // ══════════════════════════════════════════════════════════════
-// PRICES TEMPLATE EDITOR MODAL COMPONENT (قالب الأسعار - الصورة 2 و 4)
+// 6. PRICES TEMPLATE EDITOR MODAL (قالب الأسعار - الصورة 1 و 4)
 // ══════════════════════════════════════════════════════════════
 interface TemplateModalProps {
   template: GroupTemplate;
@@ -1075,7 +1200,7 @@ interface TemplateModalProps {
   onSave: (tpl: GroupTemplate) => void;
   onOpenSale: (tpl: GroupTemplate) => void;
   onClose: () => void;
-  onOpenAccountFinder: (componentId: string) => void;
+  onOpenAccountFinder: (callback: (acc: AccountFinderResult) => void) => void;
 }
 
 const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
@@ -1090,26 +1215,31 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
 }) => {
   const [tpl, setTpl] = useState<GroupTemplate>(initialTemplate);
   const [tab, setTab] = useState<'AUTO' | 'GLOBAL' | 'EXPENSES'>('AUTO');
-  const [filterType, setFilterType] = useState<string>('ALL');
-  const [filterSupplier, setFilterSupplier] = useState<string>('');
+
+  // Sub-modal: Design Trip Package Modal (الصورة 1 المنبثقة)
+  const [componentModalOpen, setComponentModalOpen] = useState(false);
+  const [editingComponent, setEditingComponent] = useState<GroupComponent | null>(null);
 
   const patchTpl = (changes: Partial<GroupTemplate>) => setTpl((t) => ({ ...t, ...changes }));
 
-  const addComponent = (kind: GroupComponentKind) => {
+  const handleAddNewComponent = (kind: GroupComponentKind) => {
     const newComp: GroupComponent = {
       id: `cmp-${Date.now()}-${(tpl.components || []).length}`,
       kind,
       supplierName: '',
       cost: 0,
+      issueDate: new Date().toISOString().slice(0, 10),
+      currency: tpl.currency,
       perSeat: kind !== 'EXPENSE' && tab === 'AUTO',
+      active: true,
     };
-    patchTpl({ components: [...(tpl.components || []), newComp] });
+    setEditingComponent(newComp);
+    setComponentModalOpen(true);
   };
 
-  const patchComponent = (id: string, changes: Partial<GroupComponent>) => {
-    patchTpl({
-      components: (tpl.components || []).map((c) => (c.id === id ? { ...c, ...changes } : c)),
-    });
+  const handleEditComponent = (c: GroupComponent) => {
+    setEditingComponent({ ...c });
+    setComponentModalOpen(true);
   };
 
   const removeComponent = (id: string) => {
@@ -1133,7 +1263,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
   return (
     <div className="flex flex-col h-[85vh] bg-[#F8FAFC] font-sans" dir={direction}>
       
-      {/* ── Top Bar (Image 2: Template Name, Seats, Currency, Price Sale, Open Sale) ── */}
+      {/* ── Top Bar (Image 1: Template Name, Seats, Currency, Price Sale, Open Sale) ── */}
       <div className="bg-white border-b border-[#E5E7EB] p-4 shadow-2xs shrink-0">
         <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100 flex-wrap">
           <div className="flex items-center gap-2">
@@ -1149,7 +1279,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Green Open Sale Button (Image 2: Open Sale) */}
+            {/* Green Open Sale Button (Image 1: Open Sale) */}
             <button
               type="button"
               onClick={() => onOpenSale(tpl)}
@@ -1169,7 +1299,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           </div>
         </div>
 
-        {/* Inputs Row (Image 2) */}
+        {/* Inputs Row (Image 1) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 items-end">
           {/* Template Name */}
           <div>
@@ -1210,7 +1340,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
             />
           </div>
 
-          {/* Price Sale (Image 2) */}
+          {/* Price Sale (Image 1) */}
           <div>
             <label className="text-[11px] font-bold text-[#F45A0A] block mb-1">
               {isAr ? 'سعر البيع المقترح' : 'Price Sale'}
@@ -1226,7 +1356,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
         </div>
       </div>
 
-      {/* ── 3 Tabs (Image 2: Auto Purchases, Global Purchases, Global Expenses) ── */}
+      {/* ── 3 Tabs (Image 1: Auto Purchases, Global Purchases, Global Expenses) ── */}
       <div className="bg-white border-b border-[#E5E7EB] px-4 pt-2 flex items-center gap-2">
         <button
           type="button"
@@ -1280,7 +1410,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
             </span>
           </div>
 
-          {/* Yellow (+) Button Menu as in Image 2 & 4 */}
+          {/* Yellow (+) Button Menu as in Image 1 & 4 */}
           <Menu position="bottom-end" shadow="lg" radius="xl" width={220} withinPortal zIndex={10080}>
             <Menu.Target>
               <button
@@ -1304,7 +1434,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
                         <Icon size={14} />
                       </span>
                     }
-                    onClick={() => addComponent(k.kind)}
+                    onClick={() => handleAddNewComponent(k.kind)}
                   >
                     <span className="text-[12.5px] font-bold text-slate-800">{isAr ? k.ar : k.en}</span>
                   </Menu.Item>
@@ -1323,8 +1453,8 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">
               {isAr
-                ? 'اضغط على «إضافة مكوّن جديد (+)» لإضافة تذكرة، فندق، فيزا، أو نقل'
-                : 'Click "Add Component (+)" to add tickets, hotels, visas, or transports'}
+                ? 'اضغط على «إضافة مكوّن جديد» لإضافة تذكرة، فندق، فيزا، أو نقل وتحديد المصدر وتاريخ الإصدار'
+                : 'Click "Add Component" to add tickets, hotels, visas, or transports'}
             </p>
           </div>
         ) : (
@@ -1335,60 +1465,52 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
               return (
                 <div
                   key={c.id}
-                  className="grid grid-cols-[auto_minmax(0,1.5fr)_minmax(0,1fr)_auto_auto] items-center gap-2.5 p-3 rounded-xl border border-[#E5E7EB] bg-white hover:border-slate-300 transition-all shadow-2xs"
+                  className="grid grid-cols-[auto_minmax(0,1.5fr)_minmax(0,1fr)_auto_auto_auto] items-center gap-2.5 p-3 rounded-xl border border-[#E5E7EB] bg-white hover:border-slate-300 transition-all shadow-2xs"
                 >
                   <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${tone.bg} ${tone.border} ${tone.text}`}>
                     <Icon size={17} />
                   </div>
 
-                  {/* Supplier & Account Finder */}
+                  {/* Supplier & Details */}
                   <div className="min-w-0">
                     <span className="text-[10px] font-black text-slate-500 block mb-0.5">
-                      {kindLabel(c.kind, isAr)}
+                      {kindLabel(c.kind, isAr)} {c.issueDate ? `• ${c.issueDate}` : ''}
                     </span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        value={c.supplierName}
-                        onChange={(e) => patchComponent(c.id, { supplierName: e.target.value })}
-                        placeholder={isAr ? 'اسم المورد أو شركة الطيران...' : 'Supplier name...'}
-                        className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-bold text-slate-900 outline-none focus:border-[#F45A0A]"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => onOpenAccountFinder(c.id)}
-                        className="h-8 w-8 rounded-lg border border-orange-200 bg-orange-50 text-[#F45A0A] hover:bg-orange-100 flex items-center justify-center cursor-pointer shrink-0 transition-colors"
-                        title={isAr ? 'بحث في الحسابات' : 'Search accounts'}
-                      >
-                        <Search size={13} />
-                      </button>
-                    </div>
+                    <span className="font-bold text-[13px] text-slate-900 block truncate">
+                      {c.supplierName || (isAr ? '— بدون مصدر محدد —' : '— No supplier —')}
+                    </span>
                   </div>
 
-                  {/* Cost Input */}
-                  <div>
+                  {/* Cost Display */}
+                  <div className="text-end">
                     <span className="text-[10px] font-black text-slate-500 block mb-0.5">
-                      {isAr ? `الكلفة (${tpl.currency})` : `Cost (${tpl.currency})`}
+                      {isAr ? 'الكلفة' : 'Cost'}
                     </span>
-                    <input
-                      value={c.cost ? c.cost.toLocaleString('en-US') : ''}
-                      onChange={(e) => patchComponent(c.id, { cost: numeric(e.target.value) })}
-                      placeholder="0"
-                      dir="ltr"
-                      className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12.5px] font-mono font-black text-slate-900 text-end outline-none focus:border-[#F45A0A]"
-                    />
+                    <span className="font-mono font-black text-[13.5px] text-slate-900" dir="ltr">
+                      {money(c.cost, c.currency || tpl.currency)}
+                    </span>
                   </div>
 
-                  {/* Scope Toggle: per seat vs whole group */}
-                  <button
-                    type="button"
-                    onClick={() => patchComponent(c.id, { perSeat: !c.perSeat })}
-                    className={`h-8 px-2.5 rounded-lg border text-[11px] font-black cursor-pointer whitespace-nowrap transition-colors ${
+                  {/* Scope Badge */}
+                  <span
+                    className={`h-7 px-2.5 rounded-lg border text-[10.5px] font-black inline-flex items-center justify-center whitespace-nowrap ${
                       c.perSeat
                         ? 'bg-indigo-50 border-indigo-200 text-indigo-800'
                         : 'bg-amber-50 border-amber-200 text-amber-800'
                     }`}
                   >
                     {c.perSeat ? (isAr ? 'للمقعد' : 'Per seat') : isAr ? 'للكروب كامل' : 'Whole group'}
+                  </span>
+
+                  {/* Edit Button (Opens Design Trip Package Modal - Image 1 popup) */}
+                  <button
+                    type="button"
+                    onClick={() => handleEditComponent(c)}
+                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-1 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
+                    title={isAr ? 'تعديل تفاصيل باقة الرحلة' : 'Edit Package Component'}
+                  >
+                    <Palette size={13} />
+                    <span>{isAr ? 'تعديل' : 'Edit'}</span>
                   </button>
 
                   {/* Delete */}
@@ -1406,7 +1528,7 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
         )}
       </div>
 
-      {/* ── Bottom Summary Row (Image 2: Buy, Global Buy, Expenses, Cost, Sale) ── */}
+      {/* ── Bottom Summary Row (Image 1: Buy, Global Buy, Expenses, Cost, Sale) ── */}
       <div className="bg-white border-t border-[#E5E7EB] p-3 shadow-md shrink-0">
         <div className="flex items-center justify-between gap-3 flex-wrap text-xs">
           
@@ -1460,6 +1582,581 @@ const PricesTemplateModalContent: React.FC<TemplateModalProps> = ({
           </div>
 
         </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════
+          DESIGN TRIP PACKAGE MODAL (تصميم باقة الرحلة - الصورة 1 المنبثقة)
+         ══════════════════════════════════════════════════════════════ */}
+      <Modal
+        opened={componentModalOpen}
+        onClose={() => {
+          setComponentModalOpen(false);
+          setEditingComponent(null);
+        }}
+        size="620px"
+        centered
+        radius="2xl"
+        withCloseButton={false}
+        overlayProps={{ backgroundOpacity: 0.5, blur: 3 }}
+        styles={{ body: { padding: 0 } }}
+      >
+        {editingComponent && (
+          <DesignTripPackageModalContent
+            priceSystemName={tpl.name}
+            component={editingComponent}
+            defaultCurrency={tpl.currency}
+            isAr={isAr}
+            direction={direction}
+            onSave={(updatedCmp) => {
+              const exists = (tpl.components || []).some((c) => c.id === updatedCmp.id);
+              if (exists) {
+                patchTpl({
+                  components: (tpl.components || []).map((c) => (c.id === updatedCmp.id ? updatedCmp : c)),
+                });
+              } else {
+                patchTpl({
+                  components: [...(tpl.components || []), updatedCmp],
+                });
+              }
+              setComponentModalOpen(false);
+              setEditingComponent(null);
+            }}
+            onClose={() => {
+              setComponentModalOpen(false);
+              setEditingComponent(null);
+            }}
+            onOpenAccountFinder={() => {
+              onOpenAccountFinder((account) => {
+                if (editingComponent) {
+                  setEditingComponent({
+                    ...editingComponent,
+                    supplierName: account.name,
+                    supplierAccountId: account.id,
+                  });
+                }
+              });
+            }}
+          />
+        )}
+      </Modal>
+
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+// 7. DESIGN TRIP PACKAGE MODAL CONTENT (الصورة 1 المنبثقة)
+// ══════════════════════════════════════════════════════════════
+interface DesignTripPackageModalProps {
+  priceSystemName: string;
+  component: GroupComponent;
+  defaultCurrency: 'IQD' | 'USD';
+  isAr: boolean;
+  direction: 'rtl' | 'ltr';
+  onSave: (cmp: GroupComponent) => void;
+  onClose: () => void;
+  onOpenAccountFinder: () => void;
+}
+
+const DesignTripPackageModalContent: React.FC<DesignTripPackageModalProps> = ({
+  priceSystemName,
+  component: initialCmp,
+  defaultCurrency,
+  isAr,
+  direction,
+  onSave,
+  onClose,
+  onOpenAccountFinder,
+}) => {
+  const [cmp, setCmp] = useState<GroupComponent>({
+    ...initialCmp,
+    currency: initialCmp.currency || defaultCurrency,
+    issueDate: initialCmp.issueDate || new Date().toISOString().slice(0, 10),
+    active: initialCmp.active !== false,
+  });
+
+  return (
+    <div className="bg-white rounded-2xl overflow-hidden font-sans select-none" dir={direction}>
+      
+      {/* Title Bar (Design Trip Package) */}
+      <div className="bg-[#0284C7] px-4 py-3 text-white flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center">
+            <Package size={16} />
+          </div>
+          <span className="font-black text-[13.5px]">
+            {isAr ? 'تصميم باقة الرحلة (Design Trip Package)' : 'Design Trip Package'}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center cursor-pointer transition-colors"
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      {/* Body Box */}
+      <div className="p-5 space-y-4">
+        
+        {/* Header Badge: Price System */}
+        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-3">
+          <div>
+            <span className="text-[11px] font-bold text-slate-500 block">
+              {isAr ? 'نظام القالب المعتمد' : 'Price System'}
+            </span>
+            <span className="font-black text-[13.5px] text-slate-900 font-mono">
+              Price System : {priceSystemName}
+            </span>
+          </div>
+
+          <div className="w-10 h-10 rounded-xl bg-orange-100/70 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
+            <Package size={22} />
+          </div>
+        </div>
+
+        {/* Inputs Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          
+          {/* Supplier (المورد / المصدر) */}
+          <div className="sm:col-span-2">
+            <label className="text-[11.5px] font-black text-rose-600 block mb-1">
+              {isAr ? 'المورد / المصدر (Supplier) *' : 'Supplier *'}
+            </label>
+            <div className="flex items-center gap-1.5">
+              <input
+                value={cmp.supplierName}
+                onChange={(e) => setCmp({ ...cmp, supplierName: e.target.value })}
+                placeholder={isAr ? 'اسم المورد أو شركة الطيران...' : 'Supplier name...'}
+                className="w-full h-[44px] px-3.5 rounded-xl border border-slate-200 bg-white text-[13px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+              />
+              <button
+                type="button"
+                onClick={onOpenAccountFinder}
+                className="h-[44px] w-[44px] rounded-xl border border-cyan-200 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 flex items-center justify-center cursor-pointer shrink-0 transition-colors shadow-2xs"
+                title={isAr ? 'بحث في دليل الحسابات' : 'Find Account'}
+              >
+                <Search size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Issue Date */}
+          <div>
+            <AccountingDatePicker
+              label={isAr ? 'تاريخ الإصدار (Issue Date)' : 'Issue Date'}
+              value={cmp.issueDate}
+              onChange={(val) => setCmp({ ...cmp, issueDate: val })}
+              placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
+            />
+          </div>
+
+          {/* Buy (سعر الشراء / الكلفة) */}
+          <div>
+            <label className="text-[11.5px] font-black text-slate-700 block mb-1">
+              {isAr ? 'سعر الشراء / الكلفة (Buy) *' : 'Buy Price *'}
+            </label>
+            <input
+              value={cmp.cost ? cmp.cost.toLocaleString('en-US') : ''}
+              onChange={(e) => setCmp({ ...cmp, cost: numeric(e.target.value) })}
+              placeholder="0.00"
+              dir="ltr"
+              className="w-full h-[44px] px-3.5 rounded-xl border border-slate-200 bg-white text-[13.5px] font-mono font-black text-end text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
+            />
+          </div>
+
+          {/* Currency */}
+          <div>
+            <SearchableCombobox
+              label={isAr ? 'العملة (Currency)' : 'Currency'}
+              value={cmp.currency}
+              onChange={(val) => setCmp({ ...cmp, currency: (val as 'IQD' | 'USD') || defaultCurrency })}
+              options={[
+                { value: 'USD', label: isAr ? '$ دولار أمريكي (Dollar)' : 'Dollar ($)' },
+                { value: 'IQD', label: isAr ? 'د.ع دينار عراقي (IQD)' : 'Iraqi Dinar (IQD)' },
+              ]}
+              placeholder={isAr ? 'العملة...' : 'Currency...'}
+            />
+          </div>
+
+          {/* Scope: Per Seat vs Whole Group */}
+          <div>
+            <label className="text-[11.5px] font-black text-slate-700 block mb-1">
+              {isAr ? 'نطاق الكلفة' : 'Cost Scope'}
+            </label>
+            <div className="flex items-center gap-1.5 h-[44px]">
+              <button
+                type="button"
+                onClick={() => setCmp({ ...cmp, perSeat: true })}
+                className={`flex-1 h-full rounded-xl border text-[11.5px] font-black cursor-pointer transition-colors ${
+                  cmp.perSeat
+                    ? 'bg-indigo-50 border-indigo-300 text-indigo-800'
+                    : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                {isAr ? 'للمقعد الواحد' : 'Per Seat'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCmp({ ...cmp, perSeat: false })}
+                className={`flex-1 h-full rounded-xl border text-[11.5px] font-black cursor-pointer transition-colors ${
+                  !cmp.perSeat
+                    ? 'bg-amber-50 border-amber-300 text-amber-800'
+                    : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                {isAr ? 'للكروب كامل' : 'Whole Group'}
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Active Toggle Switch */}
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-black text-slate-800">
+              {isAr ? 'الحالة (Active):' : 'Status (Active):'}
+            </span>
+            <span className={`text-[11.5px] font-bold ${cmp.active ? 'text-teal-700' : 'text-slate-400'}`}>
+              {cmp.active ? (isAr ? 'مفعل (On)' : 'On') : isAr ? 'معطل (Off)' : 'Off'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCmp({ ...cmp, active: !cmp.active })}
+            className={`w-12 h-6 rounded-full transition-colors cursor-pointer p-0.5 flex items-center ${
+              cmp.active ? 'bg-teal-600 justify-end' : 'bg-slate-300 justify-start'
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full bg-white shadow-xs block" />
+          </button>
+        </div>
+
+      </div>
+
+      {/* Action Footer */}
+      <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-[38px] px-4 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+        >
+          {isAr ? 'إلغاء' : 'Cancel'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSave(cmp)}
+          className="h-[38px] px-5 rounded-xl bg-[#0284C7] hover:bg-[#0369A1] text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+        >
+          <Save size={15} />
+          <span>{isAr ? 'حفظ المكوّن' : 'Save Package'}</span>
+        </button>
+      </div>
+
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+// 8. SALE CUSTOMGROUP MODAL CONTENT (الصورة 2 القديمة)
+// ══════════════════════════════════════════════════════════════
+interface SaleCustomGroupModalProps {
+  customer: GroupCustomer;
+  groupDesign: GroupDesign;
+  selectedTemplateId?: string;
+  cashboxOptions: ComboboxOption[];
+  customerOptions: ComboboxOption[];
+  currentUserName: string;
+  isAr: boolean;
+  direction: 'rtl' | 'ltr';
+  onSave: (cust: GroupCustomer) => void;
+  onClose: () => void;
+}
+
+const SaleCustomGroupModalContent: React.FC<SaleCustomGroupModalProps> = ({
+  customer: initialCustomer,
+  groupDesign,
+  selectedTemplateId,
+  cashboxOptions,
+  customerOptions,
+  currentUserName,
+  isAr,
+  direction,
+  onSave,
+  onClose,
+}) => {
+  const targetTpl =
+    (groupDesign.templates || []).find((t) => t.id === (selectedTemplateId || initialCustomer.templateId)) ||
+    (groupDesign.templates || [])[0];
+
+  const [cust, setCust] = useState<GroupCustomer>({
+    ...initialCustomer,
+    templateId: targetTpl?.id,
+    templateName: targetTpl?.name,
+    sale: initialCustomer.sale || Number(targetTpl?.seatPrice) || Number(groupDesign.seatPrice) || 0,
+    boxCash: initialCustomer.boxCash || cashboxOptions[0]?.value || 'صندوق الشركات والقاصة',
+    date: initialCustomer.date || new Date().toISOString().slice(0, 10),
+    state: initialCustomer.state || 'MR',
+  });
+
+  return (
+    <div className="bg-white rounded-2xl overflow-hidden font-sans select-none" dir={direction}>
+      
+      {/* Top Purple Bar (Sale CustomGroup - Image 2) */}
+      <div className="bg-[#7E22CE] px-5 py-3 text-white flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center">
+            <ShoppingCart size={16} />
+          </div>
+          <span className="font-black text-[14px]">
+            {isAr ? 'بيع وتعيين مقعد لمستفيد (Sale CustomGroup)' : 'Sale CustomGroup'}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center cursor-pointer transition-colors"
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      {/* Body Content (Image 2) */}
+      <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+        
+        {/* Section 1: Customer Profile (Image 2) */}
+        <div className="border border-slate-200 rounded-2xl p-4 bg-[#FAFAFA] space-y-3.5">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <span className="text-[12.5px] font-black text-slate-800">
+              {isAr ? 'ملف العميل والمستفيد (Customer Profile)' : 'Customer Profile'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            
+            {/* Box Cash (الصندوق / القاصة) */}
+            <div>
+              <SearchableCombobox
+                label={isAr ? 'الصندوق / القاصة (Box Cash)' : 'Box Cash'}
+                value={cust.boxCash}
+                onChange={(val) => setCust({ ...cust, boxCash: val || '' })}
+                options={cashboxOptions}
+                placeholder={isAr ? 'اختر القاصة...' : 'Select Box Cash...'}
+              />
+            </div>
+
+            {/* User */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                {isAr ? 'المستخدم / المحرر (User)' : 'User'}
+              </label>
+              <input
+                value={currentUserName}
+                readOnly
+                className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-slate-100 text-[12.5px] font-bold text-slate-700 outline-none"
+              />
+            </div>
+
+            {/* Date */}
+            <div>
+              <AccountingDatePicker
+                label={isAr ? 'تاريخ البيع (Date)' : 'Date'}
+                value={cust.date}
+                onChange={(val) => setCust({ ...cust, date: val })}
+                placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
+              />
+            </div>
+
+            {/* Agent */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                {isAr ? 'الوكيل (Agent)' : 'Agent'}
+              </label>
+              <input
+                value={cust.agent || ''}
+                onChange={(e) => setCust({ ...cust, agent: e.target.value })}
+                placeholder={isAr ? 'اسم الوكيل...' : 'Agent name...'}
+                className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+              />
+            </div>
+
+            {/* State: MR / MRS */}
+            <div>
+              <SearchableCombobox
+                label={isAr ? 'اللقب (State)' : 'Title (State)'}
+                value={cust.state}
+                onChange={(val) => setCust({ ...cust, state: val || 'MR' })}
+                options={[
+                  { value: 'MR', label: 'MR (السيد)' },
+                  { value: 'MRS', label: 'MRS (السيدة)' },
+                  { value: 'CHD', label: 'CHD (طفل)' },
+                  { value: 'INF', label: 'INF (رضيع)' },
+                ]}
+                placeholder="MR"
+              />
+            </div>
+
+            {/* Pay Type */}
+            <div>
+              <SearchableCombobox
+                label={isAr ? 'طريقة الدفع (Pay)' : 'Pay Type'}
+                value={cust.payType}
+                onChange={(val) => setCust({ ...cust, payType: (val as 'CASH' | 'CREDIT') || 'CASH' })}
+                options={[
+                  { value: 'CASH', label: isAr ? 'نقدي (Cash)' : 'Cash' },
+                  { value: 'CREDIT', label: isAr ? 'آجل (Debit / Credit)' : 'Debit / Credit' },
+                ]}
+                placeholder="Pay..."
+              />
+            </div>
+
+            {/* Name (Passenger / Customer) */}
+            <div className="sm:col-span-2">
+              <SearchableCombobox
+                label={isAr ? 'اسم المسافر / المستفيد (Name) *' : 'Passenger Name *'}
+                value={cust.name}
+                onChange={(val) => setCust({ ...cust, name: val || '' })}
+                options={customerOptions}
+                placeholder={isAr ? 'اختر العميل أو اكتب اسماً جديداً...' : 'Select or type name...'}
+                allowCustomValue
+              />
+            </div>
+
+            {/* Price Sale */}
+            <div>
+              <label className="text-[11px] font-black text-[#F45A0A] block mb-1">
+                {isAr ? 'سعر البيع (Price) *' : 'Price *'}
+              </label>
+              <input
+                value={cust.sale ? cust.sale.toLocaleString('en-US') : ''}
+                onChange={(e) => setCust({ ...cust, sale: numeric(e.target.value) })}
+                placeholder="0.00"
+                dir="ltr"
+                className="w-full h-[46px] px-3.5 rounded-[11px] border border-orange-300 bg-white text-[13.5px] font-mono font-black text-end text-slate-900 outline-none hover:border-orange-400 focus:border-2 focus:border-[#F45A0A] transition-all"
+              />
+            </div>
+
+            {/* Passport */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                {isAr ? 'رقم الجواز (Passport)' : 'Passport'}
+              </label>
+              <input
+                value={cust.passport || ''}
+                onChange={(e) => setCust({ ...cust, passport: e.target.value })}
+                placeholder="A12345678"
+                dir="ltr"
+                className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+              />
+            </div>
+
+            {/* Voucher */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                {isAr ? 'الفاوتشر (Voucher)' : 'Voucher'}
+              </label>
+              <input
+                value={cust.voucher || ''}
+                onChange={(e) => setCust({ ...cust, voucher: e.target.value })}
+                placeholder="VCH-1002"
+                dir="ltr"
+                className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+              />
+            </div>
+
+            {/* F.Code */}
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                {isAr ? 'كود الطيران (F.Code)' : 'F.Code'}
+              </label>
+              <input
+                value={cust.fCode || ''}
+                onChange={(e) => setCust({ ...cust, fCode: e.target.value })}
+                placeholder="IA-702"
+                dir="ltr"
+                className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+              />
+            </div>
+
+            {/* Note */}
+            <div className="sm:col-span-3">
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                {isAr ? 'ملاحظات (Note)' : 'Note'}
+              </label>
+              <input
+                value={cust.notes || ''}
+                onChange={(e) => setCust({ ...cust, notes: e.target.value })}
+                placeholder={isAr ? 'أي شروط أو تفاصيل إضافية للبيع...' : 'Additional notes...'}
+                className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
+              />
+            </div>
+
+          </div>
+        </div>
+
+        {/* Section 2: Group Information (Image 2 Bottom Box) */}
+        <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-2">
+          <span className="text-[11.5px] font-black text-slate-700 block">
+            {isAr ? 'معلومات الكروب المعتمدة (Group Information)' : 'Group Information'}
+          </span>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div>
+              <span className="text-slate-500 font-bold block text-[11px]">Group Name :</span>
+              <span className="font-black text-rose-700 font-mono text-[13px] block">
+                {groupDesign.groupName || '31521'}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-slate-500 font-bold block text-[11px]">System Price :</span>
+              <span className="font-black text-rose-700 font-mono text-[13px] block">
+                {targetTpl ? `${targetTpl.name} (${money(targetTpl.seatPrice, targetTpl.currency)})` : '321023'}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-slate-500 font-bold block text-[11px]">User Create :</span>
+              <span className="font-black text-emerald-700 font-mono text-[12.5px] block">
+                {currentUserName}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-slate-500 font-bold block text-[11px]">Date Create :</span>
+              <span className="font-black text-slate-700 font-mono text-[12px] block">
+                {groupDesign.buyDate || new Date().toISOString().slice(0, 10)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Action Footer */}
+      <div className="bg-slate-50 px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-[38px] px-4 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+        >
+          {isAr ? 'إلغاء' : 'Cancel'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSave(cust)}
+          className="h-[38px] px-5 rounded-xl bg-[#7E22CE] hover:bg-[#6B21A8] text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+        >
+          <Save size={15} />
+          <span>{isAr ? 'حفظ وتعيين المقعد' : 'Save Seat Sale'}</span>
+        </button>
       </div>
 
     </div>

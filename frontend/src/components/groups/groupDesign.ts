@@ -31,10 +31,16 @@ export interface GroupComponent {
   supplierName: string;
   /** معرّف حساب المورد في الشجرة، إن اختير من البحث. */
   supplierAccountId?: string;
+  /** تاريخ الإصدار أو الحجز للمكوّن. */
+  issueDate?: string;
   /** الكلفة كما أُدخلت. */
   cost: number;
+  /** عملة كلفة المكوّن */
+  currency?: 'IQD' | 'USD';
   /** هل الكلفة للمجموعة كلّها أم للمقعد الواحد؟ */
   perSeat: boolean;
+  /** تفعيل أو تعطيل المكوّن */
+  active?: boolean;
   note?: string;
 }
 
@@ -50,13 +56,18 @@ export interface GroupTemplate {
 export interface GroupCustomer {
   id: string;
   name: string;
+  passport?: string;
+  voucher?: string;
+  fCode?: string;
+  state?: string; // MR / MRS
   agent?: string;
   templateId?: string;
   templateName?: string;
   /** نقدي أو آجل. */
   payType: 'CASH' | 'CREDIT';
   sale: number;
-  cashbox?: string;
+  boxCash?: string;
+  date?: string;
   notes?: string;
 }
 
