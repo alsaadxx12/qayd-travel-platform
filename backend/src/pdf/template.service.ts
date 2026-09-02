@@ -12,7 +12,8 @@ const LABELS: Record<string, Record<string, string>> = {
     periodFrom: 'Period',
     periodTo: 'to',
     noCol: 'No.',
-    dateDoc: 'Date',
+    // رقم المستند يُعرض تحت تاريخه، فالعمود لهما معاً.
+    dateDoc: 'Date / Doc',
     description: 'Details',
     docTypeCol: 'Type',
     debit: 'Debit',
@@ -39,7 +40,8 @@ const LABELS: Record<string, Record<string, string>> = {
     periodFrom: 'Period',
     periodTo: 'to',
     noCol: 'No.',
-    dateDoc: 'Date',
+    // رقم المستند يُعرض تحت تاريخه، فالعمود لهما معاً.
+    dateDoc: 'Date / Doc',
     description: 'Details',
     docTypeCol: 'Type',
     debit: 'Debit',
@@ -65,8 +67,11 @@ export interface StatementRow {
   rowNumber: number;
   date: string;
   docRef?: string;
+  /** رقم الفاتورة أو السند — له عمود مستقل، فلا يُكرَّر داخل نص البيان. */
+  docNumber?: string;
   pnr?: string;
   route?: string;
+  airline?: string;
   routeFrom?: string;
   routeTo?: string;
   hasPnr?: boolean;
@@ -88,6 +93,15 @@ export interface StatementTotals {
 
 export interface TemplateSettings {
   templatePreset?: string;  // classic | modern | compact
+  /** هوامش الصفحة بالملّيمتر — لكل تصميم قيمه الافتراضية إن تُركت فارغة. */
+  pageMarginX?: number;
+  pageMarginTop?: number;
+  pageMarginBottom?: number;
+  /** A4 | LETTER، وطولي أو عرضي. */
+  pageSize?: string;
+  pageOrientation?: string;
+  /** كثافة صفوف الجدول: compact | normal | relaxed. */
+  tableDensity?: string;
   logoUrl?: string;
   logoSize?: number;
   logoBorderRadius?: number;
@@ -356,6 +370,9 @@ export class TemplateService {
 
       printDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' - ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
 
+      // Page geometry
+      ...this.pageGeometry(settings, preset),
+
       // Data
       rows: (data.rows || []).map(row => {
         const paxList = row.passengers || [];
@@ -366,10 +383,13 @@ export class TemplateService {
         const paxSummaryLine = paxList.length ? `${adtCount} ADT ${chdCount} CHD ${infCount} INF: ${paxNamesStr}` : '';
         const isPrevRow = (row.docRef && (row.docRef.includes('PREV') || row.docRef.includes('OPEN'))) || (row.statement && row.statement.toLowerCase().includes('previous balance'));
         const docType = isPrevRow ? '' : ((row as any).type || (row as any).docType || 'DT-ISSUE');
+        // الصفوف القديمة لا ترسل docNumber، فيقوم المرجع مقامه بدل خانة فارغة.
+        const docNumber = isPrevRow ? '' : (row.docNumber || row.docRef || '');
 
         return {
           ...row,
           docType,
+          docNumber,
           paxSummaryLine,
           isPrevRow,
           hasPnr: !!(row.pnr && row.pnr !== '-') || !!(row.route && row.route !== '-') || !!(paxList.length > 0),
@@ -395,5 +415,54 @@ export class TemplateService {
     }
 
     return template(context);
+  }
+
+  /**
+   * هندسة الصفحة: الحجم والاتجاه والهوامش وكثافة الجدول.
+   *
+   * الهوامش كانت مثبّتة في أنماط القوالب، ولكل تصميم قيمه — عشرة ملّيمترات في
+   * الكلاسيكي وثمانية في المتراص. فتُقرأ الآن من الإعدادات، وحين لا يضبطها أحد
+   * يبقى كل تصميم على ما كان عليه بالضبط، فلا يتغيّر كشفُ من لم يطلب تغييراً.
+   */
+  private pageGeometry(settings: TemplateSettings, preset: string) {
+    const compact = preset === 'compact';
+
+    const mm = (value: unknown, fallback: number) => {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(40, Math.max(0, n));
+    };
+
+    const px = (value: unknown, fallback: number) => {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return fallback;
+      return Math.min(24, Math.max(1, n));
+    };
+
+    const density = String(settings.tableDensity || 'normal').toLowerCase();
+    const defaultPad = compact ? { y: 6.5, x: 6 } : { y: 8, x: 7 };
+    const pad =
+      density === 'compact'
+        ? { y: 4, x: 4 }
+        : density === 'relaxed'
+        ? { y: 12, x: 9 }
+        : defaultPad;
+
+    const landscape = String(settings.pageOrientation || 'portrait').toLowerCase() === 'landscape';
+    const letter = String(settings.pageSize || 'A4').toUpperCase() === 'LETTER';
+    const base = letter ? { w: 216, h: 279 } : { w: 210, h: 297 };
+    const width = landscape ? base.h : base.w;
+    const height = landscape ? base.w : base.h;
+
+    return {
+      pageSizeCss: `${width}mm ${height}mm`,
+      pageWidthMm: width,
+      pageHeightMm: height,
+      pageMarginX: mm(settings.pageMarginX, compact ? 8 : 10),
+      pageMarginTop: mm(settings.pageMarginTop, compact ? 8 : 10),
+      pageMarginBottom: mm(settings.pageMarginBottom, compact ? 4 : 5),
+      cellPaddingY: px(pad.y, defaultPad.y),
+      cellPaddingX: px(pad.x, defaultPad.x),
+    };
   }
 }

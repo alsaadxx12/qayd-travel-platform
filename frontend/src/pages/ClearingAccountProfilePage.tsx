@@ -54,6 +54,8 @@ import {
   IconCalendar,
   IconSearch,
   IconRotate,
+  IconCurrencyDollar,
+  IconBuildingBank,
 } from '@tabler/icons-react';
 import { clearingsApi, type ClearingAccountItem, type StatementRow, DEFAULT_RATES } from '../api/clearings';
 import { accountsApi } from '../api/accounts';
@@ -790,39 +792,44 @@ export const ClearingAccountProfilePage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-3 w-full select-none text-slate-800 font-['IBM_Plex_Sans_Arabic',sans-serif]">
-      {/* ═══════════════ 1. رأس الصفحة والبروفايل وأزرار الحركات ═══════════════ */}
-      <div className="bg-white border border-slate-200 rounded-xl px-5 py-2.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+    <div
+      className="w-full max-w-[1760px] mx-auto px-4 sm:px-6 py-4 sm:py-5 select-none font-sans space-y-4 bg-[#F7F8FA] min-h-screen text-right"
+      dir="rtl"
+      style={{ fontFamily: "'IBM Plex Sans Arabic', system-ui, sans-serif" }}
+    >
+      {/* ══════════════════════════════════════════════════════════════
+          1. UNIFIED PAGE HEADER (86px Height)
+         ══════════════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between flex-wrap gap-4 bg-white rounded-[14px] border border-[#E5E7EB] px-6 py-4 min-h-[86px] shadow-2xs">
+        <div className="flex items-center gap-3.5">
           <Tooltip label="العودة إلى الدليل الرئيسي" withArrow>
-            <ActionIcon
-              size="md"
-              variant="default"
+            <button
+              type="button"
               onClick={() => navigate('/external-clearings')}
-              className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700"
+              className="w-[42px] h-[42px] rounded-[10px] bg-white border border-[#E5E7EB] hover:bg-slate-50 text-slate-700 flex items-center justify-center cursor-pointer active:scale-98 shadow-2xs transition-all"
             >
-              <IconArrowLeft size={16} />
-            </ActionIcon>
+              <IconArrowLeft size={18} />
+            </button>
           </Tooltip>
 
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-black text-slate-900 leading-tight">{account.nameAr}</h1>
-              <Badge color="orange" variant="light" size="sm" className="font-mono font-bold">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="font-bold text-[20px] text-[#111827] leading-tight">{account.nameAr}</h1>
+              <span className="font-mono font-bold text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-[6px] border border-slate-200">
                 {account.code}
-              </Badge>
+              </span>
               {account.category === 'BOURSE' ? (
-                <Badge size="xs" color="blue" variant="light" className="font-bold">
+                <span className="bg-blue-50 text-blue-700 border border-blue-200/80 rounded-[6px] px-2 py-0.5 font-bold text-[11px]">
                   حساب بورصة
-                </Badge>
+                </span>
               ) : account.category === 'OFFICE' ? (
-                <Badge size="xs" color="grape" variant="light" className="font-bold">
+                <span className="bg-purple-50 text-purple-700 border border-purple-200/80 rounded-[6px] px-2 py-0.5 font-bold text-[11px]">
                   مكتب وسيط
-                </Badge>
+                </span>
               ) : (
-                <Badge size="xs" color="gray" variant="light" className="font-bold">
+                <span className="bg-slate-100 text-slate-700 border border-slate-200/80 rounded-[6px] px-2 py-0.5 font-bold text-[11px]">
                   حساب عميل
-                </Badge>
+                </span>
               )}
             </div>
 
@@ -830,14 +837,14 @@ export const ClearingAccountProfilePage: React.FC = () => {
             <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-1">
               {account.contactPerson && (
                 <span className="flex items-center gap-1">
-                  <IconUser size={12} className="text-slate-400" />
+                  <IconUser size={13} className="text-slate-400" />
                   <span>{account.contactPerson}</span>
                 </span>
               )}
               {account.phone && (
-                <span className="flex items-center gap-1 font-mono text-[11px]">
-                  <IconPhone size={12} className="text-slate-400" />
-                  <span>{account.phone}</span>
+                <span className="flex items-center gap-1 font-mono text-[11px] font-bold text-slate-600">
+                  <IconPhone size={13} className="text-slate-400" />
+                  <span dir="ltr">{account.phone}</span>
                 </span>
               )}
               {account.notes && <span className="text-slate-400">({account.notes})</span>}
@@ -845,22 +852,11 @@ export const ClearingAccountProfilePage: React.FC = () => {
           </div>
         </div>
 
-        {/* أزرار الحركات السريعة (قبض / دفع / صرافة / قيد / تعديل) */}
-        <div className="flex items-center gap-2">
-          <Button
-            size="xs"
-            variant="default"
-            onClick={loadAccountData}
-            leftSection={<IconRefresh size={14} className={loading ? 'animate-spin' : ''} />}
-            className="font-bold bg-white hover:bg-slate-50 border-slate-300"
-          >
-            تحديث
-          </Button>
-
+        {/* أزرار الحركات السريعة (قبض / دفع / صرافة / قيد / تحديث) */}
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* زر سند قبض */}
-          <Button
-            size="xs"
-            color="teal"
+          <button
+            type="button"
             onClick={() => {
               setVoucherType('RECEIPT');
               setVoucherCurrency(isClientAccount ? 'IQD' : 'TOMAN');
@@ -869,16 +865,15 @@ export const ClearingAccountProfilePage: React.FC = () => {
               setVoucherNotes('');
               setVoucherModalOpen(true);
             }}
-            leftSection={<IconArrowDownLeft size={14} />}
-            className="font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+            className="h-[44px] px-4 rounded-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-98"
           >
-            + سند قبض
-          </Button>
+            <IconArrowDownLeft size={16} strokeWidth={2.4} />
+            <span>+ سند قبض</span>
+          </button>
 
           {/* زر سند دفع */}
-          <Button
-            size="xs"
-            color="red"
+          <button
+            type="button"
             onClick={() => {
               setVoucherType('PAYMENT');
               setVoucherCurrency(isClientAccount ? 'IQD' : 'TOMAN');
@@ -887,17 +882,15 @@ export const ClearingAccountProfilePage: React.FC = () => {
               setVoucherNotes('');
               setVoucherModalOpen(true);
             }}
-            leftSection={<IconArrowUpRight size={14} />}
-            className="font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+            className="h-[44px] px-4 rounded-[10px] bg-rose-600 hover:bg-rose-700 text-white font-bold text-[13px] shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-98"
           >
-            + سند دفع
-          </Button>
+            <IconArrowUpRight size={16} strokeWidth={2.4} />
+            <span>+ سند دفع</span>
+          </button>
 
           {/* زر حركة صرافة ومبادلة عملات */}
-          <Button
-            size="xs"
-            color="orange"
-            variant="light"
+          <button
+            type="button"
             onClick={() => {
               setFromCurrency(isClientAccount ? 'IQD' : 'TOMAN');
               setToCurrency('USD');
@@ -906,17 +899,15 @@ export const ClearingAccountProfilePage: React.FC = () => {
               setExchangeNotes('');
               setExchangeModalOpen(true);
             }}
-            leftSection={<IconArrowsExchange size={14} />}
-            className="font-bold bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300"
+            className="h-[44px] px-4 rounded-[10px] bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[13px] flex items-center gap-1.5 transition-all cursor-pointer active:scale-98"
           >
-            + صرافة عملات
-          </Button>
+            <IconArrowsExchange size={16} />
+            <span>+ صرافة عملات</span>
+          </button>
 
           {/* زر قيد تصفية ومقاصة */}
-          <Button
-            size="xs"
-            color="gray"
-            variant="default"
+          <button
+            type="button"
             onClick={() => {
               setVoucherType('JOURNAL');
               setVoucherCurrency(isClientAccount ? 'IQD' : 'TOMAN');
@@ -925,85 +916,111 @@ export const ClearingAccountProfilePage: React.FC = () => {
               setVoucherNotes('');
               setVoucherModalOpen(true);
             }}
-            leftSection={<IconArrowsLeftRight size={14} />}
-            className="font-bold bg-slate-100 hover:bg-slate-200 text-slate-800"
+            className="h-[44px] px-4 rounded-[10px] bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[13px] flex items-center gap-1.5 transition-all cursor-pointer active:scale-98"
           >
-            + قيد مقاصة
-          </Button>
+            <IconArrowsLeftRight size={16} />
+            <span>+ قيد مقاصة</span>
+          </button>
+
+          {/* زر تحديث */}
+          <button
+            type="button"
+            onClick={loadAccountData}
+            disabled={loading}
+            className="h-[44px] px-4 rounded-[10px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-bold text-[13px] flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            title="تحديث البيانات"
+          >
+            <IconRefresh size={16} className={loading ? 'animate-spin text-[#F45A0A]' : 'text-[#64748B]'} />
+            <span>تحديث</span>
+          </button>
         </div>
       </div>
 
-      {/* ═══════════════ 2. بطاقات أرصدة العملات الثلاث والمعادل بالدولار لهذا الحساب ═══════════════ */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${isClientAccount ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
+      {/* ══════════════════════════════════════════════════════════════
+          2. FOUR FINANCIAL KPI CARDS (Height 120px, Unified Design)
+         ══════════════════════════════════════════════════════════════ */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3.5 ${isClientAccount ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
         {/* 1. إجمالي التقييم الشامل بالدولار — يُخفى لحساب العميل */}
         {!isClientAccount && (
-        <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
-            <span>إجمالي الرصيد المعادل بالدولار</span>
-            <Badge size="xs" color="orange" variant="light" className="font-mono font-bold">
-              Consolidated
-            </Badge>
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-bold text-slate-800">إجمالي الرصيد المعادل</span>
+              <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <IconScale size={20} stroke={1.85} />
+              </div>
+            </div>
+            <div>
+              <div className="text-[22px] font-black text-slate-900 font-mono tracking-tight tabular-nums" dir="ltr">
+                ${account.totalConsolidatedUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div className="text-[11px] font-semibold text-[#64748B] mt-0.5">التقييم الشامل لأرصدة العملات الثلاث</div>
+            </div>
           </div>
-          <div className="text-xl font-black text-slate-900 font-mono tracking-tight">
-            ${account.totalConsolidatedUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div className="text-[10px] font-medium text-slate-400 mt-1">
-            التقييم الشامل لأرصدة العملات الثلاث
-          </div>
-        </Paper>
         )}
 
         {/* 2. رصيد الدولار */}
-        <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
-            <span>رصيد الدولار ($ USD)</span>
-            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">USD</span>
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] font-bold text-slate-800">رصيد الدولار (USD)</span>
+            <div className="w-[38px] h-[38px] rounded-[10px] bg-emerald-50 text-[#078B61] flex items-center justify-center shrink-0 border border-emerald-100">
+              <IconCurrencyDollar size={20} stroke={2} />
+            </div>
           </div>
-          <div className="text-xl font-black text-emerald-900 font-mono">
-            ${account.balanceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div>
+            <div className="text-[22px] font-black text-[#078B61] font-mono tracking-tight tabular-nums" dir="ltr">
+              ${account.balanceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="text-[11px] font-semibold text-[#64748B] mt-0.5">الرصيد المباشر بالدولار الأمريكي</div>
           </div>
-          <div className="text-[10px] font-medium text-slate-400 mt-1">
-            الرصيد المباشر بالدولار الأمريكي
-          </div>
-        </Paper>
+        </div>
 
         {/* 3. رصيد الدينار العراقي */}
-        <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
-            <span>رصيد الدينار (IQD)</span>
-            <span className="text-[10px] font-mono font-bold text-slate-500">
-              ≈ ${(account.balanceIQD / (iqdRate || 1530)).toLocaleString('en-US', { maximumFractionDigits: 0 })}
-            </span>
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] font-bold text-slate-800">رصيد الدينار (IQD)</span>
+            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+              <IconCoins size={20} stroke={1.85} />
+            </div>
           </div>
-          <div className="text-xl font-black text-slate-900 font-mono">
-            {account.balanceIQD.toLocaleString()} <span className="text-xs font-sans font-bold text-slate-500">د.ع</span>
+          <div>
+            <div className="text-[21px] font-black text-slate-900 font-mono tabular-nums">
+              {account.balanceIQD.toLocaleString()} <span className="text-xs font-sans font-bold text-slate-400">د.ع</span>
+            </div>
+            <div className="text-[11px] font-semibold text-[#64748B] flex items-center justify-between mt-0.5">
+              <span>سعر الصرف: {iqdRate.toLocaleString()}</span>
+              <span className="font-mono text-[10px] text-slate-400" dir="ltr">
+                ≈ ${(account.balanceIQD / (iqdRate || 1530)).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              </span>
+            </div>
           </div>
-          <div className="text-[10px] font-medium text-slate-400 mt-1">
-            سعر الصرف المرجعي: {iqdRate.toLocaleString()} د.ع/$
-          </div>
-        </Paper>
+        </div>
 
         {/* 4. رصيد التومان — يُخفى لحساب العميل (لا يتعامل بالتومان) */}
         {!isClientAccount && (
-        <Paper p="sm" radius="md" withBorder className="bg-white border-slate-200 shadow-2xs">
-          <div className="flex items-center justify-between text-xs text-slate-600 font-bold mb-1">
-            <span>رصيد التومان (TOMAN)</span>
-            <span className="text-[10px] font-mono font-bold text-slate-500">
-              ≈ ${(account.balanceTOMAN / (tomanRate || 92000)).toLocaleString('en-US', { maximumFractionDigits: 0 })}
-            </span>
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-[13px] font-bold text-slate-800">رصيد التومان (TOMAN)</span>
+              <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <IconBuildingBank size={20} stroke={1.85} />
+              </div>
+            </div>
+            <div>
+              <div className="text-[21px] font-black text-slate-900 font-mono tabular-nums">
+                {account.balanceTOMAN.toLocaleString()} <span className="text-xs font-sans font-bold text-slate-400">تومان</span>
+              </div>
+              <div className="text-[11px] font-semibold text-[#64748B] flex items-center justify-between mt-0.5">
+                <span>سعر الصرف: {tomanRate.toLocaleString()}</span>
+                <span className="font-mono text-[10px] text-slate-400" dir="ltr">
+                  ≈ ${(account.balanceTOMAN / (tomanRate || 92000)).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="text-xl font-black text-slate-900 font-mono">
-            {account.balanceTOMAN.toLocaleString()} <span className="text-xs font-sans font-bold text-slate-500">تومان</span>
-          </div>
-          <div className="text-[10px] font-medium text-slate-400 mt-1">
-            سعر الصرف المرجعي: {tomanRate.toLocaleString()} تومان/$
-          </div>
-        </Paper>
         )}
       </div>
 
       {/* ═══════════════ 3. كشف الحساب وسجل الحركات المحاسبية مع الفلترة المتقدمة ═══════════════ */}
-      <Paper radius="lg" withBorder className="bg-white border-slate-200 shadow-2xs overflow-hidden p-3 space-y-2.5">
+      <div className="bg-white rounded-[14px] border border-[#E5E7EB] shadow-2xs overflow-hidden p-4 space-y-3">
         {/* ─── شريط الفلترة والبحث المتقدم الذكي ─── */}
         <div className="bg-slate-50/80 border border-slate-200 rounded-lg p-2.5 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1421,7 +1438,7 @@ export const ClearingAccountProfilePage: React.FC = () => {
             </div>
           </div>
         )}
-      </Paper>
+      </div>
 
       {/* ═══════════════ MODAL 1: إضافة سند قبض / دفع لهذا المكتب ═══════════════ */}
       <Modal

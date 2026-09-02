@@ -90,8 +90,25 @@ export class CashboxesBanksService {
     return balances;
   }
 
+  /**
+   * الصناديق والبنوك وطرق الدفع: ما هو مسجَّل، لا ما يشبه الاسم.
+   *
+   * كانت هذه الدالة تجمع الحسابات بتخمين البادئات والأسماء — «كل ما يبدأ بـ2614»
+   * و«كل اسم فيه ماستر أو كاش أو صندوق» — فظهرت في الصفحة 411 بطاقة، منها 363
+   * حساب مجهِّز (2614 = مجهزون قطاع خاص) لا علاقة لها ببطاقات الدفع، وعشرات
+   * حسابات عملاء تنتهي أسماؤها بكلمة «كاش».
+   *
+   * الآن لا تُعرض إلا الأشياء المسجَّلة صراحةً:
+   *   • صفوف جدولَي Cashbox وBank،
+   *   • الحسابات المصنَّفة CASH أو BANK في شجرة الحسابات،
+   *   • والحسابات المرتبطة بطريقة دفع مفعّلة في إعدادات «ربط طرق الدفع بالصناديق».
+   *
+   * فبطاقة «ماستر كارد وكيل» تظهر لأنها طريقة دفع معرَّفة، وأخواتها الستّ اللواتي
+   * يحملن كلمة «ماستر» في أسمائهنّ ولم يُعرَّفن لا تظهرن — وهذا هو الفرق بين
+   * سجلٍّ محاسبي وبحثٍ بالاسم.
+   */
   async getSummary(companyId: string) {
-    const [cashboxes, banks, cashAccounts, bankAccounts] = await Promise.all([
+    const [cashboxes, banks, categorised, mappingTemplate] = await Promise.all([
       this.prisma.cashbox.findMany({
         where: { companyId },
         include: { account: true },
@@ -105,66 +122,75 @@ export class CashboxesBanksService {
       this.prisma.account.findMany({
         where: {
           companyId,
-          AND: [
-            { isParent: false },
-            {
-              OR: [
-                { category: AccountCategory.CASH },
-                { code: { startsWith: '1341' } },
-                { code: { startsWith: '1343' } },
-                { code: { startsWith: '134213' } },
-                { code: { startsWith: '232146' } },
-                { code: { startsWith: '1111' } },
-                { code: { startsWith: '181' } },
-                { code: { startsWith: '183' } },
-              ],
-            },
-          ],
+          isParent: false,
+          category: { in: [AccountCategory.CASH, AccountCategory.BANK] },
         },
         orderBy: { code: 'asc' },
       }),
-      this.prisma.account.findMany({
-        where: {
-          companyId,
-          AND: [
-            { isParent: false },
-            {
-              OR: [
-                { category: AccountCategory.BANK },
-                { code: { startsWith: '1342' } },
-                { code: { startsWith: '1343' } },
-                { code: { startsWith: '232146' } },
-                { code: { startsWith: '1112' } },
-                { code: { startsWith: '182' } },
-              ],
-            },
-          ],
-        },
-        orderBy: { code: 'asc' },
+      this.prisma.printTemplate.findFirst({
+        where: { companyId, docType: 'payment_methods_mapping' },
       }),
     ]);
 
-    const allAccountIds = Array.from(new Set([
-      ...cashboxes.map(c => c.accountId || c.account?.id).filter(Boolean),
-      ...banks.map(b => b.accountId || b.account?.id).filter(Boolean),
-      ...cashAccounts.map(a => a.id),
-      ...bankAccounts.map(a => a.id),
-    ])) as string[];
+    /*
+     * حساب التبويب لا يُعرض بطاقةً؛ شجرةُ الحسابات نفسها تسمّيه «حساب أب» ولا
+     * تُرحّل عليه، فتتبعها هذه الصفحة بالراية ذاتها كي لا تختلف الشاشتان.
+     */
+    const leafAccounts = categorised;
+
+    // طرق الدفع المعرَّفة والمفعّلة وحدها، وما ارتبط منها بحسابٍ حقيقي.
+    const methodTypeByAccount = new Map<string, 'MASTER' | 'CASHBOX' | 'BANK'>();
+    try {
+      const raw = (mappingTemplate as any)?.config;
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      const mappings: any[] = Array.isArray(parsed?.mappings) ? parsed.mappings : [];
+      for (const m of mappings) {
+        if (m?.isActive === false) continue;
+        const target = String(m?.targetAccountId || '').trim();
+        // القيم الرمزية مثل EMPLOYEE_ASSIGNED ليست حساباً، فلا بطاقة لها.
+        if (!target || !/^[0-9a-f-]{20,}$/i.test(target)) continue;
+        const type = String(m?.type || '').toUpperCase();
+        methodTypeByAccount.set(
+          target,
+          type === 'BANK' ? 'BANK' : type === 'CASH' ? 'CASHBOX' : 'MASTER',
+        );
+      }
+    } catch {
+      /* إعدادٌ تالف لا يُسقط الصفحة: تُعرض الصناديق المصنَّفة وحدها */
+    }
+
+    const methodAccounts = methodTypeByAccount.size
+      ? await this.prisma.account.findMany({
+          where: { companyId, id: { in: Array.from(methodTypeByAccount.keys()) } },
+          orderBy: { code: 'asc' },
+        })
+      : [];
+
+    const allAccountIds = Array.from(
+      new Set(
+        [
+          ...cashboxes.map((c) => c.accountId || c.account?.id),
+          ...banks.map((b) => b.accountId || b.account?.id),
+          ...leafAccounts.map((a) => a.id),
+          ...methodAccounts.map((a) => a.id),
+        ].filter(Boolean),
+      ),
+    ) as string[];
 
     const balances = await this.getAccountBalances(companyId, allAccountIds);
-    const cashAccountCodes = new Set(cashAccounts.map(a => a.code));
     const map = new Map<string, any>();
 
-    const buildItem = (entity: any, account: any, fallbackType: 'CASHBOX' | 'BANK') => {
+    const buildItem = (
+      entity: any,
+      account: any,
+      itemType: 'CASHBOX' | 'BANK' | 'MASTER',
+      source: string,
+    ) => {
       const accId = entity.accountId || account?.id;
       const code = entity.code || account?.code;
       const balance = accId ? balances.get(accId) : undefined;
       const netIQD = (balance?.debitIQD || 0) - (balance?.creditIQD || 0);
       const netUSD = (balance?.debitUSD || 0) - (balance?.creditUSD || 0);
-      const itemType =
-        code?.startsWith('1343') || code?.startsWith('232146') || code?.startsWith('183') || (entity.nameAr || account?.nameAr || '').includes('ماستر')
-          ? 'MASTER'
-          : fallbackType;
 
       return {
         id: entity.id || accId,
@@ -176,6 +202,8 @@ export class CashboxesBanksService {
         iban: entity.iban,
         accountId: accId,
         itemType,
+        /** من أين جاءت البطاقة: سجل الصناديق، أو تصنيف الشجرة، أو طريقة دفع معرَّفة. */
+        source,
         balance: netIQD !== 0 ? netIQD : netUSD,
         balanceIQD: netIQD,
         balanceUSD: netUSD,
@@ -187,20 +215,25 @@ export class CashboxesBanksService {
 
     for (const c of cashboxes) {
       const key = c.account?.code || c.code;
-      map.set(key, buildItem(c, c.account, 'CASHBOX'));
+      if (key) map.set(key, buildItem(c, c.account, 'CASHBOX', 'CASHBOX_REGISTRY'));
     }
 
     for (const b of banks) {
       const key = b.account?.code || b.code;
-      if (!map.has(key)) {
-        map.set(key, buildItem(b, b.account, 'BANK'));
-      }
+      if (key && !map.has(key)) map.set(key, buildItem(b, b.account, 'BANK', 'BANK_REGISTRY'));
     }
 
-    for (const a of [...cashAccounts, ...bankAccounts]) {
-      if (!map.has(a.code)) {
-        map.set(a.code, buildItem(a, a, cashAccountCodes.has(a.code) ? 'CASHBOX' : 'BANK'));
-      }
+    for (const a of leafAccounts) {
+      if (map.has(a.code)) continue;
+      map.set(
+        a.code,
+        buildItem(a, a, a.category === AccountCategory.BANK ? 'BANK' : 'CASHBOX', 'ACCOUNT_CATEGORY'),
+      );
+    }
+
+    for (const a of methodAccounts) {
+      if (map.has(a.code)) continue;
+      map.set(a.code, buildItem(a, a, methodTypeByAccount.get(a.id) || 'MASTER', 'PAYMENT_METHOD'));
     }
 
     return Array.from(map.values());
@@ -225,9 +258,15 @@ export class CashboxesBanksService {
               { code: { startsWith: '1343' } },
               { code: { startsWith: '134213' } },
               { code: { startsWith: '232146' } },
+              { code: { startsWith: '2614' } },
               { code: { startsWith: '1111' } },
               { code: { startsWith: '181' } },
               { code: { startsWith: '183' } },
+              { nameAr: { contains: 'ماستر' } },
+              { nameAr: { contains: 'Master' } },
+              { nameAr: { contains: 'صندوق' } },
+              { nameAr: { contains: 'قاصة' } },
+              { nameAr: { contains: 'كاش' } },
             ],
           },
         ],
@@ -308,8 +347,12 @@ export class CashboxesBanksService {
               { code: { startsWith: '1342' } },
               { code: { startsWith: '1343' } },
               { code: { startsWith: '232146' } },
+              { code: { startsWith: '2614' } },
               { code: { startsWith: '1112' } },
               { code: { startsWith: '182' } },
+              { nameAr: { contains: 'مصرف' } },
+              { nameAr: { contains: 'بنك' } },
+              { nameAr: { contains: 'Bank' } },
             ],
           },
         ],

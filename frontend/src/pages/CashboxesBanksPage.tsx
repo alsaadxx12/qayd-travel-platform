@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { apiRequest } from '../api/client';
+import { fetchPrintTemplate } from '../api/printTemplates';
 import { AccountingGrid, AccountingColumnDef } from '../components/common/AccountingGrid';
 import { Button, Badge, SegmentedControl, Tooltip } from '@mantine/core';
 import {
@@ -78,35 +79,86 @@ export const CashboxesBanksPage: React.FC = () => {
 
     try {
       const noCacheOpt = forceRefresh ? { noCache: true } : { ttl: 5000 };
-      const summaryData = await apiRequest('/api/cashboxes-banks/summary', noCacheOpt).catch(() => []);
+      const [coreRes, summaryRes] = await Promise.allSettled([
+        fetchPrintTemplate('core_accounts_mapping'),
+        apiRequest('/api/cashboxes-banks/summary', noCacheOpt),
+      ]);
+
+      const coreConfig = coreRes.status === 'fulfilled' && coreRes.value ? coreRes.value.config : null;
+      const configuredMainCashboxId = coreConfig?.mainCashboxId || null;
+
+      let summaryData: any = summaryRes.status === 'fulfilled' ? summaryRes.value : null;
+
+      /*
+       * حين لا يُرجع الملخّص شيئاً فالمعنى أن لا صندوق مسجَّلاً — لا أن نبحث عنه
+       * بالتخمين. المسار الاحتياطي القديم كان يجلب كل حساب يشبه اسمه صندوقاً،
+       * فيعود العطل نفسه من بابٍ آخر. فلم يبقَ إلا الحسابات المصنَّفة نقديةً.
+       */
+      if (!summaryData || !Array.isArray(summaryData) || summaryData.length === 0) {
+        const cashAccounts = await apiRequest('/api/accounts?category=CASH', noCacheOpt).catch(() => []);
+        if (Array.isArray(cashAccounts)) {
+          summaryData = cashAccounts;
+        }
+      }
 
       const formatItem = (item: any) => {
         const code = String(item.code || item.account?.code || '');
         const name = item.nameAr || item.account?.nameAr || '';
+        const accId = item.id || item.accountId || item.account?.id;
+        /*
+         * التصنيف يأتي من الخادم، ولا يُعاد تخمينه هنا.
+         *
+         * كانت الشاشة تعيد تصنيف كل بطاقة ببادئة رقمها أو بكلمةٍ في اسمها، فيصير
+         * كل حساب يبدأ بـ2614 «ماستر كارد» — وهي في الحقيقة حسابات المجهِّزين —
+         * وكل اسم فيه «مصرف» بنكاً. والخادم يعرف مصدر كل بطاقة: سجلّ الصناديق، أو
+         * تصنيف الشجرة، أو طريقة دفع معرَّفة. فيُؤخذ منه.
+         *
+         * ويبقى التخمين ملاذاً أخيراً لمسارٍ احتياطي لا يرسل itemType أصلاً.
+         */
+        const serverType = String(item.itemType || '').toUpperCase();
         const isMaster =
-          code.startsWith('1343') ||
-          code.startsWith('134213') ||
-          code.startsWith('232146') ||
-          code.startsWith('183') ||
-          name.includes('ماستر');
+          serverType === 'MASTER' ||
+          (!serverType &&
+            (code.startsWith('1343') ||
+              code.startsWith('134213') ||
+              name.includes('ماستر') ||
+              name.toLowerCase().includes('master')));
         const isBank =
           !isMaster &&
-          (code.startsWith('1342') ||
-            code.startsWith('182') ||
-            item.category === 'BANK' ||
-            name.includes('مصرف') ||
-            name.includes('بنك'));
+          (serverType === 'BANK' ||
+            (!serverType &&
+              (code.startsWith('1342') ||
+                code.startsWith('182') ||
+                code.startsWith('1112') ||
+                item.category === 'BANK' ||
+                name.includes('مصرف') ||
+                name.includes('بنك') ||
+                name.toLowerCase().includes('bank'))));
         const itemType = isMaster ? 'MASTER' : isBank ? 'BANK' : 'CASHBOX';
-        const isMain = Boolean(
-          item.isMain ||
-          code === '13411' ||
-          code === '1341101' ||
-          code === '11011' ||
-          code === '18101' ||
-          name.includes('حسابات الشركة') ||
-          name.includes('الرئيسي')
+
+        const isConfiguredMain = Boolean(
+          configuredMainCashboxId &&
+          (accId === configuredMainCashboxId || item.id === configuredMainCashboxId || item.accountId === configuredMainCashboxId || item.account?.id === configuredMainCashboxId)
         );
-        const typeLabel = isMaster ? 'دفع إلكتروني / ماستر' : isBank ? 'حساب مصرفي' : isMain ? 'صندوق رئيسي' : 'صندوق فرعي';
+
+        const isMain = isConfiguredMain || (
+          !configuredMainCashboxId && (
+            item.isMain ||
+            code === '13411' ||
+            code === '1341101' ||
+            code === '11011' ||
+            code === '18101' ||
+            name.includes('حسابات الشركة') ||
+            name.includes('الرئيسي')
+          )
+        );
+        const typeLabel = isMaster
+          ? (item.source === 'PAYMENT_METHOD' ? 'طريقة دفع معرَّفة' : 'دفع إلكتروني / ماستر')
+          : isBank
+          ? 'حساب مصرفي'
+          : isMain
+          ? 'صندوق رئيسي (معتمد)'
+          : 'صندوق فرعي';
 
         return {
           ...item,
@@ -602,61 +654,46 @@ export const CashboxesBanksPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4 w-full text-xs">
-      {/* Top Header & Actions */}
-      <div className="flex flex-wrap justify-between items-center no-print gap-2 py-1">
-        <div>
-          <h1 className="font-black text-base text-slate-900 flex items-center gap-2">
-            <IconCoins size={22} className="text-orange-600" />
-            الصناديق والبنوك والدفع الإلكتروني
-          </h1>
-          <span className="text-[11px] text-slate-500 font-medium block mt-0.5">
-            إدارة النقدية، بطاقات Master والمحافظ الإلكترونية، والحسابات المصرفية (كلا العملتين IQD + USD)
-          </span>
-          <span className="text-[10px] text-slate-400 font-bold block mt-1">
-            {hasLoadedOnce
-              ? `آخر تحديث حقيقي: ${lastUpdatedAt?.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) || '-'}`
-              : 'جاري جلب الأرصدة الحقيقية من القيود المحاسبية...'}
-          </span>
+    <div
+      className="w-full max-w-[1760px] mx-auto px-4 sm:px-6 py-4 sm:py-5 select-none font-sans space-y-4 bg-[#F7F8FA] min-h-screen text-right"
+      dir="rtl"
+      style={{ fontFamily: "'IBM Plex Sans Arabic', system-ui, sans-serif" }}
+    >
+      {/* ══════════════════════════════════════════════════════════════
+          1. UNIFIED PAGE HEADER (86px Height)
+         ══════════════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between flex-wrap gap-4 bg-white rounded-[14px] border border-[#E5E7EB] px-6 py-4 min-h-[86px] shadow-2xs">
+        <div className="flex items-center gap-3.5">
+          <div className="w-[42px] h-[42px] rounded-[12px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shadow-2xs shrink-0">
+            <IconCoins size={22} stroke={2} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="font-bold text-[20px] text-[#111827] leading-tight">
+                الصناديق والبنوك والدفع الإلكتروني
+              </h1>
+            </div>
+            <p className="text-[13px] font-normal text-[#64748B] mt-0.5">
+              إدارة النقدية، بطاقات Master والمحافظ الإلكترونية، والحسابات المصرفية (كلا العملتين IQD + USD)
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {refreshing && (
-            <Badge size="sm" color="blue" variant="light" className="font-extrabold">
-              تحديث آني...
-            </Badge>
-          )}
-
-          <Tooltip label="تحديث الأرصدة الآن من القيود الفعلية">
-            <Button
-              size="xs"
-              variant="default"
-              className="w-8 h-8 p-0 rounded-lg border-slate-200 hover:border-orange-300 hover:text-orange-600 cursor-pointer flex items-center justify-center"
-              onClick={() => fetchCashAndBanks(true)}
-              loading={refreshing}
-            >
-              <IconRefresh size={16} />
-            </Button>
-          </Tooltip>
-
-          {/* Settings Icon Button for Customizing Visuals */}
-          <Tooltip label="تخصيص وتعيين صور وبطاقات الصناديق والماستر">
-            <Button
-              size="xs"
-              variant="default"
-              className="w-8 h-8 p-0 rounded-lg border-slate-200 hover:border-orange-300 hover:text-orange-600 cursor-pointer flex items-center justify-center"
-              onClick={() => {
-                setSelectedAccountForVisual(null);
-                setVisualModalOpen(true);
-              }}
-            >
-              <IconSettings size={16} />
-            </Button>
-          </Tooltip>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* زر إضافة حساب مالي / صندوق / ماستر */}
+          <button
+            type="button"
+            onClick={() => setCreateModalOpen(true)}
+            className="h-[44px] px-5 rounded-[10px] bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-[13.5px] shadow-xs flex items-center gap-2 transition-all cursor-pointer active:scale-98"
+          >
+            <IconPlus size={18} strokeWidth={2.4} />
+            <span>إضافة حساب مالي / صندوق / ماستر</span>
+          </button>
 
           {/* View Mode Toggle */}
           <SegmentedControl
             size="xs"
+            radius="md"
             value={viewMode}
             onChange={(val: any) => setViewMode(val)}
             data={[
@@ -664,115 +701,144 @@ export const CashboxesBanksPage: React.FC = () => {
               { label: 'البطاقات', value: 'CARDS' },
               { label: 'الجدول', value: 'GRID' },
             ]}
+            color="orange"
+            className="bg-slate-100 font-bold"
           />
 
-          <Button
-            size="xs"
-            color="orange"
-            leftSection={<IconPlus size={14} />}
-            onClick={() => setCreateModalOpen(true)}
-          >
-            إضافة حساب مالي / صندوق / ماستر
-          </Button>
+          {/* Settings Icon Button */}
+          <Tooltip label="تخصيص وتعيين صور وبطاقات الصناديق والماستر">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedAccountForVisual(null);
+                setVisualModalOpen(true);
+              }}
+              className="h-[44px] w-[44px] rounded-[10px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] flex items-center justify-center cursor-pointer transition-colors shadow-2xs active:scale-98"
+            >
+              <IconSettings size={18} />
+            </button>
+          </Tooltip>
+
+          {/* Refresh Button */}
+          <Tooltip label="تحديث الأرصدة الآن من القيود الفعلية">
+            <button
+              type="button"
+              onClick={() => fetchCashAndBanks(true)}
+              disabled={refreshing}
+              className="h-[44px] w-[44px] rounded-[10px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] flex items-center justify-center cursor-pointer transition-colors shadow-2xs active:scale-98 disabled:opacity-50"
+            >
+              <IconRefresh size={18} className={refreshing ? 'animate-spin text-[#F45A0A]' : ''} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
-      {/* Category Tabs Switcher */}
-      <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200 max-w-2xl">
-        <button
-          type="button"
-          onClick={() => setCategoryFilter('ALL')}
-          className={`flex items-center justify-center gap-1.5 flex-1 py-1.5 rounded-lg font-extrabold text-xs transition-all cursor-pointer ${
-            categoryFilter === 'ALL'
-              ? 'bg-white text-orange-950 shadow-xs border border-orange-300'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-          }`}
-        >
-          <IconCoins size={14} className="text-orange-600" />
-          <span>الكل ({counts.allCount})</span>
-        </button>
+      {/* ══════════════════════════════════════════════════════════════
+          2. CATEGORY FILTER TABS
+         ══════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-2.5 shadow-2xs flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setCategoryFilter('ALL')}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-[9px] font-bold text-xs transition-all cursor-pointer ${
+              categoryFilter === 'ALL'
+                ? 'bg-[#F45A0A] text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/80'
+            }`}
+          >
+            <IconCoins size={15} />
+            <span>الكل ({counts.allCount})</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setCategoryFilter('CASHBOX')}
-          className={`flex items-center justify-center gap-1.5 flex-1 py-1.5 rounded-lg font-extrabold text-xs transition-all cursor-pointer ${
-            categoryFilter === 'CASHBOX'
-              ? 'bg-white text-orange-950 shadow-xs border border-orange-300'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-          }`}
-        >
-          <IconWallet size={14} className="text-orange-600" />
-          <span>الصناديق والقاصات ({counts.cashCount})</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter('CASHBOX')}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-[9px] font-bold text-xs transition-all cursor-pointer ${
+              categoryFilter === 'CASHBOX'
+                ? 'bg-[#F45A0A] text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/80'
+            }`}
+          >
+            <IconWallet size={15} />
+            <span>الصناديق والقاصات ({counts.cashCount})</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setCategoryFilter('MASTER')}
-          className={`flex items-center justify-center gap-1.5 flex-1 py-1.5 rounded-lg font-extrabold text-xs transition-all cursor-pointer ${
-            categoryFilter === 'MASTER'
-              ? 'bg-white text-blue-950 shadow-xs border border-blue-200'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-          }`}
-        >
-          <IconCreditCard size={14} className="text-blue-700" />
-          <span>الدفع الإلكتروني والماستر ({counts.masterCount})</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter('MASTER')}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-[9px] font-bold text-xs transition-all cursor-pointer ${
+              categoryFilter === 'MASTER'
+                ? 'bg-blue-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/80'
+            }`}
+          >
+            <IconCreditCard size={15} />
+            <span>الدفع الإلكتروني والماستر ({counts.masterCount})</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setCategoryFilter('BANK')}
-          className={`flex items-center justify-center gap-1.5 flex-1 py-1.5 rounded-lg font-extrabold text-xs transition-all cursor-pointer ${
-            categoryFilter === 'BANK'
-              ? 'bg-white text-indigo-950 shadow-xs border border-indigo-200'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-          }`}
-        >
-          <IconBuildingBank size={14} className="text-indigo-700" />
-          <span>الحسابات المصرفية ({counts.bankCount})</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter('BANK')}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-[9px] font-bold text-xs transition-all cursor-pointer ${
+              categoryFilter === 'BANK'
+                ? 'bg-indigo-600 text-white shadow-2xs'
+                : 'text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/80'
+            }`}
+          >
+            <IconBuildingBank size={15} />
+            <span>الحسابات المصرفية ({counts.bankCount})</span>
+          </button>
+        </div>
+
+        {hasLoadedOnce && lastUpdatedAt && (
+          <span className="text-[11px] font-mono text-slate-500 font-bold px-2 py-1 bg-slate-50 rounded-[6px] border border-slate-200">
+            آخر تحديث: {lastUpdatedAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        )}
       </div>
 
-      {/* ULTRA-MODERN FINANCIAL CARDS GRID */}
+      {/* ══════════════════════════════════════════════════════════════
+          3. FINANCIAL CARDS GRID
+         ══════════════════════════════════════════════════════════════ */}
       {(viewMode === 'CARDS' || viewMode === 'BOTH') && (
-        <div className="space-y-2">
+        <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-4 shadow-2xs space-y-3.5">
           <div className="flex justify-between items-center px-1">
             <span className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
-              <IconLayoutGrid size={15} className="text-orange-600" />
+              <IconLayoutGrid size={16} className="text-[#F45A0A]" />
               بطاقات الأرصدة المالية
             </span>
-            <span className="text-[11px] text-slate-500 font-bold">العدد: ({filteredList.length})</span>
+            <span className="text-[11px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-[6px] border border-slate-200">
+              العدد: ({filteredList.length})
+            </span>
           </div>
 
           {filteredList.length === 0 && loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
               {[1, 2, 3, 4].map(i => (
-                <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 animate-pulse h-44"></div>
+                <div key={i} className="bg-slate-50 rounded-[14px] border border-slate-200 p-4 animate-pulse h-48"></div>
               ))}
             </div>
           ) : filteredList.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-500 font-bold">
+            <div className="p-8 text-center bg-slate-50/50 rounded-[14px] border border-dashed border-slate-200 text-slate-500 font-bold">
               لا توجد حسابات مالية مطابقة للتصنيف المحدد.
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
               {filteredList.map((item) => {
-                const iqdVal = item.balanceIQD ?? (item.currency === 'USD' ? (item.account?.balanceIQD || 0) : item.balanceVal);
-                const usdVal = item.balanceUSD ?? (item.currency === 'USD' ? item.balanceVal : (item.account?.balanceUSD || 0));
                 const isMaster = item.itemType === 'MASTER';
                 const isBank = item.itemType === 'BANK';
 
                 return (
                   <div
                     key={item.id || item.code}
-                    className={`bg-white rounded-xl border shadow-2xs p-3 flex flex-col justify-between relative overflow-hidden transition-all ${
-                      isMaster ? 'border-blue-200/90 hover:border-blue-400' : isBank ? 'border-indigo-200/90 hover:border-indigo-400' : 'border-slate-200/80 hover:border-slate-300'
-                    }`}
+                    className="bg-white rounded-[14px] border border-[#E5E7EB] shadow-2xs p-3.5 flex flex-col justify-between relative overflow-hidden transition-all hover:border-[#F45A0A]/60 hover:shadow-md group space-y-3"
                   >
                     <div>
                       {/* Header Badge & Card Visual Edit Button */}
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-1">
-                          <span className="font-mono font-black text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-black text-[10.5px] text-slate-700 bg-slate-100 px-2 py-0.5 rounded-[6px] border border-slate-200">
                             {item.code}
                           </span>
                           <Tooltip label="تغيير صورة وتصميم البطاقة / الصندوق">
@@ -783,9 +849,9 @@ export const CashboxesBanksPage: React.FC = () => {
                                 setSelectedAccountForVisual(item);
                                 setVisualModalOpen(true);
                               }}
-                              className="w-5 h-5 rounded hover:bg-orange-100 text-slate-400 hover:text-orange-600 flex items-center justify-center transition-colors cursor-pointer"
+                              className="w-6 h-6 rounded-[6px] hover:bg-orange-100 text-slate-400 hover:text-[#F45A0A] flex items-center justify-center transition-colors cursor-pointer"
                             >
-                              <IconSettings size={12} />
+                              <IconSettings size={13} />
                             </button>
                           </Tooltip>
                         </div>
@@ -795,6 +861,7 @@ export const CashboxesBanksPage: React.FC = () => {
                               size="xs"
                               variant="filled"
                               color="yellow"
+                              radius="sm"
                               leftSection={<IconCrown size={11} />}
                               className="font-bold shadow-2xs"
                             >
@@ -804,7 +871,9 @@ export const CashboxesBanksPage: React.FC = () => {
                           <Badge
                             size="xs"
                             variant="light"
+                            radius="sm"
                             color={isMaster ? 'blue' : isBank ? 'indigo' : item.isMain ? 'yellow' : 'orange'}
+                            className="font-bold"
                           >
                             {item.typeLabel}
                           </Badge>
@@ -818,37 +887,32 @@ export const CashboxesBanksPage: React.FC = () => {
                     </div>
 
                     {/* Card Action Footer */}
-                    <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
-                      <Button
-                        size="xs"
-                        variant="light"
-                        color={isMaster ? 'blue' : isBank ? 'indigo' : 'orange'}
-                        fullWidth
-                        className="h-7 text-[10px] font-bold"
-                        leftSection={<IconFileText size={12} />}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
                         onClick={() => {
                           const targetId = item.accountId || item.id || item.account?.id;
                           openTab({ id: 'reports', title: 'كشف حساب وتقارير', path: `/reports?accountId=${targetId}&currency=ALL`, closable: true });
                           navigate(`/reports?accountId=${targetId}&currency=ALL`, { state: { accountId: targetId, currency: 'ALL' } });
                         }}
+                        className="flex-1 h-[34px] rounded-[9px] bg-[#FFF3E8] hover:bg-[#F45A0A] text-[#F45A0A] hover:text-white font-bold text-[12px] flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 border border-orange-200/70"
                       >
-                        كشف الحساب
-                      </Button>
+                        <IconFileText size={14} />
+                        <span>كشف الحساب</span>
+                      </button>
 
-                      <Button
-                        size="xs"
-                        variant="default"
-                        color="gray"
-                        className="h-7 w-7 p-0 shrink-0 flex items-center justify-center"
-                        title="تفاصيل الحساب"
+                      <button
+                        type="button"
                         onClick={() => {
                           const targetId = item.accountId || item.id || item.account?.id;
                           openTab({ id: 'reports', title: 'كشف حساب وتقارير', path: `/reports?accountId=${targetId}&currency=ALL`, closable: true });
                           navigate(`/reports?accountId=${targetId}&currency=ALL`, { state: { accountId: targetId, currency: 'ALL' } });
                         }}
+                        className="h-[34px] w-[34px] rounded-[9px] bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center cursor-pointer transition-all active:scale-98 shrink-0"
+                        title="تفاصيل الحساب"
                       >
-                        <IconArrowUpRight size={13} />
-                      </Button>
+                        <IconArrowUpRight size={14} />
+                      </button>
                     </div>
                   </div>
                 );
@@ -858,12 +922,14 @@ export const CashboxesBanksPage: React.FC = () => {
         </div>
       )}
 
-      {/* ACCOUNTING GRID VIEW (TABULAR DETAILED VIEW) */}
+      {/* ══════════════════════════════════════════════════════════════
+          4. ACCOUNTING GRID VIEW (TABULAR DETAILED VIEW)
+         ══════════════════════════════════════════════════════════════ */}
       {(viewMode === 'GRID' || viewMode === 'BOTH') && (
-        <div className="pt-2">
-          <div className="flex justify-between items-center mb-2 px-1">
+        <div className="bg-white rounded-[14px] border border-[#E5E7EB] shadow-2xs overflow-hidden p-4 space-y-3">
+          <div className="flex justify-between items-center px-1">
             <span className="font-extrabold text-xs text-slate-800 flex items-center gap-1.5">
-              <IconTable size={15} className="text-orange-600" />
+              <IconTable size={16} className="text-[#F45A0A]" />
               جدول التفاصيل الجردية
             </span>
           </div>
@@ -875,6 +941,7 @@ export const CashboxesBanksPage: React.FC = () => {
             columnDefs={columnDefs}
             loading={loading && !hasLoadedOnce}
             onRefresh={fetchCashAndBanks}
+            hideDateFilter={true}
             onRowDoubleClick={(row) => {
               const targetId = row.accountId || row.id || row.account?.id;
               openTab({ id: 'reports', title: 'كشف حساب وتقارير', path: `/reports?accountId=${targetId}&currency=ALL`, closable: true });

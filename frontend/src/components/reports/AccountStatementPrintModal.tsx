@@ -235,8 +235,11 @@ export interface StatementMovementItem {
   rowNumber: number;
   date: string;
   docRef?: string;
+  /** رقم الفاتورة أو السند — يُعرض في عموده، ولا يُكرَّر في نص البيان. */
+  docNumber?: string;
   pnr?: string;
   route?: string;
+  airline?: string;
   passengersDetail?: PassengerDetailItem[];
   statement: string;
   /** Source document of the movement, e.g. «سند قبض RV-2026-0007». */
@@ -304,6 +307,55 @@ export function useStatementQr(accountCode?: string, accountId?: string, enabled
   return qrDataUrl;
 }
 
+/**
+ * هندسة صفحة الكشف: الحجم والاتجاه والهوامش وكثافة الجدول.
+ *
+ * هذه القيم كانت مثبّتة في الأنماط — ورقة A4 طولية وحاشية 24 بكسل — فلا سبيل
+ * إلى تحريكها. صارت تُقرأ من إعدادات القالب بالحسبة نفسها التي يستعملها مولّد
+ * الـPDF في الخادم، فما تراه في المعاينة هو ما يخرج في الملف.
+ */
+export interface StatementPageGeometry {
+  widthMm: number;
+  heightMm: number;
+  marginX: number;
+  marginTop: number;
+  marginBottom: number;
+  cellPaddingY: number;
+  cellPaddingX: number;
+}
+
+export const statementPageGeometry = (config: any): StatementPageGeometry => {
+  const clamp = (value: unknown, fallback: number, max: number, min = 0) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+  };
+
+  const compact = String(config?.templatePreset || 'classic') === 'compact';
+  const density = String(config?.tableDensity || 'normal').toLowerCase();
+  const defaultPad = compact ? { y: 6.5, x: 6 } : { y: 8, x: 7 };
+  const pad =
+    density === 'compact'
+      ? { y: 4, x: 4 }
+      : density === 'relaxed'
+      ? { y: 12, x: 9 }
+      : defaultPad;
+
+  const landscape = String(config?.pageOrientation || 'portrait').toLowerCase() === 'landscape';
+  const letter = String(config?.pageSize || 'A4').toUpperCase() === 'LETTER';
+  const base = letter ? { w: 216, h: 279 } : { w: 210, h: 297 };
+
+  return {
+    widthMm: landscape ? base.h : base.w,
+    heightMm: landscape ? base.w : base.h,
+    marginX: clamp(config?.pageMarginX, compact ? 8 : 10, 40),
+    marginTop: clamp(config?.pageMarginTop, compact ? 8 : 10, 40),
+    marginBottom: clamp(config?.pageMarginBottom, compact ? 4 : 5, 40),
+    cellPaddingY: clamp(pad.y, defaultPad.y, 24, 1),
+    cellPaddingX: clamp(pad.x, defaultPad.x, 24, 1),
+  };
+};
+
 export const PrintableAccountStatementSheet: React.FC<{
   accountName: string;
   accountId?: string;
@@ -340,6 +392,7 @@ export const PrintableAccountStatementSheet: React.FC<{
   const tableRowStripedColor = config.tableRowStripedColor || '#f8fafc';
   const tableTextColor = config.tableTextColor || '#0f172a';
   const balanceDueColor = config.balanceDueColor || '#0f172a';
+  const geometry = statementPageGeometry(config);
 
   const fmtNum = (num: number) => {
     return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
@@ -358,15 +411,21 @@ export const PrintableAccountStatementSheet: React.FC<{
     <div
       id="printable-statement-sheet"
       dir="ltr"
-      className="bg-white text-slate-900 w-[210mm] min-h-[297mm] p-6 pb-6 text-left flex flex-col justify-between border border-slate-300 shadow-xs relative mx-auto box-border"
+      className="bg-white text-slate-900 text-left flex flex-col justify-between border border-slate-300 shadow-xs relative mx-auto box-border"
       style={{
         direction: 'ltr',
         textAlign: 'left',
-        minHeight: '297mm',
+        width: `${geometry.widthMm}mm`,
+        minHeight: `${geometry.heightMm}mm`,
+        paddingTop: `${geometry.marginTop}mm`,
+        paddingBottom: `${geometry.marginBottom}mm`,
+        paddingInline: `${geometry.marginX}mm`,
         fontFamily: `'${selectedFontFamily}', 'Tajawal', Arial, sans-serif`,
         fontSize: '11px',
       }}
     >
+      {/* كثافة الجدول تُطبَّق من مكان واحد بدل تعديل كل خلية على حدة. */}
+      <style>{`#printable-statement-sheet table th, #printable-statement-sheet table td { padding: ${geometry.cellPaddingY}px ${geometry.cellPaddingX}px !important; }`}</style>
       {/* Watermark overlay - SVG text with proper Arabic ligature/shaping */}
       {config.showWatermark && config.watermarkText && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden z-0 select-none">
@@ -461,22 +520,29 @@ export const PrintableAccountStatementSheet: React.FC<{
         </div>
 
         {/* Movements Table */}
+        {/*
+          * الأعمدة تُقسَّم بالنِّسب لا بمقاس محتواها.
+          *
+          * مع التوزيع التلقائي كانت أعمدة المبالغ — الممنوعة من الالتواء — تأخذ ما
+          * تشاء فينضغط عمود التفاصيل، وينكسر فيه المسار والـPNR والمسافرون. وبالثابت
+          * يأخذ كلٌّ نصيبه المعلن، والمبلغ الطويل يلتفّ عند رمز عملته بدل أن يُقصّ.
+          */}
         <table
           className="w-full border-collapse border border-slate-300 text-left"
-          style={{ fontSize: `${tableFontSize}px`, color: tableTextColor }}
+          style={{ fontSize: `${tableFontSize}px`, color: tableTextColor, tableLayout: 'fixed' }}
         >
           <thead>
             <tr
               className="font-extrabold border-b border-slate-300"
               style={{ backgroundColor: tableHeaderBgColor, color: tableHeaderTextColor, fontSize: `${Math.max(10, tableFontSize + 0.5)}px` }}
             >
-              <th className="p-2 text-center border-r border-slate-300 w-[4%] whitespace-nowrap">No.</th>
-              <th className="p-2 border-r border-slate-300 w-[12%] whitespace-nowrap">Date</th>
-              <th className="p-2 border-r border-slate-300 w-[39%]">Details</th>
-              <th className="p-2 text-center border-r border-slate-300 w-[12%] whitespace-nowrap">Type</th>
-              <th className="p-2 text-right border-r border-slate-300 w-[11%] whitespace-nowrap">Debit</th>
-              <th className="p-2 text-right border-r border-slate-300 w-[11%] whitespace-nowrap">Credit</th>
-              <th className="p-2 text-right w-[11%] whitespace-nowrap">Balance</th>
+              <th className="p-2 text-center border-r border-slate-300 w-[4%]">No.</th>
+              <th className="p-2 border-r border-slate-300 w-[13%]">Date / Doc</th>
+              <th className="p-2 border-r border-slate-300 w-[35.5%]">Details</th>
+              <th className="p-2 text-center border-r border-slate-300 w-[8.5%]">Type</th>
+              <th className="px-1 py-2 text-right border-r border-slate-300 w-[12.5%]">Debit</th>
+              <th className="px-1 py-2 text-right border-r border-slate-300 w-[12.5%]">Credit</th>
+              <th className="px-1 py-2 text-right w-[14%]">Balance</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200" style={{ fontWeight: isTableBold ? 800 : 600 }}>
@@ -496,8 +562,11 @@ export const PrintableAccountStatementSheet: React.FC<{
                     else if (type === 'INF' || type === 'INFANT') inf++;
                     else adt++;
 
+                    // اسم المسافر ورقم تذكرته معاً: الكشف المطبوع مستندٌ يُراجَع،
+                    // والاسم وحده لا يُثبت أي تذكرة صُرفت له.
                     const name = typeof p === 'string' ? p : (p.name || p.passengerName || '');
-                    if (name) names.push(name);
+                    const ticketNo = typeof p === 'string' ? '' : (p.ticketNumber || '');
+                    if (name) names.push(ticketNo ? `${name} (${ticketNo})` : name);
                   });
                   paxSummaryStr = `${adt} ADT ${chd} CHD ${inf} INF: ${names.join(', ')}`;
                 }
@@ -506,21 +575,37 @@ export const PrintableAccountStatementSheet: React.FC<{
 
                 const typeLabel =
                   row.typeCode ||
-                  (hasPnr ? 'DT-ISSUE' : row.docRef?.startsWith('RV') ? 'RV-PAY' : 'GL-ENTRY');
+                  (hasPnr ? (lang === 'en' ? 'Ticket' : 'تذكرة') : row.docRef?.startsWith('RV') ? (lang === 'en' ? 'Receipt' : 'قبض') : (lang === 'en' ? 'Journal' : 'قيد'));
 
                 return (
                   <tr key={idx} style={{ backgroundColor: idx % 2 === 1 ? tableRowStripedColor : '#ffffff' }}>
                     <td className="p-2 text-center font-mono border-r border-slate-200 whitespace-nowrap">{row.rowNumber}</td>
-                    <td className="p-2 font-mono leading-tight border-r border-slate-200 whitespace-nowrap">
-                      <div className="font-bold text-slate-900">{cleanRowDate}</div>
-                      <div className="text-slate-600 text-[9px] font-bold mt-0.5">{row.docRef}</div>
+                    {/*
+                      * رقم المستند تحت تاريخه، ويلتوي على شَرَطاته.
+                      *
+                      * إفراده بعمودٍ أخذ من عمود التفاصيل عرضاً يحتاجه أكثر منه —
+                      * فالمسار والـPNR والمسافرون كانوا ينكسرون في أربعة أسطر. وهو
+                      * هنا لا يزاحم شيئاً: يلتفّ في سطرين ويبقى العمود ضيّقاً.
+                      */}
+                    <td className="p-2 font-mono leading-tight border-r border-slate-200">
+                      <div className="font-bold text-slate-900 whitespace-nowrap">{cleanRowDate}</div>
+                      {(row.docNumber || row.docRef) && (
+                        <div
+                          className="text-slate-600 text-[8px] font-bold mt-0.5"
+                          style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+                        >
+                          {row.docNumber || row.docRef}
+                        </div>
+                      )}
                     </td>
                     {/* The only column allowed to wrap: it carries the source document text. */}
                     <td className="p-2 text-slate-900 leading-snug border-r border-slate-200 break-words">
                       {(hasRoute || hasPnr) ? (
                         <div>
                           <div className="font-bold text-slate-900">
-                            FLIGHT, {hasRoute ? row.route : ''} , Dep. {cleanRowDate} {hasPnr ? `, PNR:${row.pnr}` : ''}
+                            FLIGHT, {hasRoute ? row.route : ''}
+                            {row.airline ? `, ${row.airline}` : ''} , Dep. {cleanRowDate}
+                            {hasPnr ? `, PNR:${row.pnr}` : ''}
                           </div>
                           {paxSummaryStr && (
                             <div className="text-[9.5px] text-slate-700 font-bold mt-0.5">
@@ -547,16 +632,17 @@ export const PrintableAccountStatementSheet: React.FC<{
                         </div>
                       )}
                     </td>
-                    <td className="p-2 text-center font-black text-slate-800 border-r border-slate-200 whitespace-nowrap">
+                    <td className="px-1 py-2 text-center font-black text-slate-800 border-r border-slate-200 leading-tight">
                       {typeLabel}
                     </td>
-                    <td className="p-2 text-right font-mono font-bold border-r border-slate-200 text-slate-900 whitespace-nowrap">
+                    {/* الرقم نفسه كتلة لا تنكسر؛ الذي يلتفّ عند الضيق هو رمز العملة بعده. */}
+                    <td className="px-1 py-2 text-right font-mono font-bold border-r border-slate-200 text-slate-900 break-words">
                       {row.debit > 0 ? `${fmtNum(row.debit)} IQD` : ''}
                     </td>
-                    <td className="p-2 text-right font-mono font-bold border-r border-slate-200 text-slate-900 whitespace-nowrap">
+                    <td className="px-1 py-2 text-right font-mono font-bold border-r border-slate-200 text-slate-900 break-words">
                       {row.credit > 0 ? `${fmtNum(row.credit)} IQD` : ''}
                     </td>
-                    <td className="p-2 text-right font-mono font-black text-slate-900 whitespace-nowrap">
+                    <td className="px-1 py-2 text-right font-mono font-black text-slate-900 break-words">
                       ({fmtNum(row.runningBalance)}) IQD
                     </td>
                   </tr>
@@ -626,7 +712,11 @@ export interface AccountStatementPrintModalProps {
   };
 }
 
-export const printElementHD = (elementId: string, lang: LangKey = 'ar') => {
+export const printElementHD = (
+  elementId: string,
+  lang: LangKey = 'ar',
+  geometry?: StatementPageGeometry,
+) => {
   const element = document.getElementById(elementId);
   if (!element) {
     window.print();
@@ -671,8 +761,8 @@ export const printElementHD = (elementId: string, lang: LangKey = 'ar') => {
         ${styleTags}
         <style>
           @page {
-            size: A4 portrait;
-            margin: 8mm 6mm 38mm 6mm !important;
+            size: ${geometry ? `${geometry.widthMm}mm ${geometry.heightMm}mm` : 'A4 portrait'};
+            margin: ${geometry ? geometry.marginTop : 8}mm ${geometry ? geometry.marginX : 6}mm ${geometry ? Math.max(geometry.marginBottom, 30) : 38}mm ${geometry ? geometry.marginX : 6}mm !important;
           }
           *, *::before, *::after {
             box-sizing: border-box !important;
@@ -699,7 +789,8 @@ export const printElementHD = (elementId: string, lang: LangKey = 'ar') => {
             max-width: 100% !important;
             min-width: 100% !important;
             margin: 0 !important;
-            padding: 0mm 6mm 0mm 6mm !important;
+            /* الهامش يُضبط في @page، فلا تُضاف إليه حاشيةٌ ثانية داخل الورقة. */
+            padding: 0 !important;
             box-shadow: none !important;
             border: none !important;
             background: #ffffff !important;
@@ -851,7 +942,7 @@ export const AccountStatementPrintModal: React.FC<AccountStatementPrintModalProp
   });
 
   const handlePrint = () => {
-    printElementHD('printable-statement-sheet', printLang);
+    printElementHD('printable-statement-sheet', printLang, statementPageGeometry(config));
   };
 
   const handleExportPdf = async () => {

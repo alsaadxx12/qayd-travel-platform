@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Paper, TextInput, Button, Select, Checkbox, Textarea, Badge, SegmentedControl, ColorInput, Slider, Switch, Tabs, Progress } from '@mantine/core';
 import { useFont, FONT_OPTIONS, type FontId } from '../../hooks/useFont';
 import {
@@ -139,15 +140,23 @@ export const SystemSettingsPage: React.FC = () => {
     staleTime: 60000,
   });
 
-  const [activeSection, setActiveSection] = useState<string>('core_accounts');
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeSection, setActiveSection] = useState<string>(() => tabParam || 'core_accounts');
   const [baseCurrency, setBaseCurrency] = useState<string>('IQD');
   const { fontId, setFontId, currentFont } = useFont();
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveSection(tabParam);
+    }
+  }, [tabParam]);
 
   useEffect(() => {
     if (activeSection === 'security' || (activeSection === 'database' && currentTenant && !currentTenant.isRoot)) {
       setActiveSection('core_accounts');
     }
-  }, [activeSection, currentTenant]);
+  }, [currentTenant?.isRoot]);
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('b1');
@@ -314,11 +323,13 @@ export const SystemSettingsPage: React.FC = () => {
     }
   }, [activeSection]);
 
+  const hasInitializedExRef = useRef(false);
   useEffect(() => {
-    if (adoptedExHook.config) {
+    if (adoptedExHook?.config && !hasInitializedExRef.current) {
+      hasInitializedExRef.current = true;
       setExConfigForm(adoptedExHook.config);
     }
-  }, [adoptedExHook.config]);
+  }, [adoptedExHook?.config]);
 
   // Compute live preview in settings with full null safety
   const previewBaseRate = useMemo(() => {
@@ -437,12 +448,28 @@ export const SystemSettingsPage: React.FC = () => {
         if (res && res.config && Array.isArray(res.config.mappings) && res.config.mappings.length > 0) {
           setPaymentMappings(res.config.mappings);
         } else {
-          // Initialize intelligent defaults based on real DB accounts
           accountsApi.getFlat().then((allAccs) => {
-            const master1 = allAccs.find(a => a.code.startsWith('134213') || a.nameAr.includes('ماستر 1') || a.nameAr.includes('Master 1') || a.code === '183101');
-            const master2 = allAccs.find(a => a.code.startsWith('232146') || a.nameAr.includes('ماستر 2') || a.nameAr.includes('Master 2') || a.code === '18321');
-            const bankBgd = allAccs.find(a => a.code.startsWith('134211') || a.nameAr.includes('بغداد') || a.code === '1821');
-            const bankTbi = allAccs.find(a => a.code.startsWith('134221') || a.nameAr.includes('TBI') || a.nameAr.includes('تجارة') || a.code === '1822');
+            if (!Array.isArray(allAccs) || allAccs.length === 0) return;
+            const masterAccounts = allAccs.filter(a =>
+              a.code.startsWith('1343') ||
+              a.code.startsWith('134213') ||
+              a.code.startsWith('232146') ||
+              a.code.startsWith('2614') ||
+              a.code.startsWith('183') ||
+              a.nameAr.includes('ماستر') ||
+              a.nameAr.toLowerCase().includes('master')
+            );
+
+            const bankAccounts = allAccs.filter(a =>
+              !masterAccounts.some(m => m.id === a.id) &&
+              (a.category === 'BANK' ||
+                a.code.startsWith('1342') ||
+                a.code.startsWith('182') ||
+                a.code.startsWith('1112') ||
+                a.nameAr.includes('مصرف') ||
+                a.nameAr.includes('بنك') ||
+                a.nameAr.toLowerCase().includes('bank'))
+            );
 
             const initialList: PaymentMethodMapping[] = [
               {
@@ -455,49 +482,29 @@ export const SystemSettingsPage: React.FC = () => {
                 description: 'الدفع النقدي المباشر في الفرع',
                 isActive: true,
               },
-              ...(master1 ? [{
-                id: 'pm-master1',
-                nameAr: '1 Master وكيل (ماستر داخلي)',
-                key: master1.id,
+              ...masterAccounts.map((m) => ({
+                id: `pm-master-${m.id}`,
+                nameAr: m.nameAr,
+                key: m.id,
                 type: 'MASTER' as const,
-                targetAccountId: master1.id,
-                targetAccountName: `${master1.code} - ${master1.nameAr}`,
-                description: 'بطاقة ماستر كارد وكيل داخلية',
+                targetAccountId: m.id,
+                targetAccountName: `${m.code} - ${m.nameAr}`,
+                description: `بطاقة ماستر كارد (${m.nameAr})`,
                 isActive: true,
-              }] : []),
-              ...(master2 ? [{
-                id: 'pm-master2',
-                nameAr: 'Master 2 سستم (ماستر خارجي)',
-                key: master2.id,
-                type: 'MASTER' as const,
-                targetAccountId: master2.id,
-                targetAccountName: `${master2.code} - ${master2.nameAr}`,
-                description: 'بطاقة ماستر كارد سيستم المرتبطة بالأنظمة الخارجية',
-                isActive: true,
-              }] : []),
-              ...(bankBgd ? [{
-                id: 'pm-bank1',
-                nameAr: 'حوالة مصرف بغداد - دينار',
-                key: bankBgd.id,
+              })),
+              ...bankAccounts.map((b) => ({
+                id: `pm-bank-${b.id}`,
+                nameAr: b.nameAr,
+                key: b.id,
                 type: 'BANK' as const,
-                targetAccountId: bankBgd.id,
-                targetAccountName: `${bankBgd.code} - ${bankBgd.nameAr}`,
-                description: 'حساب مصرف بغداد بالدينار العراقي',
+                targetAccountId: b.id,
+                targetAccountName: `${b.code} - ${b.nameAr}`,
+                description: `حساب مصرفي (${b.nameAr})`,
                 isActive: true,
-              }] : []),
-              ...(bankTbi ? [{
-                id: 'pm-bank2',
-                nameAr: 'حوالة مصرف TBI - دولار',
-                key: bankTbi.id,
-                type: 'BANK' as const,
-                targetAccountId: bankTbi.id,
-                targetAccountName: `${bankTbi.code} - ${bankTbi.nameAr}`,
-                description: 'المصرف العراقي للتجارة بالدولار',
-                isActive: true,
-              }] : []),
+              })),
             ];
 
-            if (initialList.length > 1) {
+            if (initialList.length > 0) {
               setPaymentMappings(initialList);
             }
           });
@@ -820,6 +827,74 @@ export const SystemSettingsPage: React.FC = () => {
     }
   };
 
+  const handleAutoDiscoverPaymentMethods = () => {
+    if (!accountsList || accountsList.length === 0) {
+      showErrorNotification('تنبيه', 'جاري تحميل شجرة الحسابات، يرجى المحاولة بعد لحظات');
+      return;
+    }
+
+    const masterAccounts = accountsList.filter(a =>
+      a.code.startsWith('1343') ||
+      a.code.startsWith('134213') ||
+      a.code.startsWith('232146') ||
+      a.code.startsWith('2614') ||
+      a.code.startsWith('183') ||
+      a.nameAr.includes('ماستر') ||
+      a.nameAr.toLowerCase().includes('master')
+    );
+
+    const bankAccounts = accountsList.filter(a =>
+      !masterAccounts.some(m => m.id === a.id) &&
+      (a.category === 'BANK' ||
+        a.code.startsWith('1342') ||
+        a.code.startsWith('182') ||
+        a.code.startsWith('1112') ||
+        a.nameAr.includes('مصرف') ||
+        a.nameAr.includes('بنك') ||
+        a.nameAr.toLowerCase().includes('bank'))
+    );
+
+    const existingTargetIds = new Set(paymentMappings.map(m => m.targetAccountId));
+
+    const newMasters: PaymentMethodMapping[] = masterAccounts
+      .filter(m => !existingTargetIds.has(m.id))
+      .map(m => ({
+        id: `pm-master-${m.id}`,
+        nameAr: m.nameAr,
+        key: m.id,
+        type: 'MASTER' as const,
+        targetAccountId: m.id,
+        targetAccountName: `${m.code} - ${m.nameAr}`,
+        description: `بطاقة ماستر كارد (${m.nameAr})`,
+        isActive: true,
+      }));
+
+    const newBanks: PaymentMethodMapping[] = bankAccounts
+      .filter(b => !existingTargetIds.has(b.id))
+      .map(b => ({
+        id: `pm-bank-${b.id}`,
+        nameAr: b.nameAr,
+        key: b.id,
+        type: 'BANK' as const,
+        targetAccountId: b.id,
+        targetAccountName: `${b.code} - ${b.nameAr}`,
+        description: `حساب مصرفي (${b.nameAr})`,
+        isActive: true,
+      }));
+
+    const totalAdded = newMasters.length + newBanks.length;
+    if (totalAdded === 0) {
+      showSuccessNotification('مكتمل', 'جميع حسابات الماستر كارد والبنوك في دليلك المحاسبي مضافة بالفعل');
+      return;
+    }
+
+    setPaymentMappings(prev => [...prev, ...newMasters, ...newBanks]);
+    showSuccessNotification(
+      'تم اكتشاف واستيراد الماسترات والبنوك',
+      `تم استيراد ${newMasters.length} بطاقة ماستر و ${newBanks.length} حساب بنكي، اضغط على "حفظ ربط طرق الدفع" لتثبيتها`
+    );
+  };
+
   const handleAddPaymentMethod = () => {
     if (!newMethodName.trim()) {
       showErrorNotification('تنبيه', 'يرجى إدخال اسم طريقة الدفع');
@@ -938,9 +1013,10 @@ export const SystemSettingsPage: React.FC = () => {
       ],
     },
     {
-      title: 'النظام والمظهر',
+      title: 'النظام والهوية والمظهر',
       isAccountingGroup: false,
       items: [
+        { id: 'company_logo', label: 'إعدادات الشركة والشعار', icon: IconPhoto },
         ...(currentTenant?.isRoot ? [{ id: 'database', label: 'قاعدة البيانات والتخزين', icon: IconDatabase }] : []),
         { id: 'appearance', label: 'المظهر والخطوط', icon: IconTypography },
       ],
@@ -966,38 +1042,67 @@ export const SystemSettingsPage: React.FC = () => {
   const currentBranchName = branches.find((b) => b.id === selectedBranchId)?.nameAr || 'الفرع الرئيسي';
 
   return (
-    <div className="space-y-3 w-full select-none">
-      {/* Arabic Title */}
-      <Paper p="xs" radius="sm" withBorder className="bg-white no-print shadow-2xs">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <IconSettings size={18} className="text-emerald-700" />
-            <h1 className="font-extrabold text-xs text-slate-900">إعدادات النظام المحاسبي (System Settings)</h1>
+    <div
+      className="w-full max-w-[1760px] mx-auto px-4 sm:px-6 py-4 sm:py-5 select-none font-sans space-y-4 bg-[#F7F8FA] min-h-screen text-right"
+      dir="rtl"
+      style={{ fontFamily: "'IBM Plex Sans Arabic', system-ui, sans-serif" }}
+    >
+      {/* ══════════════════════════════════════════════════════════════
+          1. UNIFIED PAGE HEADER (86px Height)
+         ══════════════════════════════════════════════════════════════ */}
+      <div className="flex items-center justify-between flex-wrap gap-4 bg-white rounded-[14px] border border-[#E5E7EB] px-6 py-4 min-h-[86px] shadow-2xs">
+        <div className="flex items-center gap-3.5">
+          <div className="w-[42px] h-[42px] rounded-[12px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shadow-2xs shrink-0">
+            <IconSettings size={22} stroke={2} />
           </div>
-
-          <Button size="xs" color="emerald" onClick={handleSaveAll} leftSection={<IconDeviceFloppy size={14} />}>
-            حفظ التغييرات
-          </Button>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="font-bold text-[20px] text-[#111827] leading-tight">
+                إعدادات النظام المحاسبي
+              </h1>
+              <span className="bg-[#FFF3E8] text-[#F45A0A] border border-orange-200/80 rounded-[8px] px-2.5 py-0.5 font-mono text-[11px] font-bold">
+                System Settings
+              </span>
+            </div>
+            <p className="text-[13px] font-normal text-[#64748B] mt-0.5">
+              الربط المحاسبي، العملات وأسعار الصرف، التسلسلات، طرق الدفع، هوية الشركة والشعار، وقاعدة البيانات
+            </p>
+          </div>
         </div>
-      </Paper>
 
-      {/* Internal Side Navigation & Main Workspace */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            className="h-[44px] px-5 rounded-[10px] bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-[13.5px] shadow-xs flex items-center gap-2 transition-all cursor-pointer active:scale-98"
+          >
+            <IconDeviceFloppy size={18} strokeWidth={2.4} />
+            <span>حفظ التغييرات</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════
+          2. INTERNAL SIDE NAVIGATION & MAIN WORKSPACE
+         ══════════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
         {/* Left Side Navigation Menu */}
-        <Paper p="xs" radius="sm" withBorder className="md:col-span-3 bg-white space-y-3 h-fit">
+        <div className="md:col-span-3 bg-white rounded-[14px] border border-[#E5E7EB] p-3.5 shadow-2xs space-y-4 h-fit">
           {navGroups.map((group, gIdx) => (
-            <div key={gIdx} className="space-y-1">
-              <div className="flex items-center justify-between px-2 py-1 border-b border-slate-100 mb-1">
-                <span className={`text-[11px] font-black uppercase tracking-wider ${group.isAccountingGroup ? 'text-emerald-800 flex items-center gap-1.5' : 'text-slate-500'}`}>
-                  {group.isAccountingGroup && <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />}
+            <div key={gIdx} className="space-y-1.5">
+              <div className="flex items-center justify-between px-2 py-1 border-b border-slate-100">
+                <span className={`text-[11px] font-black uppercase tracking-wider ${group.isAccountingGroup ? 'text-slate-800 flex items-center gap-1.5' : 'text-slate-500'}`}>
+                  {group.isAccountingGroup && <span className="w-2 h-2 rounded-full bg-[#F45A0A]" />}
                   {group.title}
                 </span>
                 {group.isAccountingGroup && (
-                  <Badge size="xs" color="emerald" variant="light" className="font-bold">مجموعة رئيسية</Badge>
+                  <span className="text-[9.5px] font-bold text-[#F45A0A] bg-orange-50 border border-orange-200 px-1.5 py-0.2 rounded">
+                    رئيسي
+                  </span>
                 )}
               </div>
 
-              <div className={group.isAccountingGroup ? 'bg-emerald-50/40 p-1 rounded-lg border border-emerald-100/80 space-y-1' : 'space-y-1'}>
+              <div className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isSelected = activeSection === item.id;
@@ -1005,15 +1110,13 @@ export const SystemSettingsPage: React.FC = () => {
                     <button
                       key={item.id}
                       onClick={() => setActiveSection(item.id)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs transition-all cursor-pointer text-right font-bold ${
+                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] text-xs transition-all cursor-pointer text-right font-bold ${
                         isSelected
-                          ? 'bg-orange-600 text-white shadow-xs'
-                          : group.isAccountingGroup
-                          ? 'text-slate-800 hover:bg-orange-100/60'
-                          : 'text-slate-700 hover:bg-slate-100'
+                          ? 'bg-[#FFF3E8] text-[#F45A0A] border border-orange-200/80 shadow-2xs'
+                          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
-                      <Icon size={16} className={isSelected ? 'text-orange-200' : group.isAccountingGroup ? 'text-orange-600' : 'text-slate-500'} />
+                      <Icon size={16} className={isSelected ? 'text-[#F45A0A]' : 'text-slate-400'} />
                       <span className="flex-1">{item.label}</span>
                     </button>
                   );
@@ -1021,67 +1124,65 @@ export const SystemSettingsPage: React.FC = () => {
               </div>
             </div>
           ))}
-        </Paper>
+        </div>
 
         {/* Right Main Settings Workspace */}
-        <Paper p="md" radius="sm" withBorder className="md:col-span-9 bg-white space-y-4">
+        <div className="md:col-span-9 bg-white rounded-[14px] border border-[#E5E7EB] shadow-2xs p-5 space-y-5">
           {/* Unified Accounting Group Sub-Navigation Header Bar */}
           {isAccountingSection && (
-            <div className="bg-orange-50/70 border border-orange-200/90 rounded-xl p-2.5 flex items-center justify-between flex-wrap gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-orange-600 text-white flex items-center justify-center shrink-0">
-                  <IconBook2 size={15} />
+            <div className="bg-[#FFF3E8]/80 border border-orange-200/80 rounded-[12px] p-3 flex items-center justify-between flex-wrap gap-2 mb-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#F45A0A] text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <IconBook2 size={16} />
                 </div>
                 <div>
-                  <span className="text-[11px] font-black text-orange-950 block leading-none">
+                  <span className="text-[12px] font-black text-slate-900 block leading-none">
                     مجموعة الإعدادات المحاسبية والمالية
                   </span>
-                  <span className="text-[10px] text-orange-800/80">
+                  <span className="text-[11px] text-slate-500 font-medium">
                     الحسابات الأساسية، العملات وأسعار الصرف، التسلسلات والترقيم، طرق الدفع والصناديق
                   </span>
                 </div>
               </div>
 
               {/* Sub Navigation Pills */}
-              <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-orange-200 shadow-2xs font-bold text-xs">
+              <div className="flex items-center gap-1 bg-white p-1 rounded-[9px] border border-orange-200/80 shadow-2xs font-bold text-xs">
                 <button
                   type="button"
                   onClick={() => setActiveSection('currencies')}
-                  className={`px-2.5 py-1 rounded transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    activeSection === 'currencies' ? 'bg-orange-600 text-white shadow-2xs' : 'text-slate-600 hover:text-orange-800 hover:bg-orange-50'
+                  className={`px-3 py-1.5 rounded-[7px] transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeSection === 'currencies' ? 'bg-[#F45A0A] text-white' : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  <IconCoin size={13} />
+                  <IconCoin size={14} />
                   <span>العملات وأسعار الصرف</span>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setActiveSection('sequences')}
-                  className={`px-2.5 py-1 rounded transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    activeSection === 'sequences' ? 'bg-orange-600 text-white shadow-2xs' : 'text-slate-600 hover:text-orange-800 hover:bg-orange-50'
+                  className={`px-3 py-1.5 rounded-[7px] transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeSection === 'sequences' ? 'bg-[#F45A0A] text-white' : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  <IconNumbers size={13} />
+                  <IconNumbers size={14} />
                   <span>التسلسلات والترقيم</span>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setActiveSection('accounting')}
-                  className={`px-2.5 py-1 rounded transition-colors cursor-pointer flex items-center gap-1.5 ${
-                    activeSection === 'accounting' ? 'bg-orange-600 text-white shadow-2xs' : 'text-slate-600 hover:text-orange-800 hover:bg-orange-50'
+                  className={`px-3 py-1.5 rounded-[7px] transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    activeSection === 'accounting' ? 'bg-[#F45A0A] text-white' : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  <IconCreditCard size={13} />
+                  <IconReceipt size={14} />
                   <span>طرق الدفع والصناديق</span>
                 </button>
-
               </div>
             </div>
           )}
-          {/* Section 1: Company Logo Settings */}
-          {activeSection === 'company' && (
+
+          {/* Section: Company Logo Settings */}
+          {(activeSection === 'company' || activeSection === 'company_logo') && (
             <div className="space-y-4 text-xs">
               <input
                 type="file"
@@ -2132,15 +2233,26 @@ export const SystemSettingsPage: React.FC = () => {
                     تحديد الصندوق أو الحساب المستلم لكل طريقة دفع (كاش، ماستر، بنوك) لضمان توجيه الإيرادات والمبالغ آلياً للحساب الصحيح
                   </p>
                 </div>
-                <Button
-                  size="xs"
-                  color="emerald"
-                  loading={isSavingPaymentMappings}
-                  onClick={handleSavePaymentMappings}
-                  leftSection={<IconDeviceFloppy size={13} />}
-                >
-                  حفظ ربط طرق الدفع
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="teal"
+                    onClick={handleAutoDiscoverPaymentMethods}
+                    leftSection={<IconSparkles size={14} />}
+                  >
+                    اكتشاف واستيراد الماسترات والبنوك تلقائياً
+                  </Button>
+                  <Button
+                    size="xs"
+                    color="orange"
+                    loading={isSavingPaymentMappings}
+                    onClick={handleSavePaymentMappings}
+                    leftSection={<IconDeviceFloppy size={13} />}
+                  >
+                    حفظ ربط طرق الدفع
+                  </Button>
+                </div>
               </div>
 
               {/* Banner Info */}
@@ -3189,7 +3301,7 @@ export const SystemSettingsPage: React.FC = () => {
               </div>
             </div>
           )}
-        </Paper>
+        </div>
       </div>
     </div>
   );

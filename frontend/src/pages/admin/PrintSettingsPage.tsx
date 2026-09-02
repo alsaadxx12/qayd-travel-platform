@@ -381,18 +381,19 @@ export const PrintSettingsPage: React.FC = () => {
   };
 
   /**
-   * تبويب «التخطيط» يخصّ السندات وحدها.
+   * لكل مستند تخطيطه، وكلٌّ يعرض مفاتيحه هو.
    *
-   * حجم الورق والكثافة وترتيب الحقول والتواقيع كلّها مفاتيح يقرؤها سند القبض والدفع؛
-   * وكشف الحساب وتقرير المصاريف لهما بنية أخرى لا تستعملها. وإظهار تبويب لا يفعل
-   * شيئاً أسوأ من إخفائه، فيُخفى — ويعود التبويب إلى «الألوان» إن كان مفتوحاً حين
-   * ينتقل المستخدم إلى مستند لا تخطيط له.
+   * السند يعرض حجم الورق وترتيب الحقول والتواقيع؛ والكشف وتقرير المصاريف — وهما
+   * الورقة نفسها — يعرضان هوامش الصفحة وكثافة الجدول وقالب التصميم. وإظهار مفتاح
+   * لا يقرؤه المستند أسوأ من إخفائه، فيُعرض لكلٍّ ما يخصّه.
    */
   const isVoucherDoc = currentDocKey === 'receipt_voucher' || currentDocKey === 'payment_voucher';
+  const isSheetDoc = currentDocKey === 'statement' || currentDocKey === 'expense_report';
+  const hasLayoutTab = isVoucherDoc || isSheetDoc;
 
   useEffect(() => {
-    if (!isVoucherDoc && printTab === 'layout') setPrintTab('colors');
-  }, [isVoucherDoc, printTab]);
+    if (!hasLayoutTab && printTab === 'layout') setPrintTab('colors');
+  }, [hasLayoutTab, printTab]);
 
   /** ترتيب الحقول كما هو محفوظ، مكمَّلاً بأي حقل جديد أُضيف بعد آخر حفظ. */
   const orderedFieldKeys: string[] = useMemo(() => {
@@ -769,7 +770,7 @@ export const PrintSettingsPage: React.FC = () => {
                       <IconAdjustments size={14} />
                       <span>{isAr ? 'خيارات' : 'Options'}</span>
                     </button>
-                    {isVoucherDoc && (
+                    {hasLayoutTab && (
                       <button
                         type="button"
                         onClick={() => setPrintTab('layout')}
@@ -1969,6 +1970,149 @@ export const PrintSettingsPage: React.FC = () => {
                     كل مفتاح هنا يقرؤه سند القبض والدفع مباشرةً؛ وما لا يُضبط من هنا
                     لا يُضبط من مكان آخر.
                    ══════════════════════════════════════════════════════ */}
+                {printTab === 'layout' && isSheetDoc && (
+                  <div className="space-y-3.5 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                    <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <IconLayoutBoard size={14} className="text-[#F45A0A]" />
+                        <span>{isAr ? 'تخطيط الورقة والهوامش' : 'Page Layout & Margins'}</span>
+                      </div>
+                      <Badge size="xs" color="orange" variant="light">
+                        {currentDocKey}
+                      </Badge>
+                    </h4>
+
+                    {/* ── الورقة ── */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'حجم الورق' : 'Paper Size'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.pageSize || 'A4'}
+                          onChange={(v) => updateCurrentConfig('pageSize', v || 'A4')}
+                          data={[
+                            { value: 'A4', label: 'A4 (210 × 297)' },
+                            { value: 'LETTER', label: 'Letter (216 × 279)' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'اتجاه الورقة' : 'Orientation'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.pageOrientation || 'portrait'}
+                          onChange={(v) => updateCurrentConfig('pageOrientation', v || 'portrait')}
+                          data={[
+                            { value: 'portrait', label: isAr ? 'طولي' : 'Portrait' },
+                            { value: 'landscape', label: isAr ? 'عرضي' : 'Landscape' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'قالب الكشف المُولَّد' : 'Generated Sheet Template'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.templatePreset || 'classic'}
+                          onChange={(v) => updateCurrentConfig('templatePreset', v || 'classic')}
+                          data={[
+                            { value: 'classic', label: isAr ? 'كلاسيكي' : 'Classic' },
+                            { value: 'modern', label: isAr ? 'عصري' : 'Modern' },
+                            { value: 'compact', label: isAr ? 'متراص' : 'Compact' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-700 block mb-1">
+                          {isAr ? 'كثافة صفوف الجدول' : 'Table Density'}
+                        </label>
+                        <Select
+                          size="xs"
+                          value={currentConfig.tableDensity || 'normal'}
+                          onChange={(v) => updateCurrentConfig('tableDensity', v || 'normal')}
+                          data={[
+                            { value: 'compact', label: isAr ? 'متراصة' : 'Compact' },
+                            { value: 'normal', label: isAr ? 'عادية' : 'Normal' },
+                            { value: 'relaxed', label: isAr ? 'مريحة' : 'Relaxed' },
+                          ]}
+                          allowDeselect={false}
+                        />
+                      </div>
+                    </div>
+
+                    {/* ── الهوامش ── */}
+                    <div className="pt-1 border-t border-slate-100 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black text-slate-800">
+                          {isAr ? 'هوامش الصفحة (ملّيمتر)' : 'Page Margins (mm)'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateCurrentConfig('pageMarginX', undefined);
+                            updateCurrentConfig('pageMarginTop', undefined);
+                            updateCurrentConfig('pageMarginBottom', undefined);
+                          }}
+                          className="text-[10px] font-bold text-slate-500 hover:text-[#F45A0A] cursor-pointer transition-colors"
+                        >
+                          {isAr ? 'إعادة الافتراضي' : 'Reset'}
+                        </button>
+                      </div>
+
+                      {/* القيم الافتراضية تتبع القالب: المتراص أضيق هوامش من الكلاسيكي. */}
+                      {([
+                        { key: 'pageMarginX', label: isAr ? 'الهامش الجانبي (يمين ويسار)' : 'Side margin', fallback: currentConfig.templatePreset === 'compact' ? 8 : 10 },
+                        { key: 'pageMarginTop', label: isAr ? 'الهامش العلوي' : 'Top margin', fallback: currentConfig.templatePreset === 'compact' ? 8 : 10 },
+                        { key: 'pageMarginBottom', label: isAr ? 'الهامش السفلي' : 'Bottom margin', fallback: currentConfig.templatePreset === 'compact' ? 4 : 5 },
+                      ] as const).map((m) => {
+                        const value = Number.isFinite(Number(currentConfig[m.key]))
+                          ? Number(currentConfig[m.key])
+                          : m.fallback;
+                        return (
+                          <div key={m.key}>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[10px] font-bold text-slate-700">{m.label}</label>
+                              <span className="text-[10px] font-mono font-black text-[#F45A0A]">{value}mm</span>
+                            </div>
+                            <Slider
+                              size="sm"
+                              color="orange"
+                              min={0}
+                              max={30}
+                              step={1}
+                              value={value}
+                              onChange={(v) => updateCurrentConfig(m.key, v)}
+                              marks={[
+                                { value: 0, label: '0' },
+                                { value: 10, label: '10' },
+                                { value: 20, label: '20' },
+                                { value: 30, label: '30' },
+                              ]}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-[10px] text-slate-500 font-medium leading-relaxed bg-slate-50 border border-slate-200 rounded-lg p-2">
+                      {isAr
+                        ? 'هذه المفاتيح تُطبَّق على المعاينة، وعلى الطباعة من المتصفح، وعلى ملف الـPDF الذي يولّده الخادم تلقائياً — الثلاثة تقرأ الحسبة نفسها.'
+                        : 'These apply to the preview, to browser printing, and to the PDF the server generates — all three read the same geometry.'}
+                    </p>
+                  </div>
+                )}
+
                 {printTab === 'layout' && isVoucherDoc && (
                   <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                     <h4 className="font-extrabold text-xs text-slate-900 border-b pb-1.5 flex items-center gap-1.5">

@@ -35,6 +35,7 @@ import { useNavigate } from 'react-router-dom';
 import { SmartAccountWizardModal } from '../accounts/SmartAccountWizardModal';
 import { accountsApi } from '../../api/accounts';
 import { branchesApi, type Branch } from '../../api/branches';
+import { fetchPrintTemplate } from '../../api/printTemplates';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -190,6 +191,19 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
   const [selectedCurrency, setSelectedCurrency] = useState<string>(() => localStorage.getItem('coa_currency') || 'ALL');
   const [showZeroBalances, setShowZeroBalances] = useState<boolean>(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+  const [mainCashboxId, setMainCashboxId] = useState<string | null>(null);
+
+  // Fetch configured main cashbox from core accounts mapping
+  useEffect(() => {
+    fetchPrintTemplate('core_accounts_mapping')
+      .then((res) => {
+        if (res?.config?.mainCashboxId) {
+          setMainCashboxId(res.config.mainCashboxId);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch branches and listen for branch change
   useEffect(() => {
@@ -1086,6 +1100,13 @@ export const AccountingTreeGrid: React.FC<AccountingTreeGridProps> = ({
                             <span className={`truncate ${node.isGroup ? 'font-black text-slate-900' : 'font-medium text-slate-800'}`}>
                               {node.nameAr}
                             </span>
+
+                            {mainCashboxId && (node.id === mainCashboxId || node.code === mainCashboxId) && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#FFF3E8] text-[#F45A0A] border border-orange-200 text-[10.5px] font-black shrink-0 shadow-2xs">
+                                <span>⭐</span>
+                                <span>{isAr ? 'الصندوق الرئيسي (المعتمد)' : 'Main Cashbox'}</span>
+                              </span>
+                            )}
                           </div>
                         </td>
                       )}

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Tooltip, Menu, Modal, Popover } from '@mantine/core';
 import { Lottie } from 'lottie-react';
-import flightBookingAnimation from '../../assets/animations/flight-booking.json';
+import aiSpiderAnimation from '../../assets/animations/ai-spider.json';
 
 import {
   PlaneTakeoff,
@@ -34,10 +34,12 @@ import {
   RotateCcw,
   Trash2,
   AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { TicketInvoiceEditorWorkspace } from '../../components/tickets/TicketInvoiceEditorWorkspace';
 import { TicketRefundEditorWorkspace } from '../../components/refunds/TicketRefundEditorWorkspace';
 import { InvoiceAuditLogModal } from '../../components/tickets/InvoiceAuditLogModal';
+import { SmartTicketImportModal, ParsedTicketData } from '../../components/tickets/SmartTicketImportModal';
 import { SegmentedDatePicker } from '../../components/ui/SegmentedDatePicker';
 import { SearchableCombobox, ComboboxOption } from '../../components/ui/SearchableCombobox';
 import { CurrencySegmentedControl } from '../../components/ui/CurrencySegmentedControl';
@@ -291,12 +293,96 @@ export const TicketsPage: React.FC = () => {
 
   // Modals State
   const [modalOpen, setModalOpen] = useState(false);
+  const [smartImportModalOpen, setSmartImportModalOpen] = useState(false);
+  const [selectedTicketFile, setSelectedTicketFile] = useState<File | null>(null);
   const [editingTicketData, setEditingTicketData] = useState<any>(null);
   const [auditLogOpen, setAuditLogOpen] = useState(false);
   const [selectedTicketForAudit, setSelectedTicketForAudit] = useState<any>(null);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [selectedReceiptTicket, setSelectedReceiptTicket] = useState<any>(null);
   const [copiedTicketId, setCopiedTicketId] = useState<string | null>(null);
+  const lottieRef = useRef<any>(null);
+  const ticketFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Handle direct file pick from file explorer dialog
+  const handleTicketFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedTicketFile(file);
+      setSmartImportModalOpen(true);
+    }
+    e.target.value = '';
+  };
+
+  // Global Ctrl+V Screenshot Paste on Tickets Page
+  useEffect(() => {
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      const activeTag = (document.activeElement?.tagName || '').toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of Array.from(items)) {
+        if (item.type.indexOf('image') !== -1 || item.type === 'application/pdf') {
+          const blob = item.getAsFile();
+          if (blob) {
+            e.preventDefault();
+            const pastedFile = new File([blob], `ticket-screenshot-${Date.now()}.${item.type.includes('png') ? 'png' : 'jpg'}`, {
+              type: blob.type || 'image/jpeg',
+            });
+            setSelectedTicketFile(pastedFile);
+            setSmartImportModalOpen(true);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, []);
+
+  // Handle Smart AI Ticket Import to prepare and open in TicketInvoiceEditorWorkspace
+  const handleSmartImport = useCallback((parsed: ParsedTicketData) => {
+    const formattedData = {
+      pnr: parsed.pnr || '',
+      airline: parsed.airline || '',
+      customerName: '',
+      customer: '',
+      supplierAccount: '',
+      supplierAccountName: '',
+      supplierId: '',
+      route: parsed.routeFrom && parsed.routeTo
+        ? (parsed.tripType === 'ROUND_TRIP' ? `${parsed.routeFrom} - ${parsed.routeTo} - ${parsed.routeFrom}` : `${parsed.routeFrom} - ${parsed.routeTo}`)
+        : '',
+      travelDate: parsed.travelDate || new Date().toISOString(),
+      issueDate: parsed.issueDate || new Date().toISOString(),
+      flightNumber: parsed.flightNumber || '',
+      currency: parsed.currency || 'IQD',
+      notes: [
+        parsed.flightNumber ? `Flight: ${parsed.flightNumber}` : '',
+        parsed.travelClass ? `Class: ${parsed.travelClass}` : '',
+        parsed.baggage ? `Baggage: ${parsed.baggage}` : '',
+        parsed.bookingRef ? `Ref: ${parsed.bookingRef}` : '',
+      ].filter(Boolean).join(' | '),
+      passengers: (parsed.passengers || []).map((p, idx) => ({
+        id: `p-ai-${Date.now()}-${idx}`,
+        name: p.name || '',
+        ticketType: p.ticketType || 'ADULT',
+        ticketNumber: p.ticketNumber || '',
+        documentNumber: p.documentNumber || '',
+        pnr: parsed.pnr || '',
+        fareBuy: p.fareBuy || null,
+        fareSell: p.fareSell || null,
+        tax1: p.tax1 || 0,
+        tax2: p.tax2 || 0,
+        charge: p.charge || 0,
+      })),
+    };
+    setEditingTicketData(formattedData);
+    setModalOpen(true);
+  }, []);
 
   // Context Menu & Deletion States
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ticket: any } | null>(null);
@@ -864,42 +950,42 @@ export const TicketsPage: React.FC = () => {
       dir={direction}
       style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
     >
-      {/* ── 1. KPI CARDS + LOTTIE ANIMATION (Height 124px) ── */}
-      <div className="flex gap-3 items-stretch h-[124px]">
+      {/* ── 1. KPI CARDS + LOTTIE ANIMATION (Height 118px) ── */}
+      <div className="flex gap-3 items-stretch h-[118px]">
         {/* KPI Cards (First in RTL) */}
         <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 h-full">
           {/* Card 1: Total Sales */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-full">
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] px-3.5 py-2.5 shadow-2xs flex flex-col justify-between h-full hover:border-slate-300 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.totalSales')}</span>
-              <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-                <Banknote size={19} strokeWidth={1.85} />
+              <span className="text-[12px] font-bold text-slate-800">{t('tickets.totalSales')}</span>
+              <div className="w-[32px] h-[32px] rounded-[8px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <Banknote size={17} strokeWidth={1.85} />
               </div>
             </div>
             <div>
               {ticketsLoading ? (
                 <div className="grid grid-cols-2 gap-2 animate-pulse">
                   <div className="space-y-1">
-                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4.5 w-16 bg-slate-200/70 rounded" />
+                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4 w-16 bg-slate-200/70 rounded" />
                   </div>
                   <div className="space-y-1">
-                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4.5 w-20 bg-slate-200/70 rounded" />
+                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4 w-20 bg-slate-200/70 rounded" />
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dollar')}</span>
-                    <span className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
+                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
+                    <span className="text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
                       ${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dinar')}</span>
-                    <span className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
-                      {kpis.totalSellIQD.toLocaleString()} <span className="text-[10px] font-sans font-semibold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
+                    <span className="text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                      {kpis.totalSellIQD.toLocaleString()} <span className="text-[9px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                     </span>
                   </div>
                 </div>
@@ -908,37 +994,37 @@ export const TicketsPage: React.FC = () => {
           </div>
 
           {/* Card 2: Total Buy Cost */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-full">
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] px-3.5 py-2.5 shadow-2xs flex flex-col justify-between h-full hover:border-slate-300 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.totalCost')}</span>
-              <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-                <ReceiptText size={19} strokeWidth={1.85} />
+              <span className="text-[12px] font-bold text-slate-800">{t('tickets.totalCost')}</span>
+              <div className="w-[32px] h-[32px] rounded-[8px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+                <ReceiptText size={17} strokeWidth={1.85} />
               </div>
             </div>
             <div>
               {ticketsLoading ? (
                 <div className="grid grid-cols-2 gap-2 animate-pulse">
                   <div className="space-y-1">
-                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4.5 w-16 bg-slate-200/70 rounded" />
+                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4 w-16 bg-slate-200/70 rounded" />
                   </div>
                   <div className="space-y-1">
-                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4.5 w-20 bg-slate-200/70 rounded" />
+                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4 w-20 bg-slate-200/70 rounded" />
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dollar')}</span>
-                    <span className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
+                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
+                    <span className="text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
                       ${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dinar')}</span>
-                    <span className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
-                      {kpis.totalBuyIQD.toLocaleString()} <span className="text-[10px] font-sans font-semibold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
+                    <span className="text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                      {kpis.totalBuyIQD.toLocaleString()} <span className="text-[9px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                     </span>
                   </div>
                 </div>
@@ -947,50 +1033,84 @@ export const TicketsPage: React.FC = () => {
           </div>
 
           {/* Card 3: Net Profit */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-full">
+          <div className="bg-white border border-[#E5E7EB] rounded-[14px] px-3.5 py-2.5 shadow-2xs flex flex-col justify-between h-full hover:border-slate-300 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] font-semibold text-[#64748B]">{t('tickets.netProfit')}</span>
-              <div className="w-[36px] h-[36px] rounded-[10px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
-                <TrendingUp size={19} strokeWidth={1.85} />
+              <span className="text-[12px] font-bold text-slate-800">{t('tickets.netProfit')}</span>
+              <div className="w-[32px] h-[32px] rounded-[8px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
+                <TrendingUp size={17} strokeWidth={1.85} />
               </div>
             </div>
             <div>
               {ticketsLoading ? (
                 <div className="grid grid-cols-2 gap-2 animate-pulse">
                   <div className="space-y-1">
-                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4.5 w-16 bg-slate-200/70 rounded" />
+                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4 w-16 bg-slate-200/70 rounded" />
                   </div>
                   <div className="space-y-1">
-                    <div className="h-2.5 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-4.5 w-20 bg-slate-200/70 rounded" />
+                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
+                    <div className="h-4 w-20 bg-slate-200/70 rounded" />
                   </div>
                 </div>
               ) : canViewProfits ? (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dollar')}</span>
-                    <span className={`text-[17px] font-bold font-mono tabular-nums leading-tight block ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dollar')}</span>
+                    <span className={`text-[16px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
                       {kpis.totalProfitUSD > 0 ? `+$${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : kpis.totalProfitUSD < 0 ? `-$${Math.abs(kpis.totalProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `$0.00`}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10.5px] font-medium text-[#64748B] block">{t('currency.dinar')}</span>
-                    <span className={`text-[16px] font-bold font-mono tabular-nums leading-tight block ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
-                      {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`} <span className="text-[10px] font-sans font-semibold">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                    <span className="text-[10px] font-semibold text-[#64748B] block">{t('currency.dinar')}</span>
+                    <span className={`text-[15px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                      {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`} <span className="text-[9px] font-sans font-bold">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                     </span>
                   </div>
                 </div>
               ) : (
-                <span className="text-[13.5px] text-slate-400 font-mono">{t('tickets.unauthorized')}</span>
+                <span className="text-[13px] text-slate-400 font-mono">{t('tickets.unauthorized')}</span>
               )}
             </div>
           </div>
         </div>
 
-        {/* Lottie Animation — Last (left side in RTL) */}
-        <div className="hidden lg:flex w-[220px] shrink-0 bg-white border border-[#E5E7EB] rounded-[14px] shadow-2xs items-center justify-center overflow-hidden p-2 h-full">
-          <Lottie src={flightBookingAnimation} loop={true} autoplay={true} className="w-full h-full object-contain" />
+        {/* Hidden File Input for Direct AI Ticket Upload */}
+        <input
+          type="file"
+          ref={ticketFileInputRef}
+          accept="application/pdf,image/*,.txt,.doc,.docx"
+          onChange={handleTicketFileSelected}
+          className="hidden"
+        />
+
+        {/* Lottie Animation — Last (left side in RTL, click directly opens file chooser dialog) */}
+        <div
+          onClick={() => {
+            ticketFileInputRef.current?.click();
+          }}
+          className="relative hidden lg:flex w-[190px] shrink-0 bg-white border border-[#E5E7EB] hover:border-[#F45A0A] rounded-[14px] shadow-2xs items-center justify-center overflow-hidden p-1 h-full cursor-pointer group transition-all"
+          onMouseEnter={() => lottieRef.current?.play()}
+          onMouseLeave={() => {
+            // lottie-react 3 لا يعرف goToAndStop — كان النداء يرمي استثناءً في كل
+            // مرة يغادر فيها المؤشّر البطاقة. وstop() هنا تفعل الأمرين: توقف وتعود
+            // إلى أول إطار.
+            lottieRef.current?.stop();
+          }}
+          title={language === 'ar' ? '📸 انقر مباشرة لاختيار ملف التذكرة أو الصق لقطة الشاشة (Ctrl+V)' : '📸 Click directly to select ticket file or paste screenshot (Ctrl+V)'}
+        >
+          <Lottie
+            lottieRef={lottieRef}
+            src={aiSpiderAnimation}
+            loop={true}
+            autoplay={false}
+            className="w-full h-full object-contain scale-105 transition-transform duration-300 group-hover:scale-115"
+          />
+
+          {/* Floating Action Badge */}
+          <div className="absolute bottom-1 inset-x-2 flex items-center justify-center gap-1 bg-white/95 group-hover:bg-[#FFF3E8] border border-slate-200 group-hover:border-[#F45A0A]/30 py-0.5 px-1.5 rounded-lg text-[10px] font-bold text-slate-700 group-hover:text-[#F45A0A] transition-all shadow-2xs backdrop-blur-xs">
+            <Sparkles size={11} className="text-[#F45A0A]" />
+            <span>{language === 'ar' ? 'اختر تذكرة (AI)' : 'Pick Ticket (AI)'}</span>
+          </div>
         </div>
       </div>
 
@@ -1717,6 +1837,16 @@ export const TicketsPage: React.FC = () => {
           setEditingTicketData(null);
         }}
         onSuccess={handleTicketSaved}
+      />
+
+      <SmartTicketImportModal
+        opened={smartImportModalOpen}
+        initialFile={selectedTicketFile}
+        onClose={() => {
+          setSmartImportModalOpen(false);
+          setSelectedTicketFile(null);
+        }}
+        onImport={handleSmartImport}
       />
 
       <InvoiceAuditLogModal

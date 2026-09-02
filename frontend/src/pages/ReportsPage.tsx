@@ -11,10 +11,11 @@ import {
   Switch,
   Tooltip,
   Menu,
+  Modal,
+  Loader,
 } from '@mantine/core';
 import {
   IconSearch,
-  IconEye,
   IconFileText,
   IconReceipt,
   IconCreditCard,
@@ -49,6 +50,10 @@ import {
   IconTicket,
   IconPlus,
   IconEdit,
+  IconTrash,
+  IconAlertTriangle,
+  IconLink,
+  IconCheck,
 } from '@tabler/icons-react';
 import * as XLSX from 'xlsx';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
@@ -58,6 +63,12 @@ import {
 } from '../components/reports/AccountStatementPrintModal';
 import { FinancialVoucherForm } from '../components/vouchers/FinancialVoucherForm';
 import { TicketInvoiceEditorWorkspace } from '../components/tickets/TicketInvoiceEditorWorkspace';
+// نافذة الفيزا ثقيلة ولا تُفتح إلا حين يكون المستند تأشيرة، فتُحمَّل عند الطلب.
+const VisaInvoiceEditorWorkspace = React.lazy(() =>
+  import('../components/visas/VisaInvoiceEditorWorkspace').then((m) => ({
+    default: m.VisaInvoiceEditorWorkspace,
+  }))
+);
 import { ticketsApi } from '../api/tickets';
 import { useLanguageStore } from '../store/useLanguageStore';
 
@@ -117,6 +128,374 @@ const formatRouteCodesOnly = (rawRoute?: string): string => {
     .filter(Boolean)
     .join(' ➔ ');
 };
+
+/*
+ * نوع المستند يُقرأ من الخدمة التي وُلد عنها، لا من نصّ القيد.
+ *
+ * كان كل قيد ناشئ عن تذكرة يظهر في عمود «المستند ونوعه» باسم «قيد يومية»، فيقرأ
+ * صاحبُ الكشف صفَّ تذكرةٍ ولا يعرف أنها تذكرة، ثم يفتحه فتنفتح له نافذة سندٍ لا
+ * صلة لها بالمستند. والقيد نفسه يحمل مصدره — sourceType وsourceId — فمنهما
+ * يُشتقّ النوع، ومن رقم الفاتورة والقيد حين يكون القيد قديماً بلا مصدر مسجَّل.
+ */
+export type ServiceKind = 'TICKET' | 'VISA' | 'HOTEL' | 'REISSUE' | 'REFUND' | 'GROUP';
+
+const SERVICE_KIND_LABEL: Record<ServiceKind, { ar: string; en: string }> = {
+  TICKET: { ar: 'تذاكر', en: 'Tickets' },
+  VISA: { ar: 'تأشيرة', en: 'Visa' },
+  HOTEL: { ar: 'فندق', en: 'Hotel' },
+  REISSUE: { ar: 'تغيير', en: 'Reissue' },
+  REFUND: { ar: 'استرجاع', en: 'Refund' },
+  GROUP: { ar: 'كروب', en: 'Group' },
+};
+
+const SERVICE_SOURCE_TYPES = new Set(['TICKET', 'VISA', 'HOTEL', 'REISSUE', 'REFUND', 'GROUP']);
+
+const serviceKindLabel = (kind: ServiceKind, isAr: boolean) => {
+  const entry = SERVICE_KIND_LABEL[kind] || SERVICE_KIND_LABEL.TICKET;
+  return isAr ? entry.ar : entry.en;
+};
+
+const resolveServiceKind = (ticket?: any, sourceType?: string, docHint?: string): ServiceKind => {
+  const src = String(sourceType || '').toUpperCase();
+  const trip = String(ticket?.tripType || '').toUpperCase();
+  const status = String(ticket?.status || '').toUpperCase();
+  // أرقام الفواتير والقيود تحمل بادئة نوعها (REF- للاسترجاع، REIS-/CHG- للتغيير)،
+  // وهي الملاذ حين يسبق القيدُ تسجيلَ نوع المصدر في القاعدة.
+  const codes = `${ticket?.invoiceNumber || ''} ${docHint || ''}`.toUpperCase();
+
+  if (src === 'REFUND' || trip === 'REFUND' || status === 'REFUNDED' || /(^|[^A-Z])REF-/.test(codes)) return 'REFUND';
+  if (src === 'REISSUE' || trip === 'REISSUE' || trip === 'CHANGE' || /(^|[^A-Z])(REIS|CHG)-/.test(codes)) return 'REISSUE';
+  if (src === 'HOTEL' || trip === 'HOTEL') return 'HOTEL';
+  if (src === 'VISA' || trip === 'VISA') return 'VISA';
+  if (src === 'GROUP' || trip === 'GROUP') return 'GROUP';
+  return 'TICKET';
+};
+
+/*
+ * سطر السداد يتبع فاتورته مباشرة، كفرعٍ تحت أصله في الشجرة.
+ *
+ * بيعُ التذكرة نقداً يُنتج سطرين على حساب العميل: قيمة الفاتورة مديناً، ثم
+ * سدادها دائناً. وما دام الكشف يُرتَّب زمنياً فحسب، فقد ينزلق بينهما سطرٌ ثالث
+ * — سندٌ في اللحظة نفسها مثلاً — فينقطع السداد عن فاتورته ويقرأ المحاسب رقمين
+ * لا يعرف أنهما وجهان لعملية واحدة. هنا يُعاد ترتيب المصفوفة المرتَّبة فيُلحَق
+ * كل سداد بأبيه فوراً، ويُترك في موضعه الزمني وحده إن غاب أبوه عن التصفية.
+ */
+const groupServiceSettlements = (rows: any[]): any[] => {
+  const present = new Set(rows.map((r) => r.id));
+  const children = new Map<string, any[]>();
+
+  rows.forEach((r) => {
+    if (r.parentRowId && present.has(r.parentRowId)) {
+      const list = children.get(r.parentRowId) || [];
+      list.push(r);
+      children.set(r.parentRowId, list);
+    }
+  });
+
+  if (!children.size) return rows;
+
+  const out: any[] = [];
+  rows.forEach((r) => {
+    if (r.parentRowId && present.has(r.parentRowId)) return; // يخرج ملحقاً بأبيه
+    out.push(r);
+    (children.get(r.id) || []).forEach((child) => out.push(child));
+  });
+  return out;
+};
+
+// تفاصيل الرحلة تُنتزع من التذكرة نفسها لتُعرض تحت بيان الحركة في الكشف.
+const ticketDetailsOf = (ticket: any) => {
+  if (!ticket) return null;
+  const passengers = (ticket.passengers || []).map((p: any) => ({
+    name: p.name || p.passenger || '',
+    ticketNumber: p.ticketNumber || p.documentNumber || '',
+    ticketType: p.ticketType || p.type || '',
+  })).filter((p: any) => p.name);
+
+  const pnr = ticket.pnr || ticket.reference || '';
+  const route = ticket.fullRouteText || ticket.route || '';
+  const airline = ticket.airline || '';
+  if (!passengers.length && !pnr && !route && !airline) return null;
+  return { passengers, pnr, route, airline };
+};
+
+/** ما يُكتب في عمود «النوع» بالكشف المطبوع، بالكلمات التي يستعملها المحاسب. */
+const SERVICE_TYPE_LABEL_AR: Record<ServiceKind, string> = {
+  TICKET: 'تذكرة',
+  VISA: 'فيزا',
+  HOTEL: 'فنادق',
+  REISSUE: 'تغيير',
+  REFUND: 'استرجاع',
+  GROUP: 'كروب',
+};
+
+const SERVICE_WORD: Record<ServiceKind, { one: string; many: string }> = {
+  TICKET: { one: 'تذكرة', many: 'التذاكر' },
+  VISA: { one: 'تأشيرة', many: 'التأشيرات' },
+  HOTEL: { one: 'حجز فندق', many: 'حجوزات الفنادق' },
+  REISSUE: { one: 'تغيير', many: 'التغييرات' },
+  REFUND: { one: 'استرجاع', many: 'الاسترجاعات' },
+  GROUP: { one: 'كروب', many: 'الكروبات' },
+};
+
+/*
+ * البيان يُسمّي الخدمة باسمها، ولا يعيد اسم صاحب الكشف عليه.
+ *
+ * القيود المولَّدة تكتب «تذكرة/تأشيرة» احتياطاً لأنها لا تعرف أيّهما، فيقرأ
+ * صاحبُ تذكرةٍ كلمة تأشيرة لا معنى لها عنده. ونحن نعرف نوع الخدمة من مصدر
+ * القيد، فيُستبدل الاحتياط باسمه الصحيح.
+ *
+ * ويُنزع اسم الحساب من النص لأن الكشف كلّه له: تكراره في كل سطر حشوٌ يزاحم
+ * التفاصيل التي تنفع — المسافر والمسار ورقم التذكرة.
+ */
+const cleanStatementText = (
+  text?: string,
+  kind?: ServiceKind | null,
+  ...accountNames: Array<string | undefined>
+): string => {
+  let out = String(text || '');
+
+  if (kind && SERVICE_WORD[kind]) {
+    out = out
+      .split('تذكرة/تأشيرة').join(SERVICE_WORD[kind].one)
+      .split('التذاكر/التأشيرات').join(SERVICE_WORD[kind].many)
+      .split('تذاكر/تأشيرات').join(SERVICE_WORD[kind].many);
+  }
+
+  let removed = false;
+  Array.from(new Set(accountNames.map((n) => String(n || '').trim()).filter((n) => n.length >= 3)))
+    .sort((a, b) => b.length - a.length)
+    .forEach((name) => {
+      const wrapped = `(${name})`;
+      if (out.includes(wrapped)) {
+        out = out.split(wrapped).join('');
+        removed = true;
+      }
+      if (out.includes(name)) {
+        out = out.split(name).join('');
+        removed = true;
+      }
+    });
+
+  if (!removed) return out.trim();
+
+  return out
+    .replace(/\(\s*\)/g, '')
+    .replace(/[-–—]\s*(?=\s|$|\))/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .replace(/\s+([,،.])/g, '$1')
+    .trim();
+};
+
+/*
+ * رقم المستند يُنزع من البيان لأن له عموداً.
+ *
+ * كان الرقم يُكتب ثلاث مرات في الصف الواحد: تحت التاريخ، وداخل نص البيان، وفي
+ * رقم القيد الذي يحويه بدوره. فأُفرد له عمود، ويُحذف من النص هنا مع الشَّرطة
+ * التي كانت تسبقه والقوس الفارغ الذي قد يخلّفه — والتنظيف لا يجري إلا إذا حُذف
+ * شيء فعلاً، كي لا تُمسّ شَرطةٌ في بيانٍ لا رقم فيه.
+ */
+const stripDocNumber = (text?: string, ...codes: Array<string | undefined>): string => {
+  let out = String(text || '');
+  let removed = false;
+
+  Array.from(new Set(codes.map((c) => String(c || '').trim()).filter((c) => c.length >= 4)))
+    .sort((a, b) => b.length - a.length) // الأطول أولاً كي لا يُبقي الأقصرُ بقيّةً منه
+    .forEach((code) => {
+      if (!out.includes(code)) return;
+      out = out.split(code).join('');
+      removed = true;
+    });
+
+  if (!removed) return out.trim();
+
+  return out
+    .replace(/[-–—]\s*(?=\s|$|\))/g, ' ')
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .trim();
+};
+
+/*
+ * أرقام الفواتير والمراجع تبقى كتلة واحدة.
+ *
+ * المتصفّح يكسر السطر بعد أي شَرطة، فينقسم «KAB-TKT-2026-01001» نصفين ويقرأه
+ * القارئ رقمين. وهذه الرموز لاتينية داخل نصٍّ عربي، فتُعزل باتجاهها الخاص
+ * أيضاً كي تُرتَّب خاناتها كما كُتبت.
+ */
+const NoBreakCodes: React.FC<{ text?: string }> = ({ text }) => (
+  <>
+    {String(text || '')
+      .split(/(\s+)/)
+      .map((token, i) =>
+        /[A-Za-z0-9]/.test(token) && /[-/]/.test(token) ? (
+          <span key={i} className="whitespace-nowrap" dir="ltr">
+            {token}
+          </span>
+        ) : (
+          <React.Fragment key={i}>{token}</React.Fragment>
+        )
+      )}
+  </>
+);
+
+/*
+ * شريط تفاصيل الرحلة: الـPNR والمسار والمسافرون تحت بيان الحركة.
+ *
+ * سطرُ القيد يقول «قيمة مبيعات تذكرة» ولا يقول لمن ولا إلى أين — فيضطر القارئ
+ * إلى فتح التذكرة ليعرف. وهذه التفاصيل موجودة في السجل المرتبط أصلاً، فتُعرض
+ * حيث تُقرأ.
+ */
+const CHIP = 'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap shrink-0';
+
+/*
+ * قيمة تُنسخ بنقرة.
+ *
+ * أسماء المسافرين وأرقام تذاكرهم تُنقل إلى نظام شركة الطيران أو إلى محادثة مع
+ * العميل، وكتابتها يدوياً بابُ خطأ لا داعي له. فكل قيمة زرٌّ ينسخ نفسه ويُظهر
+ * علامة صحّ لحظةً ليعرف الناسخ أن النسخ تمّ.
+ */
+const CopyValue: React.FC<{ value: string; label?: string; title: string; className?: string }> = ({
+  value,
+  label,
+  title,
+  className = '',
+}) => {
+  const [done, setDone] = React.useState(false);
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(value).then(
+          () => {
+            setDone(true);
+            window.setTimeout(() => setDone(false), 1400);
+          },
+          () => undefined
+        );
+      }}
+      className={`inline-flex items-center gap-1 cursor-pointer hover:bg-black/5 rounded px-0.5 transition-colors whitespace-nowrap ${className}`}
+    >
+      <span className="whitespace-nowrap">{label ?? value}</span>
+      {done ? (
+        <IconCheck size={10} className="text-emerald-600 shrink-0" />
+      ) : (
+        <IconCopy size={10} className="opacity-45 shrink-0" />
+      )}
+    </button>
+  );
+};
+
+const TicketDetailStrip: React.FC<{ details: any; isAr: boolean }> = ({ details, isAr }) => {
+  if (!details) return null;
+  const { passengers = [], pnr, route, airline } = details;
+  const routeClean = formatRouteCodesOnly(route);
+  if (!passengers.length && !pnr && !routeClean && !airline) return null;
+
+  /*
+   * الشرائح لا تلتوي.
+   *
+   * الاسم اللاتيني ورقم التذكرة كانا ينكسران في منتصفهما داخل عمودٍ ضيّق، فيُقرأ
+   * «RAJAA AL / KHALEDI» سطرين و«512- / 2300832814» رقمين. لذلك كل شريحة كتلةٌ
+   * لا تُكسر (whitespace-nowrap + shrink-0)، وحين يضيق العمود تنتقل الشريحةُ
+   * كاملةً إلى السطر التالي بدل أن ينشقّ ما بداخلها.
+   */
+  return (
+    <div className="space-y-1 pt-0.5">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {pnr && (
+          <span className={`${CHIP} bg-slate-900 text-white font-mono`} dir="ltr">
+            <CopyValue
+              value={String(pnr)}
+              label={`PNR: ${pnr}`}
+              title={isAr ? 'نسخ الـ PNR' : 'Copy PNR'}
+              className="hover:bg-white/15 text-white"
+            />
+          </span>
+        )}
+        {routeClean && (
+          <span className={`${CHIP} font-mono text-emerald-900 bg-emerald-50 border border-emerald-200`} dir="ltr">
+            <IconRoute size={11} className="text-emerald-700 shrink-0" />
+            {routeClean}
+          </span>
+        )}
+        {airline && (
+          <span className={`${CHIP} text-sky-900 bg-sky-50 border border-sky-200`}>
+            <IconPlane size={11} className="text-sky-700 shrink-0" />
+            {airline}
+          </span>
+        )}
+        {passengers.length > 0 && (
+          <span className={`${CHIP} bg-indigo-50 text-indigo-900 border border-indigo-200`}>
+            <IconUsers size={11} className="text-indigo-600 shrink-0" />
+            {isAr ? 'العدد' : 'Pax'}
+            <span className="w-3.5 h-3.5 rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center font-mono">
+              {passengers.length}
+            </span>
+          </span>
+        )}
+      </div>
+
+      {passengers.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {passengers.map((pass: any, idx: number) => (
+            <span
+              key={idx}
+              dir="ltr"
+              className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200/70 rounded-md px-1.5 py-0.5 text-[10.5px] font-mono font-bold text-slate-800 whitespace-nowrap shrink-0"
+            >
+              <IconUser size={10} className="text-indigo-500 shrink-0" />
+              <CopyValue
+                value={String(pass.name).trim()}
+                title={isAr ? 'نسخ اسم المسافر' : 'Copy passenger name'}
+                className="text-slate-900"
+              />
+              {pass.ticketType && (
+                <span className="text-[9px] font-bold text-indigo-700 bg-indigo-100/70 px-1 rounded whitespace-nowrap">
+                  {pass.ticketType}
+                </span>
+              )}
+              {pass.ticketNumber && (
+                <CopyValue
+                  value={String(pass.ticketNumber)}
+                  label={`#${pass.ticketNumber}`}
+                  title={isAr ? 'نسخ رقم التذكرة' : 'Copy ticket number'}
+                  className="text-[9.5px] text-slate-600 bg-white rounded border border-slate-200"
+                />
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/*
+ * وصلة الشجرة: زاويةٌ مرسومة تربط سطر السداد بالفاتورة التي فوقه.
+ * تُبنى بخصائص CSS المنطقية لتنقلب مع اتجاه الصفحة بلا شرطٍ في الشيفرة.
+ */
+const SettlementBranch: React.FC = () => (
+  <div
+    aria-hidden
+    className="shrink-0"
+    style={{
+      width: 16,
+      height: 12,
+      marginTop: 5,
+      marginInlineStart: 4,
+      borderInlineStart: '2px solid #cbd5e1',
+      borderBottom: '2px solid #cbd5e1',
+      borderEndStartRadius: 8,
+    }}
+  />
+);
 
 export const ReportsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -201,6 +580,12 @@ export const ReportsPage: React.FC = () => {
   const [editVoucherId, setEditVoucherId] = useState<string | undefined>(undefined);
   const [ticketModalOpened, setTicketModalOpened] = useState(false);
   const [editingTicketData, setEditingTicketData] = useState<any | null>(null);
+  const [visaModalOpened, setVisaModalOpened] = useState(false);
+  const [editingVisaData, setEditingVisaData] = useState<any | null>(null);
+  const [openingDocId, setOpeningDocId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingRow, setDeletingRow] = useState(false);
   // ── Sidebar Toggle Filters ──
   const [activeFilters, setActiveFilters] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -293,6 +678,15 @@ export const ReportsPage: React.FC = () => {
     if (vt === 'RECEIPT') return 'receipt';
     if (vt === 'PAYMENT') return 'payment';
 
+    // القيد الناشئ عن خدمة يُصنَّف بخدمته لا بنصّه، فتعمل مفاتيح «الخدمات» عليه.
+    const sk = String(m.serviceKind || '').toUpperCase();
+    if (sk === 'TICKET') return 'tickets';
+    if (sk === 'VISA') return 'visa';
+    if (sk === 'GROUP') return 'groups';
+    if (sk === 'REFUND') return 'refunds';
+    if (sk === 'REISSUE') return 'changes';
+    if (sk === 'HOTEL') return 'hotels';
+
     const dt = (m.docType || '').toLowerCase();
     if (dt.includes('تذكر') || dt.includes('طيران') || dt.includes('ticket')) return 'tickets';
     if (dt.includes('فيزا') || dt.includes('visa')) return 'visa';
@@ -359,6 +753,7 @@ export const ReportsPage: React.FC = () => {
         m.docType,
         m.entryNumber,
         m.voucherNumber,
+        m.docNumber,
         m.reference,
         m.pnr,
         m.airline,
@@ -425,6 +820,18 @@ export const ReportsPage: React.FC = () => {
         const rawLines: any[] = [];
         const processedVoucherNumbers = new Set<string>();
 
+        // فهرس التذاكر يُبنى مرة واحدة ليُوصل كل قيد بخدمته بلا مسحٍ متكرر للقائمة.
+        const ticketList: any[] = Array.isArray(tickets) ? tickets : [];
+        const ticketById = new Map<string, any>();
+        const ticketByRef = new Map<string, any>();
+        ticketList.forEach((t: any) => {
+          if (t?.id) ticketById.set(String(t.id), t);
+          [t?.invoiceNumber, t?.reference].forEach((key: any) => {
+            const k = String(key || '').trim().toLowerCase();
+            if (k && !ticketByRef.has(k)) ticketByRef.set(k, t);
+          });
+        });
+
         // 1. Process Journal Entries
         if (Array.isArray(entries)) {
           entries.forEach((e: any) => {
@@ -443,10 +850,41 @@ export const ReportsPage: React.FC = () => {
               return;
             }
 
+            const srcType = String(e.sourceType || '').toUpperCase();
+            const srcTicket =
+              (e.sourceId && ticketById.get(String(e.sourceId))) ||
+              (e.reference && ticketByRef.get(String(e.reference).trim().toLowerCase())) ||
+              null;
+            const entryServiceKind: ServiceKind | null =
+              srcTicket
+                ? resolveServiceKind(srcTicket, srcType, `${e.entryNumber || ''} ${e.reference || ''}`)
+                : SERVICE_SOURCE_TYPES.has(srcType)
+                ? resolveServiceKind(null, srcType, `${e.entryNumber || ''} ${e.reference || ''}`)
+                : null;
+
             let hasTargetAcc = false;
+            /*
+             * القيدُ الواحد قد يمسّ الحساب مرتين: مرةً بقيمة الفاتورة ومرةً بسدادها.
+             * والسطر الأول هو الفاتورة دائماً — هكذا يبنيها المُولّد — وما بعده
+             * تسويةٌ لها، فيُربط به بدل أن يُقرأ حركةً مستقلة.
+             */
+            let serviceParentRowId: string | null = null;
             e.lines.forEach((l: any) => {
               if (l.accountId === targetAccId) {
                 hasTargetAcc = true;
+                const rowId = `${e.id}_${l.id}`;
+                /*
+                 * رقم المستند يُحسب مرة واحدة عند بناء الصف، فتقرأه الشاشةُ في
+                 * عموده والطباعةُ في عمودها، ويُنزع من نص البيان في الاثنين.
+                 */
+                const rowDocNumber =
+                  String(srcTicket?.invoiceNumber || '').trim() ||
+                  e.voucherNumber ||
+                  e.reference ||
+                  e.entryNumber ||
+                  '';
+                const isSettlementLine = !!entryServiceKind && serviceParentRowId !== null;
+                if (entryServiceKind && !serviceParentRowId) serviceParentRowId = rowId;
                 const lineDesc = (l.description || e.description || '').toLowerCase();
                 const rawLineCurr = (l.currency || e.currency || '').toString().toUpperCase();
                 const isUSD =
@@ -457,21 +895,51 @@ export const ReportsPage: React.FC = () => {
                   lineDesc.includes('$');
 
                 rawLines.push({
-                  id: `${e.id}_${l.id}`,
+                  id: rowId,
+                  parentRowId: isSettlementLine ? serviceParentRowId : null,
+                  isServiceSettlement: isSettlementLine,
+                  // التفاصيل تُعرض على الفاتورة وحدها؛ تكرارها على سطر سدادها حشو.
+                  ticketDetails: isSettlementLine ? null : ticketDetailsOf(srcTicket),
                   date: e.date,
                   entryDate: e.createdAt || e.date,
                   entryNumber: e.entryNumber,
-                  docType: e.voucherNumber
+                  docType: entryServiceKind
+                    ? serviceKindLabel(entryServiceKind, isAr)
+                    : e.voucherNumber
                     ? e.voucherType === 'RECEIPT'
                       ? (isAr ? 'سند قبض' : 'Receipt Voucher')
                       : e.voucherType === 'PAYMENT'
                       ? (isAr ? 'سند دفع' : 'Payment Voucher')
                       : (isAr ? 'قيد يومية' : 'Journal Entry')
                     : (isAr ? 'قيد يومية' : 'Journal Entry'),
+                  serviceKind: entryServiceKind,
+                  ticketRaw: srcTicket,
+                  ticketId: srcTicket?.id || (entryServiceKind ? e.sourceId || null : null),
                   voucherNumber: e.voucherNumber || '-',
                   reference: e.reference || '-',
-                  description: e.voucherDescription || l.description || e.description,
-                  accountingDescription: l.description || e.description,
+                  docNumber: rowDocNumber,
+                  description: stripDocNumber(
+                    cleanStatementText(
+                      e.voucherDescription || l.description || e.description,
+                      entryServiceKind,
+                      targetAcc?.nameAr,
+                      targetAcc?.nameEn
+                    ),
+                    rowDocNumber,
+                    e.entryNumber,
+                    e.reference
+                  ),
+                  accountingDescription: stripDocNumber(
+                    cleanStatementText(
+                      l.description || e.description,
+                      entryServiceKind,
+                      targetAcc?.nameAr,
+                      targetAcc?.nameEn
+                    ),
+                    rowDocNumber,
+                    e.entryNumber,
+                    e.reference
+                  ),
                   debit: Number(l.debit || 0),
                   credit: Number(l.credit || 0),
                   costCenter: e.costCenter || (isAr ? 'الفرع الرئيسي' : 'Main Branch'),
@@ -569,18 +1037,9 @@ export const ReportsPage: React.FC = () => {
              * يفرّق قارئ الكشف بين خدماتنا. والاسترجاع يُكتب «Refund» بالإنجليزية
              * في اللغتين بطلب صاحب النظام، ليبقى مميّزاً بلمحة عين.
              */
-            const tripKind = String(t.tripType || '').toUpperCase();
-            const isRefundRow =
-              tripKind === 'REFUND' ||
-              String(t.status || '').toUpperCase() === 'REFUNDED' ||
-              String(t.invoiceNumber || '').startsWith('REF-');
-            const serviceLabel = (amount: number): string => {
-              if (isRefundRow || amount < 0) return 'Refund';
-              if (tripKind === 'VISA') return isAr ? 'مبيعات تأشيرات' : 'Visa Sales';
-              if (tripKind === 'HOTEL') return isAr ? 'حجوزات فنادق' : 'Hotel Booking';
-              if (tripKind === 'GROUP') return isAr ? 'حجوزات جماعية' : 'Group Booking';
-              return isAr ? 'مبيعات تذاكر' : 'Ticket Sales';
-            };
+            const rowKind = resolveServiceKind(t, undefined, t.invoiceNumber);
+            const kindOf = (amount: number): ServiceKind => (amount < 0 ? 'REFUND' : rowKind);
+            const serviceLabel = (amount: number): string => serviceKindLabel(kindOf(amount), isAr);
 
             const cleanRoute = (t.fullRouteText || t.route || '').replace(/^—$/, '');
             const issuerEmp = t.employeeName || t.issuerName || t.createdByName || (isAr ? 'موظف الإصدار' : 'Issuing Staff');
@@ -596,6 +1055,10 @@ export const ReportsPage: React.FC = () => {
                 entryDate: t.createdAt || t.issueDate,
                 entryNumber: t.invoiceNumber || t.id,
                 docType: serviceLabel(sellAmt),
+                serviceKind: kindOf(sellAmt),
+                ticketId: t.id,
+                docNumber: t.invoiceNumber || '',
+                ticketDetails: ticketDetailsOf(t),
                 voucherNumber: t.invoiceNumber || '-',
                 reference: t.pnr || t.reference || '-',
                 pnr: t.pnr || t.reference || '-',
@@ -622,6 +1085,11 @@ export const ReportsPage: React.FC = () => {
                   entryDate: t.createdAt || t.issueDate,
                   entryNumber: t.invoiceNumber || t.id,
                   docType: isAr ? 'سداد نقدي فوري' : 'Cash Settlement',
+                  serviceKind: rowKind,
+                  ticketId: t.id,
+                  docNumber: t.invoiceNumber || '',
+                  parentRowId: `ticket_cust_${t.id}`,
+                  isServiceSettlement: true,
                   voucherNumber: t.invoiceNumber || '-',
                   reference: t.pnr || t.reference || '-',
                   pnr: t.pnr || t.reference || '-',
@@ -651,6 +1119,10 @@ export const ReportsPage: React.FC = () => {
                 entryDate: t.createdAt || t.issueDate,
                 entryNumber: t.invoiceNumber || t.id,
                 docType: `${serviceLabel(1)}${isAr ? ' (نقدي)' : ' (Cash)'}`,
+                serviceKind: kindOf(1),
+                ticketId: t.id,
+                docNumber: t.invoiceNumber || '',
+                ticketDetails: ticketDetailsOf(t),
                 voucherNumber: t.invoiceNumber || '-',
                 reference: t.pnr || t.reference || '-',
                 pnr: t.pnr || t.reference || '-',
@@ -658,9 +1130,10 @@ export const ReportsPage: React.FC = () => {
                 route: cleanRoute,
                 passengersList: pList,
                 passengersDetail: passDetails,
+                // اسم الحساب لا يُعاد داخل كشفه؛ الـPNR وحده يكفي للتمييز.
                 description: isAr
-                  ? `مقبوضات مبيعات تذكرة نقدية - ${t.customerName || ''} (${t.pnr || ''})`
-                  : `Cash Ticket Sale Proceeds - ${t.customerName || ''} (${t.pnr || ''})`,
+                  ? cleanStatementText(`مقبوضات مبيعات تذكرة نقدية - ${t.customerName || ''} (${t.pnr || ''})`, rowKind, targetAcc?.nameAr, targetAcc?.nameEn)
+                  : `Cash Ticket Sale Proceeds (${t.pnr || ''})`,
                 debit: sellAmt,
                 credit: 0,
                 costCenter: isAr ? 'قسم الطيران' : 'Aviation Dept',
@@ -682,7 +1155,11 @@ export const ReportsPage: React.FC = () => {
                 date: t.issueDate || t.createdAt,
                 entryDate: t.createdAt || t.issueDate,
                 entryNumber: t.invoiceNumber || t.id,
-                docType: buyAmt < 0 ? 'Refund' : serviceLabel(buyAmt),
+                docType: serviceLabel(buyAmt),
+                serviceKind: kindOf(buyAmt),
+                ticketId: t.id,
+                docNumber: t.invoiceNumber || '',
+                ticketDetails: ticketDetailsOf(t),
                 voucherNumber: t.invoiceNumber || '-',
                 reference: t.pnr || t.reference || '-',
                 pnr: t.pnr || t.reference || '-',
@@ -707,7 +1184,7 @@ export const ReportsPage: React.FC = () => {
 
         rawLines.sort(compareByEntryOrder);
 
-        setStatementMovements(rawLines);
+        setStatementMovements(groupServiceSettlements(rawLines));
 
         if (forceRefresh) {
           showSuccessNotification(
@@ -781,7 +1258,7 @@ export const ReportsPage: React.FC = () => {
     const filtered = inScope.filter(isWithinRange);
     const beforeRange = inScope.filter(isBeforeRange);
 
-    const sortedFiltered = [...filtered].sort(compareByEntryOrder);
+    const sortedFiltered = groupServiceSettlements([...filtered].sort(compareByEntryOrder));
 
     const rows: any[] = [];
     const isOpeningCredit = (selectedAcc as any)?.openingNature === 'CREDIT';
@@ -995,32 +1472,77 @@ export const ReportsPage: React.FC = () => {
       const voucherNo = r.voucherNumber && r.voucherNumber !== '-' ? r.voucherNumber : '';
       const docRef = voucherNo || r.entryNumber || '';
       const reference = r.reference && r.reference !== '-' ? r.reference : '';
+      /*
+        * عمود «النوع» يسمّي المستند بما هو، لا برمزٍ واحد للجميع.
+        *
+        * كان كل صفٍّ يُكتب GL-ENTRY لأن التصنيف كان يقرأ voucherType وحده، وهو
+        * فارغٌ في القيود المولَّدة عن الخدمات. والنوع معروف: من خدمة القيد إن
+        * كان ناشئاً عن خدمة، ومن كون السطر تسديداً لفاتورته، وإلا فمن نوع السند.
+        */
       const vt = String(r.voucherType || '').toUpperCase();
-      const typeCode =
-        vt === 'TICKET' || vt === 'FLIGHT'
-          ? 'DT-ISSUE'
-          : vt === 'RECEIPT'
-          ? 'RV-RCPT'
-          : vt === 'PAYMENT'
-          ? 'PV-PAY'
-          : vt === 'OPENING'
-          ? 'OPEN-BAL'
-          : vt === 'PREVIOUS'
-          ? 'PREV-BAL'
-          : 'GL-ENTRY';
+      const kind = String(r.serviceKind || '').toUpperCase() as ServiceKind;
+      const typeCode = r.serviceKind
+        ? r.isServiceSettlement
+          ? isAr
+            ? `تسديد ${SERVICE_WORD[kind]?.one || 'تذكرة'}`
+            : `${serviceKindLabel(kind, false)} settlement`
+          : isAr
+          ? SERVICE_TYPE_LABEL_AR[kind] || 'قيد'
+          : serviceKindLabel(kind, false)
+        : vt === 'RECEIPT'
+        ? (isAr ? 'قبض' : 'Receipt')
+        : vt === 'PAYMENT'
+        ? (isAr ? 'دفع' : 'Payment')
+        : vt === 'EXCHANGE'
+        ? (isAr ? 'صرافة' : 'Exchange')
+        : vt === 'OPENING'
+        ? (isAr ? 'افتتاحي' : 'Opening')
+        : vt === 'PREVIOUS'
+        ? (isAr ? 'سابق' : 'Previous')
+        : (isAr ? 'قيد' : 'Journal');
 
       const docLabel = [r.docType, reference && reference !== docRef ? `Ref: ${reference}` : '']
         .filter(Boolean)
         .join(' · ');
 
+      /*
+       * الكشف المطبوع يقرأ pnr وroute وpassengersDetail من الصف مباشرة، وصفوف
+       * القيود تحمل تفاصيلها في ticketDetails — فتُسطَّح هنا ليصل إلى الـPDF ما
+       * يظهر على الشاشة نفسه، لا أقل.
+       */
+      const details = r.ticketDetails;
+      const flatPassengers = Array.isArray(r.passengersDetail) && r.passengersDetail.length
+        ? r.passengersDetail
+        : Array.isArray(details?.passengers) && details.passengers.length
+        ? details.passengers
+        : undefined;
+
+      /*
+       * رقم المستند هو رقم الفاتورة إن كانت الحركة خدمةً، وإلا رقم السند، وإلا
+       * المرجع أو رقم القيد — أي الرقم الذي يعود به المحاسب إلى المستند نفسه، لا
+       * رقم القيد المولَّد الذي يحوي الفاتورة داخله.
+       */
+      const invoiceNumber = String(r.ticketRaw?.invoiceNumber || '').trim();
+      const docNumber = r.docNumber || invoiceNumber || voucherNo || reference || r.entryNumber || '';
+
       return {
         ...r,
         rowNumber: idx + 1,
         docRef,
+        docNumber,
         docLabel,
         typeCode,
-        statement: r.description || r.accountingDescription || '',
-        passengersDetail: Array.isArray(r.passengersDetail) ? r.passengersDetail : undefined,
+        statement: stripDocNumber(
+          r.description || r.accountingDescription || '',
+          docNumber,
+          r.entryNumber,
+          reference,
+          invoiceNumber
+        ),
+        pnr: r.pnr && r.pnr !== '-' ? r.pnr : details?.pnr || undefined,
+        route: r.route || details?.route || undefined,
+        airline: r.airline || details?.airline || undefined,
+        passengersDetail: flatPassengers,
       };
     });
   }, [calculatedRows]);
@@ -1075,14 +1597,24 @@ export const ReportsPage: React.FC = () => {
         align: 'center',
         render: (r) => {
           const dt = (r.docType || '').toLowerCase();
-          const isTicket = dt.includes('تذكرة') || dt.includes('ticket');
+          const sk = String(r.serviceKind || '').toUpperCase();
           const isReceipt = dt.includes('قبض') || dt.includes('receipt');
           const isPayment = dt.includes('دفع') || dt.includes('payment');
           const isOpening = dt.includes('افتتاحي') || dt.includes('opening');
           const isPrevious = dt.includes('سابق') || dt.includes('previous');
 
-          const badgeColor = isTicket
-            ? 'bg-sky-50 text-sky-800 border-sky-200'
+          // لكل خدمة لونها، فيُميَّز نوع المستند قبل قراءة اسمه.
+          const serviceBadge: Record<string, string> = {
+            TICKET: 'bg-sky-50 text-sky-800 border-sky-200',
+            VISA: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+            HOTEL: 'bg-violet-50 text-violet-800 border-violet-200',
+            REISSUE: 'bg-amber-50 text-amber-900 border-amber-200',
+            REFUND: 'bg-rose-50 text-rose-800 border-rose-200',
+            GROUP: 'bg-teal-50 text-teal-800 border-teal-200',
+          };
+
+          const badgeColor = serviceBadge[sk]
+            ? serviceBadge[sk]
             : isReceipt
             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
             : isPayment
@@ -1096,9 +1628,19 @@ export const ReportsPage: React.FC = () => {
           return (
             <div className="flex flex-col items-center justify-center gap-1 py-1">
               <div className="flex items-center gap-1">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shadow-2xs ${badgeColor}`}>
+                {/* شارة النوع هي مدخل التفاصيل، فتبقى قائمة الإجراءات للتعديل والحذف وحدهما. */}
+                <button
+                  type="button"
+                  title={isAr ? 'عرض تفاصيل المستند' : 'View document details'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedMovement(r);
+                    setDrawerOpen(true);
+                  }}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shadow-2xs cursor-pointer hover:brightness-95 transition ${badgeColor}`}
+                >
                   {r.docType}
-                </span>
+                </button>
                 {r.status === 'AUDITED' && (
                   <Tooltip label={isAr ? 'حركة مدققة ومقفلة' : 'Audited & Locked'} withArrow>
                     <span className="inline-flex items-center justify-center bg-amber-50 border border-amber-200 p-0.5 rounded-full text-amber-600">
@@ -1107,8 +1649,13 @@ export const ReportsPage: React.FC = () => {
                   </Tooltip>
                 )}
               </div>
-              <span className="font-mono font-bold text-slate-600 text-[11px] bg-slate-100/90 px-1.5 py-0.2 rounded border border-slate-200/80 tracking-tight" dir="ltr">
-                {r.voucherNumber}
+              {/* رقم الفاتورة/السند في عموده — فلا يُكرَّر داخل البيان. */}
+              <span
+                className="font-mono font-bold text-slate-700 text-[10.5px] bg-slate-100/90 px-1.5 py-0.2 rounded border border-slate-200/80 tracking-tight max-w-full truncate"
+                dir="ltr"
+                title={r.docNumber || r.voucherNumber || ''}
+              >
+                {r.docNumber || r.voucherNumber}
               </span>
             </div>
           );
@@ -1119,6 +1666,7 @@ export const ReportsPage: React.FC = () => {
         headerText: isAr ? 'البيان وشرح الحركة' : 'Statement & Flight Details',
         isWide: true,
         render: (r) => {
+          const renderBody = () => {
           if (r.voucherType === 'TICKET' || r.docType?.includes('تذكرة') || r.docType?.includes('Ticket')) {
             const pDetails: Array<{ name: string; ticketNumber?: string; ticketType?: string }> = r.passengersDetail || [];
             const pnrVal = r.pnr || r.reference || '';
@@ -1200,11 +1748,31 @@ export const ReportsPage: React.FC = () => {
           }
 
           return (
-            <div
-              className="whitespace-pre-line text-xs leading-relaxed py-1 font-bold text-slate-900"
-              title={r.accountingDescription && r.accountingDescription !== r.description ? r.accountingDescription : undefined}
-            >
-              {r.description}
+            <div className="py-1 space-y-1">
+              <div
+                className="whitespace-pre-line text-xs leading-relaxed font-bold text-slate-900"
+                title={r.accountingDescription && r.accountingDescription !== r.description ? r.accountingDescription : undefined}
+              >
+                <NoBreakCodes text={r.description} />
+              </div>
+              <TicketDetailStrip details={r.ticketDetails} isAr={isAr} />
+            </div>
+          );
+          };
+
+          if (!r.isServiceSettlement) return renderBody();
+
+          // سطر السداد يُعرَض فرعاً تحت فاتورته، موسوماً بما هو، فلا يُقرأ حركةً ثانية.
+          return (
+            <div className="flex items-start gap-1.5">
+              <SettlementBranch />
+              <div className="flex-1 min-w-0">
+                <span className="inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded mb-0.5">
+                  <IconLink size={10} />
+                  {isAr ? 'تسديد الفاتورة أعلاه' : 'Settles the invoice above'}
+                </span>
+                {renderBody()}
+              </div>
             </div>
           );
         },
@@ -1318,6 +1886,47 @@ export const ReportsPage: React.FC = () => {
   const handleOpenDocument = useCallback(async (row: any) => {
     if (!row) return;
 
+    /*
+     * المستند الناشئ عن خدمة يُفتح في محرّر خدمته لا في نافذة سند.
+     *
+     * ويُعاد جلبه من الخادم بمعرّفه لأن نسخة القائمة مختصرة — بلا مسافرين ولا
+     * تفاصيل شراء — والمطلوب أن تُعرض بيانات التذكرة كاملة عند التعديل. وإن
+     * تعذّر الجلب نُكمل بالنسخة المتوفرة بدل أن نترك المستخدم أمام لا شيء.
+     */
+    const serviceKind = String(row.serviceKind || '').toUpperCase();
+    if (serviceKind) {
+      const docId = row.ticketId || row.ticketRaw?.id || null;
+      let record: any = row.ticketRaw || row.ticket || null;
+
+      if (docId) {
+        setOpeningDocId(String(row.id));
+        try {
+          record = (await ticketsApi.getOne(docId)) || record;
+        } catch {
+          /* النسخة المختصرة تكفي لفتح المحرّر حتى لو تعذّر التحديث */
+        } finally {
+          setOpeningDocId(null);
+        }
+      }
+
+      if (record) {
+        if (serviceKind === 'VISA') {
+          setEditingVisaData(record);
+          setVisaModalOpened(true);
+        } else {
+          setEditingTicketData(record);
+          setTicketModalOpened(true);
+        }
+        return;
+      }
+
+      showErrorNotification(
+        isAr ? 'تعذّر فتح المستند' : 'Could Not Open Document',
+        isAr ? 'لم يُعثر على سجل الخدمة المرتبط بهذه الحركة.' : 'The service record linked to this movement was not found.'
+      );
+      return;
+    }
+
     const dt = String(row.docType || '').toLowerCase();
     const isTicket =
       row.voucherType === 'TICKET' ||
@@ -1370,32 +1979,124 @@ export const ReportsPage: React.FC = () => {
     setVoucherModalType(vType);
     setEditVoucherId(vId);
     setVoucherModalOpened(true);
-  }, []);
+  }, [isAr]);
+
+  /*
+   * الحذف يُصيب المستند نفسه لا سطرَه.
+   *
+   * صفوف الكشف مشتقّة: التذكرة الواحدة تُنتج سطر بيعٍ وسطرَ سدادٍ نقدي، والسند
+   * يُنتج سطراً لكل حساب. فحذف «الصف» بلا معناه يترك نصف الحركة معلّقاً. لذلك
+   * يُحدَّد المستند الأصل — تذكرةً أو سنداً أو قيداً — ويُحذف، وتُرفع معه كل
+   * أسطره من الشاشة فوراً؛ وإن ردّ الخادم بخطأ عادت كما كانت.
+   */
+  const resolveDeleteTarget = useCallback((row: any) => {
+    const serviceKind = String(row?.serviceKind || '').toUpperCase();
+    const ticketId = serviceKind ? row?.ticketId || row?.ticketRaw?.id || null : null;
+    if (ticketId) {
+      return {
+        endpoint: `/api/tickets/${ticketId}`,
+        label: serviceKindLabel(serviceKind as ServiceKind, isAr),
+        matches: (m: any) => (m.ticketId || m.ticketRaw?.id || null) === ticketId,
+      };
+    }
+
+    const vType = String(row?.voucherType || '').toUpperCase();
+    if (row?.voucherId && (vType === 'RECEIPT' || vType === 'PAYMENT')) {
+      return {
+        endpoint: `/api/${vType === 'RECEIPT' ? 'receipt' : 'payment'}-vouchers/${row.voucherId}`,
+        label: vType === 'RECEIPT' ? (isAr ? 'سند القبض' : 'the receipt voucher') : (isAr ? 'سند الدفع' : 'the payment voucher'),
+        matches: (m: any) => m.voucherId === row.voucherId,
+      };
+    }
+
+    if (row?.journalEntryId) {
+      return {
+        endpoint: `/api/journal-entries/${row.journalEntryId}`,
+        label: isAr ? 'القيد' : 'the journal entry',
+        matches: (m: any) => m.journalEntryId === row.journalEntryId,
+      };
+    }
+
+    return null;
+  }, [isAr]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    const row = deleteTarget;
+    if (!row) return;
+
+    const target = resolveDeleteTarget(row);
+    if (!target) {
+      showErrorNotification(
+        isAr ? 'تعذّر الحذف' : 'Delete Unavailable',
+        isAr ? 'هذه الحركة محسوبة ولا تقابلها مستند قابل للحذف.' : 'This movement is derived and has no deletable document.'
+      );
+      setDeleteConfirmOpen(false);
+      setDeleteTarget(null);
+      return;
+    }
+
+    const snapshot = statementMovements;
+    setDeletingRow(true);
+    setStatementMovements((prev) => prev.filter((m) => !target.matches(m)));
+    setDeleteConfirmOpen(false);
+    setDeleteTarget(null);
+
+    try {
+      await apiRequest(target.endpoint, { method: 'DELETE' });
+      showSuccessNotification(
+        isAr ? 'تم الحذف' : 'Deleted',
+        isAr ? `تم حذف ${target.label} وكل حركاته من الكشف.` : `Deleted ${target.label} and all of its statement lines.`
+      );
+    } catch (err: any) {
+      setStatementMovements(snapshot);
+      showErrorNotification(
+        isAr ? 'خطأ في الحذف' : 'Delete Error',
+        err?.message || (isAr ? 'تعذّر حذف المستند' : 'Failed to delete the document')
+      );
+    } finally {
+      setDeletingRow(false);
+    }
+  }, [deleteTarget, resolveDeleteTarget, statementMovements, isAr]);
+
+  // الرصيد الافتتاحي والرصيد السابق سطران محسوبان لا مستندان، فلا يُعدَّلان ولا يُحذفان.
+  const isDerivedBalanceRow = useCallback(
+    (row: any) => ['OPENING', 'PREVIOUS'].includes(String(row?.voucherType || '').toUpperCase()),
+    []
+  );
 
   const actionMenuItems: AccountingActionMenuItem[] = useMemo(
     () => [
       {
-        label: isAr ? 'معاينة / تعديل المستند' : 'Edit / View Document',
+        label: isAr ? 'تعديل' : 'Edit',
         icon: IconEdit,
+        hidden: isDerivedBalanceRow,
+        // سطر السداد ليس مستنداً يُحرَّر، بل أثرٌ لفاتورته — والتعديل يقع عليها هي.
+        disabled: (row: any) => !!row?.isServiceSettlement,
+        description: (row: any) =>
+          row?.isServiceSettlement
+            ? isAr
+              ? 'التعديل يتم من سطر الفاتورة'
+              : 'Edit from the invoice line'
+            : isAr
+            ? 'يفتح المستند بكامل بياناته'
+            : 'Opens the full document',
         onClick: (row: any) => {
           handleOpenDocument(row);
         },
       },
       {
-        label: isAr ? 'عرض تفاصيل المستند' : 'View Document Details',
-        icon: IconEye,
+        label: isAr ? 'حذف' : 'Delete',
+        icon: IconTrash,
+        color: 'red',
+        hidden: isDerivedBalanceRow,
+        description: isAr ? 'يحذف المستند وكل أسطره' : 'Removes the document and all its lines',
         onClick: (row: any) => {
-          setSelectedMovement(row);
-          setDrawerOpen(true);
+          setDeleteTarget(row);
+          setDeleteConfirmOpen(true);
         },
       },
-      {
-        label: isAr ? 'طباعة الحركة' : 'Print Transaction',
-        icon: IconPrinter,
-        onClick: () => window.print(),
-      },
     ],
-    [handleOpenDocument, isAr]
+    [handleOpenDocument, isDerivedBalanceRow, isAr]
   );
 
   return (
@@ -1943,6 +2644,7 @@ export const ReportsPage: React.FC = () => {
               loading={loading}
               onRefresh={() => handleFetchStatement(true)}
               actionMenuItems={actionMenuItems}
+              getRowClassName={(row: any) => (row?.isServiceSettlement ? 'bg-slate-50/60 hover:bg-orange-50/25 border-slate-100' : '')}
               onRowDoubleClick={handleOpenDocument}
               hideHeaderCard={true}
               hideFooter={false}
@@ -2180,6 +2882,123 @@ export const ReportsPage: React.FC = () => {
           handleFetchStatement(true);
         }}
       />
+
+      {/* ── Visa Invoice Editor Workspace Modal (Edit) ── */}
+      {visaModalOpened && (
+        <React.Suspense
+          fallback={(
+            <div className="fixed inset-0 z-[9998] bg-white/95 backdrop-blur-sm flex items-center justify-center">
+              <div className="flex items-center gap-3 text-sm font-bold text-slate-700">
+                <Loader size="sm" color="orange" />
+                <span>{isAr ? 'جارٍ فتح مساحة معاملة التأشيرة...' : 'Opening visa workspace...'}</span>
+              </div>
+            </div>
+          )}
+        >
+          <VisaInvoiceEditorWorkspace
+            opened={visaModalOpened}
+            initialData={editingVisaData}
+            onClose={() => {
+              setVisaModalOpened(false);
+              setEditingVisaData(null);
+            }}
+            onSuccess={() => {
+              setVisaModalOpened(false);
+              setEditingVisaData(null);
+              handleFetchStatement(true);
+            }}
+          />
+        </React.Suspense>
+      )}
+
+      {/* ── Opening a service document (fetching the full record) ── */}
+      {openingDocId && (
+        <div className="fixed inset-0 z-[9997] bg-slate-900/20 backdrop-blur-[2px] flex items-center justify-center no-print">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 px-5 py-4 flex items-center gap-3 text-sm font-bold text-slate-700">
+            <Loader size="sm" color="orange" />
+            <span>{isAr ? 'جارٍ فتح المستند بكامل بياناته...' : 'Loading the full document...'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Document Confirmation ── */}
+      <Modal
+        opened={deleteConfirmOpen}
+        onClose={() => {
+          if (deletingRow) return;
+          setDeleteConfirmOpen(false);
+          setDeleteTarget(null);
+        }}
+        centered
+        radius="lg"
+        withCloseButton={false}
+        size="md"
+        overlayProps={{ backgroundOpacity: 0.35, blur: 2 }}
+      >
+        <div className="space-y-4 font-sans" dir={direction}>
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
+              <IconAlertTriangle size={20} />
+            </div>
+            <div className="space-y-1">
+              <div className="text-sm font-black text-slate-900">
+                {isAr ? 'حذف المستند نهائياً' : 'Delete this document'}
+              </div>
+              <div className="text-xs text-slate-500 leading-relaxed">
+                {isAr
+                  ? 'سيُحذف المستند وقيده المحاسبي معاً، وتختفي كل أسطره من هذا الكشف. لا يمكن التراجع.'
+                  : 'The document and its journal entry are removed together, and every line of it disappears from this statement. This cannot be undone.'}
+              </div>
+            </div>
+          </div>
+
+          {deleteTarget && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-500 font-medium">{isAr ? 'المستند:' : 'Document:'}</span>
+                <span className="font-black text-slate-900">
+                  {deleteTarget.docType} — {deleteTarget.voucherNumber && deleteTarget.voucherNumber !== '-' ? deleteTarget.voucherNumber : deleteTarget.entryNumber}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-500 font-medium">{isAr ? 'التاريخ:' : 'Date:'}</span>
+                <span className="font-mono font-bold text-slate-800" dir="ltr">
+                  {new Date(deleteTarget.date).toLocaleDateString('en-GB')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-slate-500 font-medium">{isAr ? 'المبلغ:' : 'Amount:'}</span>
+                <span className="font-mono font-black text-slate-900" dir="ltr">
+                  {Number(deleteTarget.debit || deleteTarget.credit || 0).toLocaleString()} {deleteTarget.currency}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              disabled={deletingRow}
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                setDeleteTarget(null);
+              }}
+              className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-colors disabled:opacity-50"
+            >
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button
+              type="button"
+              disabled={deletingRow}
+              onClick={handleConfirmDelete}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-colors disabled:opacity-50"
+            >
+              <IconTrash size={14} />
+              <span>{isAr ? 'حذف نهائي' : 'Delete permanently'}</span>
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

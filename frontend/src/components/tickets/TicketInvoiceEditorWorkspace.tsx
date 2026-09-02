@@ -656,19 +656,23 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       setTravelDate(d.travelDate ? new Date(d.travelDate) : new Date());
       setEntryDate(d.entryDate ? new Date(d.entryDate) : d.createdAt ? new Date(d.createdAt) : new Date());
       setCustomerName(d.customerName || d.customer || '');
-      const supplierHint = d.supplierId || d.supplierAccountId || d.supplierAccount || d.supplierAccountName || d.supplierName;
-      const resolvedSupplier = suppliersList.find((supplier) =>
-        [supplier.id, supplier.accountId, supplier.code, supplier.nameAr, supplier.nameEn]
-          .some((candidate) => String(candidate || '').trim() === String(supplierHint || '').trim()),
-      );
+      const rawSupplierHint = d.supplierId || d.supplierAccountId || d.supplierAccount || d.supplierAccountName || d.supplierName;
+      const supplierHint = String(rawSupplierHint || '').trim();
+      const resolvedSupplier = supplierHint
+        ? suppliersList.find((supplier) =>
+            [supplier.id, supplier.accountId, supplier.code, supplier.nameAr, supplier.nameEn]
+              .filter(Boolean)
+              .some((candidate) => String(candidate).trim().toLowerCase() === supplierHint.toLowerCase()),
+          ) || null
+        : null;
       const resolvedAirline = resolveAirline(d.airlineId || d.airline);
       const resolvedReceivingAccount = resolveAccount(d.cashboxAccountId || d.receivingCashbox);
       const resolvedPayingAccount = resolveAccount(d.cashbox);
 
-      setSupplierAccount(resolvedSupplier?.id || d.supplierId || '');
+      setSupplierAccount(resolvedSupplier?.id || (supplierHint ? d.supplierId || '' : ''));
       setSupplierAccountName(resolvedSupplier
         ? (isAr ? resolvedSupplier.nameAr : (resolvedSupplier.nameEn || resolvedSupplier.nameAr))
-        : (d.supplierAccountName || d.supplierName || ''));
+        : (supplierHint ? d.supplierAccountName || d.supplierName || '' : ''));
       setAirline(resolvedAirline?.id || d.airline || '');
       setPnr(d.pnr || '');
       setEmployeeName(d.employeeName || d.issuedBy || user?.name || (isAr ? 'علي جعفر' : 'Ali Jaafar'));

@@ -132,7 +132,6 @@ const DEFAULT_SIDEBAR_SECTIONS: NavSection[] = [
       { id: 'feedback-tickets', title: 'مركز البلاغات والدعم الفني', path: '/feedback-tickets', iconKey: 'MessageSquare' },
       { id: 'saas-admin', title: 'لوحة إدارة المنصة (SaaS)', path: '/saas-admin', iconKey: 'Sparkles' },
       { id: 'deleted-records', title: 'سجل المحذوفات', path: '/deleted-records', iconKey: 'Trash2' },
-      { id: 'company-settings', title: 'إعدادات الشركة والشعار', path: '/company-settings', iconKey: 'Building' },
       { id: 'print-settings', title: 'إعدادات الطباعة', path: '/print-settings', iconKey: 'Printer' },
       { id: 'system-settings', title: 'إعدادات النظام', path: '/system-settings', iconKey: 'Settings' },
     ],
@@ -605,31 +604,38 @@ export const Sidebar: React.FC = () => {
       <div className="p-2 border-t border-[#E5E7EB] bg-slate-50/80 shrink-0 space-y-1.5">
         {!sidebarCollapsed ? (
           <>
-            {/* Fixed Addons Store Button */}
+            {/* Fixed Addons Store Card */}
             <button
               type="button"
               onClick={() => handleNavClick({ id: 'addons-store', title: isAr ? 'متجر الإضافات' : 'Addons Store', path: '/addons' })}
-              className={`group w-full h-[40px] px-2.5 rounded-xl border flex items-center justify-between transition-all cursor-pointer shadow-2xs ${
+              className={`group w-full p-2 rounded-xl border bg-white text-start transition-all cursor-pointer shadow-2xs ${
                 location.pathname === '/addons'
-                  ? 'bg-orange-50/90 border-[#F45A0A] text-[#F45A0A]'
-                  : 'bg-white border-slate-200 hover:border-orange-300 hover:bg-orange-50/40 text-slate-800'
+                  ? 'border-[#F45A0A] ring-2 ring-orange-100'
+                  : 'border-slate-200 hover:border-orange-300 hover:bg-orange-50/40'
               }`}
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-xs transition-colors ${
                   location.pathname === '/addons'
-                    ? 'bg-[#F45A0A] text-white shadow-xs'
-                    : 'bg-orange-50 text-[#F45A0A] group-hover:bg-[#F45A0A] group-hover:text-white'
+                    ? 'bg-[#F45A0A] text-white'
+                    : 'bg-[#FFF3E8] text-[#F45A0A] group-hover:bg-[#F45A0A] group-hover:text-white'
                 }`}>
-                  <Store size={15} strokeWidth={2.2} />
+                  <Store size={16} strokeWidth={2.2} />
                 </div>
-                <span className="text-[12.5px] font-black truncate">
-                  {isAr ? 'متجر الإضافات' : 'Addons Store'}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[11.5px] font-black text-slate-950 truncate block">
+                      {isAr ? 'متجر الإضافات' : 'Addons Store'}
+                    </span>
+                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 bg-orange-100 text-[#F45A0A]">
+                      {isAr ? 'المتجر' : 'Store'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 block truncate mt-0.5 font-semibold">
+                    {isAr ? 'ترقية وتفعيل الميزات الإضافية' : 'Activate extra modules'}
+                  </span>
+                </div>
               </div>
-              <span className="text-[9.5px] font-black bg-orange-100 text-[#F45A0A] px-1.5 py-0.5 rounded-md shrink-0">
-                {isAr ? 'المتجر' : 'Store'}
-              </span>
             </button>
 
             {/* Fixed Active Subscription Card */}
@@ -643,7 +649,11 @@ export const Sidebar: React.FC = () => {
               }`}
             >
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-[#F45A0A] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-xs transition-colors ${
+                  location.pathname === '/subscription-settings'
+                    ? 'bg-[#F45A0A] text-white'
+                    : 'bg-[#FFF3E8] text-[#F45A0A] group-hover:bg-[#F45A0A] group-hover:text-white'
+                }`}>
                   <CreditCard size={16} strokeWidth={2.2} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -687,8 +697,8 @@ export const Sidebar: React.FC = () => {
                 aria-label={isAr ? 'متجر الإضافات' : 'Addons Store'}
                 className={`w-10 h-10 rounded-xl flex items-center justify-center mx-auto transition-all cursor-pointer shadow-xs ${
                   location.pathname === '/addons'
-                    ? 'bg-[#F45A0A] text-white'
-                    : 'bg-orange-50 text-[#F45A0A] hover:bg-[#F45A0A] hover:text-white border border-orange-200/80'
+                    ? 'bg-[#F45A0A] text-white ring-2 ring-orange-200'
+                    : 'bg-[#FFF3E8] text-[#F45A0A] hover:bg-[#F45A0A] hover:text-white border border-orange-200/80'
                 }`}
               >
                 <Store size={18} strokeWidth={2.2} />
@@ -706,10 +716,10 @@ export const Sidebar: React.FC = () => {
                 type="button"
                 onClick={() => handleNavClick({ id: 'subscription-settings', title: planName, path: '/subscription-settings' })}
                 aria-label={isAr ? `الاشتراك: ${planName}` : `Subscription: ${planName}`}
-                className={`w-10 h-10 rounded-xl text-white flex items-center justify-center mx-auto transition-all cursor-pointer shadow-xs ${
+                className={`w-10 h-10 rounded-xl flex items-center justify-center mx-auto transition-all cursor-pointer shadow-xs ${
                   location.pathname === '/subscription-settings'
-                    ? 'bg-[#F45A0A] ring-2 ring-orange-200'
-                    : 'bg-slate-900 hover:bg-[#F45A0A]'
+                    ? 'bg-[#F45A0A] text-white ring-2 ring-orange-200'
+                    : 'bg-[#FFF3E8] text-[#F45A0A] hover:bg-[#F45A0A] hover:text-white border border-orange-200/80'
                 }`}
               >
                 <CreditCard size={18} strokeWidth={2.2} />

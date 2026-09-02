@@ -356,11 +356,7 @@ export const App: React.FC = () => {
             />
             <Route
               path="/company-settings"
-              element={
-                <PermissionRouteGuard routePath="/system-settings">
-                  <CompanySettingsPage />
-                </PermissionRouteGuard>
-              }
+              element={<Navigate to="/system-settings?tab=company_logo" replace />}
             />
             <Route
               path="/print-settings"

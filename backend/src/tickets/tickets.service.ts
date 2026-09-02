@@ -1641,6 +1641,17 @@ export class TicketsService {
     const revenueAccountId = revRecord?.id || null;
     const resolvedCustomerName = ticket.customerName?.trim() || '';
 
+    /*
+     * البيان يسمّي الخدمة باسمها.
+     *
+     * كانت القيود تكتب «تذكرة/تأشيرة» لأن المُولّد لم يكن يفرّق، فيقرأ صاحبُ
+     * تذكرةٍ في كشفه كلمة «تأشيرة» لا معنى لها عنده. والنوع معروف هنا — من
+     * tripType ومن كون العملية فيزا — فيُكتب صريحاً.
+     */
+    const tripKind = String(ticket.tripType || '').toUpperCase();
+    const svcOne = isVisa ? 'تأشيرة' : tripKind === 'HOTEL' ? 'حجز فندق' : 'تذكرة';
+    const svcMany = isVisa ? 'التأشيرات' : tripKind === 'HOTEL' ? 'حجوزات الفنادق' : 'التذاكر';
+
     // 6. Build lines
     const lines: Array<{ accountId: string; debit: Prisma.Decimal; credit: Prisma.Decimal; description: string }> = [];
 
@@ -1703,7 +1714,7 @@ export class TicketsService {
           accountId: customerAccountId,
           debit: new Prisma.Decimal(netSell),
           credit: new Prisma.Decimal(0),
-          description: `قيمة مبيعات تذكرة/تأشيرة - ${ticket.invoiceNumber} (${resolvedCustomerName})`,
+          description: `قيمة مبيعات ${svcOne} - ${ticket.invoiceNumber} (${resolvedCustomerName})`,
         });
 
         // 2. Cash Receipt Settlement Entry (Cashbox is Debited, Customer is Credited)
@@ -1711,14 +1722,14 @@ export class TicketsService {
           accountId: cashboxAccountId,
           debit: new Prisma.Decimal(netSell),
           credit: new Prisma.Decimal(0),
-          description: `مقبوضات مبيعات تذكرة نقدية باليد - ${ticket.invoiceNumber} (${resolvedCustomerName})`,
+          description: `مقبوضات مبيعات ${svcOne} نقدية باليد - ${ticket.invoiceNumber} (${resolvedCustomerName})`,
         });
 
         lines.push({
           accountId: customerAccountId,
           debit: new Prisma.Decimal(0),
           credit: new Prisma.Decimal(netSell),
-          description: `سداد فوري لمبيعات تذكرة نقدية باليد - ${ticket.invoiceNumber} (${resolvedCustomerName})`,
+          description: `سداد فوري لمبيعات ${svcOne} نقدية باليد - ${ticket.invoiceNumber} (${resolvedCustomerName})`,
         });
       } else {
         if (debitAccountId && netSell > 0) {
@@ -1727,8 +1738,8 @@ export class TicketsService {
             debit: new Prisma.Decimal(netSell),
             credit: new Prisma.Decimal(0),
             description: isCash
-              ? `مقبوضات مبيعات تذكرة/تأشيرة نقدية - ${ticket.invoiceNumber} (${resolvedCustomerName})`
-              : `قيمة مبيعات تذكرة/تأشيرة آجل - ${ticket.invoiceNumber} (${resolvedCustomerName})`,
+              ? `مقبوضات مبيعات ${svcOne} نقدية - ${ticket.invoiceNumber} (${resolvedCustomerName})`
+              : `قيمة مبيعات ${svcOne} آجلة - ${ticket.invoiceNumber} (${resolvedCustomerName})`,
           });
         }
       }
@@ -1738,7 +1749,7 @@ export class TicketsService {
           accountId: supplierAccountId,
           debit: new Prisma.Decimal(0),
           credit: new Prisma.Decimal(netBuy),
-          description: `استحقاق مزود التذاكر/التأشيرات - ${ticket.invoiceNumber} (${ticket.supplierAccountName || ''})`,
+          description: `استحقاق مزود ${svcMany} - ${ticket.invoiceNumber} (${ticket.supplierAccountName || ''})`,
         });
       }
 
@@ -1747,14 +1758,14 @@ export class TicketsService {
           accountId: revenueAccountId,
           debit: new Prisma.Decimal(0),
           credit: new Prisma.Decimal(profit),
-          description: `أرباح مبيعات التذاكر/التأشيرات - ${ticket.invoiceNumber}`,
+          description: `أرباح مبيعات ${svcMany} - ${ticket.invoiceNumber}`,
         });
       } else if (revenueAccountId && profit < 0) {
         lines.push({
           accountId: revenueAccountId,
           debit: new Prisma.Decimal(Math.abs(profit)),
           credit: new Prisma.Decimal(0),
-          description: `خسائر/فروقات مبيعات تذاكر - ${ticket.invoiceNumber}`,
+          description: `خسائر/فروقات مبيعات ${svcMany} - ${ticket.invoiceNumber}`,
         });
       }
     }
@@ -1796,7 +1807,15 @@ export class TicketsService {
            * كشف الحساب ويظهر الجميع باسم واحد. الآن: استرجاع REFUND، فندق HOTEL،
            * فيزا VISA، وما بقي TICKET — فيُسمّى كل سطر باسم خدمته.
            */
-          sourceType: isRefund ? 'REFUND' : isVisa ? 'VISA' : (ticket as any).tripType === 'HOTEL' ? 'HOTEL' : 'TICKET',
+          sourceType: (() => {
+            if (isRefund) return 'REFUND';
+            const trip = String((ticket as any).tripType || '').toUpperCase();
+            if (trip === 'REISSUE' || trip === 'CHANGE') return 'REISSUE';
+            if (isVisa) return 'VISA';
+            if (trip === 'HOTEL') return 'HOTEL';
+            if (trip === 'GROUP') return 'GROUP';
+            return 'TICKET';
+          })(),
           sourceId: ticket.id,
           lines: {
             create: lines,

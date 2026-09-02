@@ -6,6 +6,7 @@ export interface ParsedPassengerDto {
   ticketType: 'ADULT' | 'CHILD' | 'INFANT';
   ticketNumber: string;
   documentNumber?: string;
+  baggage?: string;
   fareBuy: number;
   fareSell: number;
   tax1: number;
@@ -27,6 +28,7 @@ export interface ParsedTicketDataDto {
   tripType?: 'ONE_WAY' | 'ROUND_TRIP';
   travelClass?: string;
   flightNumber?: string;
+  baggage?: string;
   currency?: string;
   aiEngineUsed?: string;
 }
@@ -51,12 +53,14 @@ Fields:
 - tripType: ONE_WAY or ROUND_TRIP
 - travelClass: Economy / Business / First if printed
 - flightNumber e.g. QB 1234
+- baggage: e.g. 20KG, 30KG, 2PC, 7KG hand luggage if printed
 - currency: IQD or USD if printed next to fares
 - passengers in table order:
   name (without MR/MRS unless that is the only form)
   ticketType: ADULT | CHILD | INFANT (بالغ/طفل/رضيع)
   ticketNumber: e-ticket / رقم التذكرة / التذكرة الإلكترونية / شماره بلیت EXACTLY as printed (digits, hyphens). NOT PNR, NOT passport, NOT phone (07… / +964…)
   documentNumber: passport/ID
+  baggage: luggage allowance if specified per passenger
   fareBuy: cost/شراء/fare if printed, else 0
   fareSell: sale/مبيع if printed, else 0
   tax1, tax2, charge: only if printed, else 0
@@ -64,7 +68,7 @@ Fields:
 Each passenger keeps THEIR own ticket number from their row.
 
 JSON only:
-{"pnr":"","bookingRef":"","airline":"","routeFrom":"","routeTo":"","routeStops":[],"issueDate":"","travelDate":"","returnDate":"","tripType":"ONE_WAY","travelClass":"","flightNumber":"","currency":"","passengers":[{"name":"","ticketType":"ADULT","ticketNumber":"","documentNumber":"","fareBuy":0,"fareSell":0,"tax1":0,"tax2":0,"charge":0}]}`;
+{"pnr":"","bookingRef":"","airline":"","routeFrom":"","routeTo":"","routeStops":[],"issueDate":"","travelDate":"","returnDate":"","tripType":"ONE_WAY","travelClass":"","flightNumber":"","baggage":"","currency":"","passengers":[{"name":"","ticketType":"ADULT","ticketNumber":"","documentNumber":"","baggage":"","fareBuy":0,"fareSell":0,"tax1":0,"tax2":0,"charge":0}]}`;
 
 export interface ParsedVisaPassengerDto {
   name: string;

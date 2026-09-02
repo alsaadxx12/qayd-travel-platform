@@ -51,10 +51,14 @@ export interface AccountingColumnDef {
 
 export interface AccountingActionMenuItem {
   label: string;
+  /** وصف قصير تحت الاسم يشرح ما يفعله الإجراء أو سبب تعطّله. */
+  description?: string | ((row: any) => string | undefined);
   icon?: any;
   color?: string;
   onClick: (row: any) => void;
   hidden?: (row: any) => boolean;
+  /** يُعرض معطّلاً بدل إخفائه، ليعرف المستخدم أن الإجراء موجود لكنه لا ينطبق هنا. */
+  disabled?: (row: any) => boolean;
 }
 
 interface AccountingGridProps {
@@ -900,30 +904,76 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
                         {/* Actions Menu Column */}
                         {actionMenuItems.length > 0 && (
                           <td className="px-3 py-2.5 border-l border-slate-200 text-center align-middle" onClick={e => e.stopPropagation()}>
-                            <Menu shadow="md" width={180} position="bottom-start" zIndex={1000}>
+                            <Menu
+                              shadow="lg"
+                              width={232}
+                              radius="lg"
+                              position={direction === 'rtl' ? 'bottom-end' : 'bottom-start'}
+                              zIndex={1000}
+                              withinPortal
+                              offset={6}
+                              transitionProps={{ transition: 'pop', duration: 120 }}
+                            >
                               <Menu.Target>
-                                <ActionIcon size="xs" variant="subtle" color="gray" className="cursor-pointer">
+                                <ActionIcon
+                                  size="sm"
+                                  variant="subtle"
+                                  color="gray"
+                                  radius="md"
+                                  className="cursor-pointer hover:bg-slate-100"
+                                >
                                   <IconDotsVertical size={15} />
                                 </ActionIcon>
                               </Menu.Target>
-                              <Menu.Dropdown>
+                              <Menu.Dropdown className="p-1.5 font-sans" style={{ direction }}>
                                   {actionMenuItems.map((item, mIdx) => {
                                     if (item.hidden && item.hidden(row)) return null;
-                                    const IconComponent = typeof item.icon === 'function' ? item.icon : null;
+
+                                    /*
+                                     * أيقونات Tabler صارت forwardRef لا دوالّ، فكان الفحص القديم
+                                     * `typeof icon === 'function'` يسقط دائماً ويُرسم رمز العين لكل
+                                     * إجراء مهما كانت أيقونته. createElement يقبل النوعين معاً.
+                                     */
                                     const iconElement = React.isValidElement(item.icon)
                                       ? item.icon
-                                      : IconComponent
-                                      ? <IconComponent size={14} />
-                                      : <IconEye size={14} />;
+                                      : item.icon
+                                      ? React.createElement(item.icon as any, { size: 16, stroke: 1.9 })
+                                      : <IconEye size={16} stroke={1.9} />;
+
+                                    const isDisabled = item.disabled ? item.disabled(row) : false;
+                                    const description =
+                                      typeof item.description === 'function' ? item.description(row) : item.description;
 
                                     return (
                                       <Menu.Item
                                         key={mIdx}
-                                        color={item.color || 'dark'}
-                                        leftSection={iconElement}
-                                        onClick={() => item.onClick(row)}
+                                        color={isDisabled ? 'gray' : item.color || 'dark'}
+                                        disabled={isDisabled}
+                                        className="rounded-lg"
+                                        leftSection={
+                                          <span
+                                            className={`w-6.5 h-6.5 rounded-lg border flex items-center justify-center ${
+                                              isDisabled
+                                                ? 'bg-slate-50 border-slate-200 text-slate-300'
+                                                : item.color === 'red'
+                                                ? 'bg-rose-50 border-rose-200 text-rose-600'
+                                                : 'bg-slate-50 border-slate-200 text-slate-600'
+                                            }`}
+                                          >
+                                            {iconElement}
+                                          </span>
+                                        }
+                                        onClick={() => {
+                                          if (isDisabled) return;
+                                          item.onClick(row);
+                                        }}
                                       >
-                                        {item.label}
+                                        <span className="text-[12.5px] font-bold leading-tight block">{item.label}</span>
+                                        {description && (
+                                          <span className="text-[10.5px] text-slate-400 font-medium leading-tight block mt-0.5">
+                                            {description}
+                                          </span>
+                                        )}
                                       </Menu.Item>
                                     );
                                   })}

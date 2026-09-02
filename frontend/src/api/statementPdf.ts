@@ -4,8 +4,11 @@ interface StatementPdfRow {
   rowNumber?: number;
   date?: string;
   docRef?: string;
+  /** رقم الفاتورة أو السند، وله عمود مستقل في الكشف المطبوع. */
+  docNumber?: string;
   pnr?: string;
   route?: string;
+  airline?: string;
   statement?: string;
   docLabel?: string;
   typeCode?: string;
@@ -13,7 +16,7 @@ interface StatementPdfRow {
   credit?: number;
   runningBalance?: number;
   currency?: string;
-  passengersDetail?: Array<{ name?: string; ticketType?: string }>;
+  passengersDetail?: Array<{ name?: string; ticketType?: string; ticketNumber?: string }>;
 }
 
 export interface StatementPdfPayload {
@@ -59,7 +62,8 @@ function toServerRows(rows: StatementPdfRow[]) {
     const passengers = (Array.isArray(r.passengersDetail) ? r.passengersDetail : []).map((p) => {
       const type = mapPassengerType(p.ticketType);
       return {
-        fullName: p.name || '',
+        // رقم التذكرة يسافر مع الاسم: الكشف المطبوع مستندٌ يُراجَع.
+        fullName: p.ticketNumber ? `${p.name || ''} (${p.ticketNumber})` : p.name || '',
         type,
         typeClass: type === 'INF' ? 'pax-type-inf' : type === 'CHD' ? 'pax-type-chd' : 'pax-type-adt',
         isChild: type !== 'ADT',
@@ -69,8 +73,10 @@ function toServerRows(rows: StatementPdfRow[]) {
       rowNumber: r.rowNumber || idx + 1,
       date: formatDay(r.date),
       docRef: r.docRef || '',
+      docNumber: r.docNumber || r.docRef || '',
       pnr: r.pnr || '',
       route: r.route || '',
+      airline: r.airline || '',
       statement: r.statement || r.docLabel || '',
       type: r.typeCode || undefined,
       debit: Number(r.debit || 0),
