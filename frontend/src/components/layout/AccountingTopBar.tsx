@@ -32,21 +32,20 @@ export const AccountingTopBar: React.FC<AccountingTopBarProps> = () => {
       dir={direction}
       style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
     >
-      {/* Sidebar toggle button (Left / Start) */}
+      {/* Sidebar toggle button + Search (Positioned towards Sidebar / Start) */}
       <div className="flex items-center gap-3 shrink-0 z-10">
         <button
           type="button"
           onClick={toggleSidebar}
-          className="w-9 h-9 rounded-[9px] hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+          className="w-9 h-9 rounded-[9px] hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
           title={sidebarCollapsed ? (language === 'ar' ? 'توسيع القائمة' : 'Expand Sidebar') : (language === 'ar' ? 'تصغير القائمة' : 'Collapse Sidebar')}
         >
           <MenuIcon size={18} />
         </button>
-      </div>
 
-      {/* Absolutely Mathematically Centered Global Search (Never pushed by side elements) */}
-      <div className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[460px] px-2 pointer-events-auto z-10">
-        <GlobalSearch />
+        <div className="hidden sm:flex w-[300px] md:w-[380px] lg:w-[440px]">
+          <GlobalSearch />
+        </div>
       </div>
 
       {/* Clean Neutral Exchange Rate Pill + Lottie Calculator + Notifications + User */}

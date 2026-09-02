@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactDOM from 'react-dom/client';
 import calculatorSvg from '../../assets/calculator.svg';
 import {
   X,
@@ -11,7 +10,6 @@ import {
   Check,
   Delete,
   ArrowRightLeft,
-  PictureInPicture2,
 } from 'lucide-react';
 import { Tooltip } from '@mantine/core';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -57,96 +55,6 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
   const [showHistory, setShowHistory] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [copied, setCopied] = useState(false);
-  const hostRef = useRef<HTMLDivElement>(null);
-  const [isPoppedOut, setIsPoppedOut] = useState(false);
-  const pipWindowRef = useRef<Window | null>(null);
-
-  // Cleanup PiP window when calculator closes
-  useEffect(() => {
-    if (!opened && pipWindowRef.current) {
-      pipWindowRef.current.close();
-      pipWindowRef.current = null;
-      setIsPoppedOut(false);
-    }
-  }, [opened]);
-
-  // Pop-out into Picture-in-Picture window (Zero-latency DOM Transfer)
-  const handlePopOut = useCallback(async () => {
-    // If already popped out, close and bring back
-    if (isPoppedOut && pipWindowRef.current) {
-      pipWindowRef.current.close();
-      pipWindowRef.current = null;
-      setIsPoppedOut(false);
-      return;
-    }
-
-    // Use Document Picture-in-Picture API (Chrome 116+ / Edge 116+)
-    if ('documentPictureInPicture' in window) {
-      try {
-        // @ts-ignore – Document PiP API
-        const pip = await window.documentPictureInPicture.requestWindow({
-          width: 340,
-          height: 560,
-          disallowReturnToOpener: false,
-        });
-        pipWindowRef.current = pip;
-        setIsPoppedOut(true);
-
-        // Copy all stylesheets into PiP window so Tailwind & Mantine work
-        [...document.styleSheets].forEach((sheet) => {
-          try {
-            const cssText = [...sheet.cssRules].map((r) => r.cssText).join('');
-            const style = pip.document.createElement('style');
-            style.textContent = cssText;
-            pip.document.head.appendChild(style);
-          } catch {
-            if ((sheet as CSSStyleSheet).href) {
-              const link = pip.document.createElement('link');
-              link.rel = 'stylesheet';
-              link.href = (sheet as CSSStyleSheet).href!;
-              pip.document.head.appendChild(link);
-            }
-          }
-        });
-
-        // Add reset styles for PiP window body
-        const baseStyle = pip.document.createElement('style');
-        baseStyle.textContent = `
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { background: #FFFFFF; font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
-          ::-webkit-scrollbar { display: none; }
-        `;
-        pip.document.head.appendChild(baseStyle);
-
-        // Move the modal element into PiP window
-        const contentEl = modalRef.current;
-        if (contentEl) {
-          contentEl.style.position = 'static';
-          contentEl.style.left = '0px';
-          contentEl.style.top = '0px';
-          contentEl.style.width = '100%';
-          contentEl.style.height = '100%';
-          pip.document.body.appendChild(contentEl);
-        }
-
-        // Return element back to main window when PiP is closed
-        pip.addEventListener('pagehide', () => {
-          if (contentEl && hostRef.current) {
-            contentEl.style.position = 'fixed';
-            contentEl.style.left = `${dragRef.current.currentX || 40}px`;
-            contentEl.style.top = `${dragRef.current.currentY || 60}px`;
-            contentEl.style.width = isMinimized ? '280px' : '340px';
-            contentEl.style.height = 'auto';
-            hostRef.current.appendChild(contentEl);
-          }
-          pipWindowRef.current = null;
-          setIsPoppedOut(false);
-        });
-      } catch (err) {
-        console.error('Error opening PiP:', err);
-      }
-    }
-  }, [isPoppedOut, isMinimized]);
 
   // Dragging State (GPU accelerated)
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
@@ -486,16 +394,15 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
   if (!opened) return null;
 
   return (
-    <div ref={hostRef}>
-      <div
-        ref={modalRef}
-        style={{
-          position: 'fixed',
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          zIndex: 9999,
-          willChange: isDragging ? 'left, top' : 'auto',
-        }}
+    <div
+      ref={modalRef}
+      style={{
+        position: 'fixed',
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        zIndex: 9999,
+        willChange: isDragging ? 'left, top' : 'auto',
+      }}
       className={`font-sans select-none ${
         isMinimized ? 'w-[280px]' : 'w-[340px]'
       }`}
@@ -537,26 +444,6 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
                 </button>
               </Tooltip>
             )}
-
-            {/* Pop-Out to Floating Window */}
-            <Tooltip
-              label={isPoppedOut ? (isAr ? 'إعادة الدمج' : 'Bring Back') : (isAr ? 'فتح فوق كل النوافذ' : 'Float Above All Windows')}
-              withArrow
-              position="top"
-            >
-              <button
-                type="button"
-                onClick={handlePopOut}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
-                  isPoppedOut
-                    ? 'bg-blue-100 text-blue-600 shadow-2xs'
-                    : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50'
-                }`}
-                title={isPoppedOut ? 'إعادة الدمج' : 'فتح فوق كل النوافذ'}
-              >
-                <PictureInPicture2 size={14} />
-              </button>
-            </Tooltip>
 
             {/* Minimize / Maximize Button */}
             <button
@@ -900,7 +787,6 @@ export const DraggableCalculatorModal: React.FC<DraggableCalculatorModalProps> =
         )}
       </div>
     </div>
-  </div>
   );
 };
 

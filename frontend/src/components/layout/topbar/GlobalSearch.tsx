@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Search,
   BookOpen,
@@ -619,7 +620,7 @@ export const GlobalSearch: React.FC = () => {
       `}</style>
 
       {/* ── TOPBAR TRIGGER BUTTON ── */}
-      <div className="w-full max-w-[460px] mx-auto">
+      <div className="w-full">
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -640,15 +641,16 @@ export const GlobalSearch: React.FC = () => {
       </div>
 
       {/* ── SPOTLIGHT MODAL (DUAL COLUMN WITH LUXURY BANNER & RAZOR SHARP CARDS) ── */}
-      {open && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 font-sans select-none spotlight-clean-scroll" dir={direction}>
-          {/* Frosted Backdrop */}
-          <div
-            className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-150"
-            onClick={() => setOpen(false)}
-          />
+      {open &&
+        createPortal(
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 font-sans select-none spotlight-clean-scroll" dir={direction}>
+            {/* Frosted Backdrop */}
+            <div
+              className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-150"
+              onClick={() => setOpen(false)}
+            />
 
-          {/* Dialog Container */}
+            {/* Dialog Container */}
           <div
             className="relative w-full max-w-[980px] lg:max-w-[1040px] h-[610px] max-h-[92vh] bg-white rounded-3xl border border-slate-200/90 shadow-2xl flex flex-col z-10 animate-dropdown-pop overflow-hidden"
           >
@@ -828,7 +830,8 @@ export const GlobalSearch: React.FC = () => {
             </div>
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

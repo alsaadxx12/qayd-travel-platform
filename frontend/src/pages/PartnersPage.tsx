@@ -1,93 +1,75 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api/client';
-import { AccountingGrid, AccountingColumnDef, AccountingActionMenuItem } from '../components/common/AccountingGrid';
-import { Button, Badge, Drawer, Modal, NumberInput, SegmentedControl } from '@mantine/core';
+import { Button, Badge, Drawer, SegmentedControl, Tooltip } from '@mantine/core';
 import {
-  IconPlus, IconEye, IconFileText, IconCreditCard, IconEdit,
-  IconUsers, IconBuildingStore, IconPlane, IconUserCheck,
-  IconPhone, IconMail, IconMapPin, IconTrendingUp, IconTrendingDown,
+  IconPlus,
+  IconEye,
+  IconUsers,
+  IconBuildingStore,
+  IconUserCheck,
+  IconPhone,
+  IconMail,
+  IconMapPin,
+  IconSend,
+  IconSearch,
+  IconRefresh,
+  IconCopy,
+  IconCheck,
+  IconAt,
+  IconFilter,
 } from '@tabler/icons-react';
 import { SmartAccountWizardModal } from '../components/accounts/SmartAccountWizardModal';
+import { EmailBroadcastModal } from '../components/partners/EmailBroadcastModal';
+import { showSuccessNotification } from '../utils/notifications';
+import { useLanguageStore } from '../store/useLanguageStore';
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+// ─── Stat Card Component (White, Crisp Light Borders, Brand Orange) ───
 const StatCard: React.FC<{
   label: string;
   value: number;
   icon: React.ReactNode;
-  accent: string;
-  bg: string;
-  border: string;
-}> = ({ label, value, icon, accent, bg, border }) => (
-  <div
-    className={`flex items-center gap-3 px-4 py-3 rounded-2xl border ${bg} ${border} shadow-xs`}
-  >
-    <div
-      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${accent}`}
-    >
+  accentBg: string;
+  accentColor: string;
+  subtext?: string;
+}> = ({ label, value, icon, accentBg, accentColor, subtext }) => (
+  <div className="flex items-center gap-3.5 px-4 py-3 rounded-2xl border border-slate-200/90 bg-white shadow-2xs flex-1 min-w-[200px] hover:border-orange-200 transition-all">
+    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${accentBg} ${accentColor} border border-slate-100`}>
       {icon}
     </div>
     <div className="min-w-0">
-      <div
-        className="text-[11px] font-bold text-slate-500 whitespace-nowrap"
-      >
+      <div className="text-[11.5px] font-bold text-slate-500 whitespace-nowrap">
         {label}
       </div>
       <div
-        className="text-xl font-black tabular-nums text-slate-900"
+        className="text-xl font-black tabular-nums text-slate-900 leading-tight"
         style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
       >
         {value.toLocaleString('en-US')}
       </div>
+      {subtext && <div className="text-[10px] text-slate-400 font-medium mt-0.5">{subtext}</div>}
     </div>
   </div>
 );
 
-// ─── Balance Cell ─────────────────────────────────────────────────────────────
-const BalanceCell: React.FC<{ value: number; suffix?: string; prefix?: string }> = ({
-  value, suffix = '', prefix = '',
-}) => {
-  if (value > 0.01)
-    return (
-      <span className="inline-flex items-center gap-1 font-black tabular-nums text-emerald-700 text-xs"
-        style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
-        {prefix}{value.toLocaleString('en-US')}{suffix}
-        <span className="text-[9px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200 px-1 py-0.5 rounded">لنا</span>
-      </span>
-    );
-  if (value < -0.01)
-    return (
-      <span className="inline-flex items-center gap-1 font-black tabular-nums text-rose-700 text-xs"
-        style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
-        {prefix}{Math.abs(value).toLocaleString('en-US')}{suffix}
-        <span className="text-[9px] font-bold bg-rose-50 text-rose-600 border border-rose-200 px-1 py-0.5 rounded">علينا</span>
-      </span>
-    );
-  return (
-    <span className="font-mono text-slate-300 text-xs">
-      {prefix}0{suffix}
-    </span>
-  );
-};
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export const PartnersPage: React.FC = () => {
-  const navigate = useNavigate();
+  const { direction, language } = useLanguageStore();
+  const isAr = language === 'ar';
+
   const [loading, setLoading] = useState(true);
   const [rawAccounts, setRawAccounts] = useState<any[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<any>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
 
-  // Credit Limit Modal
-  const [creditModalOpen, setCreditModalOpen] = useState(false);
-  const [newCreditLimitIQD, setNewCreditLimitIQD] = useState<number | string>('');
-  const [newCreditLimitUSD, setNewCreditLimitUSD] = useState<number | string>('');
-  const [savingLimit, setSavingLimit] = useState(false);
+  // Filters & Search
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'CUSTOMER' | 'SUPPLIER'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [onlyWithEmail, setOnlyWithEmail] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Filters
-  const [selectedCurrency, setSelectedCurrency] = useState<'ALL' | 'IQD' | 'USD'>('ALL');
-
+  // Fetch Accounts from Backend (Real Database)
   const fetchPartners = async () => {
     setLoading(true);
     try {
@@ -100,56 +82,35 @@ export const PartnersPage: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchPartners(); }, []);
+  useEffect(() => {
+    fetchPartners();
+  }, []);
 
-  const handleUpdateCreditLimit = async () => {
-    if (!selectedPartner) return;
-    setSavingLimit(true);
-    try {
-      const limitIQDVal = newCreditLimitIQD !== '' && newCreditLimitIQD !== null ? Number(newCreditLimitIQD) : null;
-      const limitUSDVal = newCreditLimitUSD !== '' && newCreditLimitUSD !== null ? Number(newCreditLimitUSD) : null;
-      await apiRequest(`/api/accounts/${selectedPartner.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ creditLimit: limitIQDVal, creditLimitUSD: limitUSDVal }),
-      });
-      setCreditModalOpen(false);
-      fetchPartners();
-      setSelectedPartner({ ...selectedPartner, creditLimitIQD: limitIQDVal, creditLimitUSD: limitUSDVal });
-    } catch (err: any) {
-      alert(err.message || 'حدث خطأ أثناء تحديث حدود الائتمان');
-    } finally {
-      setSavingLimit(false);
-    }
-  };
-
+  // Filter and map ONLY Customers & Suppliers (Excluding parents and non-partner accounts)
   const partners = useMemo(() => {
     return rawAccounts
       .filter((a) => !a.isParent)
       .map((a) => {
         let partnerType = 'OTHER';
         let partnerTypeLabel = 'مستفيد / آخر';
-        let badgeColor = 'violet';
+        let badgeColor = 'gray';
 
-        if (
-          a.code.startsWith('261') ||
-          (a.nameAr || '').includes('طيران') ||
-          (a.nameAr || '').includes('خطوط') ||
-          (a.nameAr || '').includes('Airlines')
-        ) {
-          partnerType = 'AIRLINE'; partnerTypeLabel = 'شركة طيران'; badgeColor = 'blue';
-        } else if (a.category === 'SUPPLIER' || a.code.startsWith('26')) {
-          partnerType = 'SUPPLIER'; partnerTypeLabel = 'مورد (دائن)'; badgeColor = 'orange';
+        // Categorize strictly into Customer or Supplier
+        if (a.category === 'SUPPLIER' || a.code.startsWith('26')) {
+          partnerType = 'SUPPLIER';
+          partnerTypeLabel = 'مورد (دائن)';
+          badgeColor = 'blue';
         } else if (
           a.category === 'CUSTOMER' ||
-          a.code.startsWith('141') || a.code.startsWith('142') ||
-          a.code.startsWith('143') || a.code.startsWith('14')
+          a.code.startsWith('141') ||
+          a.code.startsWith('142') ||
+          a.code.startsWith('143') ||
+          a.code.startsWith('14') ||
+          a.code.startsWith('161')
         ) {
-          partnerType = 'CUSTOMER'; partnerTypeLabel = 'عميل (مدين)'; badgeColor = 'teal';
-        } else if (
-          a.code.startsWith('144') || a.category === 'EMPLOYEE' ||
-          (a.nameAr || '').includes('مستفيد') || (a.nameAr || '').includes('سلف')
-        ) {
-          partnerType = 'BENEFICIARY'; partnerTypeLabel = 'مستفيد / موظف'; badgeColor = 'violet';
+          partnerType = 'CUSTOMER';
+          partnerTypeLabel = 'عميل (مدين)';
+          badgeColor = 'orange';
         }
 
         return {
@@ -157,343 +118,433 @@ export const PartnersPage: React.FC = () => {
           code: a.code,
           nameAr: a.nameAr,
           nameEn: a.nameEn || '',
-          partnerType, partnerTypeLabel, badgeColor,
-          currency: a.currency || 'MULTI',
+          partnerType,
+          partnerTypeLabel,
+          badgeColor,
           phone: a.phone || a.customer?.phone || a.supplier?.phone || '',
           email: a.email || a.customer?.email || a.supplier?.email || '',
           address: a.address || a.customer?.address || a.supplier?.address || '',
           contactPerson: a.contactPerson || '',
-          creditLimitIQD: a.creditLimit ? Number(a.creditLimit) : null,
-          creditLimitUSD: a.creditLimitUSD ? Number(a.creditLimitUSD) : null,
-          debitIQD: Number(a.debitIQD ?? 0),
-          creditIQD: Number(a.creditIQD ?? 0),
-          balanceIQD: Number(a.balanceIQD ?? 0),
-          debitUSD: Number(a.debitUSD ?? 0),
-          creditUSD: Number(a.creditUSD ?? 0),
-          balanceUSD: Number(a.balanceUSD ?? 0),
         };
-      });
+      })
+      // Keep only Customers and Suppliers
+      .filter((p) => p.partnerType === 'CUSTOMER' || p.partnerType === 'SUPPLIER');
   }, [rawAccounts]);
 
+  // Metrics
   const metrics = useMemo(() => {
-    let totalCusts = 0, totalSupps = 0, totalAirlines = 0, totalBenef = 0;
+    let customersCount = 0;
+    let suppliersCount = 0;
+    let withEmailCount = 0;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
     partners.forEach((p) => {
-      if (p.partnerType === 'CUSTOMER') totalCusts++;
-      else if (p.partnerType === 'SUPPLIER') totalSupps++;
-      else if (p.partnerType === 'AIRLINE') totalAirlines++;
-      else if (p.partnerType === 'BENEFICIARY') totalBenef++;
+      if (p.partnerType === 'CUSTOMER') customersCount++;
+      if (p.partnerType === 'SUPPLIER') suppliersCount++;
+      if (p.email && emailRegex.test(p.email.trim())) withEmailCount++;
     });
-    return { total: partners.length, totalCusts, totalSupps, totalAirlines, totalBenef };
+
+    return {
+      total: partners.length,
+      customersCount,
+      suppliersCount,
+      withEmailCount,
+    };
   }, [partners]);
 
-  const columnDefs = useMemo<AccountingColumnDef[]>(() => {
-    const numStyle: React.CSSProperties = { fontFamily: "'JetBrains Mono', 'Consolas', monospace" };
-    const cols: AccountingColumnDef[] = [
-      {
-        field: 'partnerDetails',
-        headerText: 'بيانات الطرف / الشريك',
-        width: 'w-60',
-        isPinned: true,
-        render: (r) => (
-          <div className="flex flex-col py-0.5 leading-snug gap-0.5">
-            <span className="font-bold text-slate-900 text-xs">{r.nameAr}</span>
-            <span className="font-mono font-bold text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded w-fit border border-slate-200">
-              {r.code}
-            </span>
-            {r.phone && r.phone !== '-' && (
-              <span className="text-[10px] text-slate-400 font-mono tabular-nums">📞 {r.phone}</span>
-            )}
-          </div>
-        ),
-      },
-      {
-        field: 'partnerType',
-        headerText: 'نوع الشريك',
-        width: 'w-32',
-        align: 'center',
-        render: (r) => (
-          <Badge
-            size="sm"
-            color={r.badgeColor}
-            variant="light"
-            radius="md"
-            className="font-bold"
-          >
-            {r.partnerTypeLabel}
-          </Badge>
-        ),
-      },
-    ];
+  // Filtered List
+  const filteredPartners = useMemo(() => {
+    return partners.filter((p) => {
+      // Type Filter
+      if (typeFilter !== 'ALL' && p.partnerType !== typeFilter) return false;
 
-    if (selectedCurrency === 'ALL' || selectedCurrency === 'IQD') {
-      cols.push(
-        {
-          field: 'debitIQD', headerText: 'مدين (د.ع)', width: 'w-32', align: 'left', isMonetary: true,
-          render: (r) => (
-            <span className="font-bold tabular-nums text-slate-700 text-xs" style={numStyle}>
-              {r.debitIQD > 0 ? r.debitIQD.toLocaleString('en-US') : <span className="text-slate-300">—</span>}
-            </span>
-          ),
-        },
-        {
-          field: 'creditIQD', headerText: 'دائن (د.ع)', width: 'w-32', align: 'left', isMonetary: true,
-          render: (r) => (
-            <span className="font-bold tabular-nums text-slate-700 text-xs" style={numStyle}>
-              {r.creditIQD > 0 ? r.creditIQD.toLocaleString('en-US') : <span className="text-slate-300">—</span>}
-            </span>
-          ),
-        },
-        {
-          field: 'balanceIQD', headerText: 'الرصيد الصافي (د.ع)', width: 'w-40', align: 'left', isMonetary: true,
-          render: (r) => <BalanceCell value={r.balanceIQD} suffix=" د.ع" />,
-        },
-        {
-          field: 'creditLimitIQD', headerText: 'حد الائتمان (د.ع)', width: 'w-36', align: 'left',
-          render: (r) => (
-            <span className="font-mono tabular-nums text-xs text-slate-600" style={numStyle}>
-              {r.creditLimitIQD ? r.creditLimitIQD.toLocaleString('en-US') + ' د.ع' : <span className="text-slate-300 text-[10px]">غير محدد</span>}
-            </span>
-          ),
-        },
-      );
+      // Only With Email
+      if (onlyWithEmail) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!p.email || !emailRegex.test(p.email.trim())) return false;
+      }
+
+      // Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = (p.nameAr || '').toLowerCase().includes(q) || (p.nameEn || '').toLowerCase().includes(q);
+        const matchesCode = (p.code || '').toLowerCase().includes(q);
+        const matchesPhone = (p.phone || '').toLowerCase().includes(q);
+        const matchesEmail = (p.email || '').toLowerCase().includes(q);
+        const matchesAddress = (p.address || '').toLowerCase().includes(q);
+        return matchesName || matchesCode || matchesPhone || matchesEmail || matchesAddress;
+      }
+
+      return true;
+    });
+  }, [partners, typeFilter, onlyWithEmail, searchQuery]);
+
+  // Copy helper
+  const handleCopyText = (text: string, id: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    showSuccessNotification('تم النسخ', `تم نسخ ${label} إلى الحافظة بنجاح`);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Select all toggle
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === filteredPartners.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredPartners.map((p) => p.id));
     }
-
-    if (selectedCurrency === 'ALL' || selectedCurrency === 'USD') {
-      cols.push(
-        {
-          field: 'debitUSD', headerText: 'مدين ($)', width: 'w-28', align: 'left', isMonetary: true,
-          render: (r) => (
-            <span className="font-bold tabular-nums text-slate-700 text-xs" style={numStyle}>
-              {r.debitUSD > 0 ? `$${r.debitUSD.toLocaleString('en-US')}` : <span className="text-slate-300">—</span>}
-            </span>
-          ),
-        },
-        {
-          field: 'creditUSD', headerText: 'دائن ($)', width: 'w-28', align: 'left', isMonetary: true,
-          render: (r) => (
-            <span className="font-bold tabular-nums text-slate-700 text-xs" style={numStyle}>
-              {r.creditUSD > 0 ? `$${r.creditUSD.toLocaleString('en-US')}` : <span className="text-slate-300">—</span>}
-            </span>
-          ),
-        },
-        {
-          field: 'balanceUSD', headerText: 'الرصيد الصافي ($)', width: 'w-36', align: 'left', isMonetary: true,
-          render: (r) => <BalanceCell value={r.balanceUSD} prefix="$" />,
-        },
-        {
-          field: 'creditLimitUSD', headerText: 'حد الائتمان ($)', width: 'w-32', align: 'left',
-          render: (r) => (
-            <span className="font-mono tabular-nums text-xs text-slate-600" style={numStyle}>
-              {r.creditLimitUSD ? `$${r.creditLimitUSD.toLocaleString('en-US')}` : <span className="text-slate-300 text-[10px]">غير محدد</span>}
-            </span>
-          ),
-        },
-      );
-    }
-
-    return cols;
-  }, [selectedCurrency]);
-
-  const actionMenuItems: AccountingActionMenuItem[] = [
-    {
-      label: 'بطاقة الشريك',
-      icon: IconEye,
-      onClick: (row) => { setSelectedPartner(row); setDrawerOpen(true); },
-    },
-    {
-      label: 'كشف الحساب',
-      icon: IconFileText,
-      color: 'blue',
-      onClick: (row) => navigate(`/admin/reports?accountId=${row.id}`),
-    },
-    {
-      label: 'تغيير الائتمان',
-      icon: IconCreditCard,
-      color: 'emerald',
-      onClick: (row) => {
-        setSelectedPartner(row);
-        setNewCreditLimitIQD(row.creditLimitIQD ? String(row.creditLimitIQD) : '');
-        setNewCreditLimitUSD(row.creditLimitUSD ? String(row.creditLimitUSD) : '');
-        setCreditModalOpen(true);
-      },
-    },
-  ];
+  };
 
   return (
-    <div className="w-full flex flex-col gap-3">
-
-      {/* ── Stats Row ── */}
-      <div className="flex items-center gap-2.5 px-1 flex-wrap">
+    <div
+      className="w-full max-w-[1760px] mx-auto px-4 sm:px-6 py-4 space-y-4 font-sans select-none bg-[#F7F8FA] min-h-screen text-right"
+      dir={direction}
+      style={{ fontFamily: isAr ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
+    >
+      {/* ── 1. STATS OVERVIEW CARDS (Refined White & Orange Palette) ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
-          label="إجمالي الأطراف"
+          label="إجمالي الأطراف المسجلة"
           value={metrics.total}
-          icon={<IconUsers size={18} className="text-slate-600" />}
-          accent="bg-slate-100"
-          bg="bg-white"
-          border="border-slate-200"
+          icon={<IconUsers size={20} />}
+          accentBg="bg-orange-50"
+          accentColor="text-[#F45A0A]"
+          subtext="عملاء وموردون نشطون"
         />
         <StatCard
           label="العملاء (مدينون)"
-          value={metrics.totalCusts}
-          icon={<IconUserCheck size={18} className="text-teal-600" />}
-          accent="bg-teal-50"
-          bg="bg-white"
-          border="border-teal-200"
+          value={metrics.customersCount}
+          icon={<IconUserCheck size={20} />}
+          accentBg="bg-amber-50"
+          accentColor="text-amber-600"
+          subtext="شركات وأفراد ووكلاء"
         />
         <StatCard
           label="الموردون (دائنون)"
-          value={metrics.totalSupps}
-          icon={<IconBuildingStore size={18} className="text-[#F45A0A]" />}
-          accent="bg-orange-50"
-          bg="bg-white"
-          border="border-orange-200"
+          value={metrics.suppliersCount}
+          icon={<IconBuildingStore size={20} />}
+          accentBg="bg-blue-50"
+          accentColor="text-blue-600"
+          subtext="شركات سياحة وطيران وفنادق"
         />
         <StatCard
-          label="شركات الطيران"
-          value={metrics.totalAirlines}
-          icon={<IconPlane size={18} className="text-blue-600" />}
-          accent="bg-blue-50"
-          bg="bg-white"
-          border="border-blue-200"
-        />
-        <StatCard
-          label="المستفيدون"
-          value={metrics.totalBenef}
-          icon={<IconUsers size={18} className="text-violet-600" />}
-          accent="bg-violet-50"
-          bg="bg-white"
-          border="border-violet-200"
+          label="يمتلكون بريداً إلكترونياً"
+          value={metrics.withEmailCount}
+          icon={<IconMail size={20} />}
+          accentBg="bg-emerald-50"
+          accentColor="text-emerald-600"
+          subtext="جاهزون لمراسلة الإعلانات"
         />
       </div>
 
-      {/* ── Grid ── */}
-      <AccountingGrid
-        gridKey="partners_accounting_grid"
-        data={partners}
-        columnDefs={columnDefs}
-        loading={loading}
-        onRefresh={fetchPartners}
-        actionMenuItems={actionMenuItems}
-        onRowDoubleClick={(row) => { setSelectedPartner(row); setDrawerOpen(true); }}
-        typeFilterOptions={[
-          { label: 'جميع الأطراف والشركاء', value: 'ALL' },
-          { label: 'العملاء (مدينون)', value: 'CUSTOMER' },
-          { label: 'الموردون (دائنون)', value: 'SUPPLIER' },
-          { label: 'شركات الطيران', value: 'AIRLINE' },
-          { label: 'المستفيدون والموظفون', value: 'BENEFICIARY' },
-        ]}
-        customToolbarElements={
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-slate-100 rounded-xl px-2 py-1.5">
-              <span className="text-[11px] font-bold text-slate-500 shrink-0">العملة:</span>
-              <SegmentedControl
-                size="xs"
-                value={selectedCurrency}
-                onChange={(val: any) => setSelectedCurrency(val || 'ALL')}
-                data={[
-                  { label: 'الكل', value: 'ALL' },
-                  { label: 'IQD', value: 'IQD' },
-                  { label: 'USD', value: 'USD' },
-                ]}
-                color="orange"
-                className="font-bold"
+      {/* ── 2. FILTERS & ACTIONS TOOLBAR ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          
+          {/* Right Group: Search + Type Segment + Email Toggle */}
+          <div className="flex items-center gap-2.5 flex-wrap flex-1">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-[280px]">
+              <IconSearch size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="بحث بالاسم، الكود، الهاتف، الإيميل..."
+                className="w-full h-9 pr-9 pl-3 rounded-xl bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-[#F45A0A] text-xs font-medium text-slate-800 placeholder:text-slate-400 outline-none transition-all"
               />
             </div>
-            <Button
+
+            {/* Segmented Filter: All / Customers / Suppliers */}
+            <SegmentedControl
               size="xs"
+              value={typeFilter}
+              onChange={(val: any) => setTypeFilter(val)}
+              data={[
+                { label: `الكل (${metrics.total})`, value: 'ALL' },
+                { label: `العملاء (${metrics.customersCount})`, value: 'CUSTOMER' },
+                { label: `الموردون (${metrics.suppliersCount})`, value: 'SUPPLIER' },
+              ]}
               color="orange"
-              leftSection={<IconPlus size={14} />}
+              className="font-bold shrink-0"
+              radius="xl"
+            />
+
+            {/* Filter Toggle: Only with email */}
+            <button
+              type="button"
+              onClick={() => setOnlyWithEmail((p) => !p)}
+              className={`h-9 px-3 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                onlyWithEmail
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-2xs'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <IconAt size={14} className={onlyWithEmail ? 'text-emerald-600' : 'text-slate-400'} />
+              <span>يحمل بريداً إلكترونياً</span>
+              {onlyWithEmail && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+            </button>
+          </div>
+
+          {/* Left Group: Action Buttons (Add Partner + Email Broadcast + Refresh) */}
+          <div className="flex items-center gap-2 justify-end shrink-0">
+            {/* Email Broadcast Button */}
+            <Button
+              size="sm"
+              color="orange"
+              variant="light"
+              leftSection={<IconSend size={15} />}
+              onClick={() => setEmailModalOpen(true)}
+              className="font-bold text-xs shadow-2xs border border-orange-200"
+              radius="xl"
+            >
+              إرسال إعلان عبر الإيميل
+            </Button>
+
+            {/* Add New Partner */}
+            <Button
+              size="sm"
+              color="orange"
+              leftSection={<IconPlus size={15} />}
               onClick={() => setCreateModalOpen(true)}
-              className="font-bold"
+              className="font-bold text-xs shadow-2xs"
               radius="xl"
             >
               إضافة طرف جديد
             </Button>
+
+            {/* Refresh */}
+            <Tooltip label="تحديث البيانات" withArrow position="top">
+              <button
+                type="button"
+                onClick={fetchPartners}
+                disabled={loading}
+                className="w-9 h-9 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <IconRefresh size={16} className={loading ? 'animate-spin text-[#F45A0A]' : ''} />
+              </button>
+            </Tooltip>
           </div>
-        }
+        </div>
+      </div>
+
+      {/* ── 3. DIRECTORY TABLE CARD ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-right border-collapse text-xs">
+            <thead>
+              <tr className="h-12 bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold text-[12px]">
+                {/* Select Checkbox */}
+                <th className="px-3.5 py-2 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={filteredPartners.length > 0 && selectedIds.length === filteredPartners.length}
+                    onChange={handleToggleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer"
+                  />
+                </th>
+                <th className="px-3.5 py-2 w-14 text-center">#</th>
+                <th className="px-4 py-2 min-w-[220px]">اسم الطرف / كود الحساب</th>
+                <th className="px-3.5 py-2 text-center w-32">التصنيف</th>
+                <th className="px-4 py-2 min-w-[150px]">رقم الهاتف</th>
+                <th className="px-4 py-2 min-w-[200px]">البريد الإلكتروني</th>
+                <th className="px-4 py-2 min-w-[180px]">العنوان / المدينة</th>
+                <th className="px-3.5 py-2 text-center w-28">الإجراءات</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-12 text-slate-400 font-medium">
+                    <IconRefresh size={22} className="animate-spin text-[#F45A0A] mx-auto mb-2" />
+                    جاري تحميل بيانات الأطراف والعملاء والموردين...
+                  </td>
+                </tr>
+              ) : filteredPartners.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-12 text-slate-400">
+                    <IconUsers size={32} className="mx-auto mb-2 text-slate-300" />
+                    لا توجد أطراف مطابقة لخيارات البحث المحددة
+                  </td>
+                </tr>
+              ) : (
+                filteredPartners.map((partner, idx) => {
+                  const isSelected = selectedIds.includes(partner.id);
+                  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                  const hasValidEmail = partner.email && emailRegex.test(partner.email.trim());
+
+                  return (
+                    <tr
+                      key={partner.id}
+                      onClick={() => {
+                        setSelectedPartner(partner);
+                        setDrawerOpen(true);
+                      }}
+                      className={`h-14 hover:bg-orange-50/20 transition-colors cursor-pointer group ${
+                        isSelected ? 'bg-orange-50/40' : ''
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <td className="px-3.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            setSelectedIds((prev) =>
+                              prev.includes(partner.id) ? prev.filter((id) => id !== partner.id) : [...prev, partner.id]
+                            );
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-[#F45A0A] focus:ring-[#F45A0A] cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Index */}
+                      <td className="px-3.5 py-2 text-center font-mono text-slate-400 text-xs">
+                        {idx + 1}
+                      </td>
+
+                      {/* Name & Code */}
+                      <td className="px-4 py-2">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-bold text-slate-900 text-xs group-hover:text-[#F45A0A] transition-colors">
+                            {partner.nameAr}
+                          </span>
+                          <span className="font-mono font-bold text-[10.5px] text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded w-fit border border-slate-200">
+                            {partner.code}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Classification Badge */}
+                      <td className="px-3.5 py-2 text-center">
+                        <Badge
+                          size="sm"
+                          color={partner.partnerType === 'CUSTOMER' ? 'orange' : 'blue'}
+                          variant="light"
+                          radius="md"
+                          className="font-bold"
+                        >
+                          {partner.partnerType === 'CUSTOMER' ? 'عميل' : 'مورد'}
+                        </Badge>
+                      </td>
+
+                      {/* Phone */}
+                      <td className="px-4 py-2">
+                        {partner.phone && partner.phone !== '-' ? (
+                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <span className="font-mono font-bold text-slate-700 text-xs tabular-nums" dir="ltr">
+                              {partner.phone}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(partner.phone, `phone-${partner.id}`, 'رقم الهاتف')}
+                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600 transition-opacity p-0.5 cursor-pointer"
+                              title="نسخ رقم الهاتف"
+                            >
+                              {copiedId === `phone-${partner.id}` ? <IconCheck size={13} className="text-emerald-600" /> : <IconCopy size={13} />}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300 text-[11px]">—</span>
+                        )}
+                      </td>
+
+                      {/* Email */}
+                      <td className="px-4 py-2">
+                        {hasValidEmail ? (
+                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <span className="font-mono text-slate-700 text-xs truncate max-w-[190px]" dir="ltr">
+                              {partner.email}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(partner.email, `email-${partner.id}`, 'البريد الإلكتروني')}
+                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600 transition-opacity p-0.5 cursor-pointer"
+                              title="نسخ البريد الإلكتروني"
+                            >
+                              {copiedId === `email-${partner.id}` ? <IconCheck size={13} className="text-emerald-600" /> : <IconCopy size={13} />}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300 text-[11px]">غير مسجل</span>
+                        )}
+                      </td>
+
+                      {/* Address */}
+                      <td className="px-4 py-2">
+                        {partner.address ? (
+                          <span className="text-slate-600 text-xs truncate block max-w-[180px]">
+                            {partner.address}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 text-[11px]">—</span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-3.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          <Tooltip label="عرض بطاقة الطرف" withArrow position="top">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPartner(partner);
+                                setDrawerOpen(true);
+                              }}
+                              className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-orange-50 text-slate-600 hover:text-[#F45A0A] flex items-center justify-center transition-colors cursor-pointer"
+                            >
+                              <IconEye size={14} />
+                            </button>
+                          </Tooltip>
+
+                          {hasValidEmail && (
+                            <Tooltip label="إرسال إيميل" withArrow position="top">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedIds([partner.id]);
+                                  setEmailModalOpen(true);
+                                }}
+                                className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 flex items-center justify-center transition-colors cursor-pointer"
+                              >
+                                <IconMail size={14} />
+                              </button>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Directory Footer */}
+        <div className="bg-slate-50/80 border-t border-slate-200 px-5 py-3 flex items-center justify-between text-xs text-slate-500 font-medium">
+          <div>
+            عرض <strong className="font-mono text-slate-800">{filteredPartners.length}</strong> من أصل <strong className="font-mono text-slate-800">{partners.length}</strong> طرف
+          </div>
+          {selectedIds.length > 0 && (
+            <div className="text-[#F45A0A] font-bold">
+              تم تحديد ({selectedIds.length}) طرف
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 4. EMAIL BROADCAST MODAL ── */}
+      <EmailBroadcastModal
+        opened={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
+        partners={partners}
+        selectedPartnerIds={selectedIds}
       />
 
-      {/* ── Credit Limit Modal ── */}
-      <Modal
-        opened={creditModalOpen}
-        onClose={() => setCreditModalOpen(false)}
-        title={
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center shrink-0">
-              <IconCreditCard size={16} className="text-[#F45A0A]" />
-            </div>
-            <div>
-              <div className="font-black text-sm text-slate-900">تغيير حد الائتمان</div>
-              {selectedPartner && (
-                <div className="text-[11px] text-slate-500 font-medium">{selectedPartner.nameAr}</div>
-              )}
-            </div>
-          </div>
-        }
-        size="sm"
-        centered
-        radius="lg"
-      >
-        {selectedPartner && (
-          <div className="space-y-4 text-xs">
-            {/* Current limits info */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-center">
-                <div className="text-[10px] text-slate-400 font-bold mb-1">الحد الحالي (دينار)</div>
-                <div className="font-black text-sm text-slate-800" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                  {selectedPartner.creditLimitIQD ? selectedPartner.creditLimitIQD.toLocaleString('en-US') : '—'}
-                </div>
-              </div>
-              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-center">
-                <div className="text-[10px] text-slate-400 font-bold mb-1">الحد الحالي (دولار)</div>
-                <div className="font-black text-sm text-slate-800" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                  {selectedPartner.creditLimitUSD ? `$${selectedPartner.creditLimitUSD.toLocaleString('en-US')}` : '—'}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1.5 text-[11px]">حد الائتمان الجديد بالدينار العراقي (IQD)</label>
-              <NumberInput
-                size="sm"
-                value={newCreditLimitIQD}
-                onChange={(val) => setNewCreditLimitIQD(val)}
-                thousandSeparator=","
-                min={0}
-                allowNegative={false}
-                radius="lg"
-                placeholder="أدخل الحد بالدينار..."
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1.5 text-[11px]">حد الائتمان الجديد بالدولار الأمريكي (USD)</label>
-              <NumberInput
-                size="sm"
-                value={newCreditLimitUSD}
-                onChange={(val) => setNewCreditLimitUSD(val)}
-                thousandSeparator=","
-                min={0}
-                allowNegative={false}
-                radius="lg"
-                placeholder="أدخل الحد بالدولار..."
-              />
-              <p className="text-[10px] text-slate-400 mt-1">اتركه فارغاً لإلغاء الحد.</p>
-            </div>
-
-            <div className="flex gap-2 pt-1">
-              <Button variant="default" size="sm" onClick={() => setCreditModalOpen(false)} className="font-medium" fullWidth radius="xl">
-                إلغاء
-              </Button>
-              <Button color="orange" size="sm" loading={savingLimit} onClick={handleUpdateCreditLimit} className="font-bold" fullWidth radius="xl">
-                حفظ التغيير
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* ── Smart Wizard Modal ── */}
+      {/* ── 5. SMART ACCOUNT WIZARD MODAL ── */}
       <SmartAccountWizardModal
         opened={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
@@ -501,7 +552,7 @@ export const PartnersPage: React.FC = () => {
         defaultAccountType="INDIVIDUAL_CLIENT"
       />
 
-      {/* ── Partner Detail Drawer ── */}
+      {/* ── 6. PARTNER DETAIL DRAWER (Clean Contact View Without Financial Balances) ── */}
       <Drawer
         opened={drawerOpen}
         onClose={() => setDrawerOpen(false)}
@@ -513,178 +564,130 @@ export const PartnersPage: React.FC = () => {
             <div>
               <div className="font-black text-sm text-slate-900">بطاقة بيانات الطرف</div>
               {selectedPartner && (
-                <div className="text-[11px] text-slate-400 font-medium">{selectedPartner.code}</div>
+                <div className="text-[11px] text-slate-400 font-mono">{selectedPartner.code}</div>
               )}
             </div>
           </div>
         }
         position="left"
         size="md"
+        dir="rtl"
         styles={{
           body: { padding: '16px' },
           header: { borderBottom: '1px solid #E5E7EB', paddingBottom: '12px' },
         }}
       >
         {selectedPartner && (
-          <div className="space-y-3 text-xs">
-
+          <div className="space-y-4 text-xs font-sans">
             {/* Name + Badge */}
             <div className="p-4 bg-gradient-to-br from-slate-50 to-orange-50/30 border border-slate-200 rounded-2xl">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[10px] text-slate-400 font-bold mb-1">الاسم</div>
+                  <div className="text-[10px] text-slate-400 font-bold mb-1">الاسم الكامل</div>
                   <div className="text-base font-black text-slate-900 leading-tight">{selectedPartner.nameAr}</div>
                   {selectedPartner.nameEn && (
                     <div className="text-[11px] text-slate-500 mt-0.5 font-medium">{selectedPartner.nameEn}</div>
                   )}
                 </div>
-                <Badge size="sm" color={selectedPartner.badgeColor} variant="light" radius="xl" className="font-bold shrink-0">
-                  {selectedPartner.partnerTypeLabel}
+                <Badge size="sm" color={selectedPartner.partnerType === 'CUSTOMER' ? 'orange' : 'blue'} variant="light" radius="xl" className="font-bold shrink-0">
+                  {selectedPartner.partnerType === 'CUSTOMER' ? 'عميل' : 'مورد'}
                 </Badge>
               </div>
             </div>
 
-            {/* Balance Cards */}
-            <div className="grid grid-cols-2 gap-2">
-              {/* IQD Balance */}
-              <div className="p-3 rounded-2xl border border-slate-200 bg-white space-y-1.5">
-                <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" />
-                  الرصيد الصافي (دينار)
-                </div>
-                <div
-                  className={`text-sm font-black tabular-nums leading-tight ${selectedPartner.balanceIQD > 0.01 ? 'text-emerald-700' : selectedPartner.balanceIQD < -0.01 ? 'text-rose-700' : 'text-slate-400'}`}
-                  style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
-                >
-                  {Math.abs(selectedPartner.balanceIQD).toLocaleString('en-US')}
-                </div>
-                {selectedPartner.balanceIQD !== 0 && (
-                  <div className={`text-[9px] font-bold px-1.5 py-0.5 rounded w-fit ${selectedPartner.balanceIQD > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                    {selectedPartner.balanceIQD > 0 ? 'لنا' : 'علينا'}
+            {/* Contact Details Card */}
+            <div className="p-4 border border-slate-200 rounded-2xl space-y-3 bg-white">
+              <div className="text-[11px] font-black text-slate-600 uppercase tracking-wide border-b border-slate-100 pb-2">
+                بيانات الاتصال والعنوان
+              </div>
+
+              {/* Phone */}
+              <div className="flex items-center justify-between py-1">
+                <div className="flex items-center gap-2.5 text-slate-600">
+                  <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                    <IconPhone size={14} className="text-slate-500" />
                   </div>
+                  <span className="font-medium text-xs">رقم الهاتف:</span>
+                </div>
+                {selectedPartner.phone && selectedPartner.phone !== '-' ? (
+                  <span className="font-mono font-bold text-slate-900 text-xs" dir="ltr">{selectedPartner.phone}</span>
+                ) : (
+                  <span className="text-slate-300 text-xs">غير محدد</span>
                 )}
               </div>
 
-              {/* USD Balance */}
-              <div className="p-3 rounded-2xl border border-slate-200 bg-white space-y-1.5">
-                <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
-                  الرصيد الصافي (دولار)
-                </div>
-                <div
-                  className={`text-sm font-black tabular-nums leading-tight ${selectedPartner.balanceUSD > 0.01 ? 'text-emerald-700' : selectedPartner.balanceUSD < -0.01 ? 'text-rose-700' : 'text-slate-400'}`}
-                  style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
-                >
-                  ${Math.abs(selectedPartner.balanceUSD).toLocaleString('en-US')}
-                </div>
-                {selectedPartner.balanceUSD !== 0 && (
-                  <div className={`text-[9px] font-bold px-1.5 py-0.5 rounded w-fit ${selectedPartner.balanceUSD > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                    {selectedPartner.balanceUSD > 0 ? 'لنا' : 'علينا'}
+              {/* Email */}
+              <div className="flex items-center justify-between py-1">
+                <div className="flex items-center gap-2.5 text-slate-600">
+                  <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                    <IconMail size={14} className="text-slate-500" />
                   </div>
+                  <span className="font-medium text-xs">البريد الإلكتروني:</span>
+                </div>
+                {selectedPartner.email ? (
+                  <span className="font-mono font-bold text-slate-900 text-xs" dir="ltr">{selectedPartner.email}</span>
+                ) : (
+                  <span className="text-slate-300 text-xs">غير مسجل</span>
+                )}
+              </div>
+
+              {/* Address */}
+              <div className="flex items-center justify-between py-1">
+                <div className="flex items-center gap-2.5 text-slate-600">
+                  <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                    <IconMapPin size={14} className="text-slate-500" />
+                  </div>
+                  <span className="font-medium text-xs">العنوان / المدينة:</span>
+                </div>
+                {selectedPartner.address ? (
+                  <span className="font-bold text-slate-900 text-xs text-left max-w-[200px] truncate">{selectedPartner.address}</span>
+                ) : (
+                  <span className="text-slate-300 text-xs">غير محدد</span>
                 )}
               </div>
             </div>
 
-            {/* Debit / Credit breakdown */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="p-2.5 rounded-xl border border-slate-100 bg-slate-50 flex items-center gap-2">
-                <IconTrendingUp size={14} className="text-emerald-500 shrink-0" />
-                <div>
-                  <div className="text-[9px] text-slate-400 font-bold">إجمالي مدين</div>
-                  <div className="font-black text-xs text-slate-800 tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    {selectedPartner.debitIQD.toLocaleString('en-US')} <span className="text-[9px] text-slate-400">د.ع</span>
-                  </div>
-                </div>
-              </div>
-              <div className="p-2.5 rounded-xl border border-slate-100 bg-slate-50 flex items-center gap-2">
-                <IconTrendingDown size={14} className="text-rose-500 shrink-0" />
-                <div>
-                  <div className="text-[9px] text-slate-400 font-bold">إجمالي دائن</div>
-                  <div className="font-black text-xs text-slate-800 tabular-nums" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    {selectedPartner.creditIQD.toLocaleString('en-US')} <span className="text-[9px] text-slate-400">د.ع</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Contact Info */}
-            {(selectedPartner.phone || selectedPartner.email || selectedPartner.address) && (
-              <div className="p-3.5 border border-slate-200 rounded-2xl space-y-2.5 bg-white">
-                <div className="text-[10px] font-black text-slate-500 uppercase tracking-wide">معلومات التواصل</div>
-                {selectedPartner.phone && (
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                      <IconPhone size={13} className="text-slate-500" />
-                    </div>
-                    <span className="font-bold text-slate-800 text-xs">{selectedPartner.phone}</span>
-                  </div>
-                )}
-                {selectedPartner.email && (
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                      <IconMail size={13} className="text-slate-500" />
-                    </div>
-                    <span className="font-bold text-slate-800 text-xs">{selectedPartner.email}</span>
-                  </div>
-                )}
-                {selectedPartner.address && (
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                      <IconMapPin size={13} className="text-slate-500" />
-                    </div>
-                    <span className="font-bold text-slate-800 text-xs">{selectedPartner.address}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Credit Limits */}
-            <div className="p-3.5 border border-slate-200 rounded-2xl space-y-2.5 bg-white">
-              <div className="flex items-center justify-between">
-                <div className="text-[10px] font-black text-slate-500 uppercase tracking-wide">حدود الائتمان</div>
-                <button
-                  type="button"
+            {/* Quick Direct Actions */}
+            <div className="space-y-2 pt-2">
+              {selectedPartner.email && (
+                <Button
+                  fullWidth
+                  size="sm"
+                  color="orange"
+                  variant="light"
+                  leftSection={<IconSend size={15} />}
+                  className="font-bold"
+                  radius="xl"
                   onClick={() => {
-                    setNewCreditLimitIQD(selectedPartner.creditLimitIQD ? String(selectedPartner.creditLimitIQD) : '');
-                    setNewCreditLimitUSD(selectedPartner.creditLimitUSD ? String(selectedPartner.creditLimitUSD) : '');
-                    setCreditModalOpen(true);
+                    setSelectedIds([selectedPartner.id]);
+                    setEmailModalOpen(true);
                   }}
-                  className="text-[10px] font-bold text-[#F45A0A] hover:underline cursor-pointer flex items-center gap-0.5"
                 >
-                  <IconEdit size={11} /> تعديل
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-center">
-                  <div className="text-[9px] text-slate-400 font-bold">بالدينار</div>
-                  <div className="font-black text-xs text-slate-800 mt-0.5" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    {selectedPartner.creditLimitIQD ? selectedPartner.creditLimitIQD.toLocaleString('en-US') : <span className="text-slate-300">—</span>}
-                  </div>
-                </div>
-                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-center">
-                  <div className="text-[9px] text-slate-400 font-bold">بالدولار</div>
-                  <div className="font-black text-xs text-slate-800 mt-0.5" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                    {selectedPartner.creditLimitUSD ? `$${selectedPartner.creditLimitUSD.toLocaleString('en-US')}` : <span className="text-slate-300">—</span>}
-                  </div>
-                </div>
-              </div>
-            </div>
+                  إرسال إعلان عبر البريد الإلكتروني
+                </Button>
+              )}
 
-            {/* CTA */}
-            <Button
-              fullWidth
-              size="sm"
-              color="orange"
-              leftSection={<IconFileText size={15} />}
-              className="font-bold"
-              radius="xl"
-              onClick={() => { setDrawerOpen(false); navigate(`/admin/reports?accountId=${selectedPartner.id}`); }}
-            >
-              عرض كشف الحساب الكامل
-            </Button>
+              <Button
+                fullWidth
+                size="sm"
+                variant="default"
+                leftSection={<IconCopy size={15} />}
+                className="font-medium"
+                radius="xl"
+                onClick={() => {
+                  const summary = `الاسم: ${selectedPartner.nameAr}\nالكود: ${selectedPartner.code}\nالهاتف: ${selectedPartner.phone || '-'}\nالبريد: ${selectedPartner.email || '-'}\nالعنوان: ${selectedPartner.address || '-'}`;
+                  navigator.clipboard.writeText(summary);
+                  showSuccessNotification('تم النسخ', 'تم نسخ كامل بطاقة الطرف إلى الحافظة');
+                }}
+              >
+                نسخ كامل بيانات الطرف
+              </Button>
+            </div>
           </div>
         )}
       </Drawer>
     </div>
   );
 };
+
+export default PartnersPage;
