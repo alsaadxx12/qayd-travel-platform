@@ -14,7 +14,7 @@ import {
 } from '@tabler/icons-react';
 import { Loader, Modal } from '@mantine/core';
 import { AccountingGrid, AccountingColumnDef, AccountingActionMenuItem } from '../../components/common/AccountingGrid';
-import { GroupFareEditorWorkspace } from '../../components/tickets/GroupFareEditorWorkspace';
+import { GroupDesignWorkspace } from '../../components/groups/GroupDesignWorkspace';
 import { matchesSearchTokens } from '../../components/ui/SearchableCombobox';
 import { ticketsApi, TicketData } from '../../api/tickets';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
@@ -432,7 +432,7 @@ export const GroupsPage: React.FC = () => {
         </div>
       )}
 
-      <GroupFareEditorWorkspace
+      <GroupDesignWorkspace
         opened={workspaceOpen}
         initialData={editing}
         onClose={() => {
