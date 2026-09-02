@@ -722,45 +722,54 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
             <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4">
               
               {/* Header with Seat Progress */}
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
-                      <Armchair size={15} />
+                    <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
+                      <Armchair size={17} />
                     </div>
-                    <span className="font-black text-[13.5px] text-slate-900">
-                      {isAr ? 'توزيع مقاعد الكروب على المستفيدين والعملاء (Customers & Sales)' : 'Seat Sales & Customers'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span
-                      className={`inline-flex items-center gap-1.5 text-[11.5px] font-black px-3 py-0.5 rounded-full border ${
-                        totals.remainingSeats === 0
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                          : 'bg-amber-50 border-amber-200 text-amber-800'
-                      }`}
-                    >
-                      {totals.remainingSeats === 0 ? <CheckCircle2 size={13} /> : <Clock size={13} />}
-                      <span>
-                        {isAr
-                          ? `تم بيع ${totals.soldSeats} من إجمالي ${totals.seats} مقعداً — المتبقي: ${totals.remainingSeats} مقعد`
-                          : `Sold ${totals.soldSeats} of ${totals.seats} seats — Remaining: ${totals.remainingSeats}`}
+                    <div>
+                      <span className="font-black text-[14px] text-slate-900 block leading-tight">
+                        {isAr ? 'توزيع مقاعد الكروب على المستفيدين والعملاء (Customers & Sales)' : 'Seat Sales & Customers'}
                       </span>
-                    </span>
+                      <span className="text-[11px] text-slate-500 font-medium block mt-0.5">
+                        {isAr
+                          ? 'قم بتسجيل المستفيدين وتحديد القالب وسعر البيع لكل مقعد واحتساب الأرباح'
+                          : 'Assign passenger names, templates, sale prices, and calculate profits per seat'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleAddCustomer()}
-                  className="h-[38px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
-                >
-                  <Plus size={16} strokeWidth={2.4} />
-                  <span>{isAr ? 'إضافة مستفيد / مشتري' : 'Add Passenger / Buyer'}</span>
-                </button>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {/* Seat allocation badge */}
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[11.5px] font-black px-3.5 py-1 rounded-xl border shadow-2xs ${
+                      totals.remainingSeats === 0
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-amber-50 border-amber-200 text-amber-800'
+                    }`}
+                  >
+                    {totals.remainingSeats === 0 ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                    <span>
+                      {isAr
+                        ? `تم بيع ${totals.soldSeats} من إجمالي ${totals.seats} مقعداً — المتبقي: ${totals.remainingSeats} مقعد`
+                        : `Sold ${totals.soldSeats} of ${totals.seats} seats — Remaining: ${totals.remainingSeats}`}
+                    </span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddCustomer()}
+                    className="h-[40px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-[12px] font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+                  >
+                    <Plus size={16} strokeWidth={2.4} />
+                    <span>{isAr ? 'إضافة مستفيد / مشتري' : 'Add Passenger / Buyer'}</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Customers Table */}
+              {/* Customers List (Modern Spacious Seat Allocation Cards) */}
               {(design.customers || []).length === 0 ? (
                 <div className="py-14 text-center rounded-2xl border border-dashed border-slate-200 bg-[#FAFAFA]">
                   <Armchair size={36} className="mx-auto text-slate-300 mb-2" />
@@ -774,107 +783,135 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-[#E5E7EB]">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-[#F8FAFC] text-slate-700 text-[11.5px] font-black border-b border-[#E5E7EB]">
-                        <th className="p-2.5 w-12 text-center">#</th>
-                        <th className="p-2.5 text-start">{isAr ? 'المستفيد / العميل' : 'Customer'}</th>
-                        <th className="p-2.5 text-start w-40">{isAr ? 'الوكيل' : 'Agent'}</th>
-                        <th className="p-2.5 text-start w-52">{isAr ? 'القالب المخصص (Template)' : 'Template'}</th>
-                        <th className="p-2.5 w-36 text-center">{isAr ? 'نوع المبيع / الدفع' : 'Payment Type'}</th>
-                        <th className="p-2.5 w-36 text-end">{isAr ? 'سعر البيع' : 'Sale Price'}</th>
-                        <th className="p-2.5 w-36 text-end">{isAr ? 'صافي الربح' : 'Profit'}</th>
-                        <th className="p-2.5 w-12 text-center" />
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {(design.customers || []).map((c, idx) => {
-                        const assignedTpl = (design.templates || []).find((t) => t.id === c.templateId);
-                        const seatCost = assignedTpl
-                          ? computeTemplateTotals(assignedTpl).costPerSeat
-                          : totals.costPerSeat;
-                        const profit = (Number(c.sale) || 0) - seatCost;
+                <div className="space-y-3">
+                  {(design.customers || []).map((c, idx) => {
+                    const assignedTpl = (design.templates || []).find((t) => t.id === c.templateId);
+                    const seatCost = assignedTpl
+                      ? computeTemplateTotals(assignedTpl).costPerSeat
+                      : totals.costPerSeat;
+                    const profit = (Number(c.sale) || 0) - seatCost;
 
-                        return (
-                          <tr key={c.id} className="hover:bg-orange-50/30 transition-colors">
-                            <td className="p-2.5 text-center">
-                              <span className="w-6 h-6 rounded-full bg-orange-50 text-[#F45A0A] border border-orange-200 text-[11px] font-mono font-black inline-flex items-center justify-center">
-                                {idx + 1}
+                    return (
+                      <div
+                        key={c.id}
+                        className="bg-white rounded-2xl border border-[#E5E7EB] p-4 hover:border-orange-200 transition-all shadow-2xs space-y-3"
+                      >
+                        {/* Seat Row Header */}
+                        <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-lg bg-orange-50 text-[#F45A0A] border border-orange-200 font-mono font-black text-xs flex items-center justify-center">
+                              {idx + 1}
+                            </span>
+                            <span className="font-bold text-[13px] text-slate-900">
+                              {isAr ? `المقعد #${idx + 1}` : `Seat #${idx + 1}`}
+                            </span>
+                            {c.name && (
+                              <span className="text-[12px] font-bold text-slate-500 font-sans">
+                                • {c.name}
                               </span>
-                            </td>
-                            <td className="p-2.5">
-                              <SearchableCombobox
-                                value={c.name}
-                                onChange={(val) => handlePatchCustomer(c.id, { name: val || '' })}
-                                options={customerOptions}
-                                placeholder={isAr ? 'اختر العميل أو اكتب اسماً...' : 'Customer...'}
-                                allowCustomValue
-                              />
-                            </td>
-                            <td className="p-2.5">
-                              <input
-                                value={c.agent || ''}
-                                onChange={(e) => handlePatchCustomer(c.id, { agent: e.target.value })}
-                                placeholder={isAr ? 'اسم الوكيل' : 'Agent'}
-                                className="w-full h-[46px] px-3 rounded-[11px] border border-[#E5E7EB] bg-white text-[12px] font-bold outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
-                              />
-                            </td>
-                            <td className="p-2.5">
-                              <SearchableCombobox
-                                value={c.templateId}
-                                onChange={(val) => {
-                                  const tpl = (design.templates || []).find((t) => t.id === val);
-                                  handlePatchCustomer(c.id, {
-                                    templateId: val,
-                                    templateName: tpl?.name,
-                                    sale: tpl ? Number(tpl.seatPrice) || 0 : c.sale,
-                                  });
-                                }}
-                                options={templateComboboxOptions}
-                                placeholder={isAr ? 'اختر القالب...' : 'Template...'}
-                              />
-                            </td>
-                            <td className="p-2.5">
-                              <SearchableCombobox
-                                value={c.payType}
-                                onChange={(val) => handlePatchCustomer(c.id, { payType: (val as 'CASH' | 'CREDIT') || 'CASH' })}
-                                options={[
-                                  { value: 'CASH', label: isAr ? 'نقدي (Cash)' : 'Cash' },
-                                  { value: 'CREDIT', label: isAr ? 'آجل (Credit)' : 'Credit' },
-                                ]}
-                                placeholder={isAr ? 'الدفع...' : 'Payment...'}
-                              />
-                            </td>
-                            <td className="p-2.5">
-                              <input
-                                value={c.sale ? c.sale.toLocaleString('en-US') : ''}
-                                onChange={(e) => handlePatchCustomer(c.id, { sale: numeric(e.target.value) })}
-                                dir="ltr"
-                                placeholder="0"
-                                className="w-full h-[46px] px-3 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-mono font-black text-end text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all"
-                              />
-                            </td>
-                            <td className="p-2.5 text-end font-mono font-black text-[13px]" dir="ltr">
-                              <span className={profit >= 0 ? 'text-[#078B61]' : 'text-rose-600'}>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5 font-mono text-xs font-black">
+                              <span className="text-slate-500 font-sans text-[11px] font-bold">
+                                {isAr ? 'صافي الربح:' : 'Profit:'}
+                              </span>
+                              <span className={profit >= 0 ? 'text-[#078B61]' : 'text-rose-600'} dir="ltr">
                                 {profit >= 0 ? '+' : ''}
                                 {money(profit, design.currency)}
                               </span>
-                            </td>
-                            <td className="p-2.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveCustomer(c.id)}
-                                className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-200 inline-flex items-center justify-center cursor-pointer transition-colors"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCustomer(c.id)}
+                              className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 flex items-center justify-center cursor-pointer transition-colors"
+                              title={isAr ? 'حذف المقعد' : 'Remove seat'}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Input Fields Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+                          
+                          {/* 1. Customer Selection */}
+                          <div className="sm:col-span-2">
+                            <SearchableCombobox
+                              label={isAr ? 'المستفيد / العميل *' : 'Customer *'}
+                              value={c.name}
+                              onChange={(val) => handlePatchCustomer(c.id, { name: val || '' })}
+                              options={customerOptions}
+                              placeholder={isAr ? 'اختر العميل أو اكتب اسماً...' : 'Select or type customer...'}
+                              allowCustomValue
+                            />
+                          </div>
+
+                          {/* 2. Agent Name */}
+                          <div>
+                            <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
+                              {isAr ? 'اسم الوكيل' : 'Agent Name'}
+                            </label>
+                            <input
+                              value={c.agent || ''}
+                              onChange={(e) => handlePatchCustomer(c.id, { agent: e.target.value })}
+                              placeholder={isAr ? 'اسم الوكيل (اختياري)...' : 'Agent (optional)...'}
+                              className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-bold outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
+                            />
+                          </div>
+
+                          {/* 3. Price Template Selection */}
+                          <div>
+                            <SearchableCombobox
+                              label={isAr ? 'القالب المخصص (Template)' : 'Price Template'}
+                              value={c.templateId}
+                              onChange={(val) => {
+                                const tpl = (design.templates || []).find((t) => t.id === val);
+                                handlePatchCustomer(c.id, {
+                                  templateId: val,
+                                  templateName: tpl?.name,
+                                  sale: tpl ? Number(tpl.seatPrice) || 0 : c.sale,
+                                });
+                              }}
+                              options={templateComboboxOptions}
+                              placeholder={isAr ? 'اختر القالب...' : 'Select template...'}
+                            />
+                          </div>
+
+                          {/* 4. Payment Type */}
+                          <div>
+                            <SearchableCombobox
+                              label={isAr ? 'نوع المبيع / الدفع' : 'Payment Type'}
+                              value={c.payType}
+                              onChange={(val) => handlePatchCustomer(c.id, { payType: (val as 'CASH' | 'CREDIT') || 'CASH' })}
+                              options={[
+                                { value: 'CASH', label: isAr ? 'نقدي (Cash)' : 'Cash' },
+                                { value: 'CREDIT', label: isAr ? 'آجل (Credit)' : 'Credit' },
+                              ]}
+                              placeholder={isAr ? 'الدفع...' : 'Payment...'}
+                            />
+                          </div>
+
+                          {/* 5. Seat Sale Price */}
+                          <div>
+                            <label className="text-[11.5px] font-bold text-[#F45A0A] block mb-1">
+                              {isAr ? 'سعر بيع المقعد *' : 'Seat Sale Price *'}
+                            </label>
+                            <input
+                              value={c.sale ? c.sale.toLocaleString('en-US') : ''}
+                              onChange={(e) => handlePatchCustomer(c.id, { sale: numeric(e.target.value) })}
+                              dir="ltr"
+                              placeholder="0.00"
+                              className="w-full h-[46px] px-3.5 rounded-[11px] border border-orange-200 bg-white text-[13.5px] font-mono font-black text-end text-slate-900 outline-none hover:border-orange-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
+                            />
+                          </div>
+
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
