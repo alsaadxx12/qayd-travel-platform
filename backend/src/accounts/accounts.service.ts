@@ -1825,6 +1825,28 @@ export class AccountsService {
       });
     } catch (e) {}
 
+    /*
+     * السجلات التابعة ذات المفتاح الأجنبي Restrict تمنع حذف الحساب وترفع 500.
+     *
+     * حساب البورصة يُنشأ ومعه سجل مورّد أو عميل (Supplier/Customer.accountId)،
+     * وحساب الصندوق/المصرف معه Cashbox/Bank، وقد يكون له رمز كشف — وكلها Restrict.
+     * فما لم تُحذف أولاً يفشل حذف الحساب بخطأ خادم غامض («تعذر حذف بعض الحسابات»).
+     * تُحذف كلٌّ على حدة داخل try كي لا يُسقط غيابُ جدولٍ الحذفَ كلَّه.
+     */
+    for (const cleanup of [
+      () => this.prisma.customer.deleteMany({ where: { accountId: id } }),
+      () => this.prisma.supplier.deleteMany({ where: { accountId: id } }),
+      () => this.prisma.cashbox.deleteMany({ where: { accountId: id } }),
+      () => this.prisma.bank.deleteMany({ where: { accountId: id } }),
+      () => (this.prisma as any).statementAccessToken?.deleteMany({ where: { accountId: id } }),
+    ]) {
+      try {
+        await cleanup();
+      } catch (e) {
+        /* الجدول غير موجود أو لا سجل — لا يعني ذلك فشل الحذف. */
+      }
+    }
+
     const deleted = await this.prisma.account.delete({
       where: { id },
     });
