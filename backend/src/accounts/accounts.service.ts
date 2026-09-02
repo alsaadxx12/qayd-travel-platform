@@ -911,6 +911,16 @@ export class AccountsService {
           category: true,
           parentId: true,
           isParent: true,
+          /*
+           * بيانات التواصل أعمدةٌ في الجدول لا تُحسب، فحملها هنا لا يكلّف شيئاً —
+           * وبها تستغني شاشةُ الأطراف عن النسخة الكاملة التي تحسب أرصدة 2751
+           * حساباً لتعرض هاتفاً وبريداً.
+           */
+          currency: true,
+          phone: true,
+          email: true,
+          address: true,
+          contactPerson: true,
         },
         orderBy: { code: 'asc' },
       });

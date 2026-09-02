@@ -73,7 +73,14 @@ export const PartnersPage: React.FC = () => {
   const fetchPartners = async () => {
     setLoading(true);
     try {
-      const accs = await apiRequest('/api/accounts');
+      /*
+       * الشاشة تعرض اسماً ورمزاً وهاتفاً وبريداً — ولا رصيد فيها.
+       *
+       * وكانت تطلب النسخة الكاملة: 2.7 ميغابايت في نحو أربع ثوانٍ، لأن الخادم
+       * يجمع حركات دفتر الأستاذ ويمسح القيود الافتتاحية لكل حساب من 2751 حساباً
+       * ثم تُرمى تلك الأرصدة كلها هنا. والنسخة المخفَّفة تحمل ما يُعرض فقط.
+       */
+      const accs = await apiRequest('/api/accounts?lite=1');
       setRawAccounts(accs || []);
     } catch (err) {
       console.error('Error fetching accounts:', err);
@@ -258,16 +265,16 @@ export const PartnersPage: React.FC = () => {
 
             {/* Segmented Filter: All / Customers / Suppliers */}
             <SegmentedControl
-              size="xs"
+              size="sm"
               value={typeFilter}
               onChange={(val: any) => setTypeFilter(val)}
               data={[
-                { label: `الكل (${metrics.total})`, value: 'ALL' },
-                { label: `العملاء (${metrics.customersCount})`, value: 'CUSTOMER' },
-                { label: `الموردون (${metrics.suppliersCount})`, value: 'SUPPLIER' },
+                { label: `الكل (${metrics.total.toLocaleString('en-US')})`, value: 'ALL' },
+                { label: `العملاء (${metrics.customersCount.toLocaleString('en-US')})`, value: 'CUSTOMER' },
+                { label: `الموردون (${metrics.suppliersCount.toLocaleString('en-US')})`, value: 'SUPPLIER' },
               ]}
               color="orange"
-              className="font-bold shrink-0"
+              className="font-bold shrink-0 shadow-2xs border border-slate-200/80"
               radius="xl"
             />
 
