@@ -1318,20 +1318,14 @@ export const VouchersPage: React.FC = () => {
                 {/* 2. Sequence # */}
                 <th className="py-2.5 px-2 text-center w-9 font-mono text-slate-500">#</th>
 
+                {/* 5. Date */}
+                <th className="py-2.5 px-3 text-center w-28 font-mono">{isAr ? 'التاريخ' : 'Date'}</th>
+
                 {/* 3. Type */}
                 <th className="py-2.5 px-3 text-center w-24">{isAr ? 'نوع السند' : 'Type'}</th>
 
                 {/* 4. Voucher Number */}
                 <th className="py-2.5 px-3 text-center w-40">{isAr ? 'رقم السند' : 'Voucher No'}</th>
-
-                {/* 5. Date */}
-                <th className="py-2.5 px-3 text-center w-28 font-mono">{isAr ? 'التاريخ' : 'Date'}</th>
-
-                {/* 6. Currency */}
-                <th className="py-2.5 px-2.5 text-center w-16">{isAr ? 'العملة' : 'Curr.'}</th>
-
-                {/* 7. Amount */}
-                <th className="py-2.5 px-3 text-center w-32 font-mono">{isAr ? 'المبلغ' : 'Amount'}</th>
 
                 {/* 8. Beneficiary / Counter Account */}
                 <th className="py-2.5 px-3 text-center min-w-[170px]">
@@ -1343,6 +1337,12 @@ export const VouchersPage: React.FC = () => {
                     ? (isAr ? 'إلى ح/ (الطرف الدائن)' : 'To A/C (Credit)')
                     : (isAr ? 'الحساب المقابل / الدائن' : 'Counter / Credit Account')}
                 </th>
+
+                {/* 6. Currency */}
+                <th className="py-2.5 px-2.5 text-center w-16">{isAr ? 'العملة' : 'Curr.'}</th>
+
+                {/* 7. Amount */}
+                <th className="py-2.5 px-3 text-center w-32 font-mono">{isAr ? 'المبلغ' : 'Amount'}</th>
 
                 {/* 9. Custom Allocation Account (حساب التقسيم المخصص مثل فلاي) */}
                 {customVoucherAccounts.length > 0 ? (
@@ -1363,9 +1363,6 @@ export const VouchersPage: React.FC = () => {
                   </th>
                 )}
 
-                {/* 10. Description */}
-                <th className="py-2.5 px-3 text-center min-w-[220px]">{isAr ? 'البيان والشرح' : 'Description'}</th>
-
                 {/* 11. Cashbox / Financial Account */}
                 <th className="py-2.5 px-3 text-center min-w-[150px]">
                   {activeTab === 'RECEIPT'
@@ -1377,6 +1374,9 @@ export const VouchersPage: React.FC = () => {
                     : (isAr ? 'الصندوق / الحساب المالي' : 'Financial Account')}
                 </th>
 
+
+                {/* 10. Description */}
+                <th className="py-2.5 px-3 text-center min-w-[220px]">{isAr ? 'البيان والشرح' : 'Description'}</th>
 
                 {/* 13. Created By */}
                 <th className="py-2.5 px-3 text-center w-28">{isAr ? 'المنشئ' : 'Created By'}</th>
@@ -1460,6 +1460,11 @@ export const VouchersPage: React.FC = () => {
                         {idx + 1}
                       </td>
 
+                      {/* 5. Date */}
+                      <td className="py-2 px-3 text-center font-mono text-slate-600 text-[11px] font-bold tabular-nums lining-nums">
+                        {row.dateFormatted}
+                      </td>
+
                       {/* 3. Type Badge */}
                       <td className="py-2 px-3 text-center">
                         <span
@@ -1495,9 +1500,16 @@ export const VouchersPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* 5. Date */}
-                      <td className="py-2 px-3 text-center font-mono text-slate-600 text-[11px] font-bold tabular-nums lining-nums">
-                        {row.dateFormatted}
+                      {/* 8. Beneficiary / Counter Account */}
+                      <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[200px] text-center" title={row.accountName}>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">{row.accountName}</span>
+                          {row.splitAccounts?.length > 0 && (
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-black bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
+                              {isAr ? 'مقسم' : 'Split'}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* 6. Currency */}
@@ -1526,18 +1538,6 @@ export const VouchersPage: React.FC = () => {
                           {isPayment && '-'}
                           {Number(row.amount).toLocaleString('en-US', { minimumFractionDigits: row.currency === 'USD' ? 2 : 0 })}
                         </span>
-                      </td>
-
-                      {/* 8. Beneficiary / Counter Account */}
-                      <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[200px] text-center" title={row.accountName}>
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="truncate">{row.accountName}</span>
-                          {row.splitAccounts?.length > 0 && (
-                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono font-black bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
-                              {isAr ? 'مقسم' : 'Split'}
-                            </span>
-                          )}
-                        </div>
                       </td>
 
                       {/* 9. Custom Allocation Account (فلاي / حساب التقسيم) */}
@@ -1589,6 +1589,15 @@ export const VouchersPage: React.FC = () => {
                         </td>
                       )}
 
+                      {/* 11. Cashbox / Financial Account */}
+                      <td className="py-2 px-3 truncate max-w-[170px] text-center" title={row.cashboxName}>
+                        <div className="flex items-center gap-1.5 text-slate-700">
+                          <Wallet size={13} className="text-[#F45A0A] shrink-0" />
+                          <span className="font-semibold text-slate-800 text-xs truncate">{row.cashboxName}</span>
+                        </div>
+                      </td>
+
+
                       {/* 10. Description */}
                       {/* The full sentence is always on hover; the cell itself falls back
                           to it when the voucher carries no note of its own. */}
@@ -1601,15 +1610,6 @@ export const VouchersPage: React.FC = () => {
                             : row.description || row.detail || <span className="text-slate-300">—</span>}
                         </span>
                       </td>
-
-                      {/* 11. Cashbox / Financial Account */}
-                      <td className="py-2 px-3 truncate max-w-[170px] text-center" title={row.cashboxName}>
-                        <div className="flex items-center gap-1.5 text-slate-700">
-                          <Wallet size={13} className="text-[#F45A0A] shrink-0" />
-                          <span className="font-semibold text-slate-800 text-xs truncate">{row.cashboxName}</span>
-                        </div>
-                      </td>
-
 
                       {/* 13. Created By */}
                       <td className="py-2 px-3 text-center">
