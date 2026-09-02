@@ -732,6 +732,7 @@ export const ExternalClearingsPage: React.FC = () => {
                 {filteredAccounts.map(acc => {
                   const isBourse = acc.category === 'BOURSE';
                   const isOffice = acc.category === 'OFFICE';
+                  const isClient = acc.category === 'CLIENT';
                   
                   const isConsolidatedNegative = acc.totalConsolidatedUSD < 0;
                   const isConsolidatedPositive = acc.totalConsolidatedUSD > 0;
@@ -757,7 +758,7 @@ export const ExternalClearingsPage: React.FC = () => {
                   return (
                     <div
                       key={acc.id}
-                      onClick={() => navigate(`/external-clearings/${acc.id}`)}
+                      onClick={() => navigate(`/clearing-account-profile/${acc.id}`)}
                       className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs hover:shadow-md hover:border-orange-300 transition-all duration-200 cursor-pointer flex flex-col justify-between group space-y-3"
                     >
                       {/* ──── Header ──── */}
@@ -854,7 +855,10 @@ export const ExternalClearingsPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* ──── Total Consolidated USD Box ──── */}
+                      {/* ──── Total Consolidated USD Box — يُخفى لحساب العميل ────
+                          العميل يُتابَع بالدولار والدينار مباشرةً؛ توحيد رصيده في
+                          «معادل إجمالي» بسعر صرف يخلط عملتين لا معنى له في متابعته. */}
+                      {!isClient && (
                       <div
                         className={`rounded-xl p-2.5 flex items-center justify-between border ${
                           isConsolidatedNegative
@@ -893,6 +897,7 @@ export const ExternalClearingsPage: React.FC = () => {
                             : `$${acc.totalConsolidatedUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         </div>
                       </div>
+                      )}
 
                       {/* ──── Action Buttons: Orange as Primary ──── */}
                       <div className="flex items-center gap-2 pt-2 border-t border-slate-100" onClick={e => e.stopPropagation()}>
@@ -901,7 +906,7 @@ export const ExternalClearingsPage: React.FC = () => {
                           size="xs"
                           color="orange"
                           variant="filled"
-                          onClick={() => navigate(`/external-clearings/${acc.id}`)}
+                          onClick={() => navigate(`/clearing-account-profile/${acc.id}`)}
                           className="font-bold bg-orange-500 hover:bg-orange-600 text-white h-8 text-[12px] rounded-lg shadow-2xs transition-all"
                         >
                           البروفايل والحركات ◀

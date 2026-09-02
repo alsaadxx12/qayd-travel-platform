@@ -64,7 +64,8 @@ import { AccountingDatePicker } from '../components/common/date/AccountingDatePi
 import { useAdoptedExchangeRate } from '../hooks/useAdoptedExchangeRate';
 
 export const ClearingAccountProfilePage: React.FC = () => {
-  const { accountId } = useParams<{ accountId: string }>();
+  // المسار يسمّي المعامل :id — والصفحة كانت تقرأ accountId فيبقى فارغاً بلا تحميل.
+  const { id: accountId } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const [account, setAccount] = useState<ClearingAccountItem | null>(null);
