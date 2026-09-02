@@ -7,6 +7,8 @@ import {
   Modal,
   SegmentedControl,
   Switch,
+  Menu,
+  ActionIcon,
 } from '@mantine/core';
 import {
   RotateCcw,
@@ -31,6 +33,7 @@ import {
   Building2,
   Calendar,
   AlertTriangle,
+  MoreVertical,
 } from 'lucide-react';
 import { ticketsApi, type TicketData } from '../../api/tickets';
 import { airlinesApi, type AirlineItem } from '../../api/airlines';
@@ -760,69 +763,55 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
       dir={direction}
       style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
     >
-      {/* ── 1. Top Global Command Bar (Clean 64px Height) ── */}
-      <div className="h-[64px] bg-white border-b border-[#E5E7EB] px-6 flex items-center justify-between shrink-0 shadow-2xs">
+      {/* ── 1. Top Global Command Bar (Clean 56px/60px Height) ── */}
+      <header className="min-h-[56px] sm:h-[60px] bg-white border-b border-[#E5E7EB] px-4 sm:px-6 flex items-center justify-between shrink-0 shadow-2xs z-20 font-sans">
         
-        {/* Left / Start: Close & Title & Audit Log Button */}
-        <div className="flex items-center gap-4">
+        {/* Leading Side: Close, Icon, Title, Badge */}
+        <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
           <Tooltip label={isAr ? 'إغلاق ومغادرة' : 'Close Workspace'} position="bottom" withArrow>
             <button
               type="button"
               onClick={onClose}
-              className="w-10 h-10 rounded-[10px] flex items-center justify-center text-slate-500 hover:bg-[#F1F5F9] hover:text-slate-900 transition-colors cursor-pointer"
+              className="w-8.5 h-8.5 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
             >
-              {direction === 'rtl' ? <ArrowRight size={20} /> : <ArrowLeft size={20} />}
+              {direction === 'rtl' ? <ArrowRight size={18} /> : <ArrowLeft size={18} />}
             </button>
           </Tooltip>
 
-          <div className="h-6 w-px bg-slate-200" />
-
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shadow-2xs">
-              <RotateCcw size={21} strokeWidth={2} />
-            </div>
-            <div>
-              <span className="font-bold text-[17px] text-[#111827]">
-                {isAr ? 'فاتورة استرجاع تذكرة' : 'Ticket Refund Invoice'}
-              </span>
-            </div>
+          <div className="w-8.5 h-8.5 rounded-lg bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
+            <RotateCcw size={18} strokeWidth={2.2} />
           </div>
 
-          <div className="h-6 w-px bg-slate-200" />
-
-          {/* Audit History Log Button */}
-          <button
-            type="button"
-            onClick={() => setAuditLogOpen(true)}
-            className="h-[40px] px-3.5 rounded-[9px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-          >
-            <History size={16} className="text-blue-600" />
-            <span>{isAr ? 'سجل التعديلات' : 'Audit Log'}</span>
-          </button>
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="font-bold text-[15px] sm:text-[18px] text-[#111827] leading-tight truncate">
+              {isAr ? 'فاتورة استرجاع تذكرة' : 'Ticket Refund Invoice'}
+            </h2>
+            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono font-bold text-[11px] sm:text-xs border border-slate-200 shrink-0 select-all" dir="ltr">
+              {refundNumber || 'REF-NEW'}
+            </span>
+          </div>
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-3.5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-[44px] px-5 rounded-[9px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold text-[13.5px] transition-colors cursor-pointer"
-          >
-            {isAr ? 'إلغاء' : 'Cancel'}
-          </button>
-
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={handleSaveRefund}
-            className="h-[44px] px-6 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-semibold text-[13.5px] shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-          >
-            <Check size={18} strokeWidth={2.4} />
-            <span>{isAr ? 'حفظ وترحيل الاسترجاع' : 'Save & Post Refund'}</span>
-          </button>
+        {/* Trailing Side: 3-Dots Action Menu (Matching Ticket Invoice Workspace) */}
+        <div className="flex items-center gap-2 shrink-0">
+          <Menu position="bottom-end" shadow="sm" radius="md">
+            <Menu.Target>
+              <ActionIcon variant="default" size="md" radius="md" className="border-slate-200 text-slate-600 h-8.5 w-8.5 cursor-pointer hover:bg-slate-50">
+                <MoreVertical size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown className="p-1 text-xs font-medium" dir={direction}>
+              <Menu.Item
+                leftSection={<History size={14} className="text-blue-600" />}
+                onClick={() => setAuditLogOpen(true)}
+              >
+                {isAr ? 'سجل التدقيق والتعديلات' : 'Audit Trail History'}
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </div>
 
-      </div>
+      </header>
 
       {/* ── 2. Scrollable Workspace Body Canvas ── */}
       <div
@@ -1414,45 +1403,29 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
               </div>
             </div>
 
-            {/* ── E. Remarks & Attachments Section (Clean Full-Width Box) ── */}
-            <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-4 sm:p-5 space-y-3.5 shadow-2xs font-sans">
+            {/* ── E. Remarks & Notes Section (Clean Full-Width Box) ── */}
+            <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-4 sm:p-5 space-y-3 shadow-2xs font-sans">
               <h3 className="font-bold text-[13.5px] text-[#111827] flex items-center gap-2 border-b border-slate-100 pb-2.5">
                 <Receipt size={16} className="text-[#F45A0A]" />
-                <span>{isAr ? 'الملاحظات والوصل المرفق' : 'Remarks & Receipt Attachment'}</span>
+                <span>{isAr ? 'ملاحظات وتفاصيل الاسترجاع' : 'Refund Remarks & Notes'}</span>
               </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                {/* Attachments Section */}
-                <div>
-                  <TicketAttachmentsSection
-                    attachments={attachments}
-                    onChange={setAttachments}
-                  />
-                </div>
+              <div className="space-y-3">
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder={isAr ? 'أسباب الاسترجاع، تفاصيل التذكرة، توجيهات...' : 'Refund reason, policy notes...'}
+                  className="w-full p-2.5 rounded-[8px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-medium text-[#111827] outline-none hover:border-[#D1D5DB] focus:border-2 focus:border-[#F45A0A] transition-colors"
+                />
 
-                {/* Remarks / Notes */}
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-[12px] font-semibold text-[#334155] block mb-1">
-                      {isAr ? 'ملاحظات وتفاصيل الاسترجاع' : 'Refund Remarks & Notes'}
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder={isAr ? 'أسباب الاسترجاع، تفاصيل التذكرة، توجيهات...' : 'Refund reason, policy notes...'}
-                      className="w-full p-2.5 rounded-[8px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-medium text-[#111827] outline-none hover:border-[#D1D5DB] focus:border-2 focus:border-[#F45A0A] transition-colors"
-                    />
-                  </div>
-
-                  <div className="p-2.5 rounded-[8px] bg-[#F8FAFC] border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
-                    <ShieldCheck size={16} className="text-emerald-600 shrink-0 mt-0.5" />
-                    <p className="leading-relaxed">
-                      {isAr
-                        ? 'سيقوم النظام بتوليد قيد اليومية المزدوج، وتحديث أرصدة العملاء والموردين تلقائياً.'
-                        : 'Automatic double-entry journal vouchers will be generated and account balances updated instantly.'}
-                    </p>
-                  </div>
+                <div className="p-2.5 rounded-[8px] bg-[#F8FAFC] border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
+                  <ShieldCheck size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    {isAr
+                      ? 'سيقوم النظام بتوليد قيد اليومية المزدوج، وتحديث أرصدة العملاء والموردين تلقائياً.'
+                      : 'Automatic double-entry journal vouchers will be generated and account balances updated instantly.'}
+                  </p>
                 </div>
               </div>
             </div>
