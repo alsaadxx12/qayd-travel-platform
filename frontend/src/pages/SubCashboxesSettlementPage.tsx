@@ -270,8 +270,14 @@ export const SubCashboxesSettlementPage: React.FC = () => {
 
         const vNum = v.voucherNumber || (type === 'RECEIPT' ? `RV-${v.id.slice(0, 6)}` : `PV-${v.id.slice(0, 6)}`);
         const curr = detectCurrency(v);
-        // Source of truth from real DB clearance journal entries — and nothing else
-        const isSettled = settledRefsSet.has(`CLR-${vNum}`);
+        /*
+         * السند على القاصة الرئيسية محصَّلٌ بحكم مكانه.
+         *
+         * غايةُ التحصيل نقلُ المال من صندوقٍ فرعي إلى القاصة الرئيسية؛ فسندٌ مالُه
+         * أصلاً في القاصة لا يُنتظر تحصيله — هو محصَّل. وإلا فالمصدر الوحيد قيدُ
+         * التوريد CLR-<رقم> في القيود اليومية.
+         */
+        const isSettled = isMain || settledRefsSet.has(`CLR-${vNum}`);
 
         return {
           id: v.id,
@@ -1022,11 +1028,12 @@ export const SubCashboxesSettlementPage: React.FC = () => {
                       {/* 1. Confirmation Toggle Switch */}
                       <td className="py-2.5 px-3.5 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {/* سند على القاصة الرئيسية أصلاً لا يُحصَّل — لا قيد توريد له،
-                              فيُعطَّل تبديله ويوسَم «على الرئيسي» بدل تبديلٍ يكذب. */}
+                          {/* سند مالُه في القاصة الرئيسية أصلاً = محصَّل بحكم مكانه؛
+                              لا تبديل له، ويوسَم أخضرَ مؤكِّداً لا كهرمانياً تحذيرياً. */}
                           {item.isMainCashbox ? (
-                            <span className="px-2 py-0.5 rounded-md text-[10.5px] font-black bg-amber-50 text-amber-800 border border-amber-200">
-                              {isAr ? 'على الصندوق الرئيسي' : 'On main cashbox'}
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-black bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <IconCheck size={11} className="text-emerald-600" />
+                              {isAr ? 'محصَّل بالقاصة' : 'In main cashbox'}
                             </span>
                           ) : (
                             <>
