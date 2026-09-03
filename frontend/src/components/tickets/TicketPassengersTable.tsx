@@ -1325,13 +1325,13 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
                   {/* Passenger Name */}
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                      {isAr ? 'اسم المسافر *' : 'Passenger Name *'}
+                      {isAr ? 'المسافر *' : 'Passenger *'}
                     </label>
                     <input
                       type="text"
                       value={p.name}
                       onChange={(e) => handleFieldChange(idx, 'name', e.target.value)}
-                      placeholder={isAr ? 'اسم المسافر (LATIN / ARABIC)...' : 'Full Name (LATIN / ARABIC)...'}
+                      placeholder={isAr ? 'اسم المسافر...' : 'Passenger name...'}
                       className={`w-full h-9 px-3 rounded-[8px] text-xs font-medium text-slate-900 outline-none transition-all ${
                         nameError
                           ? 'border border-red-500 bg-red-50/20'
@@ -1367,14 +1367,13 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
 
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        {isAr ? 'رقم التذكرة الإلكترونية' : 'E-Ticket #'}
+                        {isAr ? 'رقم التذكرة' : 'Ticket #'}
                       </label>
                       <input
                         type="text"
                         dir="ltr"
                         value={p.ticketNumber}
                         onChange={(e) => handleFieldChange(idx, 'ticketNumber', e.target.value)}
-                        placeholder={isAr ? 'رقم التذكرة' : 'Ticket number'}
                         className="w-full h-9 px-2.5 rounded-[8px] border border-[#E2E6EA] bg-white text-xs font-mono font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-[#F45A0A]"
                       />
                     </div>
@@ -1511,23 +1510,23 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
         <table className={`w-full ${isAr ? 'text-right' : 'text-left'} border-collapse text-xs font-sans table-auto whitespace-nowrap`}>
           <thead>
             <tr className="bg-slate-50/90 text-[#475569] font-semibold border-b border-[#E5E7EB] text-[12.5px] select-none whitespace-nowrap">
-              <th className="py-3 px-3 w-12 text-center font-mono whitespace-nowrap">#</th>
-              <th className="py-3 px-3 min-w-[240px] whitespace-nowrap">
-                {isAr ? 'اسم المسافر *' : 'Passenger Name *'}
+              <th className="py-2.5 px-3 w-12 text-center font-mono whitespace-nowrap">#</th>
+              <th className="py-2.5 px-3 min-w-[220px] whitespace-nowrap">
+                {isAr ? 'المسافر *' : 'Passenger *'}
               </th>
-              <th className="py-3 px-3 min-w-[110px] whitespace-nowrap">{isAr ? 'النوع' : 'Type'}</th>
-              <th className="py-3 px-3 min-w-[180px] whitespace-nowrap">{isAr ? 'رقم التذكرة الإلكترونية' : 'E-Ticket #'}</th>
-              <th className="py-3 px-3 min-w-[140px] text-center whitespace-nowrap">{isAr ? 'الدفعة المسعرة' : 'Price Batch'}</th>
-              <th className={`py-3 px-3 min-w-[145px] whitespace-nowrap ${isAr ? 'text-left' : 'text-right'}`}>
-                {isAr ? `سعر الشراء (${getCurrencySymbol(currency)})` : `Buy Fare (${getCurrencySymbol(currency)})`}
+              <th className="py-2.5 px-3 min-w-[90px] whitespace-nowrap">{isAr ? 'النوع' : 'Type'}</th>
+              <th className="py-2.5 px-3 min-w-[150px] whitespace-nowrap">{isAr ? 'رقم التذكرة' : 'Ticket #'}</th>
+              <th className="py-2.5 px-3 min-w-[100px] text-center whitespace-nowrap">{isAr ? 'الدفعة' : 'Batch'}</th>
+              <th className={`py-2.5 px-3 min-w-[120px] whitespace-nowrap ${isAr ? 'text-left' : 'text-right'}`}>
+                {isAr ? 'الشراء' : 'Buy'}
               </th>
-              <th className={`py-3 px-3 min-w-[145px] whitespace-nowrap ${isAr ? 'text-left' : 'text-right'}`}>
-                {isAr ? `سعر البيع (${getCurrencySymbol(currency)}) *` : `Sell Fare (${getCurrencySymbol(currency)}) *`}
+              <th className={`py-2.5 px-3 min-w-[120px] whitespace-nowrap ${isAr ? 'text-left' : 'text-right'}`}>
+                {isAr ? 'البيع *' : 'Sell *'}
               </th>
-              <th className={`py-3 px-3 min-w-[140px] whitespace-nowrap ${isAr ? 'text-left' : 'text-right'}`}>
-                {isAr ? `صافي الربح (${getCurrencySymbol(currency)})` : `Net Profit (${getCurrencySymbol(currency)})`}
+              <th className={`py-2.5 px-3 min-w-[120px] whitespace-nowrap ${isAr ? 'text-left' : 'text-right'}`}>
+                {isAr ? 'الربح' : 'Profit'}
               </th>
-              <th className="py-3 px-3 min-w-[90px] text-center whitespace-nowrap">{isAr ? 'إجراء' : 'Action'}</th>
+              <th className="py-2.5 px-3 min-w-[60px] text-center whitespace-nowrap"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#F1F5F9] whitespace-nowrap">
@@ -1561,7 +1560,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
                       type="text"
                       value={p.name}
                       onChange={(e) => handleFieldChange(idx, 'name', e.target.value)}
-                      placeholder={isAr ? 'اسم المسافر الثلاثي (LATIN / ARABIC)...' : 'Full Passenger Name (LATIN / ARABIC)...'}
+                      placeholder={isAr ? 'اسم المسافر...' : 'Passenger name...'}
                       className={`w-full h-9 px-3 rounded-[8px] text-sm font-medium text-slate-900 outline-none transition-all placeholder:text-[#A0A7B2] ${
                         nameError
                           ? 'border border-red-500 bg-red-50/20'
@@ -1606,7 +1605,6 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
                       dir="ltr"
                       value={p.ticketNumber}
                       onChange={(e) => handleFieldChange(idx, 'ticketNumber', e.target.value)}
-                      placeholder={isAr ? 'رقم التذكرة' : 'Ticket number'}
                       className="w-full h-9 px-3 rounded-[8px] border border-[#E2E6EA] bg-white text-xs font-mono font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-[#F45A0A] placeholder:text-[#A0A7B2]"
                     />
                   </td>
@@ -1764,7 +1762,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
           <tfoot>
             <tr className="bg-slate-50 font-bold border-t border-[#E5E7EB] text-slate-900 text-xs whitespace-nowrap">
               <td colSpan={5} className="py-3 px-4 text-slate-700 font-semibold text-xs whitespace-nowrap">
-                {isAr ? `الإجمالي (${passengers.length} مسافر)` : `Total (${passengers.length} pax)`}
+                {isAr ? 'الإجمالي' : 'Total'}
               </td>
               <td className={`py-3 px-3 ${isAr ? 'text-left' : 'text-right'} font-mono text-xs whitespace-nowrap`} dir="ltr">
                 {formatAmount(totalBuy)}

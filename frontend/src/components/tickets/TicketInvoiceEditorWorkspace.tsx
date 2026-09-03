@@ -2037,18 +2037,6 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                         className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] font-mono font-semibold text-xs text-slate-900 uppercase outline-none hover:bg-white hover:border-[#D1D5DB] focus:bg-white focus:border-[#F45A0A] focus:ring-4 focus:ring-[#F45A0A]/10 transition-all duration-150"
                       />
                     </div>
-                    <div id="field-paying-cashbox">
-                      <SearchableCombobox
-                        label={isAr ? 'صندوق الدفع للمورد' : 'Paying Cashbox'}
-                        value={payingCashbox}
-                        onChange={(val) => {
-                          setPayingCashbox(val);
-                          markDirty();
-                        }}
-                        options={formattedCashboxesData}
-                        error={errors.payingCashbox}
-                      />
-                    </div>
                     </div>
 
                     {/* ── Flight Route (full width below grid) ── */}

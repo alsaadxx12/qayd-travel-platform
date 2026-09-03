@@ -29,33 +29,20 @@ const StatCard: React.FC<{
   label: string;
   value: string;
   subValue?: string;
-  icon: any;
-  accentColor: string;
-  iconBg: string;
-  iconColor: string;
-}> = ({
-  label,
-  value,
-  subValue,
-  icon: Icon,
-  accentColor,
-  iconBg,
-  iconColor,
-}) => (
-  <div className="relative bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden p-4 flex items-center justify-between gap-3">
-    <div className={`absolute top-0 inset-x-0 h-1 ${accentColor}`} />
-    <div className="min-w-0 flex-1">
-      <span className="text-[11.5px] font-bold text-slate-500 block truncate">{label}</span>
-      <span className="text-xl font-black text-slate-900 block mt-1 font-mono tracking-tight truncate" dir="ltr">
-        {value}
-      </span>
-      {subValue && (
-        <span className="text-[11px] font-bold text-slate-400 block mt-0.5 truncate">{subValue}</span>
-      )}
-    </div>
-    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border ${iconBg} ${iconColor}`}>
-      <Icon size={20} />
-    </div>
+}> = ({ label, value, subValue }) => (
+  /*
+   * بطاقة بهوية النظام وحدها: أبيض وبرتقالي، بلا أيقونات ولا ألوانٍ لكل بطاقة.
+   * الشريط العلوي البرتقالي هو التوقيع، والارتفاع الأكبر يمنح الرقم مقامه.
+   */
+  <div className="relative bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden px-5 py-6 min-h-[118px] flex flex-col justify-center">
+    <div className="absolute top-0 inset-x-0 h-1 bg-[#F45A0A]" />
+    <span className="text-[12px] font-bold text-slate-500 block truncate">{label}</span>
+    <span className="text-2xl font-black text-slate-900 block mt-1.5 font-mono tracking-tight truncate" dir="ltr">
+      {value}
+    </span>
+    {subValue && (
+      <span className="text-[11px] font-bold text-[#F45A0A]/70 block mt-1 truncate">{subValue}</span>
+    )}
   </div>
 );
 
@@ -400,10 +387,6 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
           label={isAr ? 'عدد فواتير الوزن' : 'Total Invoices'}
           value={formatNum(totals.count)}
           subValue={isAr ? 'فاتورة مسجلة' : 'Recorded'}
-          icon={IconFileInvoice}
-          accentColor="bg-[#F45A0A]"
-          iconBg="bg-orange-50 border-orange-200"
-          iconColor="text-[#F45A0A]"
         />
 
         {/* Card 2: تكلفة الشراء (بدل بطاقة عدد الكيلوات تماماً كما طلب المستخدم) */}
@@ -411,10 +394,6 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
           label={isAr ? 'تكلفة الشراء (الموردين)' : 'Total Buy Cost'}
           value={formatNum(totals.buy)}
           subValue={isAr ? 'إجمالي كلفة الشراء' : 'Total Cost'}
-          icon={IconTrendingDown}
-          accentColor="bg-amber-500"
-          iconBg="bg-amber-50 border-amber-200"
-          iconColor="text-amber-600"
         />
 
         {/* Card 3: إجمالي المبيعات */}
@@ -422,10 +401,6 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
           label={isAr ? 'إجمالي المبيعات' : 'Total Sales'}
           value={formatNum(totals.sell)}
           subValue={isAr ? 'المطلوب من العملاء' : 'Total revenue'}
-          icon={IconCoins}
-          accentColor="bg-sky-500"
-          iconBg="bg-sky-50 border-sky-200"
-          iconColor="text-sky-600"
         />
 
         {/* Card 4: صافي الأرباح */}
@@ -433,10 +408,6 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
           label={isAr ? 'صافي أرباح الوزن' : 'Net Profit'}
           value={`+${formatNum(totals.profit)}`}
           subValue={isAr ? 'فرق البيع والشراء' : 'Profit difference'}
-          icon={IconTrendingUp}
-          accentColor="bg-emerald-500"
-          iconBg="bg-emerald-50 border-emerald-200"
-          iconColor="text-emerald-600"
         />
       </div>
 

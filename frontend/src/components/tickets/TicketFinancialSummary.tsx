@@ -114,25 +114,6 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
         </div>
 
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500 font-medium text-[12.5px]">
-              {isAr ? 'الحالة:' : 'Status:'}
-            </span>
-            {status === 'POSTED' ? (
-              <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                {isAr ? 'مرحلة محاسبيًا' : 'Posted'}
-              </span>
-            ) : status === 'CANCELLED' ? (
-              <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-red-50 text-red-800 border border-red-200">
-                {isAr ? 'ملغاة' : 'Cancelled'}
-              </span>
-            ) : (
-              <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-[#FFF3E8] text-[#F45A0A] border border-orange-200">
-                {isAr ? 'مسودة' : 'Draft'}
-              </span>
-            )}
-          </div>
-
           {/* ── Interactive Completion Card Section ── */}
           <div
             onClick={() => setShowDetails(!showDetails)}
