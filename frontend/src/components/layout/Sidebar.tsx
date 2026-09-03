@@ -11,6 +11,7 @@ import {
   Building2,
   Undo2,
   RefreshCw,
+  Luggage,
   Landmark,
   ListTree,
   BookOpen,
@@ -54,6 +55,7 @@ const LUCIDE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; class
   Building2,
   Undo2,
   RefreshCw,
+  Luggage,
   Landmark,
   ListTree,
   BookOpen,
@@ -89,6 +91,7 @@ const DEFAULT_SIDEBAR_SECTIONS: NavSection[] = [
       { id: 'hotels', title: 'حجوزات الفنادق', path: '/hotels', iconKey: 'Building2' },
       { id: 'refunds', title: 'استرجاع التذاكر', path: '/refunds', iconKey: 'Undo2' },
       { id: 'reissues', title: 'تغيير التذاكر', path: '/reissues', iconKey: 'RefreshCw' },
+      { id: 'baggage', title: 'بيع الوزن', path: '/baggage', iconKey: 'Luggage' },
     ],
   },
   {

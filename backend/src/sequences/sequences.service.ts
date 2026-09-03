@@ -25,6 +25,7 @@ const DEFAULTS: Array<{ docType: string; prefix: string; nameAr: string }> = [
   { docType: 'refunds', prefix: 'RFD', nameAr: 'فواتير الاسترجاع' },
   { docType: 'changes', prefix: 'CHG', nameAr: 'فواتير التغيير وإعادة الإصدار' },
   { docType: 'hotels', prefix: 'HTL', nameAr: 'حجوزات الفنادق' },
+  { docType: 'baggage', prefix: 'WGT', nameAr: 'مبيعات الوزن الإضافي' },
   { docType: 'receiptVouchers', prefix: 'RV', nameAr: 'سندات القبض' },
   { docType: 'paymentVouchers', prefix: 'PV', nameAr: 'سندات الدفع' },
   // المصاريف تُحفظ سندات دفع، لكن ترقيمها مستقلّ كي لا يتداخل مع سندات الدفع العادية.
@@ -111,7 +112,17 @@ export class SequencesService {
       tickets.forEach((t) => {
         const trip = String(t.tripType || '').toUpperCase();
         const key =
-          trip === 'VISA' ? 'visas' : trip.startsWith('GROUP') ? 'groups' : trip === 'HOTEL' ? 'hotels' : 'tickets';
+          trip === 'VISA'
+            ? 'visas'
+            : trip.startsWith('GROUP')
+            ? 'groups'
+            : trip === 'HOTEL'
+            ? 'hotels'
+            : trip === 'BAGGAGE'
+            ? 'baggage'
+            : trip === 'REISSUE' || trip === 'CHANGE'
+            ? 'changes'
+            : 'tickets';
         bump(key, tail(t.invoiceNumber));
       });
 

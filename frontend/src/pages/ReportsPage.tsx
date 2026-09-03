@@ -137,7 +137,7 @@ const formatRouteCodesOnly = (rawRoute?: string): string => {
  * صلة لها بالمستند. والقيد نفسه يحمل مصدره — sourceType وsourceId — فمنهما
  * يُشتقّ النوع، ومن رقم الفاتورة والقيد حين يكون القيد قديماً بلا مصدر مسجَّل.
  */
-export type ServiceKind = 'TICKET' | 'VISA' | 'HOTEL' | 'REISSUE' | 'REFUND' | 'GROUP';
+export type ServiceKind = 'TICKET' | 'VISA' | 'HOTEL' | 'REISSUE' | 'REFUND' | 'GROUP' | 'BAGGAGE';
 
 const SERVICE_KIND_LABEL: Record<ServiceKind, { ar: string; en: string }> = {
   TICKET: { ar: 'تذاكر', en: 'Tickets' },
@@ -146,9 +146,10 @@ const SERVICE_KIND_LABEL: Record<ServiceKind, { ar: string; en: string }> = {
   REISSUE: { ar: 'تغيير', en: 'Reissue' },
   REFUND: { ar: 'استرجاع', en: 'Refund' },
   GROUP: { ar: 'كروب', en: 'Group' },
+  BAGGAGE: { ar: 'وزن', en: 'Baggage' },
 };
 
-const SERVICE_SOURCE_TYPES = new Set(['TICKET', 'VISA', 'HOTEL', 'REISSUE', 'REFUND', 'GROUP']);
+const SERVICE_SOURCE_TYPES = new Set(['TICKET', 'VISA', 'HOTEL', 'REISSUE', 'REFUND', 'GROUP', 'BAGGAGE']);
 
 const serviceKindLabel = (kind: ServiceKind, isAr: boolean) => {
   const entry = SERVICE_KIND_LABEL[kind] || SERVICE_KIND_LABEL.TICKET;
@@ -166,6 +167,7 @@ const resolveServiceKind = (ticket?: any, sourceType?: string, docHint?: string)
   if (src === 'REFUND' || trip === 'REFUND' || status === 'REFUNDED' || /(^|[^A-Z])REF-/.test(codes)) return 'REFUND';
   if (src === 'REISSUE' || trip === 'REISSUE' || trip === 'CHANGE' || /(^|[^A-Z])(REIS|CHG)-/.test(codes)) return 'REISSUE';
   if (src === 'HOTEL' || trip === 'HOTEL') return 'HOTEL';
+  if (src === 'BAGGAGE' || trip === 'BAGGAGE') return 'BAGGAGE';
   if (src === 'VISA' || trip === 'VISA') return 'VISA';
   if (src === 'GROUP' || trip === 'GROUP') return 'GROUP';
   return 'TICKET';
@@ -227,6 +229,7 @@ const SERVICE_TYPE_LABEL_AR: Record<ServiceKind, string> = {
   REISSUE: 'تغيير',
   REFUND: 'استرجاع',
   GROUP: 'كروب',
+  BAGGAGE: 'وزن إضافي',
 };
 
 const SERVICE_WORD: Record<ServiceKind, { one: string; many: string }> = {
@@ -236,6 +239,7 @@ const SERVICE_WORD: Record<ServiceKind, { one: string; many: string }> = {
   REISSUE: { one: 'تغيير', many: 'التغييرات' },
   REFUND: { one: 'استرجاع', many: 'الاسترجاعات' },
   GROUP: { one: 'كروب', many: 'الكروبات' },
+  BAGGAGE: { one: 'وزن إضافي', many: 'الأوزان الإضافية' },
 };
 
 /*

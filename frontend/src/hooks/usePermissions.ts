@@ -9,6 +9,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, { code: string; title: string 
   '/hotels': { code: 'hotels.view', title: 'حجوزات الفنادق' },
   '/refunds': { code: 'refunds.view', title: 'استرجاع التذاكر والخدمات' },
   '/reissues': { code: 'reissues.view', title: 'تغيير الحجوزات وإعادة الإصدار' },
+  '/baggage': { code: 'baggage.view', title: 'بيع الوزن الإضافي' },
   '/accounts': { code: 'accounts.view', title: 'شجرة الحسابات والدليل المالي' },
   '/chart-of-accounts': { code: 'accounts.view', title: 'شجرة الحسابات والدليل المالي' },
   '/journal-entries': { code: 'journal.view', title: 'القيود اليومية المحاسبية' },

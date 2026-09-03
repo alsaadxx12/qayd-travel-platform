@@ -14,6 +14,7 @@ const GroupsPage = lazy(() => import('./pages/groups/GroupsPage').then((m) => ({
 const HotelsPage = lazy(() => import('./pages/hotels/HotelsPage').then((m) => ({ default: m.HotelsPage })));
 const RefundsPage = lazy(() => import('./pages/refunds/RefundsPage').then((m) => ({ default: m.RefundsPage })));
 const ReissuesPage = lazy(() => import('./pages/reissues/ReissuesPage').then((m) => ({ default: m.ReissuesPage })));
+const BaggagePage = lazy(() => import('./pages/baggage/BaggagePage').then((m) => ({ default: m.BaggagePage })));
 const ChartOfAccountsPage = lazy(() => import('./pages/ChartOfAccountsPage').then((m) => ({ default: m.ChartOfAccountsPage })));
 const JournalEntriesPage = lazy(() => import('./pages/JournalEntriesPage').then((m) => ({ default: m.JournalEntriesPage })));
 const VouchersPage = lazy(() => import('./pages/VouchersPage').then((m) => ({ default: m.VouchersPage })));
@@ -137,6 +138,14 @@ export const App: React.FC = () => {
               element={
                 <PermissionRouteGuard routePath="/reissues">
                   <ReissuesPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/baggage"
+              element={
+                <PermissionRouteGuard routePath="/baggage">
+                  <BaggagePage />
                 </PermissionRouteGuard>
               }
             />

@@ -177,6 +177,18 @@ export function getDefaultSequencesForBranch(branchCode: string = 'KAB'): Record
       separator: '-',
       category: 'hotels',
     },
+    baggage: {
+      id: 'baggage',
+      nameAr: 'فواتير مبيعات الوزن الإضافي',
+      nameEn: 'Excess Baggage Sales',
+      prefix: 'WGT',
+      branchCode: code,
+      includeYear: true,
+      nextNumber: 1001,
+      padding: 5,
+      separator: '-',
+      category: 'tickets',
+    },
     exchange: {
       id: 'exchange',
       nameAr: 'فواتير الصرافة',

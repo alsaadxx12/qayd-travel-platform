@@ -1649,8 +1649,24 @@ export class TicketsService {
      * tripType ومن كون العملية فيزا — فيُكتب صريحاً.
      */
     const tripKind = String(ticket.tripType || '').toUpperCase();
-    const svcOne = isVisa ? 'تأشيرة' : tripKind === 'HOTEL' ? 'حجز فندق' : 'تذكرة';
-    const svcMany = isVisa ? 'التأشيرات' : tripKind === 'HOTEL' ? 'حجوزات الفنادق' : 'التذاكر';
+    const svcOne = isVisa
+      ? 'تأشيرة'
+      : tripKind === 'HOTEL'
+      ? 'حجز فندق'
+      : tripKind === 'BAGGAGE'
+      ? 'وزن إضافي'
+      : tripKind === 'REISSUE' || tripKind === 'CHANGE'
+      ? 'تغيير تذكرة'
+      : 'تذكرة';
+    const svcMany = isVisa
+      ? 'التأشيرات'
+      : tripKind === 'HOTEL'
+      ? 'حجوزات الفنادق'
+      : tripKind === 'BAGGAGE'
+      ? 'الأوزان الإضافية'
+      : tripKind === 'REISSUE' || tripKind === 'CHANGE'
+      ? 'تغييرات التذاكر'
+      : 'التذاكر';
 
     // 6. Build lines
     const lines: Array<{ accountId: string; debit: Prisma.Decimal; credit: Prisma.Decimal; description: string }> = [];
@@ -1813,6 +1829,7 @@ export class TicketsService {
             if (trip === 'REISSUE' || trip === 'CHANGE') return 'REISSUE';
             if (isVisa) return 'VISA';
             if (trip === 'HOTEL') return 'HOTEL';
+            if (trip === 'BAGGAGE') return 'BAGGAGE';
             if (trip === 'GROUP') return 'GROUP';
             return 'TICKET';
           })(),

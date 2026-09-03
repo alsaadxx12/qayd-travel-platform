@@ -162,6 +162,20 @@ export const PERMISSION_REGISTRY: ModuleDefinition[] = [
       { code: 'reissues.print', label: 'طباعة إشعار وسند التغيير', actionType: 'Print' },
     ],
   },
+  // ── بيع الوزن الإضافي ──
+  {
+    id: 'baggage',
+    title: 'بيع الوزن',
+    route: '/baggage',
+    category: 'العمليات والخدمات',
+    iconName: 'IconLuggage',
+    permissions: [
+      { code: 'baggage.view', label: 'عرض سجل مبيعات الوزن', actionType: 'View' },
+      { code: 'baggage.create', label: 'إصدار فاتورة وزن إضافي', actionType: 'Create' },
+      { code: 'baggage.update', label: 'تعديل فاتورة وزن', actionType: 'Update' },
+      { code: 'baggage.delete', label: 'حذف فاتورة وزن', actionType: 'Delete', isSensitive: true },
+    ],
+  },
 
   // ── 8. شجرة الحسابات والدليل المالي ──
   {
