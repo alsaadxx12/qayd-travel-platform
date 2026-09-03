@@ -51,6 +51,7 @@ import {
   IconBolt,
   IconSearch,
 } from '@tabler/icons-react';
+import { SearchableCombobox } from '../../components/ui/SearchableCombobox';
 import { apiRequest } from '../../api/client';
 import { useQuery } from '@tanstack/react-query';
 import { tenantsApi } from '../../api/tenants';
@@ -1896,16 +1897,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 132141
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptions}
+                    <SearchableCombobox
+                      options={accountOptions}
                       value={coreAccounts.defaultCashCustomerId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, defaultCashCustomerId: val || '' }))}
-                      searchable
                       placeholder="اختر حساب العميل النقدي الافتراضي..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                   </div>
 
@@ -1920,16 +1916,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 2611 / 261
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptions}
+                    <SearchableCombobox
+                      options={accountOptions}
                       value={coreAccounts.capitalAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, capitalAccountId: val || '' }))}
-                      searchable
                       placeholder="اختر حساب رأس المال..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                   </div>
 
@@ -1944,16 +1935,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 264
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptionsWithParent}
+                    <SearchableCombobox
+                      options={accountOptionsWithParent}
                       value={coreAccounts.partnersParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, partnersParentAccountId: val || '' }))}
-                      searchable
                       placeholder="اختر حساب أب الشركاء والعمليات الجارية..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                   </div>
 
@@ -1968,16 +1954,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 1341
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptionsWithParent}
+                    <SearchableCombobox
+                      options={accountOptionsWithParent}
                       value={coreAccounts.cashboxesParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, cashboxesParentAccountId: val || '' }))}
-                      searchable
                       placeholder="اختر حساب أب الصناديق النقدية..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                   </div>
 
@@ -1992,16 +1973,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 13214
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptionsWithParent}
+                    <SearchableCombobox
+                      options={accountOptionsWithParent}
                       value={coreAccounts.customersParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, customersParentAccountId: val || '' }))}
-                      searchable
                       placeholder="اختر حساب أب العملاء..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                   </div>
 
@@ -2016,16 +1992,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 23214
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptionsWithParent}
+                    <SearchableCombobox
+                      options={accountOptionsWithParent}
                       value={coreAccounts.suppliersParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, suppliersParentAccountId: val || '' }))}
-                      searchable
                       placeholder="اختر حساب أب الموردين وشركات الطيران..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                   </div>
 
@@ -2040,16 +2011,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 2328 / 23284
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptions}
+                    <SearchableCombobox
+                      options={accountOptions}
                       value={coreAccounts.dividendsPayableAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, dividendsPayableAccountId: val || '' }))}
-                      searchable
                       placeholder="اختر حساب استحقاق وتوزيع الأرباح..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                   </div>
 
@@ -2064,16 +2030,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 423 / 132621
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptions}
+                    <SearchableCombobox
+                      options={accountOptions}
                       value={coreAccounts.commissionsParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, commissionsParentAccountId: val || '' }))}
-                      searchable
                       placeholder="اختر حساب أب العمولات..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                   </div>
 
@@ -2088,16 +2049,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 49 / 4
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptionsWithParent}
+                    <SearchableCombobox
+                      options={accountOptionsWithParent}
                       value={coreAccounts.otherRevenuesParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, otherRevenuesParentAccountId: val || '' }))}
-                      searchable
                       placeholder="اختر حساب أب الإيرادات..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                   </div>
 
@@ -2112,16 +2068,11 @@ export const SystemSettingsPage: React.FC = () => {
                         المقترح: 9
                       </span>
                     </div>
-                    <Select
-                      size="xs"
-                      data={accountOptionsWithParent}
+                    <SearchableCombobox
+                      options={accountOptionsWithParent}
                       value={coreAccounts.externalPartiesParentAccountId}
                       onChange={(val) => setCoreAccounts(p => ({ ...p, externalPartiesParentAccountId: val || '' }))}
-                      searchable
                       placeholder="اختر الحساب الأب للأطراف الخارجية..."
-                      styles={{
-                        input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                      }}
                     />
                     <p className="text-[10px] text-slate-500 font-medium mt-1">
                       حساباتهم (البورصة، المكاتب الوسيطة، العملاء) تُدرج تحته ولا تُحتسب ضمن الموجودات أو المطلوبات — رقابية بحتة.
@@ -2196,19 +2147,11 @@ export const SystemSettingsPage: React.FC = () => {
 
                     <div className="sm:col-span-5 space-y-1">
                       <label className="text-[11px] font-bold text-slate-700">اختيار الحساب المحاسبي من الشجرة:</label>
-                      <Select
-                        size="xs"
-                        searchable
-                        placeholder="ابحث واختر الحساب من الدليل المحاسبي..."
-                        data={accountsList.map((a) => ({
-                          value: a.id,
-                          label: `${a.code} - ${a.nameAr}${a.isParent ? ' (أب)' : ''}`,
-                        }))}
+                      <SearchableCombobox
+                        options={accountOptionsWithParent}
                         value={newCustomAccountId}
                         onChange={(val) => setNewCustomAccountId(val || '')}
-                        styles={{
-                          input: { backgroundColor: '#ffffff', color: '#0f172a', borderColor: '#cbd5e1', fontSize: 11, fontWeight: 700, borderRadius: 8, height: 34 },
-                        }}
+                        placeholder="ابحث واختر الحساب من الدليل المحاسبي..."
                       />
                     </div>
 

@@ -14,6 +14,7 @@ import {
 import { AccountingGrid, AccountingColumnDef, AccountingActionMenuItem } from '../common/AccountingGrid';
 import { matchesSearchTokens } from '../ui/SearchableCombobox';
 import { ServiceInvoiceWorkspace } from './ServiceInvoiceWorkspace';
+import { BaggageInvoiceModal } from '../baggage/BaggageInvoiceModal';
 import { SERVICE_KINDS, decodeServiceExtras, type ServiceKindId } from './serviceKinds';
 import { ticketsApi, type TicketData } from '../../api/tickets';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
@@ -173,39 +174,60 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
       },
       {
         field: 'details',
-        headerText: isAr ? 'التفاصيل' : 'Details',
-        width: 'w-56',
+        headerText: isAr ? 'التفاصيل والـ PNR' : 'Details & PNR',
+        width: 'w-64',
         render: (r) => {
           const { extras } = decodeServiceExtras(r.notes);
-          const shown = def.extraFields
-            .filter((f) => extras[f.key])
-            .slice(0, 3)
-            .map((f) => `${isAr ? f.ar : f.en}: ${extras[f.key]}`);
-          if (!shown.length) return <span className="text-slate-300">—</span>;
+          const pnr = r.pnr || extras.pnr;
+          const firstPax = (r.passengers || [])[0];
+
           return (
-            <div className="flex flex-wrap gap-1">
-              {shown.map((s, i) => (
-                <span
-                  key={i}
-                  className="text-[10px] font-bold bg-slate-50 border border-slate-200 text-slate-700 rounded px-1.5 py-0.5 whitespace-nowrap"
-                >
-                  {s}
-                </span>
-              ))}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {pnr && (
+                  <span className="text-[10.5px] font-black font-mono tracking-wider bg-orange-100 text-[#F45A0A] border border-orange-200 rounded px-1.5 py-0.2" dir="ltr">
+                    PNR: {pnr}
+                  </span>
+                )}
+                {r.route && (
+                  <span className="text-[10px] font-bold font-mono text-slate-600 bg-slate-100 rounded px-1.5 py-0.2" dir="ltr">
+                    {r.route}
+                  </span>
+                )}
+              </div>
+              {firstPax && (
+                <div className="text-[11px] text-slate-700 font-medium flex items-center gap-1 truncate">
+                  <span className="font-bold">{firstPax.name}</span>
+                  {(firstPax.documentNumber || firstPax.ticketNumber) && (
+                    <span className="text-[10px] font-mono text-slate-500" dir="ltr">
+                      ({firstPax.documentNumber || firstPax.ticketNumber})
+                    </span>
+                  )}
+                  {(r.passengers || []).length > 1 && (
+                    <span className="text-[10px] font-bold text-orange-600">
+                      +{ (r.passengers || []).length - 1 }
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           );
         },
       },
       {
         field: 'units',
-        headerText: isAr ? def.quantityAr : def.quantityEn,
+        headerText: isAr ? (kind === 'BAGGAGE' ? 'الوزن' : def.quantityAr) : (kind === 'BAGGAGE' ? 'Weight' : def.quantityEn),
         width: 'w-24',
         align: 'center',
-        render: (r) => (
-          <span className="inline-flex items-center gap-1 text-[11px] font-black bg-indigo-50 text-indigo-900 border border-indigo-200 rounded-md px-1.5 py-0.5">
-            {(r.passengers || []).length || '—'}
-          </span>
-        ),
+        render: (r) => {
+          const { extras } = decodeServiceExtras(r.notes);
+          const totalW = extras.totalWeight || extras.quantity;
+          return (
+            <span className="inline-flex items-center gap-1 text-[11px] font-black bg-orange-50 text-[#F45A0A] border border-orange-200 rounded-md px-2 py-0.5 font-mono">
+              {totalW ? `${totalW} ${extras.weightUnit === 'PIECE' ? (isAr ? 'قطعة' : 'pc') : (isAr ? 'كغم' : 'kg')}` : `${(r.passengers || []).length || '—'}`}
+            </span>
+          );
+        },
       },
       {
         field: 'netSell',
@@ -350,20 +372,36 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
         </div>
       )}
 
-      <ServiceInvoiceWorkspace
-        kind={kind}
-        opened={editorOpen}
-        initialData={editing}
-        onClose={() => {
-          setEditorOpen(false);
-          setEditing(null);
-        }}
-        onSuccess={() => {
-          setEditorOpen(false);
-          setEditing(null);
-          load();
-        }}
-      />
+      {kind === 'BAGGAGE' ? (
+        <BaggageInvoiceModal
+          opened={editorOpen}
+          initialData={editing}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditing(null);
+          }}
+          onSuccess={() => {
+            setEditorOpen(false);
+            setEditing(null);
+            load();
+          }}
+        />
+      ) : (
+        <ServiceInvoiceWorkspace
+          kind={kind}
+          opened={editorOpen}
+          initialData={editing}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditing(null);
+          }}
+          onSuccess={() => {
+            setEditorOpen(false);
+            setEditing(null);
+            load();
+          }}
+        />
+      )}
 
       <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} centered radius="lg" withCloseButton={false}>
         <div className="space-y-3 font-sans" dir={direction}>
