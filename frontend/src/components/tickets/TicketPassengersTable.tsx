@@ -988,20 +988,19 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
     <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs overflow-hidden font-sans space-y-3 p-3.5 sm:p-5" dir={direction}>
       {/* ── CARD HEADER ── */}
       <div className="flex items-center justify-between pb-2.5 border-b border-slate-100 flex-wrap gap-2.5">
-        <div className="flex items-center gap-3">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center shrink-0 relative">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 flex items-center justify-center shrink-0 relative">
             <Lottie src={flightTicketAnimation} loop={true} autoplay={true} className="w-full h-full object-contain" />
           </div>
           <div>
-            <h3 className="font-bold text-[16px] sm:text-[17px] text-[#111827] leading-tight flex items-center gap-2">
-              <span>{isAr ? 'المسافرون والتسعير بالدفعات' : 'Passengers & Pricing Batches'}</span>
-              <span className="text-[10px] font-black text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                {isAr ? 'خطوة 2' : 'Step 2'}
-              </span>
+            <h3 className="font-bold text-[15px] text-[#111827] leading-tight">
+              {isAr ? 'المسافرون والتذاكر' : 'Passengers & Tickets'}
             </h3>
-            <span className="text-[11.5px] sm:text-[12px] text-[#6B7280] font-normal block sm:inline">
-              {statusString} {remainingString ? (isAr ? `| متبقي للتسعير: ${remainingString}` : `| Remaining to price: ${remainingString}`) : (isAr ? '| اكتمل تسعير جميع المسافرين ✓' : '| All passengers priced ✓')}
-            </span>
+            {statusString && (
+              <span className="text-[11px] text-[#6B7280] font-normal block">
+                {statusString}
+              </span>
+            )}
           </div>
         </div>
 
@@ -1062,7 +1061,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
           >
             {isAnalyzingTicket
               ? (isAr ? 'جارٍ التحليل...' : 'Analyzing...')
-              : (isAr ? 'إدخال ذكي (AI)' : 'AI Import')}
+              : (isAr ? 'إدخال ذكي' : 'AI Import')}
           </Button>
 
           <Button
@@ -1073,7 +1072,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
             onClick={() => setBatchModalOpen(true)}
             className="font-medium text-xs border-[#E2E6EA] text-slate-700 hover:bg-slate-50 h-8 px-2.5 sm:px-3 rounded-[8px] cursor-pointer"
           >
-            {isAr ? 'إضافة دفعة' : 'Add Batch'}
+            {isAr ? 'دفعة جديدة' : 'Add Batch'}
           </Button>
 
           <Button
@@ -1085,7 +1084,7 @@ export const TicketPassengersTable: React.FC<TicketPassengersTableProps> = ({
             onClick={handleAddPassengerRow}
             className="bg-[#F45A0A] hover:bg-orange-600 font-medium text-xs text-white shadow-xs cursor-pointer h-8 px-3 rounded-[8px]"
           >
-            {isAr ? 'إضافة مسافر' : 'Add Pax'}
+            {isAr ? 'مسافر جديد' : 'Add Pax'}
           </Button>
         </div>
       </div>

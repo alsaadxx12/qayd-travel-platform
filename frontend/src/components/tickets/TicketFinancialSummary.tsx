@@ -145,10 +145,10 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
                 ) : (
                   <AlertTriangle size={15} className="text-[#F45A0A] shrink-0" />
                 )}
-                <span className="font-bold text-[12.5px] text-slate-900">
+                <span className="font-bold text-[12px] text-slate-900">
                   {isComplete
-                    ? isAr ? 'البيانات مكتملة' : 'Data Complete'
-                    : isAr ? 'نسبة اكتمال البيانات' : 'Data Completion'}
+                    ? isAr ? 'البيانات مكتملة' : 'Complete'
+                    : isAr ? 'اكتمال البيانات' : 'Completion'}
                 </span>
               </div>
               <div className="flex items-center gap-1">
@@ -169,7 +169,7 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
             </div>
 
             {/* Progress Bar */}
-            <div className="w-full h-[6px] bg-slate-200 rounded-full overflow-hidden">
+            <div className="w-full h-[5px] bg-slate-200 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-300 ${
                   isComplete ? 'bg-emerald-500' : 'bg-[#F45A0A]'
@@ -179,15 +179,15 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
             </div>
 
             <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
-              <span>
+              <span className="font-mono font-semibold text-slate-600">
                 {isComplete
-                  ? isAr ? 'جميع المتطلبات الإلزامية جاهزة' : 'All requirements ready'
-                  : isAr ? `مكتمل ${completedCount} من ${totalCount} متطلب` : `${completedCount} of ${totalCount} completed`}
+                  ? isAr ? 'جاهزة للحفظ' : 'Ready'
+                  : `${completedCount} / ${totalCount}`}
               </span>
               <span className="text-[10.5px] text-[#F45A0A] hover:underline">
                 {showDetails
-                  ? isAr ? 'إخفاء التفاصيل' : 'Hide'
-                  : isAr ? 'عرض المتطلبات' : 'View Requirements'}
+                  ? isAr ? 'إخفاء' : 'Hide'
+                  : isAr ? 'المتطلبات' : 'Details'}
               </span>
             </div>
           </div>
@@ -263,37 +263,37 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
               />
             )}
             <span className="text-xs text-slate-700 font-medium truncate">
-              {airline && !/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(airline) ? airline : (isAr ? 'شركة الطيران' : 'Airline')}
+              {airline && !/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(airline) ? airline : '—'}
             </span>
           </div>
         </div>
 
-        <div className="space-y-2.5 text-xs">
+        <div className="space-y-2 text-xs">
           {/* Short Route Pill */}
-          <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-center">
-            <span className="text-sm font-bold text-slate-900 font-mono tracking-wider block" dir="ltr">
-              {fromAirport && toAirport ? `${fromAirport} → ${toAirport}` : (isAr ? 'لم يحدد المسار بعد' : 'Route not set')}
+          <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 text-center">
+            <span className="text-xs font-bold text-slate-900 font-mono tracking-wider block" dir="ltr">
+              {fromAirport && toAirport ? `${fromAirport} → ${toAirport}` : '—'}
             </span>
           </div>
 
-          <div className="flex items-center justify-between text-slate-600 font-normal text-[12.5px]">
+          <div className="flex items-center justify-between text-slate-600 font-normal text-[12px]">
             <span>{isAr ? 'تاريخ السفر:' : 'Travel Date:'}</span>
             <span className="font-mono font-bold text-slate-900 tabular-nums" dir="ltr">
-              {travelDate ? travelDate.toLocaleDateString('en-GB') : (isAr ? 'لم يحدد بعد' : 'Not set')}
+              {travelDate ? travelDate.toLocaleDateString('en-GB') : '—'}
             </span>
           </div>
 
           {pnr ? (
-            <div className="flex items-center justify-between text-slate-600 font-normal text-[12.5px]">
-              <span>{isAr ? 'رمز PNR:' : 'PNR Code:'}</span>
+            <div className="flex items-center justify-between text-slate-600 font-normal text-[12px]">
+              <span>PNR:</span>
               <span className="font-mono font-bold text-slate-900 uppercase" dir="ltr">{pnr}</span>
             </div>
           ) : null}
 
-          <div className="flex items-center justify-between text-slate-600 font-normal text-[12.5px]">
+          <div className="flex items-center justify-between text-slate-600 font-normal text-[12px]">
             <span>{isAr ? 'عدد المسافرين:' : 'Passengers:'}</span>
-            <span className="font-medium text-slate-900">
-              {passengersCount > 0 ? `${passengersCount} ${isAr ? 'مسافر' : 'Pax'}` : (isAr ? 'لا يوجد مسافرين' : '0 Pax')}
+            <span className="font-mono font-bold text-slate-900 tabular-nums">
+              {passengersCount > 0 ? passengersCount : '0'}
             </span>
           </div>
         </div>
@@ -318,77 +318,79 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
           <div className="p-2.5 bg-red-50 rounded-lg border border-red-200 flex items-center gap-2 text-red-900">
             <AlertTriangle size={16} className="text-red-600 shrink-0" />
             <span className="text-xs font-medium leading-tight">
-              {isAr ? `سعر البيع أقل من التكلفة بخسارة (${formatAmount(Math.abs(netProfit))})` : `Selling price is below cost by (${formatAmount(Math.abs(netProfit))})`}
+              {isAr ? `خسارة (${formatAmount(Math.abs(netProfit))})` : `Loss (${formatAmount(Math.abs(netProfit))})`}
             </span>
           </div>
         )}
 
-        <div className="space-y-2 text-xs">
-          <div className="flex items-center justify-between text-slate-600 font-normal text-[12.5px]">
-            <span>{isAr ? 'تكلفة الشراء:' : 'Buy Cost:'}</span>
-            <span className="font-mono text-slate-900 font-medium" dir="ltr">{formatAmount(totalBuy)}</span>
+        <div className="space-y-1.5 text-xs">
+          <div className="flex items-center justify-between text-slate-600 font-normal text-[12px]">
+            <span>{isAr ? 'الشراء:' : 'Buy:'}</span>
+            <span className="font-mono font-bold text-slate-900" dir="ltr">{formatAmount(totalBuy)}</span>
           </div>
 
-          <div className="flex items-center justify-between text-slate-600 font-normal text-[12.5px]">
-            <span>{isAr ? 'سعر البيع:' : 'Sell Price:'}</span>
-            <span className="font-mono text-slate-900 font-medium" dir="ltr">{formatAmount(totalSell)}</span>
+          <div className="flex items-center justify-between text-slate-600 font-normal text-[12px]">
+            <span>{isAr ? 'البيع:' : 'Sell:'}</span>
+            <span className="font-mono font-bold text-slate-900" dir="ltr">{formatAmount(totalSell)}</span>
           </div>
 
           {totalTaxes > 0 && (
-            <div className="flex items-center justify-between text-slate-500 font-normal text-[12px]">
-              <span>{isAr ? 'الضرائب والرسوم:' : 'Taxes & Fees:'}</span>
+            <div className="flex items-center justify-between text-slate-500 font-normal text-[11.5px]">
+              <span>{isAr ? 'الضرائب:' : 'Taxes:'}</span>
               <span className="font-mono" dir="ltr">{formatAmount(totalTaxes)}</span>
             </div>
           )}
 
           {discountAmount > 0 && (
-            <div className="flex items-center justify-between text-red-600 font-normal text-[12px]">
-              <span>{isAr ? 'الخصم الممنوح:' : 'Discount:'}</span>
+            <div className="flex items-center justify-between text-red-600 font-normal text-[11.5px]">
+              <span>{isAr ? 'الخصم:' : 'Discount:'}</span>
               <span className="font-mono font-medium" dir="ltr">-{formatAmount(discountAmount)}</span>
             </div>
           )}
         </div>
 
-        {/* Net Total Box (18-20px bold font) */}
-        <div className="p-3 bg-[#F8FAFC] rounded-xl border border-slate-200 flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-700">
-            {isAr ? 'صافي الفاتورة:' : 'Invoice Net Total:'}
+        {/* Net Total Box */}
+        <div className="p-2.5 bg-[#F8FAFC] rounded-xl border border-slate-200 flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-700">
+            {isAr ? 'الصافي:' : 'Net:'}
           </span>
-          <span className="font-mono text-[19px] font-bold text-slate-900" dir="ltr">
+          <span className="font-mono text-[18px] font-extrabold text-slate-900" dir="ltr">
             {formatAmount(netSell)}
           </span>
         </div>
 
         {/* Payment Settlement */}
-        <div className="space-y-1.5 pt-1 text-xs">
-          <div className="flex items-center justify-between text-slate-600 font-normal text-[12.5px]">
+        <div className="space-y-1 pt-0.5 text-xs">
+          <div className="flex items-center justify-between text-slate-600 font-normal text-[12px]">
             <span>
               {isCash
-                ? isAr ? 'المبلغ المستلم كاش:' : 'Cash Received:'
-                : isAr ? 'المتبقي على العميل:' : 'Customer Due Balance:'}
+                ? isAr ? 'المستلم كاش:' : 'Cash:'
+                : isAr ? 'المتبقي:' : 'Due:'}
             </span>
-            <span className="font-mono text-slate-900 font-medium" dir="ltr">
+            <span className="font-mono font-bold text-slate-900" dir="ltr">
               {formatAmount(isCash ? netSell : remainingOnCustomer)}
             </span>
           </div>
 
           {!isCash && supplierAccountName && (
-            <div className="flex items-center justify-between text-slate-600 font-normal text-[12.5px]">
-              <span>{isAr ? 'المستحق للمورد:' : 'Supplier Due Balance:'}</span>
-              <span className="font-mono text-slate-900 font-medium" dir="ltr">{formatAmount(netBuy)}</span>
+            <div className="flex items-center justify-between text-slate-600 font-normal text-[12px]">
+              <span>{isAr ? 'للمورد:' : 'To Supplier:'}</span>
+              <span className="font-mono font-bold text-slate-900" dir="ltr">{formatAmount(netBuy)}</span>
             </div>
           )}
         </div>
 
         {/* Profit */}
-        <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between">
-          <div>
-            <span className="text-xs font-medium text-slate-700 block">
-              {isAr ? 'صافي الربح:' : 'Net Profit:'}
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-700">
+              {isAr ? 'الربح:' : 'Profit:'}
             </span>
-            <span className="text-[11px] text-slate-400 font-mono font-normal">
-              {isAr ? 'الهامش:' : 'Margin:'} {profitMargin}%
-            </span>
+            {profitMargin > 0 && (
+              <span className="text-[10.5px] text-slate-400 font-mono">
+                ({profitMargin}%)
+              </span>
+            )}
           </div>
           <span
             className={`font-mono font-bold text-sm ${

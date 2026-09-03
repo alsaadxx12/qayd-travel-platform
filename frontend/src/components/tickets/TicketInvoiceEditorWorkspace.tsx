@@ -535,12 +535,12 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     }
 
     return [
-      { value: 'CASH_HAND', label: isAr ? 'كاش باليد (نقدي)' : 'Cash in Hand (Immediate)', targetAccountId: 'EMPLOYEE_ASSIGNED' },
-      { value: 'ZAIN_CASH', label: isAr ? 'زين كاش (Zain Cash)' : 'Zain Cash', targetAccountId: 'ZAIN_CASH' },
-      { value: 'FIB', label: isAr ? 'مصرف العراق الأول (FIB)' : 'First Iraqi Bank (FIB)', targetAccountId: 'FIB' },
-      { value: 'QI_CARD', label: isAr ? 'كي كارد (Qi Card)' : 'Qi Card', targetAccountId: 'QI_CARD' },
+      { value: 'CASH_HAND', label: isAr ? 'كاش باليد' : 'Cash', targetAccountId: 'EMPLOYEE_ASSIGNED' },
+      { value: 'ZAIN_CASH', label: isAr ? 'زين كاش' : 'Zain Cash', targetAccountId: 'ZAIN_CASH' },
+      { value: 'FIB', label: isAr ? 'مصرف FIB' : 'FIB', targetAccountId: 'FIB' },
+      { value: 'QI_CARD', label: isAr ? 'كي كارد' : 'Qi Card', targetAccountId: 'QI_CARD' },
       { value: 'BANK_TRANSFER', label: isAr ? 'تحويل بنكي' : 'Bank Transfer', targetAccountId: 'BANK' },
-      { value: 'CREDIT', label: isAr ? 'آجل (على الحساب)' : 'Credit (On Account)', targetAccountId: 'RECEIVABLE' },
+      { value: 'CREDIT', label: isAr ? 'آجل' : 'Credit', targetAccountId: 'RECEIVABLE' },
     ];
   }, [paymentMethodsConfig, isAr]);
 
@@ -1708,9 +1708,6 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                     <span className="text-[11px] sm:text-xs font-semibold text-emerald-800 leading-tight truncate">
                       {isAr ? 'المرفقات' : 'Review'}
                     </span>
-                    <span className="text-[10px] text-emerald-600 font-medium hidden sm:inline">
-                      {isAr ? 'مكتملة تلقائياً (كاش باليد)' : 'Auto-waived (Cash)'}
-                    </span>
                   </div>
                 </div>
               ) : (
@@ -1719,7 +1716,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                     3
                   </div>
                   <span className="text-[11px] sm:text-xs font-medium text-slate-400 truncate">
-                    {isAr ? 'المرفقات والمراجعة' : 'Attachments'}
+                    {isAr ? 'المرفقات' : 'Attachments'}
                   </span>
                 </div>
               )}
@@ -1734,19 +1731,16 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
               
               {/* ── CARD 1: INVOICE & FLIGHT INFO ── */}
               <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-3.5 sm:p-5 space-y-3 sm:space-y-4 font-sans">
-                {/* Header (Title 17px/700, Desc 12.5px/400) */}
+                {/* Header (Title 17px/700) */}
                 <div className="flex items-start sm:items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
                   <div className="flex items-center gap-2.5 sm:gap-3">
                     <div className="w-8 h-8 rounded-full bg-[#F45A0A] text-white font-bold text-sm flex items-center justify-center shrink-0">
                       1
                     </div>
                     <div>
-                      <h3 className="font-bold text-[16px] sm:text-[17px] text-[#111827] leading-tight">
-                        {isAr ? 'معلومات الفاتورة والرحلة' : 'Invoice & Flight Information'}
+                      <h3 className="font-bold text-[15px] sm:text-[16px] text-[#111827] leading-tight">
+                        {isAr ? 'الفاتورة والرحلة' : 'Invoice & Flight'}
                       </h3>
-                      <span className="text-[11.5px] sm:text-[12.5px] text-[#6B7280] font-normal block sm:inline">
-                        {isAr ? 'التواريخ وموظف الإصدار ومسار الرحلة' : 'Dates, issuing staff, and flight route'}
-                      </span>
                     </div>
                   </div>
 
@@ -1802,12 +1796,9 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                           <User size={15} />
                         </div>
                         <div>
-                          <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
-                            {isAr ? 'معلومات العميل' : 'Customer details'}
+                          <h4 className="text-[14px] font-bold text-[#111827] leading-tight">
+                            {isAr ? 'العميل وطريقة الدفع' : 'Customer & Payment'}
                           </h4>
-                          <p className="text-[11.5px] text-[#6B7280]">
-                            {isAr ? 'العميل ونوع البيع وطريقة الاستلام والصندوق' : 'Customer, sale type, receipt method, and cashbox'}
-                          </p>
                         </div>
                       </div>
                       {(paymentType === 'آجل' || paymentType === 'CREDIT') && (
@@ -1866,8 +1857,8 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                         markDirty();
                       }}
                       options={[
-                        { value: 'نقدي', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
-                        { value: 'آجل', label: isAr ? 'آجل (ذمة العميل)' : 'Credit (On Account)' },
+                        { value: 'نقدي', label: isAr ? 'نقدي' : 'Cash' },
+                        { value: 'آجل', label: isAr ? 'آجل' : 'Credit' },
                       ]}
                       clearable={false}
                     />
@@ -1897,7 +1888,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                         </div>
                         <div id="field-receiving-cashbox">
                           <SearchableCombobox
-                            label={isAr ? 'صندوق استلام قيمة البيع' : 'Receiving Cashbox'}
+                            label={isAr ? 'صندوق الاستلام' : 'Receiving Cashbox'}
                             required
                             value={receivingCashbox}
                             onChange={(val) => {
@@ -1908,13 +1899,6 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                             options={formattedCashboxesData}
                             error={errors.receivingCashbox}
                           />
-                          {pageSettings.linkCashboxToEmployee && autoMatchedCashboxName && (
-                            <p className="mt-1 text-[11px] text-emerald-700 font-medium">
-                              {isAr
-                                ? `تلقائي من صندوق الموظف: ${autoMatchedCashboxName}`
-                                : `Auto from employee cashbox: ${autoMatchedCashboxName}`}
-                            </p>
-                          )}
                         </div>
                       </>
                     )}
@@ -1940,12 +1924,9 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                         <Building2 size={15} />
                       </div>
                       <div>
-                        <h4 className="text-[15px] font-bold text-[#111827] leading-tight">
-                          {isAr ? 'معلومات المورد' : 'Supplier details'}
+                        <h4 className="text-[14px] font-bold text-[#111827] leading-tight">
+                          {isAr ? 'المورد والتذكرة' : 'Supplier & Ticket'}
                         </h4>
-                        <p className="text-[11.5px] text-[#6B7280]">
-                          {isAr ? 'المورد وشركة الطيران ورمز الحجز' : 'Supplier, airline, and PNR'}
-                        </p>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2043,7 +2024,7 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                     </div>
                     <div id="field-pnr">
                       <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
-                        {isAr ? 'رمز الحجز PNR' : 'PNR Code'}
+                        PNR
                       </label>
                       <input
                         type="text"
@@ -2053,13 +2034,12 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                           setPnr(e.target.value.toUpperCase());
                           markDirty();
                         }}
-                        placeholder="6-LETTER PNR"
                         className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] font-mono font-semibold text-xs text-slate-900 uppercase outline-none hover:bg-white hover:border-[#D1D5DB] focus:bg-white focus:border-[#F45A0A] focus:ring-4 focus:ring-[#F45A0A]/10 transition-all duration-150"
                       />
                     </div>
                     <div id="field-paying-cashbox">
                       <SearchableCombobox
-                        label={isAr ? 'صندوق الاستلام (الدفع للمورد)' : 'Paying Cashbox (to Supplier)'}
+                        label={isAr ? 'صندوق الدفع للمورد' : 'Paying Cashbox'}
                         value={payingCashbox}
                         onChange={(val) => {
                           setPayingCashbox(val);
@@ -2114,12 +2094,9 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
                       3
                     </div>
                     <div>
-                      <h3 className="font-bold text-[17px] text-[#111827] leading-tight">
-                        {isAr ? 'شروط وملاحظات' : 'Terms & Notes'}
+                      <h3 className="font-bold text-[15px] text-[#111827] leading-tight">
+                        {isAr ? 'ملاحظات وشروط الفاتورة' : 'Terms & Notes'}
                       </h3>
-                      <span className="text-[12.5px] text-[#6B7280] font-normal">
-                        {isAr ? 'تدوين الشروط الخاصة وملاحظات الفاتورة' : 'Write specific ticket terms and invoice remarks'}
-                      </span>
                     </div>
                   </div>
                   <span className="text-[11.5px] text-slate-400 font-normal">

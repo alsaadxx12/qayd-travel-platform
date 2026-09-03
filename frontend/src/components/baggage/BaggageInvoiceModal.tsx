@@ -502,7 +502,11 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
         withCloseButton={false}
         overlayProps={{ opacity: 0.35, blur: 2 }}
       >
-        <div className="bg-white flex flex-col max-h-[90vh] font-sans select-none overflow-hidden rounded-[18px]" dir={direction}>
+        {/*
+          * ارتفاع النافذة ثابت: إضافة مسافرٍ تزيد أسطرَ الجدول داخل منطقةٍ
+          * تتمرّر، لا حجمَ النافذة — فلا تقفز الأزرار السفلية مع كل سطر.
+          */}
+        <div className="bg-white flex flex-col h-[88vh] font-sans select-none overflow-hidden rounded-[18px]" dir={direction}>
           
           {/* ══════════════════════════════════════════════════════════════
               1. HEADER (ترويسة مدمجة وبسيطة)
@@ -576,7 +580,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                       }
                     }}
                     options={customerOptions}
-                    placeholder={isAr ? 'اختر المستفيد…' : 'Beneficiary…'}
+                    placeholder=""
                     allowCustomValue
                   />
                 </div>
@@ -605,7 +609,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                       }
                     }}
                     options={supplierOptions}
-                    placeholder={isAr ? 'المورد أو شركة الطيران…' : 'Supplier…'}
+                    placeholder=""
                     allowCustomValue
                   />
                 </div>
@@ -621,7 +625,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                     type="text"
                     value={pnr}
                     onChange={(e) => setPnr(e.target.value.toUpperCase())}
-                    placeholder="e.g. 7XQ9L2"
+                    placeholder=""
                     className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white hover:border-[#D1D5DB] text-xs font-mono font-bold text-slate-900 outline-none focus:border-2 focus:border-[#F45A0A] focus:bg-white transition-all uppercase text-center"
                     dir="ltr"
                   />
@@ -690,7 +694,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                       value={cashboxAccountId}
                       onChange={(val) => setCashboxAccountId(val || '')}
                       options={cashboxOptions}
-                      placeholder={isAr ? 'اختر الصندوق…' : 'Cashbox…'}
+                      placeholder=""
                     />
                   ) : (
                     <div>
@@ -743,10 +747,10 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
               </div>
 
               {/* الجدول بلا إطار: عناوينه تكفي لتحديده، ولا حاجة لصندوقٍ داخل صندوق. */}
-              <div className="overflow-x-auto -mx-1">
+              <div className="overflow-x-auto overflow-y-auto max-h-[34vh] -mx-1">
                 <table className="w-full text-start border-collapse text-xs">
                   <thead>
-                    <tr className="text-slate-500 font-bold border-b border-slate-200">
+                    <tr className="text-slate-500 font-bold border-b border-slate-200 sticky top-0 bg-white z-10">
                       <th className="py-2 px-2.5 w-8 text-center">#</th>
                       <th className="py-2 px-2.5 text-start">{isAr ? 'اسم المسافر *' : 'Passenger Name *'}</th>
                       <th className="py-2 px-2.5 text-center w-36">{isAr ? 'الوزن *' : 'Weight *'}</th>
@@ -772,7 +776,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                               type="text"
                               value={pax.name}
                               onChange={(e) => handleUpdatePassenger(idx, 'name', e.target.value)}
-                              placeholder={isAr ? 'اسم المسافر…' : 'Passenger name…'}
+                              placeholder=""
                               className="w-full h-[38px] px-3 rounded-lg border border-transparent bg-slate-50/80 text-xs font-medium text-slate-900 outline-none hover:bg-white hover:border-slate-200 focus:bg-white focus:border-[#F45A0A] transition-all"
                             />
                           </td>
@@ -784,7 +788,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                                 type="text"
                                 value={pax.weight || ''}
                                 onChange={(e) => handleUpdatePassenger(idx, 'weight', parseNumber(e.target.value))}
-                                placeholder="20"
+                                placeholder=""
                                 className="w-full h-[38px] px-2 rounded-lg border border-transparent bg-slate-50/80 text-xs font-mono font-bold text-slate-900 outline-none hover:bg-white hover:border-slate-200 focus:bg-white focus:border-[#F45A0A] text-center transition-all"
                                 dir="ltr"
                               />
@@ -805,7 +809,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                               type="text"
                               value={pax.fareBuy ? formatNumber(pax.fareBuy) : ''}
                               onChange={(e) => handleUpdatePassenger(idx, 'fareBuy', parseNumber(e.target.value))}
-                              placeholder="0"
+                              placeholder=""
                               className="w-full h-[38px] px-2.5 rounded-lg border border-transparent bg-slate-50/80 text-xs font-mono text-slate-700 outline-none hover:bg-white hover:border-slate-200 focus:bg-white focus:border-[#F45A0A] text-end transition-all"
                               dir="ltr"
                             />
@@ -817,7 +821,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                               type="text"
                               value={pax.fareSell ? formatNumber(pax.fareSell) : ''}
                               onChange={(e) => handleUpdatePassenger(idx, 'fareSell', parseNumber(e.target.value))}
-                              placeholder="0"
+                              placeholder=""
                               className="w-full h-[38px] px-2.5 rounded-lg border border-transparent bg-slate-50/80 text-xs font-mono font-bold text-slate-900 outline-none hover:bg-white hover:border-slate-200 focus:bg-white focus:border-[#F45A0A] text-end transition-all"
                               dir="ltr"
                             />
@@ -898,7 +902,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder={isAr ? 'ملاحظات (اختياري)…' : 'Notes (optional)…'}
+                placeholder={isAr ? 'ملاحظات' : 'Notes'}
                 className="w-full h-9 px-1 bg-transparent border-0 text-xs text-slate-700 outline-none placeholder:text-slate-300 focus:bg-slate-50/70 rounded-lg transition-colors"
               />
             </div>
