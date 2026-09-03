@@ -480,11 +480,8 @@ export const HotelsPage: React.FC = () => {
           </div>
           <div>
             <h1 className="font-bold text-[20px] text-[#111827] leading-tight">
-              {isAr ? 'حجوزات وإقامات الفنادق' : 'Hotel Bookings'}
+              {isAr ? 'حجوزات الفنادق' : 'Hotel Bookings'}
             </h1>
-            <p className="text-[13px] font-normal text-[#64748B] mt-0.5">
-              {isAr ? 'إدارة ومتابعة فواتير الحجوزات الفندقية والغرف والموردين' : 'Manage hotel booking invoices, room rates, and suppliers'}
-            </p>
           </div>
         </div>
 
@@ -827,9 +824,6 @@ export const HotelsPage: React.FC = () => {
                       </div>
                       <span className="text-sm font-black text-slate-800">
                         {isAr ? 'لا توجد حجوزات فندقية مطابقة للبحث أو الفلتر' : 'No hotel bookings found'}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        {isAr ? 'يمكنك إصدار حجز فندقي جديد بالضغط على الزر البرتقالي في الأعلى' : 'Click the button above to create a new hotel booking'}
                       </span>
                     </div>
                   </td>

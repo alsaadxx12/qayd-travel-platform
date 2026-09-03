@@ -343,6 +343,7 @@ model Company {
   tickets           Ticket[]
   printTemplates    PrintTemplate[]
   documentSequences DocumentSequence[]
+  tourGroups        TourGroup[]
 
   @@index([tenantId])
   @@map("companies")
@@ -1260,4 +1261,148 @@ model DocumentSequence {
   @@unique([companyId, branchId, docType])
   @@index([companyId, docType])
   @@map("document_sequences")
+}
+
+/// ── نظام الكروبات: ملف مالي وتشغيلي كامل ──
+///
+/// الكروب ليس قائمة مسافرين: يبدأ بإنشائه، فأنظمة أسعاره (القوالب)، فمشترياته
+/// ومصاريفه العامة، ففتح البيع، فالمسافرين — ولكلٍّ خدماتُه المستنسخة من قالبه
+/// تنتقل من Not Complete إلى Complete حين يُعرف المورد والسعر النهائي — وينتهي
+/// بربحٍ مخطَّط وربحٍ فعلي محسوبَين من الجداول لا من حقولٍ تُكتب باليد.
+model TourGroup {
+  id           String    @id @default(uuid())
+  companyId    String
+  branchId     String?
+  groupName    String
+  groupType    String    @default("FULL")
+  country      String?
+  buyDate      DateTime?
+  travelDate   DateTime?
+  active       Boolean   @default(true)
+  /// OPEN | CLOSED | CANCELLED
+  status       String    @default("OPEN")
+  /// فتح البيع: قبله يُجهَّز الملف، وبعده تُضاف المبيعات.
+  openSale     Boolean   @default(false)
+  currency     String    @default("USD")
+  exchangeRate Decimal   @default(1)
+  notes        String?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  priceSystems GroupPriceSystem[]
+  charges      GroupCharge[]
+  passengers   GroupPassenger[]
+
+  @@index([companyId, createdAt])
+  @@map("tour_groups")
+}
+
+model GroupPriceSystem {
+  id        String  @id @default(uuid())
+  groupId   String
+  name      String
+  seats     Int     @default(0)
+  currency  String  @default("USD")
+  salePrice Decimal @default(0)
+  active    Boolean @default(true)
+
+  group      TourGroup           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  items      GroupTemplateItem[]
+  passengers GroupPassenger[]
+
+  @@index([groupId])
+  @@map("group_price_systems")
+}
+
+/// بنود القالب — Auto Purchases: ما يُستنسخ خدماتٍ لكل مسافر يُباع على هذا النظام.
+model GroupTemplateItem {
+  id                String  @id @default(uuid())
+  priceSystemId     String
+  /// TICKET | HOTEL | VISA | INSURANCE | TRANSPORT | GUIDE | PACKAGE
+  kind              String
+  supplierName      String?
+  supplierAccountId String?
+  expectedBuy       Decimal @default(0)
+  currency          String  @default("USD")
+
+  priceSystem GroupPriceSystem @relation(fields: [priceSystemId], references: [id], onDelete: Cascade)
+
+  @@index([priceSystemId])
+  @@map("group_template_items")
+}
+
+/// مشتريات الكروب العامة ومصاريفه — على مستوى المجموعة لا المقعد.
+model GroupCharge {
+  id                String   @id @default(uuid())
+  groupId           String
+  /// GLOBAL_PURCHASE | EXPENSE
+  chargeType        String
+  /// Bus | Group Hotel | Advertising | Commission | ...
+  category          String
+  supplierName      String?
+  supplierAccountId String?
+  amount            Decimal  @default(0)
+  currency          String   @default("USD")
+  date              DateTime @default(now())
+  notes             String?
+
+  group TourGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, chargeType])
+  @@map("group_charges")
+}
+
+/// مسافر الكروب = عملية بيعٍ كاملة، لا اسمٌ في قائمة.
+model GroupPassenger {
+  id                String   @id @default(uuid())
+  groupId           String
+  priceSystemId     String?
+  customerName      String
+  customerId        String?
+  customerAccountId String?
+  passengerName     String
+  passport          String?
+  agent             String?
+  salePrice         Decimal  @default(0)
+  currency          String   @default("USD")
+  /// CASH | CREDIT
+  payType           String   @default("CASH")
+  paymentAccountId  String?
+  collectedAmount   Decimal  @default(0)
+  voucherNumber     String?
+  fCode             String?
+  /// RESERVED | CONFIRMED | CANCELLED — والاكتمال يُشتق من خدماته لا يُكتب.
+  state             String   @default("RESERVED")
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  group       TourGroup               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  priceSystem GroupPriceSystem?       @relation(fields: [priceSystemId], references: [id], onDelete: SetNull)
+  services    GroupPassengerService[]
+
+  @@index([groupId, state])
+  @@map("group_passengers")
+}
+
+/// خدمة مسافر: نسخة فعلية من بند القالب. Expected تخطيطٌ وFinal حقيقةٌ — لا يُخلطان.
+model GroupPassengerService {
+  id                String    @id @default(uuid())
+  passengerId       String
+  kind              String
+  supplierName      String?
+  supplierAccountId String?
+  expectedBuy       Decimal   @default(0)
+  finalBuy          Decimal?
+  currency          String    @default("USD")
+  /// NOT_COMPLETE | COMPLETE
+  status            String    @default("NOT_COMPLETE")
+  completedAt       DateTime?
+
+  passenger GroupPassenger @relation(fields: [passengerId], references: [id], onDelete: Cascade)
+
+  @@index([passengerId, status])
+  @@map("group_passenger_services")
 }

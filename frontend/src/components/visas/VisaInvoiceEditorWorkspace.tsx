@@ -596,13 +596,12 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
 
     // Default dynamic fallbacks based on real database accounts
     const initialList: any[] = [
-      { value: 'CASH_HAND', label: isAr ? 'كاش باليد (نقدي)' : 'Cash in Hand', targetAccountId: 'EMPLOYEE_ASSIGNED' },
+      { value: 'CASH_HAND', label: isAr ? 'كاش باليد' : 'Cash in Hand', targetAccountId: 'EMPLOYEE_ASSIGNED' },
     ];
 
     if (Array.isArray(accountsList)) {
       accountsList.forEach((acc: any) => {
         const accName = acc.nameAr || acc.name || '';
-        const accCode = String(acc.code || '');
         const accType = (acc.type || '').toUpperCase();
         const accCat = (acc.category || '').toUpperCase();
 
@@ -622,7 +621,7 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
         ) {
           initialList.push({
             value: acc.id,
-            label: `${accName} (${accCode})`,
+            label: accName,
             targetAccountId: acc.id,
             targetAccountName: accName,
             type: accType,
@@ -633,12 +632,27 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
 
     initialList.push({
       value: 'CREDIT',
-      label: isAr ? 'آجل (على الحساب)' : 'Credit (On Account)',
+      label: isAr ? 'آجل' : 'Credit',
       targetAccountId: 'RECEIVABLE',
     });
 
     return initialList;
   }, [paymentMethodsConfig, accountsList, isAr]);
+
+  // Show attachments only when the payment method is Master / Electronic / Bank / Transfer, NOT cash-in-hand
+  const showAttachments = useMemo(() => {
+    if (paymentType === 'آجل' || paymentType === 'CREDIT') return false;
+    const methodStr = String(paymentMethod || '').trim().toLowerCase();
+    if (!methodStr || methodStr === 'cash_hand' || methodStr === 'cash' || methodStr.includes('كاش باليد') || methodStr.includes('نقد باليد')) {
+      return false;
+    }
+    const matched = paymentMethodsList.find((pm: any) => pm.value === paymentMethod);
+    const labelStr = String(matched?.label || matched?.targetAccountName || '').toLowerCase();
+    if (labelStr.includes('كاش باليد') || labelStr.includes('نقد باليد')) {
+      return false;
+    }
+    return true;
+  }, [paymentType, paymentMethod, paymentMethodsList]);
 
   // Robust Cashbox Options ensuring every account (including payment method targets and selected IDs) has a human label
   const cashboxOptions = useMemo(() => {
@@ -1717,22 +1731,18 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
           </div>
 
           <div className="flex items-center gap-2.5">
-            <h2 className="font-bold text-[19px] text-[#111827] leading-tight">
-              {isAr ? 'معاملة التأشيرات والفيزا' : 'Visa Application & Transaction'}
+            <h2 className="font-bold text-[18px] text-[#111827] leading-tight">
+              {isAr ? 'معاملة التأشيرة' : 'Visa Application'}
             </h2>
             <span className="px-2.5 py-0.5 rounded bg-slate-100 text-slate-800 font-mono font-medium text-xs border border-slate-200" dir="ltr">
               {invoiceNumber || 'VISA-NEW'}
             </span>
 
-            {/* Status Badge + Unsaved Indicator */}
+            {/* Status Badge (Shown only if POSTED) */}
             <div className={`flex items-center gap-1.5 ${isAr ? 'mr-1' : 'ml-1'}`}>
-              {status === 'POSTED' ? (
+              {status === 'POSTED' && (
                 <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
                   {isAr ? 'معتمدة ومرحلة' : 'Posted'}
-                </span>
-              ) : (
-                <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-[#FFF3E8] text-[#F45A0A] border border-orange-200">
-                  {isAr ? 'مسودة' : 'Draft'}
                 </span>
               )}
 
@@ -1797,231 +1807,273 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
             {/* ── MAIN LEADING COLUMN ── */}
             <div className="space-y-4">
               
-              {/* ── CARD 1: CORE BUSINESS & ACCOUNTING DETAILS (Streamlined) ── */}
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4 font-sans">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
-                      <Wallet size={18} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-[16.5px] text-[#111827] leading-tight">
-                        {isAr ? 'بيانات المعاملة المحاسبية والأطراف' : 'Accounting & Settlement Parties'}
-                      </h3>
-                      <span className="text-[12px] text-[#6B7280] font-normal">
-                        {isAr ? 'حدد العميل والمورد وطريقة الاستلام والصناديق النقدية المرتبطة' : 'Select client, supplier, receiving method, and cashbox accounts'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Currency Segmented Control */}
-                  <div className="flex items-center gap-2">
-                    <CurrencySegmentedControl
-                      value={currency}
-                      onChange={handleCurrencyChange}
-                      showLabel={false}
-                      disabled={status === 'POSTED'}
-                    />
-                  </div>
-                </div>
-
-                {/* 4-Column Clean Accounting Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
-                  {/* Customer */}
-                  <div id="field-customer" className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-[11px] font-bold text-slate-700">
-                        {isAr ? 'العميل / الجهة الطالبة' : 'Customer'}
-                        {(paymentType === 'آجل' || paymentType === 'CREDIT') && <span className="text-red-500 mr-1">*</span>}
-                      </label>
-                      {isCustomerUnsaved && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const similars = findSimilarAccounts(customerName, (allCustomerCandidates as any) || [], 30);
-                            setUnmatchedCustomerData({ rawName: customerName, similarAccounts: similars });
-                            setUnmatchedSupplierData(null);
-                            setReconciliationModalOpen(true);
-                          }}
-                          className="text-[10px] text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
-                        >
-                          <Sparkles size={11} className="text-[#F45A0A]" />
-                          <span>{isAr ? 'فحص التشابه / فتح حساب' : 'Match / Create'}</span>
-                        </button>
+              {/* ── CARD 1: SEPARATE EQUAL-HEIGHT CONTAINERS FOR CUSTOMER & SUPPLIER ── */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 items-stretch">
+                
+                {/* 1. CUSTOMER & PAYMENT CONTAINER (Fixed Height & Equal) */}
+                <section id="field-customer" className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-5 flex flex-col justify-between min-h-[235px] font-sans h-full">
+                  <div>
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 gap-2 mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-sky-50 text-sky-700 border border-sky-200 flex items-center justify-center shrink-0">
+                          <User size={15} />
+                        </div>
+                        <h4 className="text-[14.5px] font-bold text-[#111827] leading-tight">
+                          {isAr ? 'العميل وطريقة الدفع' : 'Customer & Payment'}
+                        </h4>
+                      </div>
+                      {(paymentType === 'آجل' || paymentType === 'CREDIT') && (
+                        <span className="text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded shrink-0">
+                          {isAr ? 'مطلوب للبيع الآجل' : 'Required for credit'}
+                        </span>
                       )}
                     </div>
-                    <SearchableCombobox
-                      required={paymentType === 'آجل' || paymentType === 'CREDIT'}
-                      value={customerName}
-                      onChange={(val) => {
-                        const found = allCustomerCandidates.find((c) => c.id === val || c.code === val || c.nameAr === val || c.nameEn === val || (c as any).name === val);
-                        setCustomerName(found ? (isAr ? (found.nameAr || found.nameEn) : (found.nameEn || found.nameAr)) : (val || ''));
-                        markDirty();
-                      }}
-                      options={formattedCustomersData}
-                      allowCustomValue
-                      error={errors.customerName}
-                    />
-                  </div>
 
-                  {/* Supplier */}
-                  <div id="field-supplier" className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-[11px] font-bold text-slate-700">
-                        {isAr ? 'المورد / الشركة المزودة' : 'Supplier'}
-                      </label>
-                      {isSupplierUnsaved && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const val = supplierAccountName || supplierAccount;
-                            const similars = findSimilarAccounts(val, (allSupplierCandidates as any) || [], 30);
-                            setUnmatchedSupplierData({ rawName: val, similarAccounts: similars });
-                            setUnmatchedCustomerData(null);
-                            setReconciliationModalOpen(true);
-                          }}
-                          className="text-[10px] text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
-                        >
-                          <Sparkles size={11} className="text-[#F45A0A]" />
-                          <span>{isAr ? 'فحص التشابه / فتح حساب' : 'Match / Create'}</span>
-                        </button>
-                      )}
-                    </div>
-                    <SearchableCombobox
-                      value={supplierAccountName || supplierAccount}
-                      onChange={(val) => {
-                        const found = allSupplierCandidates.find((s) => s.id === val || s.code === val || s.nameAr === val || s.nameEn === val || (s as any).name === val);
-                        if (found) {
-                          setSupplierAccount(found.id || (found as any).accountId || found.code);
-                          setSupplierAccountName(isAr ? found.nameAr : (found.nameEn || found.nameAr));
-                        } else {
-                          setSupplierAccount(val);
-                          setSupplierAccountName(val);
-                        }
-                        markDirty();
-                      }}
-                      options={formattedSuppliersData}
-                      allowCustomValue
-                    />
-                  </div>
-
-                  {/* Payment Term */}
-                  <div id="field-payment-type">
-                    <SearchableCombobox
-                      label={isAr ? 'نوع السداد' : 'Payment Term'}
-                      value={paymentType}
-                      onChange={(val) => {
-                        const nextVal = val || 'نقدي';
-                        setPaymentType(nextVal);
-                        if (nextVal === 'آجل' || nextVal === 'CREDIT') {
-                          setErrors((prev) => {
-                            const next = { ...prev };
-                            delete next.receivingCashbox;
-                            delete next.paymentMethod;
-                            return next;
-                          });
-                        }
-                        markDirty();
-                      }}
-                      options={[
-                        { value: 'نقدي', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
-                        { value: 'آجل', label: isAr ? 'آجل (ذمة العميل)' : 'Credit (On Account)' },
-                      ]}
-                      clearable={false}
-                    />
-                  </div>
-
-                  {/* Receiving Method & Receiving Cashbox (only if cash) */}
-                  {(paymentType === 'نقدي' || paymentType === 'CASH') && (
-                    <>
-                      {/* Receiving Method */}
-                      <div id="field-payment-method">
+                    <div className="space-y-3">
+                      {/* Customer */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-bold text-slate-700">
+                            {isAr ? 'العميل' : 'Customer'}
+                            {(paymentType === 'آجل' || paymentType === 'CREDIT') && <span className="text-red-500 mr-1">*</span>}
+                          </label>
+                          {isCustomerUnsaved && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const similars = findSimilarAccounts(customerName, (allCustomerCandidates as any) || [], 30);
+                                setUnmatchedCustomerData({ rawName: customerName, similarAccounts: similars });
+                                setUnmatchedSupplierData(null);
+                                setReconciliationModalOpen(true);
+                              }}
+                              className="text-[10px] text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                            >
+                              <Sparkles size={11} className="text-[#F45A0A]" />
+                              <span>{isAr ? 'فحص التشابه / فتح حساب' : 'Match / Create'}</span>
+                            </button>
+                          )}
+                        </div>
                         <SearchableCombobox
-                          label={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
-                          required
-                          value={paymentMethod}
+                          required={paymentType === 'آجل' || paymentType === 'CREDIT'}
+                          value={customerName}
                           onChange={(val) => {
-                            const nextMethod = val || 'CASH_HAND';
-                            setPaymentMethod(nextMethod);
-                            const matched = paymentMethodsList.find((pm: any) => pm.value === nextMethod);
-                            if (matched?.targetAccountId && matched.targetAccountId !== 'EMPLOYEE_ASSIGNED') {
-                              setReceivingCashbox(matched.targetAccountId);
-                            } else if (nextMethod === 'CASH_HAND' && employeeName) {
-                              applyEmployeeCashbox(employeeName, availableCashboxes);
-                            }
+                            const found = allCustomerCandidates.find((c) => c.id === val || c.code === val || c.nameAr === val || c.nameEn === val || (c as any).name === val);
+                            setCustomerName(found ? (isAr ? (found.nameAr || found.nameEn) : (found.nameEn || found.nameAr)) : (val || ''));
                             markDirty();
                           }}
-                          options={paymentMethodsList}
-                          clearable={false}
+                          options={formattedCustomersData}
+                          allowCustomValue
+                          error={errors.customerName}
                         />
                       </div>
 
-                      {/* Receiving Cashbox (Validated & Populated with Full Account Label) */}
-                      <div id="field-receiving-cashbox">
-                        <SearchableCombobox
-                          label={isAr ? 'صندوق استلام قيمة البيع' : 'Receiving Cashbox'}
-                          required
-                          value={receivingCashbox}
-                          onChange={(val) => {
-                            setReceivingCashbox(val);
-                            markDirty();
-                          }}
-                          options={cashboxOptions}
-                          error={errors.receivingCashbox}
-                        />
-                      </div>
-                    </>
-                  )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Payment Term */}
+                        <div id="field-payment-type">
+                          <SearchableCombobox
+                            label={isAr ? 'نوع السداد' : 'Payment Term'}
+                            value={paymentType}
+                            onChange={(val) => {
+                              const nextVal = val || 'نقدي';
+                              setPaymentType(nextVal);
+                              if (nextVal === 'آجل' || nextVal === 'CREDIT') {
+                                setErrors((prev) => {
+                                  const next = { ...prev };
+                                  delete next.receivingCashbox;
+                                  delete next.paymentMethod;
+                                  return next;
+                                });
+                              }
+                              markDirty();
+                            }}
+                            options={[
+                              { value: 'نقدي', label: isAr ? 'نقدي' : 'Cash' },
+                              { value: 'آجل', label: isAr ? 'آجل' : 'Credit' },
+                            ]}
+                            clearable={false}
+                          />
+                        </div>
 
-                  {/* Issuing Employee */}
-                  <div id="field-employee">
-                    <SearchableCombobox
-                      label={isAr ? 'موظف الإصدار' : 'Issuing Employee'}
-                      value={employeeName}
-                      onChange={(val) => {
-                        setEmployeeName(val);
-                        markDirty();
-                        if (paymentMethod === 'CASH_HAND') {
-                          applyEmployeeCashbox(val, availableCashboxes);
-                        }
-                      }}
-                      options={employeesList.map((e) => ({
-                        value: e.fullName || e.name || e.username || '',
-                        label: e.fullName || e.name || e.username || '',
-                      }))}
-                      allowCustomValue
-                    />
+                        {/* Receiving Method */}
+                        {(paymentType === 'نقدي' || paymentType === 'CASH') && (
+                          <div id="field-payment-method">
+                            <SearchableCombobox
+                              label={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
+                              required
+                              value={paymentMethod}
+                              onChange={(val) => {
+                                const nextMethod = val || 'CASH_HAND';
+                                setPaymentMethod(nextMethod);
+                                const matched = paymentMethodsList.find((pm: any) => pm.value === nextMethod);
+                                if (matched?.targetAccountId && matched.targetAccountId !== 'EMPLOYEE_ASSIGNED') {
+                                  setReceivingCashbox(matched.targetAccountId);
+                                } else if (nextMethod === 'CASH_HAND' && employeeName) {
+                                  applyEmployeeCashbox(employeeName, availableCashboxes);
+                                }
+                                markDirty();
+                              }}
+                              options={paymentMethodsList}
+                              clearable={false}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Receiving Cashbox */}
+                      {(paymentType === 'نقدي' || paymentType === 'CASH') && (
+                        <div id="field-receiving-cashbox">
+                          <SearchableCombobox
+                            label={isAr ? 'صندوق استلام قيمة البيع' : 'Receiving Cashbox'}
+                            required
+                            value={receivingCashbox}
+                            onChange={(val) => {
+                              setReceivingCashbox(val);
+                              markDirty();
+                            }}
+                            options={cashboxOptions}
+                            error={errors.receivingCashbox}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Entry Date — one combined field when the page settings ask for a time */}
-                  <div id="field-entry-date">
-                    {pageSettings.entryDateIncludesTime ? (
-                      <DateTimeField
-                        label={isAr ? 'تاريخ ووقت الإدخال' : 'Entry date & time'}
-                        isArabic={isAr}
-                        value={entryDate}
-                        onChange={(date) => {
-                          setEntryDate(date);
+                  {/* Master / Electronic Payment File Attachment Container */}
+                  {showAttachments && (
+                    <div className="pt-3 mt-3 border-t border-slate-100">
+                      <div className="flex items-center gap-1.5 mb-2 text-xs font-bold text-slate-700">
+                        <CreditCard size={14} className="text-[#F45A0A]" />
+                        <span>{isAr ? 'إيصال الدفع الإلكتروني / الماستر' : 'Payment Receipt / Master'}</span>
+                      </div>
+                      <TicketAttachmentsSection
+                        attachments={attachments}
+                        onChange={(updatedAtts) => {
+                          setAttachments(updatedAtts);
                           markDirty();
                         }}
                       />
-                    ) : (
-                      <>
-                        <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
-                          {isAr ? 'تاريخ الإدخال' : 'Entry Date'}
-                        </label>
-                        <SegmentedDatePicker
-                          value={entryDate}
-                          onChange={(date) => {
-                            if (date) setEntryDate(date);
+                    </div>
+                  )}
+                </section>
+
+                {/* 2. SUPPLIER & OPERATION CONTAINER (Fixed Height & Equal) */}
+                <section id="field-supplier" className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-5 flex flex-col justify-between min-h-[235px] font-sans h-full">
+                  <div>
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 gap-2 mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-violet-50 text-violet-700 border border-violet-200 flex items-center justify-center shrink-0">
+                          <Building2 size={15} />
+                        </div>
+                        <h4 className="text-[14.5px] font-bold text-[#111827] leading-tight">
+                          {isAr ? 'المورد والعملية' : 'Supplier & Operation'}
+                        </h4>
+                      </div>
+
+                      {/* Currency Segmented Control */}
+                      <CurrencySegmentedControl
+                        value={currency}
+                        onChange={handleCurrencyChange}
+                        showLabel={false}
+                        disabled={status === 'POSTED'}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      {/* Supplier */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-bold text-slate-700">
+                            {isAr ? 'المورد' : 'Supplier'}
+                          </label>
+                          {isSupplierUnsaved && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const val = supplierAccountName || supplierAccount;
+                                const similars = findSimilarAccounts(val, (allSupplierCandidates as any) || [], 30);
+                                setUnmatchedSupplierData({ rawName: val, similarAccounts: similars });
+                                setUnmatchedCustomerData(null);
+                                setReconciliationModalOpen(true);
+                              }}
+                              className="text-[10px] text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1 cursor-pointer transition-all shadow-2xs"
+                            >
+                              <Sparkles size={11} className="text-[#F45A0A]" />
+                              <span>{isAr ? 'فحص التشابه / فتح حساب' : 'Match / Create'}</span>
+                            </button>
+                          )}
+                        </div>
+                        <SearchableCombobox
+                          value={supplierAccountName || supplierAccount}
+                          onChange={(val) => {
+                            const found = allSupplierCandidates.find((s) => s.id === val || s.code === val || s.nameAr === val || s.nameEn === val || (s as any).name === val);
+                            if (found) {
+                              setSupplierAccount(found.id || (found as any).accountId || found.code);
+                              setSupplierAccountName(isAr ? found.nameAr : (found.nameEn || found.nameAr));
+                            } else {
+                              setSupplierAccount(val);
+                              setSupplierAccountName(val);
+                            }
                             markDirty();
                           }}
-                          clearable={false}
+                          options={formattedSuppliersData}
+                          allowCustomValue
                         />
-                      </>
-                    )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Issuing Employee */}
+                        <div id="field-employee">
+                          <SearchableCombobox
+                            label={isAr ? 'موظف الإصدار' : 'Issuing Employee'}
+                            value={employeeName}
+                            onChange={(val) => {
+                              setEmployeeName(val);
+                              markDirty();
+                              if (paymentMethod === 'CASH_HAND') {
+                                applyEmployeeCashbox(val, availableCashboxes);
+                              }
+                            }}
+                            options={employeesList.map((e) => ({
+                              value: e.fullName || e.name || e.username || '',
+                              label: e.fullName || e.name || e.username || '',
+                            }))}
+                            allowCustomValue
+                          />
+                        </div>
+
+                        {/* Entry Date */}
+                        <div id="field-entry-date">
+                          {pageSettings.entryDateIncludesTime ? (
+                            <DateTimeField
+                              label={isAr ? 'تاريخ ووقت الإدخال' : 'Entry date & time'}
+                              isArabic={isAr}
+                              value={entryDate}
+                              onChange={(date) => {
+                                setEntryDate(date);
+                                markDirty();
+                              }}
+                            />
+                          ) : (
+                            <>
+                              <label className="block text-[12.5px] font-medium text-[#6B7280] mb-[7px]">
+                                {isAr ? 'تاريخ الإدخال' : 'Entry Date'}
+                              </label>
+                              <SegmentedDatePicker
+                                value={entryDate}
+                                onChange={(date) => {
+                                  if (date) setEntryDate(date);
+                                  markDirty();
+                                }}
+                                clearable={false}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </section>
+
               </div>
 
               {/* ── CARD 2: TRAVELERS & PASSPORTS & PRICING TABLE (Clean & Focused) ── */}
@@ -2033,15 +2085,9 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
                       <Lottie src={visaAnimation} loop={true} autoplay={true} className="w-full h-full object-contain" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-[16.5px] text-[#111827] leading-tight flex items-center gap-2">
-                        <span>{isAr ? 'بيانات المسافرين والجوازات والتسعير' : 'Travelers, Passports & Pricing'}</span>
-                        <span className="text-[10px] font-black text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
-                          {isAr ? 'خطوة 2' : 'Step 2'}
-                        </span>
+                      <h3 className="font-bold text-[16px] text-[#111827] leading-tight flex items-center gap-2">
+                        <span>{isAr ? 'المسافرون والتسعير' : 'Travelers & Pricing'}</span>
                       </h3>
-                      <span className="text-[12px] text-[#6B7280] font-normal">
-                        {isAr ? `إجمالي: ${passengers.length} مسافر` : `${passengers.length} traveler(s)`}
-                      </span>
                     </div>
                   </div>
 
@@ -2087,7 +2133,7 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <span className="font-bold text-orange-950 flex items-center gap-1.5">
                       <Percent size={14} className="text-[#F45A0A]" />
-                      {isAr ? 'شريط التسعير السريع للدفعات' : 'Quick Batch Pricing Bar'}
+                      {isAr ? 'تسعير موحد:' : 'Batch Pricing:'}
                     </span>
                     {(batchBuy || batchSell || batchVisaType) && (
                       <button
@@ -2273,15 +2319,15 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
                       <thead>
                         <tr className="h-10 bg-slate-50 border-b border-slate-200 text-slate-700 font-extrabold text-[11.5px] whitespace-nowrap">
                           <th className="px-2 py-2 text-center w-8 whitespace-nowrap">#</th>
-                          <th className="px-3 py-2 min-w-[200px] whitespace-nowrap">{isAr ? 'اسم المسافر (كما في الجواز) *' : 'Traveler Full Name *'}</th>
-                          <th className="px-2 py-2 min-w-[130px] text-center whitespace-nowrap">{isAr ? 'رقم الجواز (Passport #) *' : 'Passport Number *'}</th>
-                          <th className="px-2 py-2 min-w-[140px] w-[140px] text-center whitespace-nowrap">{isAr ? 'نوع التأشيرة / الوجهة' : 'Visa Destination'}</th>
-                          <th className="px-2 py-2 min-w-[135px] text-center whitespace-nowrap">{isAr ? 'رقم الطلب (إن وجد)' : 'Application / Order #'}</th>
-                          <th className="px-2 py-2 min-w-[110px] text-center whitespace-nowrap">{isAr ? `سعر الشراء (${currency})` : `Buy Fare (${currency})`}</th>
-                          <th className="px-2 py-2 min-w-[110px] text-center whitespace-nowrap">{isAr ? `سعر البيع (${currency})` : `Sell Fare (${currency})`}</th>
+                          <th className="px-3 py-2 min-w-[200px] whitespace-nowrap">{isAr ? 'اسم المسافر *' : 'Traveler Full Name *'}</th>
+                          <th className="px-2 py-2 min-w-[130px] text-center whitespace-nowrap">{isAr ? 'رقم الجواز *' : 'Passport Number *'}</th>
+                          <th className="px-2 py-2 min-w-[140px] w-[140px] text-center whitespace-nowrap">{isAr ? 'نوع التأشيرة' : 'Visa Destination'}</th>
+                          <th className="px-2 py-2 min-w-[135px] text-center whitespace-nowrap">{isAr ? 'رقم الطلب' : 'Application / Order #'}</th>
+                          <th className="px-2 py-2 min-w-[110px] text-center whitespace-nowrap">{isAr ? 'الشراء' : 'Buy Fare'}</th>
+                          <th className="px-2 py-2 min-w-[110px] text-center whitespace-nowrap">{isAr ? 'البيع *' : 'Sell Fare *'}</th>
                           <th className="px-2 py-2 min-w-[120px] text-center whitespace-nowrap">{isAr ? 'الربح' : 'Profit'}</th>
-                          <th className="px-2 py-2 min-w-[85px] w-[85px] text-center whitespace-nowrap">{isAr ? 'حالة التأشيرة' : 'Status'}</th>
-                          <th className="px-2 py-2 text-center w-10 whitespace-nowrap">{isAr ? 'حذف' : 'Del'}</th>
+                          <th className="px-2 py-2 min-w-[85px] w-[85px] text-center whitespace-nowrap">{isAr ? 'الحالة' : 'Status'}</th>
+                          <th className="px-2 py-2 text-center w-10 whitespace-nowrap">{isAr ? '' : ''}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -2519,78 +2565,33 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
                 </div>
               </div>
 
-              {/* ── CARD 3: ATTACHMENTS & REMARKS ── */}
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4 font-sans">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
-                      <FileText size={18} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-[16.5px] text-[#111827] leading-tight">
-                        {isAr ? 'المرفقات والملاحظات' : 'Attachments & Remarks'}
-                      </h3>
-                      <span className="text-[12px] text-[#6B7280] font-normal">
-                        {isAr ? 'إرفاق صور الجوازات والتأشيرات وكتابة الملاحظات' : 'Upload passport copies, visa documents, and remarks'}
-                      </span>
-                    </div>
-                  </div>
+              {/* ── CARD 3: REMARKS ONLY (Attachments removed per user request) ── */}
+              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-4 sm:p-5 space-y-2 font-sans">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <FileText size={16} className="text-slate-600" />
+                  <h4 className="font-bold text-[14.5px] text-slate-900 leading-tight">
+                    {isAr ? 'ملاحظات المعاملة' : 'Remarks'}
+                  </h4>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-                  <div className="h-full">
-                    <TicketAttachmentsSection
-                      attachments={attachments}
-                      onChange={(updatedAtts) => {
-                        setAttachments(updatedAtts);
-                        markDirty();
-                      }}
-                    />
-                  </div>
-
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col h-full font-sans text-xs space-y-3">
-                    <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
-                        <FileText size={18} className="text-slate-600" />
-                        <h4 className="font-bold text-[15px] text-slate-900 leading-tight">
-                          {isAr ? 'ملاحظات المعاملة' : 'Remarks'}
-                        </h4>
-                      </div>
-                      <span className="text-[11.5px] text-slate-400 font-normal">
-                        {isAr ? 'تظهر في الطباعة' : 'Printed on voucher'}
-                      </span>
-                    </div>
-
-                    <div className="flex-1 flex flex-col pt-0.5">
-                      <Textarea
-                        value={notes}
-                        onChange={(e) => {
-                          setNotes(e.target.value);
-                          markDirty();
-                        }}
-                        placeholder=""
-                        radius="md"
-                        className="flex-1 flex flex-col h-full"
-                        styles={{
-                          root: { flex: 1, display: 'flex', flexDirection: 'column' },
-                          wrapper: { flex: 1, display: 'flex', flexDirection: 'column' },
-                          input: {
-                            flex: 1,
-                            height: '100% !important',
-                            minHeight: 140,
-                            fontSize: 13,
-                            borderRadius: 9,
-                            borderColor: '#E2E6EA',
-                            backgroundColor: '#FAFAFA',
-                            padding: 12,
-                            fontFamily: 'inherit',
-                            lineHeight: 1.6,
-                          },
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => {
+                    setNotes(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder=""
+                  radius="md"
+                  minRows={3}
+                  styles={{
+                    input: {
+                      minHeight: 85,
+                      borderColor: '#E5E7EB',
+                      fontSize: 12,
+                      fontWeight: 500,
+                    },
+                  }}
+                />
               </div>
 
             </div>

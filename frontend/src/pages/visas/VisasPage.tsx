@@ -970,11 +970,8 @@ export const VisasPage: React.FC = () => {
           </div>
           <div>
             <h1 className="font-bold text-[20px] text-[#111827] leading-tight">
-              {isAr ? 'خدمات التأشيرات والفيزا' : 'Visas & Permits Management'}
+              {isAr ? 'خدمات التأشيرات' : 'Visas Management'}
             </h1>
-            <p className="text-[13px] font-normal text-[#64748B] mt-0.5">
-              {isAr ? 'إصدار وإدارة معاملات التأشيرات وتتبع الجوازات والربحية والتدقيق المالي' : 'Issue, track, audit and manage travel visa transactions and traveler records'}
-            </p>
           </div>
         </div>
 
@@ -1328,9 +1325,6 @@ export const VisasPage: React.FC = () => {
                             </div>
                             <div className="font-bold text-slate-800 text-sm">
                               {isAr ? 'لا توجد معاملات تأشيرات مطابقة' : 'No visa records found'}
-                            </div>
-                            <div className="text-xs text-slate-400 max-w-sm">
-                              {isAr ? 'جرّب تعديل خيارات البحث أو قم بإصدار معاملة تأشيرة جديدة.' : 'Try adjusting your search filters or create a new visa transaction.'}
                             </div>
                             <Button
                               size="xs"
@@ -1985,28 +1979,6 @@ export const VisasPage: React.FC = () => {
                 ? `من إجمالي ${viewMode === 'aggregated' ? filteredVisas.length : detailedVisaItems.length} ${viewMode === 'aggregated' ? 'معاملة' : 'مسافر ومعاملة'}`
                 : `of ${viewMode === 'aggregated' ? filteredVisas.length : detailedVisaItems.length} records`}
             </span>
-          </div>
-
-          {/* Center / Summary Totals */}
-          <div className="hidden md:flex items-center gap-4 text-xs font-mono">
-            <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'إجمالي المبيعات: ' : 'Sales: '}</span>
-              <span className="font-bold text-slate-900">{financialDataReady ? `$${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}</span>
-            </div>
-            <span>•</span>
-            <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'إجمالي التكلفة: ' : 'Cost: '}</span>
-              <span className="font-bold text-slate-900">{financialDataReady ? `$${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '—'}</span>
-            </div>
-            <span>•</span>
-            <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'صافي الربح: ' : 'Profit: '}</span>
-              <span className={kpis.totalProfitUSD >= 0 ? 'font-bold text-emerald-700' : 'font-bold text-red-600'}>
-                {!financialDataReady
-                  ? '—'
-                  : `${kpis.totalProfitUSD >= 0 ? '+' : '-'}$${Math.abs(kpis.totalProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-              </span>
-            </div>
           </div>
 
           {/* Trailing: Page Navigation */}

@@ -225,12 +225,12 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
       }));
     }
     return [
-      { value: 'كاش باليد (نقدي)', label: isAr ? 'كاش باليد (نقدي)' : 'Cash in Hand' },
-      { value: 'حساب آجل (ذمم)', label: isAr ? 'حساب آجل (ذمم)' : 'Credit (Receivables)' },
-      { value: 'ماستر كارد / إلكتروني', label: isAr ? 'ماستر كارد / إلكتروني' : 'MasterCard / POS' },
-      { value: 'تحويل بنكي / حوالة', label: isAr ? 'تحويل بنكي / حوالة' : 'Bank Transfer' },
+      { value: 'كاش باليد', label: isAr ? 'كاش باليد' : 'Cash in Hand' },
+      { value: 'حساب آجل', label: isAr ? 'حساب آجل' : 'Credit' },
+      { value: 'ماستر كارد', label: isAr ? 'ماستر كارد' : 'MasterCard' },
+      { value: 'تحويل بنكي', label: isAr ? 'تحويل بنكي' : 'Bank Transfer' },
       { value: 'زين كاش', label: isAr ? 'زين كاش' : 'Zain Cash' },
-      { value: 'سويتش / كي كارد', label: isAr ? 'سويتش / كي كارد' : 'QiCard / Switch' },
+      { value: 'كي كارد', label: isAr ? 'كي كارد' : 'QiCard' },
     ];
   }, [paymentMethodsConfig, isAr]);
 
@@ -590,11 +590,13 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                 <h1 className="font-black text-slate-950 text-sm sm:text-base leading-tight">
                   {initialData
                     ? (isAr ? 'تعديل الحجز الفندقي' : 'Edit Hotel Booking')
-                    : (isAr ? 'إصدار حجز وفاتورة فندقية جديدة' : 'New Hotel Booking Invoice')}
+                    : (isAr ? 'حجز فندقي' : 'Hotel Booking')}
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {status === 'CONFIRMED' ? (isAr ? 'مؤكد' : 'Confirmed') : (isAr ? 'مسودة' : 'Draft')}
-                </span>
+                {status === 'CONFIRMED' && (
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {isAr ? 'مؤكد' : 'Confirmed'}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -628,101 +630,28 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
         </header>
 
         {/* ════════════════════════════════════════════════════════════════════
-            2. STEP INDICATOR BAR (Matching Exact Ticket Design in Screenshot 1)
-           ════════════════════════════════════════════════════════════════════ */}
-        <div className="bg-white rounded-xl border border-[#E5E7EB] m-3 sm:m-5 mb-0 p-3 px-6 shadow-2xs">
-          <div className="flex items-center justify-between max-w-2xl mx-auto">
-            {/* Step 1: Customer & Invoice Info */}
-            <div className="flex items-center gap-2 text-slate-900">
-              <div className="w-7 h-7 rounded-full bg-[#F45A0A] text-white font-bold text-xs flex items-center justify-center shadow-2xs">
-                1
-              </div>
-              <span className="text-xs font-semibold text-slate-900">
-                {isAr ? 'معلومات الفاتورة والعميل' : 'Invoice & Customer'}
-              </span>
-            </div>
-
-            <div className="flex-1 h-[1.5px] bg-orange-200 mx-4"></div>
-
-            {/* Step 2: Rooms & Guests */}
-            <div className="flex items-center gap-2 text-slate-900">
-              <div className="w-7 h-7 rounded-full bg-[#F45A0A] text-white font-bold text-xs flex items-center justify-center shadow-2xs">
-                2
-              </div>
-              <span className="text-xs font-semibold text-slate-900">
-                {isAr ? 'الغرف والنزلاء والأسعار' : 'Rooms & Guests'}
-              </span>
-            </div>
-
-            <div
-              className={`flex-1 h-[1.5px] mx-4 ${
-                paymentType === 'كاش باليد (نقدي)' || paymentType === 'CASH' || attachments.length > 0
-                  ? 'bg-emerald-300'
-                  : 'bg-slate-200'
-              }`}
-            ></div>
-
-            {/* Step 3: Attachments & Review */}
-            {paymentType === 'كاش باليد (نقدي)' || paymentType === 'CASH' || attachments.length > 0 ? (
-              <div className="flex items-center gap-2 text-emerald-700">
-                <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-300 font-bold text-xs flex items-center justify-center shadow-2xs">
-                  ✓
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-emerald-800 leading-tight">
-                    {isAr ? 'المرفقات والمراجعة' : 'Attachments & Review'}
-                  </span>
-                  <span className="text-[10px] text-emerald-700 font-medium leading-none">
-                    {isAr ? 'مكتملة تلقائياً (كاش باليد)' : 'Auto-completed (Cash)'}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-slate-500">
-                <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 font-bold text-xs flex items-center justify-center">
-                  3
-                </div>
-                <span className="text-xs font-medium text-slate-500">
-                  {isAr ? 'المرفقات والتسوية' : 'Attachments & Review'}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ════════════════════════════════════════════════════════════════════
-            3. MAIN TWO-COLUMN WORKSPACE BODY (Form on Right + Sticky Summary on Left)
+            2. MAIN TWO-COLUMN WORKSPACE BODY (Form on Right + Sticky Summary on Left)
            ════════════════════════════════════════════════════════════════════ */}
         <main className="flex-1 p-3 sm:p-5 w-full">
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_310px] gap-4 items-start">
             
             {/* ─────────────────────────────────────────────────────────────
-                RIGHT AREA (8 Cols): SEPARATED CARDS (Customer, Hotel/Supplier, Rooms Table, Payment/Attachments, Notes)
+                RIGHT AREA: SEPARATED CARDS
                ───────────────────────────────────────────────────────────── */}
-            <div className="xl:col-span-8 space-y-4">
+            <div className="space-y-4">
               
               {/* ════════════════════════════════════════════════════════════
-                  ROW 1: SIDE-BY-SIDE CARDS (CARD 1: CUSTOMER & CARD 2: HOTEL/SUPPLIER)
+                  ROW 1: SIDE-BY-SIDE CARDS (CUSTOMER & HOTEL/SUPPLIER)
                  ════════════════════════════════════════════════════════════ */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 
-                {/* ── CARD 1: بيانات العميل والجهة الحاجزة ── */}
+                {/* ── CARD 1: العميل والجهة الحاجزة ── */}
                 <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4 flex flex-col justify-between">
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-[#F45A0A] text-white font-black text-xs flex items-center justify-center shadow-2xs">
-                          1
-                        </div>
-                        <div>
-                          <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
-                            {isAr ? 'بيانات العميل والجهة الحاجزة' : 'Customer & Client Information'}
-                          </h2>
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            {isAr ? 'حدد العميل المحجوز له، رقم الهاتف، والموكل الضامن' : 'Customer name, phone, and representative'}
-                          </span>
-                        </div>
-                      </div>
+                      <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
+                        {isAr ? 'العميل والجهة الحاجزة' : 'Customer & Client'}
+                      </h2>
 
                       {/* Currency & Rate */}
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -767,7 +696,7 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       {/* 1. Customer Select (Account) */}
                       <div>
                         <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'العميل / الحساب المحجوز له *' : 'Customer / Account *'}
+                          {isAr ? 'العميل *' : 'Customer *'}
                         </label>
                         <SearchableCombobox
                           options={customersList.map((c) => ({
@@ -785,7 +714,6 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                               if (found.phone) setCustomerPhone(found.phone);
                             }
                           }}
-                          placeholder={isAr ? 'ابحث عن العميل أو الشركة...' : 'Search customer account...'}
                           className="h-[48px]"
                         />
                       </div>
@@ -794,13 +722,12 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       <div>
                         <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
                           <Phone size={12} className="text-[#F45A0A]" />
-                          <span>{isAr ? 'هاتف العميل' : 'Customer Phone'}</span>
+                          <span>{isAr ? 'الهاتف' : 'Phone'}</span>
                         </label>
                         <input
                           type="text"
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(toEnglishDigits(e.target.value))}
-                          placeholder="0770XXXXXXX"
                           dir="ltr"
                           style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
                           className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-200 bg-slate-50 focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-[#F45A0A] font-mono tabular-nums"
@@ -811,13 +738,12 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       <div>
                         <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
                           <User size={12} className="text-slate-400" />
-                          <span>{isAr ? 'اسم الموكل / الضامن (إن وجد)' : 'Representative / Broker'}</span>
+                          <span>{isAr ? 'الضامن (إن وجد)' : 'Representative'}</span>
                         </label>
                         <input
                           type="text"
                           value={customerAgent}
                           onChange={(e) => setCustomerAgent(e.target.value)}
-                          placeholder={isAr ? 'اسم الموكل أو وسيط الحجز...' : 'Representative name...'}
                           className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-200 bg-slate-50 focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-[#F45A0A]"
                         />
                       </div>
@@ -825,13 +751,13 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       {/* 4. Issue Date */}
                       <div>
                         <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'تاريخ الإصدار *' : 'Issue Date *'}
+                          {isAr ? 'تاريخ الإصدار' : 'Issue Date'}
                         </label>
                         <div className="h-[48px]">
                           <SegmentedDatePicker
                             value={issueDate}
                             onChange={(d) => d && setIssueDate(d)}
-                            placeholder={isAr ? 'تاريخ الإصدار' : 'Issue Date'}
+                            clearable={false}
                           />
                         </div>
                       </div>
@@ -839,28 +765,20 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                   </div>
                 </div>
 
-                {/* ── CARD 2: بيانات الفندق والمورد وتواريخ الإقامة ── */}
+                {/* ── CARD 2: الفندق وتواريخ الإقامة ── */}
                 <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4 flex flex-col justify-between">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-                      <div className="w-8 h-8 rounded-full bg-[#F45A0A] text-white font-black text-xs flex items-center justify-center shadow-2xs">
-                        2
-                      </div>
-                      <div>
-                        <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
-                          {isAr ? 'بيانات الفندق والمورد وتواريخ الإقامة' : 'Hotel, Supplier & Stay Dates'}
-                        </h2>
-                        <span className="text-[11px] text-slate-500 font-medium">
-                          {isAr ? 'حدد الفندق، الوجهة، المورد، وتواريخ الدخول والخروج' : 'Specify hotel name, destination, supplier, and dates'}
-                        </span>
-                      </div>
+                  <div className="space-y-3">
+                    <div className="pb-3 border-b border-slate-100">
+                      <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
+                        {isAr ? 'الفندق وتواريخ الإقامة' : 'Hotel & Dates'}
+                      </h2>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {/* 1. Supplier Select */}
                       <div className="sm:col-span-2">
                         <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'حساب المورد / شركة الفنادق *' : 'Supplier / Hotel Provider *'}
+                          {isAr ? 'المورد *' : 'Supplier *'}
                         </label>
                         <SearchableCombobox
                           options={suppliersList.map((s) => ({
@@ -875,7 +793,6 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                             const found = suppliersList.find((s) => s.id === val);
                             if (found) setSupplierName(found.nameAr);
                           }}
-                          placeholder={isAr ? 'اختر المورد...' : 'Search supplier...'}
                           className="h-[48px]"
                         />
                       </div>
@@ -884,22 +801,21 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       <div>
                         <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
                           <Building2 size={12} className="text-[#F45A0A]" />
-                          <span>{isAr ? 'اسم الفندق والإقامة *' : 'Hotel Name *'}</span>
+                          <span>{isAr ? 'اسم الفندق *' : 'Hotel Name *'}</span>
                         </label>
                         <input
                           type="text"
                           value={hotelName}
                           onChange={(e) => setHotelName(e.target.value)}
-                          placeholder={isAr ? 'مثال: فندق العنوان دبي مول...' : 'e.g. Address Dubai Mall...'}
                           className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-200 bg-slate-50 focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-[#F45A0A]"
                         />
                       </div>
 
-                      {/* 3. Destination / City (Searchable World Cities Library) */}
+                      {/* 3. Destination / City */}
                       <div>
                         <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
                           <MapPin size={12} className="text-[#F45A0A]" />
-                          <span>{isAr ? 'المدينة / الوجهة (مكتبة المدن العالمية) *' : 'City / Destination (World Cities) *'}</span>
+                          <span>{isAr ? 'المدينة / الوجهة' : 'City / Destination'}</span>
                         </label>
                         <SearchableCombobox
                           options={WORLD_CITIES.map((c) => ({
@@ -921,7 +837,6 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                               setCountry(isAr ? found.countryAr : found.countryEn);
                             }
                           }}
-                          placeholder={isAr ? 'ابحث عن المدينة (دبي، إسطنبول، مكة...)' : 'Search city (Dubai, Istanbul, Mecca...)'}
                           allowCustomValue={true}
                           className="h-[48px]"
                         />
@@ -930,13 +845,13 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       {/* Check-In Date */}
                       <div>
                         <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'تاريخ الدخول (Check-in) *' : 'Check-in Date *'}
+                          {isAr ? 'تاريخ الدخول' : 'Check-in'}
                         </label>
                         <div className="h-[48px]">
                           <SegmentedDatePicker
                             value={checkInDate}
                             onChange={(d) => d && setCheckInDate(d)}
-                            placeholder={isAr ? 'تاريخ الدخول' : 'Check-in Date'}
+                            clearable={false}
                           />
                         </div>
                       </div>
@@ -944,27 +859,27 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       {/* Check-Out Date */}
                       <div>
                         <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'تاريخ الخروج (Check-out) *' : 'Check-out Date *'}
+                          {isAr ? 'تاريخ الخروج' : 'Check-out'}
                         </label>
                         <div className="h-[48px]">
                           <SegmentedDatePicker
                             value={checkOutDate}
                             onChange={(d) => d && setCheckOutDate(d)}
-                            placeholder={isAr ? 'تاريخ الخروج' : 'Check-out Date'}
+                            clearable={false}
                           />
                         </div>
                       </div>
 
                       {/* Nights Counter Badge */}
                       <div className="sm:col-span-2">
-                        <div className="h-[48px] px-3.5 rounded-[14px] border border-orange-200 bg-orange-50/50 flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-700">{isAr ? 'إجمالي عدد الليالي المحسوبة:' : 'Calculated Duration:'}</span>
+                        <div className="h-[40px] px-3.5 rounded-[12px] border border-orange-200 bg-orange-50/50 flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700">{isAr ? 'عدد الليالي:' : 'Nights:'}</span>
                           <span
                             className="font-black text-sm text-[#F45A0A] font-mono tabular-nums"
                             style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
                             dir="ltr"
                           >
-                            {nights} {isAr ? 'Nights' : 'Nights'}
+                            {nights} {isAr ? 'ليالٍ' : 'Nights'}
                           </span>
                         </div>
                       </div>
@@ -973,24 +888,12 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                 </div>
               </div>
 
-              {/* ════════════════════════════════════════════════════════════
-                  CARD 3: تفاصيل الغرف والنزلاء والأسعار (STRUCTURED ROOMS TABLE)
-                 ════════════════════════════════════════════════════════════ */}
+              {/* ── CARD 3: الغرف والنزلاء والأسعار ── */}
               <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-[#F45A0A] text-white font-black text-xs flex items-center justify-center shadow-2xs">
-                      3
-                    </div>
-                    <div>
-                      <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
-                        {isAr ? 'تفاصيل الغرف والنزلاء والأسعار' : 'Rooms, Guests & Rates'}
-                      </h2>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {isAr ? 'أضف الغرف وحدد أسعار الشراء والبيع وأسماء النزلاء' : 'Add rooms, buy/sell prices, and guest names'}
-                      </span>
-                    </div>
-                  </div>
+                  <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
+                    {isAr ? 'الغرف والنزلاء والأسعار' : 'Rooms, Guests & Rates'}
+                  </h2>
 
                   {/* Reliable Switch Toggle for Adopt Nights Multiplier */}
                   <div className="bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 flex items-center gap-3 select-none">
@@ -1049,14 +952,13 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
 
                     <div>
                       <span className="text-[11px] font-bold text-rose-700 block mb-1">
-                        {isAr ? 'سعر الشراء / التكلفة' : 'Buy Price / Cost'}
+                        {isAr ? 'الشراء' : 'Buy Price'}
                       </span>
                       <input
                         type="text"
                         inputMode="decimal"
                         value={newCostPrice}
                         onChange={(e) => setNewCostPrice(toEnglishDigits(e.target.value))}
-                        placeholder="0.00"
                         dir="ltr"
                         style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
                         className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-300 bg-white font-mono font-black text-xs text-rose-800 text-left tabular-nums"
@@ -1065,14 +967,13 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
 
                     <div>
                       <span className="text-[11px] font-bold text-emerald-700 block mb-1">
-                        {isAr ? 'سعر المبيع / العميل' : 'Sell Price / Sale'}
+                        {isAr ? 'البيع *' : 'Sell Price *'}
                       </span>
                       <input
                         type="text"
                         inputMode="decimal"
                         value={newSalePrice}
                         onChange={(e) => setNewSalePrice(toEnglishDigits(e.target.value))}
-                        placeholder="0.00"
                         dir="ltr"
                         style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
                         className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-300 bg-white font-mono font-black text-xs text-emerald-800 text-left tabular-nums"
@@ -1085,7 +986,6 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       type="text"
                       value={newGuestName}
                       onChange={(e) => setNewGuestName(e.target.value)}
-                      placeholder={isAr ? 'اسم النزيل / المسافر الرئيسي في هذه الغرفة...' : 'Main guest name for this room...'}
                       className="flex-1 h-[48px] px-3.5 rounded-[14px] border border-slate-200 bg-white font-bold text-xs"
                     />
                     <button
@@ -1108,20 +1008,20 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                         <th className="p-3">{isAr ? 'نوع الغرفة' : 'Room Type'}</th>
                         <th className="p-3 text-center">{isAr ? 'العدد' : 'Qty'}</th>
                         <th className="p-3 text-center">{isAr ? 'الليالي' : 'Nights'}</th>
-                        <th className="p-3">{isAr ? 'اسم النزيل / المسافر' : 'Guest Name'}</th>
-                        <th className="p-3 text-center text-rose-700">{isAr ? 'سعر الشراء' : 'Buy Price'}</th>
+                        <th className="p-3">{isAr ? 'النزيل' : 'Guest'}</th>
+                        <th className="p-3 text-center text-rose-700">{isAr ? 'الشراء' : 'Buy'}</th>
                         <th className="p-3 text-center text-rose-800 font-black">{isAr ? 'إجمالي الشراء' : 'Total Buy'}</th>
-                        <th className="p-3 text-center text-emerald-700">{isAr ? 'سعر البيع' : 'Sell Price'}</th>
+                        <th className="p-3 text-center text-emerald-700">{isAr ? 'البيع *' : 'Sell *'}</th>
                         <th className="p-3 text-center text-emerald-800 font-black">{isAr ? 'إجمالي البيع' : 'Total Sell'}</th>
                         <th className="p-3 text-center text-[#F45A0A] font-black">{isAr ? 'الربح' : 'Profit'}</th>
-                        <th className="p-3 text-center w-12">{isAr ? 'حذف' : 'Del'}</th>
+                        <th className="p-3 text-center w-12">{isAr ? '' : ''}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {rooms.length === 0 ? (
                         <tr>
                           <td colSpan={11} className="p-6 text-center text-slate-400 font-medium">
-                            {isAr ? 'لم يتم إضافة أي غرف حتى الآن. استخدم النموذج أعلاه للإضافة.' : 'No rooms added yet. Use form above to add.'}
+                            {isAr ? 'لم يتم إضافة أي غرف حتى الآن.' : 'No rooms added yet.'}
                           </td>
                         </tr>
                       ) : (
@@ -1150,7 +1050,6 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                                   type="text"
                                   value={room.guestNames?.[0] || ''}
                                   onChange={(e) => handleUpdateRoom(room.id, 'guestNames', [e.target.value])}
-                                  placeholder={isAr ? 'اسم النزيل...' : 'Guest name...'}
                                   className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-bold text-slate-800"
                                 />
                               </td>
@@ -1174,7 +1073,7 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                                   type="button"
                                   onClick={() => handleRemoveRoom(room.id)}
                                   className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer"
-                                  title={isAr ? 'حذف الغرفة' : 'Delete'}
+                                  title={isAr ? 'حذف' : 'Delete'}
                                 >
                                   <Trash2 size={15} />
                                 </button>
@@ -1188,34 +1087,24 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                 </div>
               </div>
 
-              {/* ════════════════════════════════════════════════════════════
-                  CARD 4: طرق الدفع والتسوية والمرفقات (REAL PAYMENT METHODS & ATTACHMENTS)
-                 ════════════════════════════════════════════════════════════ */}
+              {/* ── CARD 4: طريقة الدفع والتسوية ── */}
               <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-                <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-                  <div className="w-8 h-8 rounded-full bg-[#F45A0A] text-white font-black text-xs flex items-center justify-center shadow-2xs">
-                    4
-                  </div>
-                  <div>
-                    <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
-                      {isAr ? 'طرق الدفع والتسوية والمرفقات' : 'Payment Methods & Attachments'}
-                    </h2>
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      {isAr ? 'طريقة الدفع الحقيقية، صناديق القبض والدفع، ومرفقات الإيصالات' : 'Real payment methods, cashboxes, and receipt attachments'}
-                    </span>
-                  </div>
+                <div className="pb-3 border-b border-slate-100">
+                  <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
+                    {isAr ? 'طريقة الدفع والتسوية' : 'Payment & Settlement'}
+                  </h2>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
-                  {/* Payment Term (نوع السداد) */}
+                  {/* Payment Term */}
                   <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-1 md:col-span-2'}>
                     <label className="block font-bold text-slate-700 text-xs mb-1">
                       {isAr ? 'نوع السداد' : 'Payment Term'}
                     </label>
                     <SearchableCombobox
                       options={[
-                        { value: 'نقدي', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
-                        { value: 'آجل', label: isAr ? 'آجل (ذمة العميل)' : 'Credit (On Account)' },
+                        { value: 'نقدي', label: isAr ? 'نقدي' : 'Cash' },
+                        { value: 'آجل', label: isAr ? 'آجل' : 'Credit' },
                       ]}
                       value={paymentTerm}
                       onChange={(val: string) => {
@@ -1233,16 +1122,15 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
 
                   {paymentTerm === 'نقدي' && (
                     <>
-                      {/* Real Payment Method Select from Settings */}
+                      {/* Real Payment Method */}
                       <div className="sm:col-span-1">
                         <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'طريقة الاستلام (من الإعدادات) *' : 'Receiving Method *'}
+                          {isAr ? 'طريقة الاستلام' : 'Receiving Method'}
                         </label>
                         <SearchableCombobox
                           options={realPaymentOptions}
                           value={paymentType}
                           onChange={(val: string) => setPaymentType(val)}
-                          placeholder={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
                           className="h-[48px]"
                         />
                       </div>
@@ -1250,7 +1138,7 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                       {/* Sales Cashbox */}
                       <div className="sm:col-span-1">
                         <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'صندوق تحصيل المبيعات' : 'Sales Cashbox'}
+                          {isAr ? 'صندوق المبيعات' : 'Sales Cashbox'}
                         </label>
                         <SearchableCombobox
                           options={cashboxAccounts.map((c) => ({
@@ -1264,64 +1152,53 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                             const found = cashboxAccounts.find((c) => c.id === val);
                             if (found) setSalesCashboxName(found.nameAr);
                           }}
-                          placeholder={isAr ? 'صندوق المبيعات...' : 'Sales cashbox...'}
                           className="h-[48px]"
                         />
                       </div>
                     </>
                   )}
 
-                  {/* Issuing Staff (Compact Dropdown) */}
+                  {/* Issuing Staff */}
                   <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-1 md:col-span-2'}>
                     <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
                       <UserCheck size={13} className="text-[#F45A0A]" />
-                      <span>{isAr ? 'موظف الإصدار المسؤول' : 'Issuing Staff'}</span>
+                      <span>{isAr ? 'موظف الإصدار' : 'Issuing Staff'}</span>
                     </label>
                     <SearchableCombobox
                       options={employeeOptions}
                       value={issuerEmployee}
                       onChange={(val: string) => setIssuerEmployee(val)}
-                      placeholder={isAr ? 'اختر الموظف...' : 'Issuing employee...'}
                       className="h-[48px]"
                     />
                   </div>
                 </div>
 
-                {/* File Attachments Section for Payment Receipts */}
-                <div className="pt-2 border-t border-slate-100">
-                  <span className="block font-bold text-slate-800 text-xs mb-2 flex items-center gap-1.5">
-                    <Paperclip size={14} className="text-[#F45A0A]" />
-                    <span>{isAr ? 'إرفاق وصل الدفع / الإيصالات والمستندات' : 'Attach Payment Receipts & Vouchers'}</span>
-                  </span>
-                  <TicketAttachmentsSection
-                    attachments={attachments}
-                    onChange={(updated) => setAttachments(updated)}
-                  />
-                </div>
+                {/* File Attachments (Shown when NOT cash-in-hand or when files exist) */}
+                {(!paymentType?.includes('كاش باليد') || attachments.length > 0) && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="block font-bold text-slate-800 text-xs mb-2 flex items-center gap-1.5">
+                      <Paperclip size={14} className="text-[#F45A0A]" />
+                      <span>{isAr ? 'إرفاق وصل الدفع' : 'Attach Receipt'}</span>
+                    </span>
+                    <TicketAttachmentsSection
+                      attachments={attachments}
+                      onChange={(updated) => setAttachments(updated)}
+                    />
+                  </div>
+                )}
               </div>
 
-              {/* ════════════════════════════════════════════════════════════
-                  CARD 5: الملاحظات والشروط
-                 ════════════════════════════════════════════════════════════ */}
+              {/* ── CARD 5: الملاحظات ── */}
               <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
-                <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100">
-                  <div className="w-8 h-8 rounded-full bg-[#F45A0A] text-white font-black text-xs flex items-center justify-center shadow-2xs">
-                    5
-                  </div>
-                  <div>
-                    <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
-                      {isAr ? 'شروط وملاحظات الحجز الفندقي' : 'Hotel Terms & Booking Remarks'}
-                    </h2>
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      {isAr ? 'اكتب أية شروط خاصة بسياسة الفندق، وجبات الإفطار، ووقت الوصول' : 'Enter cancellation policy, breakfast, check-in instructions'}
-                    </span>
-                  </div>
+                <div className="pb-2 border-b border-slate-100">
+                  <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
+                    {isAr ? 'الملاحظات' : 'Remarks'}
+                  </h2>
                 </div>
 
                 <Textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder={isAr ? 'اكتب أية شروط خاصة بالفندق وسياسة الإلغاء وتعديل التواريخ...' : 'Enter hotel terms, cancellation policy, and notes...'}
                   rows={3}
                   size="xs"
                   styles={{
@@ -1337,9 +1214,9 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
             </div>
 
             {/* ─────────────────────────────────────────────────────────────
-                LEFT AREA (4 Cols / 380px Width): STICKY FINANCIAL SUMMARY
+                LEFT AREA (310px Width): COMPACT STICKY FINANCIAL SUMMARY
                ───────────────────────────────────────────────────────────── */}
-            <div className="xl:col-span-4 xl:sticky xl:top-20">
+            <div className="xl:sticky xl:top-4 w-full">
               <HotelFinancialSummary
                 invoiceNumber={invoiceNumber}
                 status={status}
@@ -1370,29 +1247,16 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
             4. FIXED BOTTOM ACTION BAR
            ════════════════════════════════════════════════════════════════════ */}
         <footer className="sticky bottom-0 z-30 h-[62px] bg-white border-t border-slate-200 px-4 sm:px-6 flex items-center justify-between shadow-lg shrink-0">
-          {/* Right: Booking Number & Sequence + New Booking */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl">
-              <span className="text-xs font-bold text-slate-600">{isAr ? 'رقم الفاتورة:' : 'Invoice No:'}</span>
-              <span
-                className="font-black text-sm text-[#F45A0A] font-mono tabular-nums"
-                style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
-                dir="ltr"
-              >
-                {invoiceNumber}
-              </span>
-            </div>
-
-            <Tooltip label={isAr ? 'تفريغ الحقول وبدء حجز فندقي جديد' : 'New blank booking'} withArrow>
-              <button
-                type="button"
-                onClick={handleNewBooking}
-                className="h-9 px-3.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#F45A0A] font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <Plus size={14} />
-                <span>{isAr ? 'سند جديد' : 'New Booking'}</span>
-              </button>
-            </Tooltip>
+          {/* Right: Booking Number */}
+          <div className="flex items-center gap-2 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl">
+            <span className="text-xs font-bold text-slate-600">{isAr ? 'رقم الفاتورة:' : 'Invoice No:'}</span>
+            <span
+              className="font-black text-sm text-[#F45A0A] font-mono tabular-nums"
+              style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
+              dir="ltr"
+            >
+              {invoiceNumber}
+            </span>
           </div>
 
           {/* Left: Cancel & Save Buttons */}

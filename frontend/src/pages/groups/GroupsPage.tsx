@@ -4,98 +4,53 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Plane,
-  Coins,
-  TrendingUp,
-  Calendar,
-  Edit,
   Trash2,
-  Copy,
-  Layers,
-  Sparkles,
-  Building2,
+  Armchair,
   CheckCircle2,
   Clock,
-  ArrowUpRight,
-  Armchair,
-  Filter,
-  Receipt,
-  Eye,
-  ExternalLink,
-  Package,
+  Coins,
+  TrendingUp,
+  Lock,
+  Unlock,
+  FolderOpen,
 } from 'lucide-react';
-import { Loader, Modal, Tooltip, SegmentedControl, Badge } from '@mantine/core';
-import { AccountingGrid, AccountingColumnDef, AccountingActionMenuItem } from '../../components/common/AccountingGrid';
-import { GroupFareEditorWorkspace } from '../../components/tickets/GroupFareEditorWorkspace';
-import { GroupDesignWorkspace } from '../../components/groups/GroupDesignWorkspace';
-import { SearchableCombobox, matchesSearchTokens } from '../../components/ui/SearchableCombobox';
-import { ticketsApi, TicketData } from '../../api/tickets';
-import { showSuccessNotification, showErrorNotification, showInfoNotification } from '../../utils/notifications';
+import { Loader, Modal } from '@mantine/core';
+import { GroupFileWorkspace } from '../../components/groups/GroupFileWorkspace';
+import { matchesSearchTokens } from '../../components/ui/SearchableCombobox';
+import { tourGroupsApi, type TourGroup } from '../../api/tourGroups';
+import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 
-const GROUP_TRIP_TYPE = 'GROUP_FARE';
+/*
+ * صفحة الكروبات — قائمة ملفات، لا قائمة تذاكر.
+ *
+ * كل بطاقة كروبٌ حقيقي من جداول tour_groups بملخّصه المحسوب في الخادم:
+ * المقاعد والمبيع والمتبقي، المبيعات والمحصَّل، والربح الفعلي. الضغط عليها
+ * يفتح النافذة الواحدة (ملف الكروب) حيث يجري كل شيء.
+ */
 
-const formatEnglishNumber = (num: number, decimals = 0): string => {
-  if (isNaN(num) || num === null || num === undefined) return '0';
-  return num.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-};
+const fmt = (n: number) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const money = (n: number, c: string) => `${fmt(n)} ${c === 'USD' ? '$' : 'IQD'}`;
 
 export const GroupsPage: React.FC = () => {
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
 
-  const [rows, setRows] = useState<TicketData[]>([]);
+  const [rows, setRows] = useState<TourGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'POSTED' | 'DRAFT'>('ALL');
-  const [currencyFilter, setCurrencyFilter] = useState<'ALL' | 'IQD' | 'USD'>('ALL');
-  const [sourcingFilter, setSourcingFilter] = useState<'ALL' | 'READY_PACKAGE' | 'CUSTOM_ASSEMBLED' | 'FLIGHT_ONLY'>('ALL');
-
-  // Workspaces State
-  const [groupFareWorkspaceOpen, setGroupFareWorkspaceOpen] = useState(false);
-  const [groupDesignWorkspaceOpen, setGroupDesignWorkspaceOpen] = useState(false);
-  const [editing, setEditing] = useState<TicketData | null>(null);
-  const [opening, setOpening] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<TicketData | null>(null);
+  const [fileOpen, setFileOpen] = useState(false);
+  const [fileGroupId, setFileGroupId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<TourGroup | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Helper to extract sourcing type
-  const getSourcingType = useCallback((t: any): 'READY_PACKAGE' | 'CUSTOM_ASSEMBLED' | 'FLIGHT_ONLY' => {
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const start = (t.notes || '').indexOf('<<<GROUP_DESIGN:');
-      if (start >= 0) {
-        const end = t.notes.indexOf(':GROUP_DESIGN>>>', start);
-        if (end > start) {
-          const payload = JSON.parse(t.notes.slice(start + 16, end));
-          return payload.sourcingType || (payload.components?.length > 0 ? 'CUSTOM_ASSEMBLED' : 'READY_PACKAGE');
-        }
-      }
-    } catch {
-      // fallback
-    }
-    const rawInv = String(t.invoiceNumber || '').toUpperCase();
-    if (rawInv.includes('-GRP-') && (t.passengers || []).length > 0 && !(t.notes || '').includes('<<<GROUP_DESIGN:')) {
-      return 'FLIGHT_ONLY';
-    }
-    return 'READY_PACKAGE';
-  }, []);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const all = await ticketsApi.getAll({ limit: 300 });
-      const list = (Array.isArray(all) ? all : []).filter(
-        (t: any) => String(t.tripType || '').toUpperCase() === GROUP_TRIP_TYPE,
-      );
-      setRows(list);
-    } catch (err: any) {
-      showErrorNotification(
-        isAr ? 'تعذّر جلب الكروبات' : 'Could not load groups',
-        err?.message || (isAr ? 'فشل الاتصال بالخادم' : 'Request failed'),
-      );
+      const data = await tourGroupsApi.list();
+      setRows(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      showErrorNotification(isAr ? 'تعذّر جلب الكروبات' : 'Load failed', e?.message || '');
     } finally {
       setLoading(false);
     }
@@ -105,755 +60,263 @@ export const GroupsPage: React.FC = () => {
     load();
   }, [load]);
 
-  // Filtered rows by search and sourcing model
   const filtered = useMemo(() => {
-    return rows.filter((t: any) => {
-      // Sourcing model filter
-      if (sourcingFilter !== 'ALL') {
-        const model = getSourcingType(t);
-        if (model !== sourcingFilter) return false;
-      }
-
-      // Text Search
-      if (search.trim()) {
-        const matches = matchesSearchTokens(
-          [
-            t.invoiceNumber,
-            t.pnr,
-            t.customerName,
-            t.supplierAccountName,
-            t.airline,
-            t.route,
-            t.employeeName,
-            t.notes,
-          ]
-            .filter(Boolean)
-            .join(' '),
-          search,
-        );
-        if (!matches) return false;
-      }
-
-      return true;
-    });
-  }, [rows, search, sourcingFilter]);
-
-  // High-level KPI Totals
-  const totals = useMemo(() => {
-    let count = filtered.length;
-    let postedCount = 0;
-    let draftCount = 0;
-    let seats = 0;
-
-    let sellUSD = 0;
-    let sellIQD = 0;
-    let buyUSD = 0;
-    let buyIQD = 0;
-    let profitUSD = 0;
-    let profitIQD = 0;
-
-    filtered.forEach((t: any) => {
-      const isPosted = String(t.status || '').toUpperCase() === 'POSTED';
-      if (isPosted) postedCount++;
-      else draftCount++;
-
-      // Seat / passenger count
-      const pCount = (t.passengers || []).length || Number(t.paxCount || 0) || 1;
-      seats += pCount;
-
-      const curr = t.currency === 'USD' ? 'USD' : 'IQD';
-      const tSell = Number(t.netSell ?? t.totalSell ?? 0);
-      const tBuy = Number(t.netBuy ?? t.totalBuy ?? 0);
-      const tProfit = Number(t.profit ?? (tSell - tBuy));
-
-      if (curr === 'USD') {
-        sellUSD += tSell;
-        buyUSD += tBuy;
-        profitUSD += tProfit;
-      } else {
-        sellIQD += tSell;
-        buyIQD += tBuy;
-        profitIQD += tProfit;
-      }
-    });
-
-    const avgSeatsPerGroup = count > 0 ? Math.round((seats / count) * 10) / 10 : 0;
-    const profitMargin = (sellUSD + sellIQD) > 0 ? Math.round(((profitUSD + profitIQD) / (sellUSD + sellIQD)) * 100) : 0;
-
-    return {
-      count,
-      postedCount,
-      draftCount,
-      seats,
-      avgSeatsPerGroup,
-      sellUSD,
-      sellIQD,
-      buyUSD,
-      buyIQD,
-      profitUSD,
-      profitIQD,
-      profitMargin,
-    };
-  }, [filtered]);
-
-  // Open Group Fare Editor
-  const openFareEditor = async (row?: TicketData) => {
-    if (!row) {
-      setEditing(null);
-      setGroupFareWorkspaceOpen(true);
-      return;
-    }
-    setOpening(true);
-    try {
-      const full = await ticketsApi.getOne(row.id as string).catch(() => row);
-      setEditing(full || row);
-      setGroupFareWorkspaceOpen(true);
-    } finally {
-      setOpening(false);
-    }
-  };
-
-  // Open Tour Package Designer
-  const openDesignEditor = async (row?: TicketData) => {
-    if (!row) {
-      setEditing(null);
-      setGroupDesignWorkspaceOpen(true);
-      return;
-    }
-    setOpening(true);
-    try {
-      const full = await ticketsApi.getOne(row.id as string).catch(() => row);
-      setEditing(full || row);
-      setGroupDesignWorkspaceOpen(true);
-    } finally {
-      setOpening(false);
-    }
-  };
-
-  // Copy PNR helper
-  const handleCopyText = (text: string, label: string) => {
-    if (!text || text === '—') return;
-    navigator.clipboard.writeText(text);
-    showSuccessNotification(
-      isAr ? 'تم النسخ' : 'Copied',
-      isAr ? `تم نسخ ${label} (${text}) بنجاح.` : `Copied ${label} (${text}) to clipboard.`,
+    const q = search.trim();
+    if (!q) return rows;
+    return rows.filter((g) =>
+      matchesSearchTokens(q, [g.groupName, g.country || '', ...g.passengers.map((p) => p.passengerName)].join(' ')),
     );
-  };
+  }, [rows, search]);
 
-  // Confirm Delete
-  const confirmDelete = async () => {
-    if (!deleteTarget?.id) return;
-    const removed = deleteTarget;
-    setDeleting(true);
-    setRows((prev) => prev.filter((t) => t.id !== removed.id));
-    setDeleteTarget(null);
-    try {
-      await ticketsApi.delete(removed.id as string);
-      showSuccessNotification(
-        isAr ? 'تم الحذف' : 'Deleted',
-        isAr ? `حُذف الكروب ${removed.invoiceNumber || ''} وقيده المحاسبي بنجاح.` : `Group ${removed.invoiceNumber || ''} deleted successfully.`,
-      );
-    } catch (err: any) {
-      setRows((prev) => (prev.some((t) => t.id === removed.id) ? prev : [removed, ...prev]));
-      showErrorNotification(
-        isAr ? 'تعذّر الحذف' : 'Delete failed',
-        err?.message || (isAr ? 'لم يُحذف الكروب' : 'The group was not deleted'),
-      );
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  // Accounting Grid Column Definitions
-  const columnDefs: AccountingColumnDef[] = useMemo(
-    () => [
-      {
-        field: 'invoiceNumber',
-        headerText: isAr ? 'رقم الكروب والـ PNR' : 'Group No. & PNR',
-        width: 'w-44',
-        isPinned: true,
-        render: (r) => (
-          <div
-            className="flex items-center gap-2 py-0.5 cursor-pointer"
-            onClick={() => openDesignEditor(r)}
-            title={isAr ? 'انقر لفتح وتعديل الكروب وقوالب الأسعار' : 'Click to edit group and prices'}
-          >
-            <div className="w-8 h-8 rounded-lg bg-[#FFF3E8] border border-[#FED7AA] text-[#F45A0A] flex items-center justify-center shrink-0 font-bold">
-              <Layers size={15} />
-            </div>
-            <div className="leading-tight min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono font-black text-[12px] text-slate-900 select-all hover:text-[#F45A0A] transition-colors" dir="ltr">
-                  {r.invoiceNumber || '—'}
-                </span>
-                {r.pnr && (
-                  <Tooltip label={isAr ? 'نسخ PNR' : 'Copy PNR'} withArrow position="top">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCopyText(r.pnr, 'PNR');
-                      }}
-                      className="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-orange-100 hover:text-[#F45A0A] text-slate-700 font-mono font-bold text-[10.5px] border border-slate-200 transition-colors cursor-pointer"
-                      dir="ltr"
-                    >
-                      {r.pnr}
-                    </button>
-                  </Tooltip>
-                )}
-              </div>
-              <span className="text-[10.5px] font-mono text-slate-400 block mt-0.5" dir="ltr">
-                {r.issueDate ? new Date(r.issueDate).toLocaleDateString('en-GB') : ''}
-              </span>
-            </div>
-          </div>
-        ),
-      },
-      {
-        field: 'customerName',
-        headerText: isAr ? 'المستفيد (العميل)' : 'Beneficiary / Customer',
-        isWide: true,
-        render: (r) => (
-          <div
-            className="flex items-center gap-2 py-0.5 min-w-0 cursor-pointer"
-            onClick={() => openDesignEditor(r)}
-            title={isAr ? 'انقر لفتح وتعديل الكروب وقوالب الأسعار' : 'Click to edit group and prices'}
-          >
-            <div className="w-7 h-7 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center shrink-0 font-bold text-xs">
-              {(r.customerName || 'ع')[0]}
-            </div>
-            <div className="leading-tight min-w-0">
-              <span className="font-bold text-[12.5px] text-slate-900 block truncate hover:text-[#F45A0A] transition-colors">
-                {r.customerName || (isAr ? '— بلا عميل —' : '— No Customer —')}
-              </span>
-              {r.supplierAccountName && (
-                <span className="text-[10.5px] font-medium text-slate-500 block truncate mt-0.5">
-                  <span className="text-slate-400">{isAr ? 'المورد: ' : 'Supplier: '}</span>
-                  {r.supplierAccountName}
-                </span>
-              )}
-            </div>
-          </div>
-        ),
-      },
-      {
-        field: 'sourcingType',
-        headerText: isAr ? 'نموذج الكروب' : 'Group Model',
-        width: 'w-36',
-        render: (r) => {
-          const model = getSourcingType(r);
-          if (model === 'READY_PACKAGE') {
-            return (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 text-[#F45A0A] border border-orange-200 text-[11px] font-black">
-                <Package size={12} />
-                <span>{isAr ? 'باكج جاهز' : 'Ready Package'}</span>
-              </span>
-            );
-          }
-          if (model === 'CUSTOM_ASSEMBLED') {
-            return (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 text-[11px] font-black">
-                <Layers size={12} />
-                <span>{isAr ? 'كروب مجمّع' : 'Custom Tour'}</span>
-              </span>
-            );
-          }
-          return (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 text-[11px] font-black">
-              <Plane size={12} />
-              <span>{isAr ? 'مقاعد طيران' : 'Flight Block'}</span>
-            </span>
-          );
-        },
-      },
-      {
-        field: 'route',
-        headerText: isAr ? 'المسار وشركة الطيران' : 'Route & Airline',
-        width: 'w-48',
-        render: (r) => (
-          <div className="leading-tight min-w-0 py-0.5">
-            <div className="flex items-center gap-1.5">
-              <Plane size={13} className="text-[#F45A0A] shrink-0 rotate-45" />
-              <span className="font-mono font-black text-[12px] text-slate-800 uppercase truncate" dir="ltr">
-                {r.route || '—'}
-              </span>
-            </div>
-            {r.airline && (
-              <span className="text-[11px] font-semibold text-slate-500 block truncate mt-0.5">
-                {r.airline}
-              </span>
-            )}
-          </div>
-        ),
-      },
-      {
-        field: 'travelDate',
-        headerText: isAr ? 'تاريخ السفر' : 'Travel Date',
-        width: 'w-32',
-        align: 'center',
-        render: (r) =>
-          r.travelDate ? (
-            <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 font-mono font-bold text-[11px] text-slate-800" dir="ltr">
-              <Calendar size={12} className="text-slate-500" />
-              <span>{new Date(r.travelDate as any).toLocaleDateString('en-GB')}</span>
-            </div>
-          ) : (
-            <span className="text-slate-300 font-mono">—</span>
-          ),
-      },
-      {
-        field: 'seats',
-        headerText: isAr ? 'المقاعد' : 'Seats',
-        width: 'w-24',
-        align: 'center',
-        render: (r) => {
-          const seats = (r.passengers || []).length || Number((r as any).paxCount || 0) || 1;
-          return (
-            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-mono font-black bg-orange-50 text-[#F45A0A] border border-orange-200 rounded-lg px-2.5 py-1">
-              <Armchair size={13} className="text-[#F45A0A]" />
-              <span>{seats}</span>
-              <span className="text-[10px] font-sans font-semibold">{isAr ? 'مقعد' : 'pax'}</span>
-            </span>
-          );
-        },
-      },
-      {
-        field: 'netSell',
-        headerText: isAr ? 'المبيعات' : 'Sales (Sell)',
-        width: 'w-36',
-        align: 'left',
-        isMonetary: true,
-        render: (r) => {
-          const val = Number(r.netSell ?? r.totalSell ?? 0);
-          const curr = r.currency === 'USD' ? '$' : (isAr ? 'د.ع' : 'IQD');
-          return (
-            <div className="leading-tight py-0.5" dir="ltr">
-              <span className="font-mono font-black text-[13px] text-slate-900 block tabular-nums">
-                {r.currency === 'USD' ? `$${formatEnglishNumber(val, 2)}` : `${formatEnglishNumber(val)} ${curr}`}
-              </span>
-            </div>
-          );
-        },
-      },
-      {
-        field: 'profit',
-        headerText: isAr ? 'صافي الربح' : 'Net Profit',
-        width: 'w-36',
-        align: 'left',
-        isMonetary: true,
-        render: (r) => {
-          const p = Number(r.profit ?? 0);
-          const curr = r.currency === 'USD' ? '$' : (isAr ? 'د.ع' : 'IQD');
-          const isPos = p > 0;
-          const isNeg = p < 0;
-
-          return (
-            <div className="leading-tight py-0.5" dir="ltr">
-              <span
-                className={`font-mono font-black text-[13px] block tabular-nums ${
-                  isPos ? 'text-[#078B61]' : isNeg ? 'text-red-600' : 'text-slate-600'
-                }`}
-              >
-                {isPos ? '+' : ''}
-                {r.currency === 'USD' ? `${p < 0 ? '-' : ''}$${formatEnglishNumber(Math.abs(p), 2)}` : `${formatEnglishNumber(p)} ${curr}`}
-              </span>
-            </div>
-          );
-        },
-      },
-      {
-        field: 'status',
-        headerText: isAr ? 'الحالة' : 'Status',
-        width: 'w-24',
-        align: 'center',
-        render: (r) => {
-          const posted = String(r.status || '').toUpperCase() === 'POSTED';
-          return (
-            <span
-              className={`inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-0.5 rounded-full border shadow-2xs ${
-                posted
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : 'bg-amber-50 text-amber-800 border-amber-200'
-              }`}
-            >
-              {posted ? <CheckCircle2 size={11} /> : <Clock size={11} />}
-              <span>{posted ? (isAr ? 'مرحَّل' : 'Posted') : isAr ? 'مسودة' : 'Draft'}</span>
-            </span>
-          );
-        },
-      },
-    ],
-    [isAr],
+  const totals = useMemo(
+    () =>
+      rows.reduce(
+        (a, g) => ({
+          groups: a.groups + 1,
+          sold: a.sold + g.summary.sold,
+          seats: a.seats + g.summary.seats,
+          sales: a.sales + g.summary.sales,
+          outstanding: a.outstanding + g.summary.outstanding,
+          profit: a.profit + g.summary.actualProfit,
+        }),
+        { groups: 0, sold: 0, seats: 0, sales: 0, outstanding: 0, profit: 0 },
+      ),
+    [rows],
   );
 
-  // Accounting Grid Action Menu
-  const actionMenuItems: AccountingActionMenuItem[] = useMemo(
-    () => [
-      {
-        label: isAr ? 'تعديل الكروب' : 'Edit Group',
-        icon: Edit,
-        description: isAr ? 'يفتح مصمم حزمة الكروب ومكونات الكلفة وتوزيع المقاعد' : 'Open group package and seat allocation designer',
-        onClick: (row: any) => openDesignEditor(row),
-      },
-      {
-        label: isAr ? 'حذف الكروب' : 'Delete Group',
-        icon: Trash2,
-        color: 'red',
-        description: isAr ? 'يحذف الكروب وقيده المحاسبي المزدوج نهائياً' : 'Permanently remove group and journal entry',
-        onClick: (row: any) => setDeleteTarget(row),
-      },
-    ],
-    [isAr],
-  );
+  const openFile = (id: string | null) => {
+    setFileGroupId(id);
+    setFileOpen(true);
+  };
 
   return (
-    <div
-      className="w-full max-w-[1760px] mx-auto px-3 sm:px-6 py-3 sm:py-5 select-none font-sans space-y-3.5 bg-[#F7F8FA] min-h-screen"
-      dir={direction}
-      style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
-    >
-      {/* ── 1. TOP HEADER HERO BANNER ── */}
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-3.5 sm:p-5">
+    <div className="min-h-full bg-[#F7F8FA] font-sans" dir={direction}>
+      <div className="max-w-[1500px] mx-auto w-full px-4 sm:px-6 py-4 space-y-4">
+        {/* ── الترويسة ── */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          
-          {/* Page Identity & Badge */}
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-[#FFF3E8] border border-[#FED7AA] text-[#F45A0A] flex items-center justify-center shadow-2xs shrink-0">
-              <Package size={22} strokeWidth={2.2} />
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#F45A0A] to-[#f59e0b] text-white flex items-center justify-center shadow-xs">
+              <Users size={22} strokeWidth={2.2} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-black text-base sm:text-lg text-[#111827] leading-tight">
-                  {isAr ? 'الكروبات والرحلات السياحية' : 'Tour Groups & Packages'}
-                </h1>
-                <Badge
-                  color="orange"
-                  variant="light"
-                  size="sm"
-                  className="font-mono font-bold"
-                  dir="ltr"
-                >
-                  {formatEnglishNumber(totals.count)} {isAr ? 'كروب' : 'groups'}
-                </Badge>
-              </div>
-              <p className="text-[11.5px] text-[#6B7280] font-medium mt-0.5">
-                {isAr
-                  ? 'إدارة حجوزات الكروبات السياحية: تصميم المكونات (طيران، فنادق، فيز)، كلفة المقاعد والمبيعات والأرباح'
-                  : 'Manage tour group packages, cost components (flights, hotels, visas), seats and profits'}
+              <h1 className="font-black text-base text-slate-900">{isAr ? 'الكروبات' : 'Tour Groups'}</h1>
+              <p className="text-[11.5px] font-bold text-slate-500 mt-0.5">
+                {isAr ? 'كل كروب ملف مالي وتشغيلي كامل — افتحه لترى ملخّصه ومسافريه' : 'Each group is a full financial file'}
               </p>
             </div>
           </div>
 
-          {/* Action Toolbar */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            
-            {/* Search Input with quick clear */}
-            <div className="relative">
-              <Search
-                size={15}
-                className="absolute top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-                style={{ insetInlineStart: 10 }}
-              />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={isAr ? 'ابحث باسم الكروب، المستفيد، أو المسار...' : 'Search by group name, customer, route...'}
-                className="h-[38px] w-60 sm:w-72 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] text-[12px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] focus:bg-white transition-all shadow-2xs"
-                style={{ paddingInlineStart: 32, paddingInlineEnd: search ? 30 : 10 }}
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  className="absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
-                  style={{ insetInlineEnd: 10 }}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => load()}
+              className="h-[38px] w-[38px] rounded-[9px] bg-white border border-slate-200 text-slate-500 hover:text-[#F45A0A] hover:border-[#FED7AA] flex items-center justify-center transition-all cursor-pointer"
+            >
+              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <button
+              type="button"
+              onClick={() => openFile(null)}
+              className="h-[38px] px-4 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-bold text-[13px] shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Plus size={15} strokeWidth={2.4} />
+              {isAr ? 'كروب جديد' : 'New group'}
+            </button>
+          </div>
+        </div>
+
+        {/* ── بطاقات الإجمالي: برتقالي وأبيض فقط ── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: isAr ? 'الكروبات' : 'Groups', value: String(totals.groups), sub: `${totals.sold}/${totals.seats} ${isAr ? 'مقعداً مبيعاً' : 'seats sold'}` },
+            { label: isAr ? 'المبيعات' : 'Sales', value: fmt(totals.sales), sub: isAr ? 'مجموع بيع المقاعد' : 'total seat sales' },
+            { label: isAr ? 'الذمم' : 'Outstanding', value: fmt(totals.outstanding), sub: isAr ? 'غير محصَّل بعد' : 'not collected yet' },
+            { label: isAr ? 'الربح الفعلي' : 'Actual profit', value: fmt(totals.profit), sub: isAr ? 'بعد الشراء والمصاريف' : 'after buy & expenses' },
+          ].map((c) => (
+            <div key={c.label} className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 shadow-xs p-4 min-h-[118px] flex flex-col justify-center">
+              <span className="absolute inset-y-0 start-0 w-1.5 bg-gradient-to-b from-[#F45A0A] to-[#f59e0b]" />
+              <p className="text-[11px] font-bold text-slate-500">{c.label}</p>
+              <p className="text-2xl font-black text-slate-900 mt-1 font-mono" dir="ltr">{c.value}</p>
+              <p className="text-[10.5px] font-bold text-[#F45A0A]/70 mt-1">{c.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* ── البحث ── */}
+        <div className="relative">
+          <Search size={15} className={`absolute top-1/2 -translate-y-1/2 text-slate-400 ${direction === 'rtl' ? 'right-3' : 'left-3'}`} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={isAr ? 'ابحث باسم الكروب أو الوجهة أو مسافر…' : 'Search…'}
+            className={`w-full h-[42px] rounded-xl bg-white border border-slate-200 text-[13px] font-bold text-slate-900 outline-none focus:border-[#F45A0A] focus:ring-2 focus:ring-orange-100 transition-all ${direction === 'rtl' ? 'pr-9 pl-3' : 'pl-9 pr-3'}`}
+          />
+        </div>
+
+        {/* ── القائمة ── */}
+        {loading && rows.length === 0 ? (
+          <div className="py-24 flex items-center justify-center gap-3 text-sm font-bold text-slate-500">
+            <Loader size="sm" color="orange" /> {isAr ? 'جارٍ جلب الكروبات…' : 'Loading…'}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-20 text-center space-y-2">
+            <p className="text-sm font-black text-slate-600">{isAr ? 'لا كروبات بعد' : 'No groups yet'}</p>
+            <p className="text-xs font-bold text-slate-400">
+              {isAr ? 'أنشئ كروباً، صمّم أنظمة أسعاره، افتح البيع، ثم بِع المقاعد' : 'Create a group, add price systems, open sale'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {filtered.map((g) => {
+              const s = g.summary;
+              return (
+                <div
+                  key={g.id}
+                  onClick={() => openFile(g.id)}
+                  className="group bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md hover:border-[#FED7AA] transition-all cursor-pointer p-4 space-y-3"
                 >
-                  ✕
-                </button>
-              )}
-            </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-[13.5px] text-slate-900 truncate">{g.groupName}</h3>
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-black rounded px-1.5 py-0.5 border shrink-0 ${
+                            g.openSale ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}
+                        >
+                          {g.openSale ? <Unlock size={10} /> : <Lock size={10} />}
+                          {g.openSale ? (isAr ? 'البيع مفتوح' : 'Open') : isAr ? 'مقفل' : 'Closed'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-bold text-slate-500 mt-0.5 truncate">
+                        {g.country || '—'} · {g.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : isAr ? 'بلا تاريخ' : 'no date'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openFile(g.id);
+                        }}
+                        title={isAr ? 'فتح الملف' : 'Open file'}
+                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-[#F45A0A] hover:bg-orange-50 flex items-center justify-center cursor-pointer"
+                      >
+                        <FolderOpen size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(g);
+                        }}
+                        title={isAr ? 'حذف' : 'Delete'}
+                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
 
-            {/* Single Unified Dropdown for Models (ازل الفلاتر الموجودة يجب ان يكون دروب داون واحد) */}
-            <div className="w-52">
-              <SearchableCombobox
-                value={sourcingFilter}
-                onChange={(val: any) => setSourcingFilter(val || 'ALL')}
-                options={[
-                  { value: 'ALL', label: isAr ? 'كافة نماذج الكروبات' : 'All Group Models' },
-                  { value: 'READY_PACKAGE', label: isAr ? 'باكجات جاهزة' : 'Ready Packages' },
-                  { value: 'CUSTOM_ASSEMBLED', label: isAr ? 'كروبات مجمعة' : 'Custom Tours' },
-                  { value: 'FLIGHT_ONLY', label: isAr ? 'مقاعد طيران' : 'Flight Blocks' },
-                ]}
-                clearable={false}
-              />
-            </div>
+                  {/* شريط المقاعد */}
+                  <div>
+                    <div className="flex items-center justify-between text-[10.5px] font-black text-slate-600 mb-1">
+                      <span className="inline-flex items-center gap-1">
+                        <Armchair size={11} className="text-[#F45A0A]" /> {s.sold}/{s.seats} {isAr ? 'مقعداً' : 'seats'}
+                      </span>
+                      <span className={s.remaining > 0 ? 'text-slate-500' : 'text-rose-600'}>
+                        {s.remaining > 0 ? `${s.remaining} ${isAr ? 'متبقٍ' : 'left'}` : isAr ? 'نفدت' : 'full'}
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#F45A0A] to-[#f59e0b] transition-all"
+                        style={{ width: `${s.seats > 0 ? Math.min(100, (s.sold / s.seats) * 100) : 0}%` }}
+                      />
+                    </div>
+                  </div>
 
-            {/* Refresh Button */}
-            <Tooltip label={isAr ? 'تحديث السجلات' : 'Refresh'} withArrow position="bottom">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-xl bg-slate-50 py-2">
+                      <p className="text-[10px] font-bold text-slate-500 flex items-center justify-center gap-1"><Coins size={10} /> {isAr ? 'مبيعات' : 'Sales'}</p>
+                      <p className="text-[12px] font-mono font-black text-slate-900 mt-0.5" dir="ltr">{money(s.sales, g.currency)}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 py-2">
+                      <p className="text-[10px] font-bold text-slate-500 flex items-center justify-center gap-1"><CheckCircle2 size={10} /> {isAr ? 'محصَّل' : 'Collected'}</p>
+                      <p className="text-[12px] font-mono font-black text-emerald-700 mt-0.5" dir="ltr">{money(s.collected, g.currency)}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 py-2">
+                      <p className="text-[10px] font-bold text-slate-500 flex items-center justify-center gap-1"><TrendingUp size={10} /> {isAr ? 'ربح فعلي' : 'Profit'}</p>
+                      <p className={`text-[12px] font-mono font-black mt-0.5 ${s.actualProfit >= 0 ? 'text-slate-900' : 'text-rose-600'}`} dir="ltr">{money(s.actualProfit, g.currency)}</p>
+                    </div>
+                  </div>
+
+                  {s.notComplete > 0 && (
+                    <p className="text-[10.5px] font-bold text-amber-700 flex items-center gap-1">
+                      <Clock size={11} /> {s.notComplete} {isAr ? 'مسافراً بخدمات غير مكتملة' : 'passengers not complete'}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* النافذة الواحدة */}
+      <GroupFileWorkspace
+        opened={fileOpen}
+        groupId={fileGroupId}
+        onClose={() => {
+          setFileOpen(false);
+          setFileGroupId(null);
+          load(true);
+        }}
+        onChanged={() => load(true)}
+      />
+
+      {/* تأكيد الحذف */}
+      <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} centered radius="lg" withCloseButton={false} zIndex={10050}>
+        {deleteTarget && (
+          <div className="space-y-3 font-sans" dir={direction}>
+            <p className="font-black text-sm text-slate-900">{isAr ? 'حذف الكروب؟' : 'Delete group?'}</p>
+            <p className="text-xs font-bold text-slate-600 leading-relaxed">
+              {isAr
+                ? `سيُحذف «${deleteTarget.groupName}» بكل أنظمته ومسافريه وخدماتهم (${deleteTarget.summary.passengers} مسافراً) نهائياً.`
+                : `"${deleteTarget.groupName}" and everything in it will be deleted.`}
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
               <button
                 type="button"
-                onClick={load}
-                disabled={loading}
-                className="h-[46px] w-[46px] rounded-[11px] border border-[#E5E7EB] bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-colors flex items-center justify-center shadow-2xs disabled:opacity-50"
+                onClick={() => setDeleteTarget(null)}
+                className="h-9 px-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer"
               >
-                <RefreshCw size={16} className={loading ? 'animate-spin text-[#F45A0A]' : ''} />
+                {isAr ? 'إلغاء' : 'Cancel'}
               </button>
-            </Tooltip>
-
-            {/* Design Group Button (زر تصميم الكروب - يفتح النافذة المنبثقة) */}
-            <button
-              type="button"
-              onClick={() => openDesignEditor()}
-              className="h-[46px] px-5 rounded-[11px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-black text-xs cursor-pointer transition-all flex items-center gap-2 shadow-xs"
-            >
-              <Plus size={17} strokeWidth={2.4} />
-              <span>{isAr ? 'تصميم الكروب' : 'Design Group'}</span>
-            </button>
-
-          </div>
-        </div>
-      </div>
-
-      {/* ── 2. KPI METRIC SUMMARY CARDS (Brand Pure White & Soft Accents) ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-sans">
-        
-        {/* Card 1: Total Groups */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 shadow-2xs flex flex-col justify-between hover:border-orange-200 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[12px] font-bold text-[#6B7280]">
-              {isAr ? 'عدد الكروبات الإجمالي' : 'Total Groups'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-[#FFF3E8] border border-[#FED7AA] text-[#F45A0A] flex items-center justify-center shrink-0">
-              <Users size={16} />
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    await tourGroupsApi.remove(deleteTarget.id);
+                    showSuccessNotification(isAr ? 'حُذف' : 'Deleted', deleteTarget.groupName);
+                    setDeleteTarget(null);
+                    load(true);
+                  } catch (e: any) {
+                    showErrorNotification(isAr ? 'تعذّر الحذف' : 'Failed', e?.message || '');
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-black cursor-pointer flex items-center gap-1.5"
+              >
+                {deleting && <Loader size={12} color="white" />}
+                {isAr ? 'حذف نهائي' : 'Delete'}
+              </button>
             </div>
           </div>
-          <div>
-            <div className="text-2xl font-black font-mono text-[#111827] tabular-nums" dir="ltr">
-              {formatEnglishNumber(totals.count)}
-            </div>
-            <div className="flex items-center gap-2 mt-1 text-[11px] font-semibold text-slate-500">
-              <span className="text-emerald-700 font-bold">✓ {totals.postedCount} {isAr ? 'مرحَّل' : 'posted'}</span>
-              <span className="text-slate-300">•</span>
-              <span className="text-amber-700 font-bold">⏱ {totals.draftCount} {isAr ? 'مسودة' : 'draft'}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2: Total Seats / Passengers */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 shadow-2xs flex flex-col justify-between hover:border-indigo-200 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[12px] font-bold text-[#6B7280]">
-              {isAr ? 'إجمالي المقاعد / المسافرين' : 'Total Seats & Pax'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center shrink-0">
-              <Armchair size={16} />
-            </div>
-          </div>
-          <div>
-            <div className="text-2xl font-black font-mono text-indigo-950 tabular-nums" dir="ltr">
-              {formatEnglishNumber(totals.seats)} <span className="text-xs font-sans font-bold text-slate-500">{isAr ? 'مقعد' : 'seats'}</span>
-            </div>
-            <div className="mt-1 text-[11px] font-semibold text-slate-500">
-              {isAr
-                ? `متوسط المقاعد: ${totals.avgSeatsPerGroup} لكل حجز`
-                : `Avg seats: ${totals.avgSeatsPerGroup} / group`}
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Total Sales */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 shadow-2xs flex flex-col justify-between hover:border-sky-200 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[12px] font-bold text-[#6B7280]">
-              {isAr ? 'إجمالي المبيعات' : 'Total Sales (Revenue)'}
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center shrink-0">
-              <Coins size={16} />
-            </div>
-          </div>
-          <div className="space-y-0.5">
-            <div className="flex items-baseline justify-between font-mono" dir="ltr">
-              <span className="text-[11px] font-sans font-bold text-slate-500">$ USD:</span>
-              <span className="font-black text-slate-900 text-base tabular-nums">
-                ${formatEnglishNumber(totals.sellUSD, 2)}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between font-mono" dir="ltr">
-              <span className="text-[11px] font-sans font-bold text-slate-500">{isAr ? 'د.ع IQD:' : 'IQD:'}</span>
-              <span className="font-black text-slate-900 text-base tabular-nums">
-                {formatEnglishNumber(totals.sellIQD)} <span className="text-[10px] font-sans font-semibold text-slate-500">{isAr ? 'د.ع' : 'IQD'}</span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: Net Realized Profit */}
-        <div className="bg-white rounded-2xl border border-[#E5E7EB] p-4 shadow-2xs flex flex-col justify-between hover:border-emerald-200 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[12px] font-bold text-[#6B7280]">
-                {isAr ? 'صافي الأرباح المحققة' : 'Net Realized Profit'}
-              </span>
-              {totals.profitMargin > 0 && (
-                <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded">
-                  {totals.profitMargin}%
-                </span>
-              )}
-            </div>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
-              <TrendingUp size={16} />
-            </div>
-          </div>
-          <div className="space-y-0.5">
-            <div className="flex items-baseline justify-between font-mono text-[#078B61]" dir="ltr">
-              <span className="text-[11px] font-sans font-bold text-emerald-800">$ USD:</span>
-              <span className="font-black text-base tabular-nums">
-                {totals.profitUSD >= 0 ? '+' : ''}${formatEnglishNumber(totals.profitUSD, 2)}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between font-mono text-[#078B61]" dir="ltr">
-              <span className="text-[11px] font-sans font-bold text-emerald-800">{isAr ? 'د.ع IQD:' : 'IQD:'}</span>
-              <span className="font-black text-base tabular-nums">
-                {totals.profitIQD >= 0 ? '+' : ''}{formatEnglishNumber(totals.profitIQD)} <span className="text-[10px] font-sans font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── 3. MAIN DATA GRID ── */}
-      <div className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-2xs">
-        <AccountingGrid
-          gridKey="groups_tour_grid_v2"
-          data={filtered}
-          columnDefs={columnDefs}
-          loading={loading}
-          actionMenuItems={actionMenuItems}
-          onRowDoubleClick={(row: any) => openDesignEditor(row)}
-          onRefresh={load}
-          emptyMessage={
-            isAr
-              ? 'لا توجد كروبات مسجّلة حالياً — اضغط على «كروب جديد» لتصميم وإضافة أول كروب سياحي.'
-              : 'No groups registered yet — click "New Group" to design your first tour package.'
-          }
-        />
-      </div>
-
-      {/* ── 4. Loading Overlay ── */}
-      {opening && (
-        <div className="fixed inset-0 z-9997 bg-slate-900/20 backdrop-blur-[2px] flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 px-6 py-4 flex items-center gap-3 text-sm font-bold text-slate-800">
-            <Loader size="sm" color="orange" />
-            <span>{isAr ? 'جارٍ فتح مساحة عمل الكروب بكامل تفاصيلها...' : 'Opening group workspace...'}</span>
-          </div>
-        </div>
-      )}
-
-      {/* ── 5. Workspaces ── */}
-      <GroupFareEditorWorkspace
-        opened={groupFareWorkspaceOpen}
-        initialData={editing}
-        onClose={() => {
-          setGroupFareWorkspaceOpen(false);
-          setEditing(null);
-        }}
-        onSuccess={() => {
-          setGroupFareWorkspaceOpen(false);
-          setEditing(null);
-          load();
-        }}
-      />
-
-      <GroupDesignWorkspace
-        opened={groupDesignWorkspaceOpen}
-        initialData={editing}
-        onClose={() => {
-          setGroupDesignWorkspaceOpen(false);
-          setEditing(null);
-        }}
-        onSuccess={() => {
-          setGroupDesignWorkspaceOpen(false);
-          setEditing(null);
-          load();
-        }}
-      />
-
-      {/* ── 6. Delete Confirmation Modal ── */}
-      <Modal
-        opened={!!deleteTarget}
-        onClose={() => !deleting && setDeleteTarget(null)}
-        centered
-        radius="lg"
-        withCloseButton={false}
-        overlayProps={{ backgroundOpacity: 0.35, blur: 2 }}
-      >
-        <div className="space-y-3 font-sans" dir={direction}>
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
-              <Trash2 size={20} />
-            </div>
-            <div>
-              <div className="text-sm font-black text-slate-900">
-                {isAr ? 'تأكيد حذف الكروب نهائياً' : 'Delete Group Booking'}
-              </div>
-              <div className="text-xs text-slate-500 leading-relaxed mt-0.5">
-                {isAr
-                  ? 'سيتم حذف سجل الكروب وقيده المحاسبي وسجلات المسافرين المرافقة له نهائياً ولا يمكن التراجع.'
-                  : 'The group record, its double-entry journal entry, and passengers will be permanently deleted.'}
-              </div>
-            </div>
-          </div>
-
-          {deleteTarget && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-1.5 font-sans">
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500 font-bold">{isAr ? 'رقم الكروب:' : 'Group #:'}</span>
-                <span className="font-mono font-black text-slate-900" dir="ltr">
-                  {deleteTarget.invoiceNumber}
-                </span>
-              </div>
-              {deleteTarget.pnr && (
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-500 font-bold">PNR:</span>
-                  <span className="font-mono font-bold text-[#F45A0A]" dir="ltr">
-                    {deleteTarget.pnr}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500 font-bold">{isAr ? 'المستفيد / العميل:' : 'Customer:'}</span>
-                <span className="font-black text-slate-900">{deleteTarget.customerName || '—'}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500 font-bold">{isAr ? 'إجمالي المبيعات:' : 'Total Sales:'}</span>
-                <span className="font-mono font-black text-slate-900" dir="ltr">
-                  {formatEnglishNumber(Number(deleteTarget.netSell ?? deleteTarget.totalSell ?? 0))} {deleteTarget.currency || 'IQD'}
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              disabled={deleting}
-              onClick={() => setDeleteTarget(null)}
-              className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer disabled:opacity-50"
-            >
-              {isAr ? 'إلغاء' : 'Cancel'}
-            </button>
-            <button
-              type="button"
-              disabled={deleting}
-              onClick={confirmDelete}
-              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white text-xs font-black cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
-            >
-              <Trash2 size={14} />
-              <span>{isAr ? 'حذف نهائي' : 'Delete'}</span>
-            </button>
-          </div>
-        </div>
+        )}
       </Modal>
     </div>
   );

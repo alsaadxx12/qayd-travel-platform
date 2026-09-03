@@ -1,18 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  FileCheck2,
-  DollarSign,
-  TrendingUp,
-  CreditCard,
-  Building2,
-  User,
-  Calendar,
   Sparkles,
-  ArrowRight,
-  ShieldCheck,
+  TrendingUp,
   Globe,
   UsersRound,
-  CheckCircle2,
+  User,
+  Building2,
   AlertCircle,
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/currencyUtils';
@@ -47,18 +40,14 @@ interface VisaFinancialSummaryProps {
 }
 
 export const VisaFinancialSummary: React.FC<VisaFinancialSummaryProps> = ({
-  invoiceNumber,
-  status,
   visaDestination,
   visaDestinations,
-  issueDate,
   passengersCount,
   passengersNamedCount,
   totalBuy,
   totalSell,
   discountAmount = 0,
   currency,
-  paymentType,
   supplierAccountName,
   customerName,
   completionPercentage,
@@ -71,9 +60,10 @@ export const VisaFinancialSummary: React.FC<VisaFinancialSummaryProps> = ({
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
 
+  const [showMissingRequirements, setShowMissingRequirements] = useState(false);
+
   const netSell = Math.max(0, totalSell - discountAmount);
   const netProfit = netSell - totalBuy;
-  const profitMargin = totalSell > 0 ? Math.round((netProfit / totalSell) * 100) : 0;
   const isProfitPositive = netProfit > 0;
   const isProfitNegative = netProfit < 0;
 
@@ -82,129 +72,101 @@ export const VisaFinancialSummary: React.FC<VisaFinancialSummaryProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 space-y-4 font-sans text-[#0F172A]" dir={direction}>
+    <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-3.5 sm:p-4 space-y-3 font-sans text-[#0F172A]" dir={direction}>
       
-      {/* ── 1. STATUS & COMPLETION SCORE ── */}
-      <div className="space-y-3 pb-3.5 border-b border-slate-100">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-500">
-            {isAr ? 'حالة المعاملة' : 'Transaction Status'}
+      {/* ── 1. COMPLETION SCORE (Compact & Hidden Requirements by Default) ── */}
+      <div className="space-y-2 pb-2.5 border-b border-slate-100">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-bold text-slate-800 flex items-center gap-1.5 text-[11.5px]">
+            <Sparkles size={13} className="text-[#F45A0A]" />
+            {isAr ? 'اكتمال البيانات' : 'Completion'}
           </span>
-          <span
-            className={`px-2.5 py-0.5 rounded text-xs font-bold font-mono ${
-              status === 'POSTED'
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                : status === 'CANCELLED'
-                ? 'bg-red-50 text-red-800 border border-red-200'
-                : 'bg-orange-50 text-[#F45A0A] border border-orange-200'
-            }`}
-          >
-            {status === 'POSTED' ? (isAr ? 'معتمدة ومرحلة' : 'Posted') : status === 'CANCELLED' ? (isAr ? 'ملغاة' : 'Cancelled') : (isAr ? 'مسودة' : 'Draft')}
+          <span className="font-mono font-bold text-[#F45A0A] text-xs">
+            {completionPercentage}% ({completedCount}/{totalCount})
           </span>
         </div>
 
-        {/* Dynamic Progress Indicator */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-800 flex items-center gap-1.5">
-              <Sparkles size={14} className="text-[#F45A0A]" />
-              {isAr ? 'اكتمال بيانات التأشيرة' : 'Visa Completion'}
-            </span>
-            <span className="font-mono font-bold text-[#F45A0A]">
-              {completionPercentage}% ({completedCount}/{totalCount})
-            </span>
-          </div>
+        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full transition-all duration-300 rounded-full ${
+              isComplete ? 'bg-emerald-500' : 'bg-[#F45A0A]'
+            }`}
+            style={{ width: `${completionPercentage}%` }}
+          />
+        </div>
 
-          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all duration-300 rounded-full ${
-                isComplete ? 'bg-emerald-500' : 'bg-[#F45A0A]'
-              }`}
-              style={{ width: `${completionPercentage}%` }}
-            />
-          </div>
-
-          {/* Missing Requirements List (Clean & Refined) */}
-          {!isComplete && missingRequirements.length > 0 && (
-            <div className="pt-2 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] text-amber-800 font-bold">
-                <span>{isAr ? 'حقول متبقية للإكمال:' : 'Required to complete:'}</span>
-                <span className="text-[10.5px] font-mono text-amber-600 font-semibold">
-                  ({missingRequirements.length})
+        {/* Missing Requirements (Hidden by Default per User Rule) */}
+        {!isComplete && missingRequirements.length > 0 && (
+          <div className="pt-0.5">
+            <button
+              type="button"
+              onClick={() => setShowMissingRequirements((prev) => !prev)}
+              className="w-full flex items-center justify-between text-[11px] font-semibold text-slate-600 hover:text-slate-900 transition-colors py-1 cursor-pointer"
+            >
+              <span className="flex items-center gap-1">
+                <AlertCircle size={12} className="text-amber-500" />
+                <span>{isAr ? 'حقول متبقية للإكمال' : 'Required fields'}</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-mono font-bold">
+                  {missingRequirements.length}
                 </span>
-              </div>
-              <div className="space-y-1.5">
+              </span>
+              <span className="text-[10px] text-[#F45A0A] font-bold">
+                {showMissingRequirements ? (isAr ? 'إخفاء ▲' : 'Hide ▲') : (isAr ? 'عرض ▼' : 'Show ▼')}
+              </span>
+            </button>
+
+            {showMissingRequirements && (
+              <div className="pt-1.5 space-y-1">
                 {missingRequirements.map((req) => (
                   <button
                     key={req.id}
                     type="button"
                     onClick={() => onNavigateToField(req.targetElementId)}
-                    className="w-full text-start text-[11.5px] px-2.5 py-1.5 rounded-lg bg-amber-50/80 hover:bg-amber-100 text-amber-900 border border-amber-200/70 flex items-center justify-between transition-all cursor-pointer group shadow-2xs"
+                    className="w-full text-start text-[11px] px-2 py-1 rounded-md bg-amber-50/80 hover:bg-amber-100 text-amber-900 border border-amber-200/70 flex items-center justify-between transition-all cursor-pointer group shadow-2xs"
                   >
-                    <span className="font-semibold text-slate-800">{req.label}</span>
-                    <span className="text-[10.5px] text-[#F45A0A] font-bold shrink-0 flex items-center gap-1 group-hover:translate-x-[-2px] transition-transform">
+                    <span className="font-semibold text-slate-800 truncate max-w-[200px]">{req.label}</span>
+                    <span className="text-[10px] text-[#F45A0A] font-bold shrink-0">
                       {isAr ? 'انتقال ←' : 'Go →'}
                     </span>
                   </button>
                 ))}
               </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── 2. SUMMARY DETAILS (Multiple Destinations Support) ── */}
-      <div className="space-y-2.5 text-xs text-slate-600 pb-3 border-b border-slate-100">
-        <div className="flex items-start justify-between gap-2">
-          <span className="text-slate-500 flex items-center gap-1.5 shrink-0 pt-0.5">
-            <Globe size={14} className="text-slate-400" />
-            {isAr ? 'نوع التأشيرة / الوجهة:' : 'Visa Destination:'}
-          </span>
-          <div className="text-end">
-            {visaDestinations && visaDestinations.length > 0 ? (
-              visaDestinations.length === 1 ? (
-                <span className="font-black text-[#0F172A] block text-xs">
-                  {visaDestinations[0]}
-                </span>
-              ) : (
-                <div className="space-y-1">
-                  <div className="flex flex-wrap gap-1 justify-end">
-                    {visaDestinations.map((v, i) => (
-                      <span key={i} className="inline-block px-1.5 py-0.5 rounded bg-orange-50 text-[#F45A0A] border border-orange-200 font-bold text-[10.5px]">
-                        {v}
-                      </span>
-                    ))}
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-bold block">
-                    ({visaDestinations.length} {isAr ? 'أنواع تأشيرات' : 'visa types'})
-                  </span>
-                </div>
-              )
-            ) : (
-              <span className="font-bold text-[#0F172A] text-xs">
-                {visaDestination || (isAr ? 'لم تحدد' : 'Not specified')}
-              </span>
             )}
           </div>
+        )}
+      </div>
+
+      {/* ── 2. SUMMARY DETAILS (Ultra-Compact Single Lines) ── */}
+      <div className="space-y-1.5 text-xs text-slate-600 pb-2.5 border-b border-slate-100">
+        <div className="flex items-center justify-between">
+          <span className="text-slate-500 flex items-center gap-1.5">
+            <Globe size={13} className="text-slate-400" />
+            {isAr ? 'الوجهة:' : 'Destination:'}
+          </span>
+          <span className="font-bold text-[#0F172A] text-xs truncate max-w-[160px]">
+            {visaDestinations && visaDestinations.length > 0
+              ? visaDestinations.join('، ')
+              : (visaDestination || '—')}
+          </span>
         </div>
 
         <div className="flex items-center justify-between">
           <span className="text-slate-500 flex items-center gap-1.5">
-            <UsersRound size={14} className="text-slate-400" />
-            {isAr ? 'عدد المسافرين:' : 'Travelers:'}
+            <UsersRound size={13} className="text-slate-400" />
+            {isAr ? 'المسافرون:' : 'Travelers:'}
           </span>
           <span className="font-black font-mono text-[#0F172A] text-xs">
-            {passengersNamedCount}/{passengersCount} {isAr ? 'مسافر' : 'pax'}
+            {passengersNamedCount}/{passengersCount}
           </span>
         </div>
 
         {customerName && (
           <div className="flex items-center justify-between">
             <span className="text-slate-500 flex items-center gap-1.5">
-              <User size={14} className="text-slate-400" />
+              <User size={13} className="text-slate-400" />
               {isAr ? 'العميل:' : 'Customer:'}
             </span>
-            <span className="font-bold text-[#0F172A] truncate max-w-[170px]">
+            <span className="font-bold text-[#0F172A] truncate max-w-[160px]">
               {customerName}
             </span>
           </div>
@@ -213,78 +175,69 @@ export const VisaFinancialSummary: React.FC<VisaFinancialSummaryProps> = ({
         {supplierAccountName && (
           <div className="flex items-center justify-between">
             <span className="text-slate-500 flex items-center gap-1.5">
-              <Building2 size={14} className="text-slate-400" />
-              {isAr ? 'المزود:' : 'Supplier:'}
+              <Building2 size={13} className="text-slate-400" />
+              {isAr ? 'المورد:' : 'Supplier:'}
             </span>
-            <span className="font-bold text-[#0F172A] truncate max-w-[170px]">
+            <span className="font-bold text-[#0F172A] truncate max-w-[160px]">
               {supplierAccountName}
             </span>
           </div>
         )}
       </div>
 
-      {/* ── 3. FINANCIAL BREAKDOWN (Darker & Bold Typography) ── */}
-      <div className="space-y-2.5 text-xs font-sans">
-        <h4 className="font-black text-[14px] text-[#0F172A] pb-1">
-          {isAr ? 'الملخص المالي للتأشيرة' : 'Financial Breakdown'}
-        </h4>
-
-        <div className="flex items-center justify-between text-slate-600">
-          <span className="font-medium">{isAr ? 'إجمالي تكلفة الشراء (Buy):' : 'Total Purchase Cost:'}</span>
-          <span className="font-mono font-black text-[#0F172A] text-[13.5px] tabular-nums">
+      {/* ── 3. FINANCIAL BREAKDOWN (Compact & Bold) ── */}
+      <div className="space-y-2 text-xs font-sans">
+        <div className="flex items-center justify-between text-slate-600 text-[11.5px]">
+          <span className="font-medium">{isAr ? 'الشراء:' : 'Cost:'}</span>
+          <span className="font-mono font-black text-[#0F172A] tabular-nums text-xs">
             {formatAmount(totalBuy)}
           </span>
         </div>
 
-        <div className="flex items-center justify-between text-slate-600">
-          <span className="font-medium">{isAr ? 'إجمالي سعر البيع (Sell):' : 'Total Sell Price:'}</span>
-          <span className="font-mono font-black text-[#0F172A] text-[13.5px] tabular-nums">
+        <div className="flex items-center justify-between text-slate-600 text-[11.5px]">
+          <span className="font-medium">{isAr ? 'البيع:' : 'Sell:'}</span>
+          <span className="font-mono font-black text-[#0F172A] tabular-nums text-xs">
             {formatAmount(totalSell)}
           </span>
         </div>
 
         {discountAmount > 0 && (
-          <div className="flex items-center justify-between text-red-600">
-            <span className="font-medium">{isAr ? 'الخصم الممنوح:' : 'Discount:'}</span>
-            <span className="font-mono font-black text-red-700 text-[13.5px] tabular-nums">
+          <div className="flex items-center justify-between text-red-600 text-[11.5px]">
+            <span className="font-medium">{isAr ? 'الخصم:' : 'Discount:'}</span>
+            <span className="font-mono font-black text-red-700 tabular-nums text-xs">
               -{formatAmount(discountAmount)}
             </span>
           </div>
         )}
 
-        {/* Net Total & Profit Highlights */}
-        <div className="pt-2 border-t border-slate-100 space-y-2">
+        {/* Net Total & Profit in Clean Horizontal Cards */}
+        <div className="pt-2 border-t border-slate-100 space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="font-black text-xs text-[#0F172A]">
-              {isAr ? 'صافي الفاتورة:' : 'Net Invoice Total:'}
+              {isAr ? 'الصافي:' : 'Net Total:'}
             </span>
-            <span className="font-mono font-black text-[17px] text-[#0F172A] tabular-nums">
+            <span className="font-mono font-black text-[15px] text-[#0F172A] tabular-nums">
               {formatAmount(netSell)}
             </span>
           </div>
 
           <div
-            className={`p-3 rounded-xl border flex items-center justify-between ${
+            className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between ${
               isProfitPositive
-                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
                 : isProfitNegative
-                ? 'bg-red-50/80 border-red-200 text-red-950'
+                ? 'bg-red-50/70 border-red-200 text-red-950'
                 : 'bg-slate-50 border-slate-200 text-slate-900'
             }`}
           >
-            <div className="flex items-center gap-2">
-              <TrendingUp size={16} className={isProfitPositive ? 'text-emerald-700' : isProfitNegative ? 'text-red-700' : 'text-slate-500'} />
-              <div>
-                <span className="font-black text-xs block">
-                  {isAr ? 'صافي الربح المتوقع' : 'Expected Net Profit'}
-                </span>
-                <span className="text-[10px] font-bold opacity-75">
-                  {isAr ? `هامش الربح: ${profitMargin}%` : `Margin: ${profitMargin}%`}
-                </span>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <TrendingUp size={14} className={isProfitPositive ? 'text-emerald-700' : isProfitNegative ? 'text-red-700' : 'text-slate-500'} />
+              <span className="font-black text-[11px]">
+                {isAr ? 'الربح:' : 'Profit:'}
+              </span>
             </div>
 
-            <span className="font-mono font-black text-[15px] tabular-nums">
+            <span className="font-mono font-black text-[13px] tabular-nums">
               {formatAmount(netProfit)}
             </span>
           </div>
