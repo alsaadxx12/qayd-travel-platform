@@ -301,13 +301,8 @@ export const RefundsPage: React.FC = () => {
           </div>
           <div>
             <h1 className="font-bold text-[20px] text-[#111827] leading-tight">
-              {isAr ? 'استرجاع التذاكر (Ticket Refunds)' : 'Ticket Refunds Management'}
+              {isAr ? 'استرجاع التذاكر' : 'Ticket Refunds'}
             </h1>
-            <p className="text-[13px] font-normal text-[#64748B] mt-0.5">
-              {isAr
-                ? 'إدارة فواتير وسندات استرجاع التذاكر واحتساب غرامات الإلغاء وتحديث أرصدة العملاء والموردين فورياً'
-                : 'Manage ticket refunds, cancellation penalties, customer credits, and automatic ledger posting'}
-            </p>
           </div>
         </div>
 
@@ -324,7 +319,7 @@ export const RefundsPage: React.FC = () => {
             className="h-[44px] px-5 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-semibold text-[13.5px] shadow-xs flex items-center gap-2 transition-all cursor-pointer"
           >
             <Plus size={17} strokeWidth={2.4} />
-            <span>{isAr ? 'استرجاع من تذكرة مسجلة' : 'Refund From Ticket'}</span>
+            <span>{isAr ? 'استرجاع من تذكرة' : 'From Ticket'}</span>
           </button>
 
           {/* Button 2: New Manual Direct Refund (نيو ريفاوند) */}
@@ -338,7 +333,7 @@ export const RefundsPage: React.FC = () => {
             className="h-[44px] px-4 rounded-[9px] bg-white border-2 border-[#F45A0A] text-[#F45A0A] hover:bg-[#FFF3E8] font-bold text-[13px] flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
           >
             <RotateCcw size={16} strokeWidth={2.2} />
-            <span>{isAr ? 'نيو ريفاوند (استرجاع يدوي)' : 'New Direct Refund'}</span>
+            <span>{isAr ? 'استرجاع يدوي' : 'Manual Refund'}</span>
           </button>
 
           <button
@@ -523,7 +518,7 @@ export const RefundsPage: React.FC = () => {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder={isAr ? 'ابحث برقم الاسترجاع، PNR، رقم التذكرة، العميل، أو المسافر...' : 'Search refund #, PNR, ticket #, or customer...'}
+              placeholder={isAr ? 'بحث...' : 'Search...'}
               className={`w-full h-[44px] ${direction === 'rtl' ? 'pr-10 pl-3.5' : 'pl-10 pr-3.5'} rounded-[10px] bg-[#FAFAFA] border border-[#E5E7EB] text-[13.5px] text-[#111827] placeholder-[#9CA3AF] outline-none hover:bg-white hover:border-[#D1D5DB] focus:bg-white focus:border-2 focus:border-[#F45A0A] transition-colors`}
             />
             {searchQuery && (
@@ -623,11 +618,8 @@ export const RefundsPage: React.FC = () => {
                   <td colSpan={15} className="p-12 text-center text-slate-400 space-y-2">
                     <RotateCcw size={38} className="mx-auto text-slate-300 stroke-1" />
                     <div className="font-bold text-sm text-slate-700">
-                      {isAr ? 'لا توجد سجلات استرجاع تطابق عوامل التصفية' : 'No refund records found'}
+                      {isAr ? 'لا توجد سجلات استرجاع' : 'No refund records found'}
                     </div>
-                    <p className="text-xs text-slate-400">
-                      {isAr ? 'يمكنك إنشاء طلب استرجاع جديد بالنقر على زر "+ طلب استرجاع جديد"' : 'Click "+ New Ticket Refund" to record a refund.'}
-                    </p>
                   </td>
                 </tr>
               ) : (
@@ -899,48 +891,11 @@ export const RefundsPage: React.FC = () => {
           </table>
         </div>
 
-        {/* ── 5. Table Footer & Summary Bar (Exact Match with TicketsPage) ── */}
-        <div className="p-4 bg-[#F8FAFC] border-t border-[#E5E7EB] flex items-center justify-between flex-wrap gap-4 text-xs font-bold text-slate-700">
-          
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-slate-500">
-              {isAr ? `النتائج المطابقة: ${filteredRefunds.length} فاتورة` : `Matched: ${filteredRefunds.length} vouchers`}
-            </span>
-            <span className="text-slate-300">•</span>
-            <span className="text-slate-500">
-              {isAr ? `المسافرون: ${kpis.totalPassengers}` : `Passengers: ${kpis.totalPassengers}`}
-            </span>
-            <span className="text-slate-300">|</span>
-            <span>
-              {isAr ? 'إجمالي المبيعات المستردة:' : 'Total Refunds:'}{' '}
-              <b className="font-mono text-slate-900 font-black">
-                {kpis.totalSellIQD.toLocaleString()} د.ع
-              </b>{' '}
-              <b className="font-mono text-blue-700 font-black">
-                ${kpis.totalSellUSD.toLocaleString()}
-              </b>
-            </span>
-            <span className="text-slate-300">•</span>
-            <span>
-              {isAr ? 'تكلفة الشراء (الموردين):' : 'Supplier Recovery:'}{' '}
-              <b className="font-mono text-slate-900 font-black">
-                {kpis.totalBuyIQD.toLocaleString()} د.ع
-              </b>{' '}
-              <b className="font-mono text-slate-700 font-black">
-                ${kpis.totalBuyUSD.toLocaleString()}
-              </b>
-            </span>
-            <span className="text-slate-300">•</span>
-            <span className="text-[#078B61]">
-              {isAr ? 'صافي الأرباح المحققة:' : 'Net Realized Profit:'}{' '}
-              <b className="font-mono font-black text-[#078B61]">
-                +{kpis.totalProfitIQD.toLocaleString()} د.ع
-              </b>{' '}
-              <b className="font-mono font-black text-[#078B61]">
-                +${kpis.totalProfitUSD.toLocaleString()}
-              </b>
-            </span>
-          </div>
+        {/* ── 5. Table Footer (Clean & Streamlined) ── */}
+        <div className="p-3.5 bg-[#F8FAFC] border-t border-[#E5E7EB] flex items-center justify-between flex-wrap gap-4 text-xs font-bold text-slate-700">
+          <span className="text-slate-500 font-semibold">
+            {isAr ? `العدد: ${filteredRefunds.length}` : `Count: ${filteredRefunds.length}`}
+          </span>
 
           {/* Pagination Controls */}
           <div className="flex items-center gap-2">

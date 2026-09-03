@@ -891,7 +891,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={isAr ? 'اكتب رقم التذكرة، كود الحجز PNR، اسم المسافر أو العميل لاستدعاء التذكرة فورياً...' : 'Search by ticket #, PNR, passenger or customer name...'}
+                    placeholder={isAr ? 'بحث عن تذكرة...' : 'Search ticket...'}
                     className={`w-full h-[44px] ${direction === 'rtl' ? 'pr-11 pl-3.5' : 'pl-11 pr-3.5'} rounded-[10px] bg-[#FFFDF9] border border-[#FED7AA] text-[13px] text-[#111827] placeholder-[#9CA3AF] outline-none hover:border-[#F45A0A] focus:border-2 focus:border-[#F45A0A] transition-colors`}
                   />
 
@@ -933,8 +933,8 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                     <Edit3 size={16} className="text-[#F45A0A] shrink-0" />
                     <span className="font-semibold">
                       {isAr
-                        ? 'وضع الاسترجاع اليدوي المباشر (نيو ريفاوند): يمكنك إدخال التذكرة غير المسجلة مسبقاً، وتحديد العميل والمورد والمبالغ، وإضافة مسافرين بحرية.'
-                        : 'Direct/Manual refund mode: create a refund for non-issued tickets and add passengers freely.'}
+                        ? 'وضع الاسترجاع اليدوي المباشر: يمكنك إدخال التذكرة والمبالغ وإضافة مسافرين بحرية.'
+                        : 'Manual refund mode: enter ticket details and add passengers freely.'}
                     </span>
                   </div>
                 </div>
@@ -967,9 +967,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                     <h3 className="font-bold text-[15px] text-[#111827] leading-tight">
                       {isAr ? 'بيانات التذكرة ونوع الاسترجاع' : 'Ticket & Refund Details'}
                     </h3>
-                    <span className="text-[11px] text-[#6B7280]">
-                      {isAr ? 'حدد نوع الاسترجاع، التواريخ، وموظف العملية' : 'Refund type, dates, and issuing staff'}
-                    </span>
                   </div>
                 </div>
 
@@ -1061,7 +1058,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                     options={airlineOptions}
                     value={airline}
                     onChange={setAirline}
-                    placeholder={isAr ? 'اختر أو اكتب شركة الطيران' : 'Select airline'}
                   />
                 </div>
 
@@ -1073,7 +1069,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                   <input
                     type="text"
                     dir="ltr"
-                    placeholder="e.g. PRMCK"
                     value={pnr}
                     onChange={(e) => setPnr(e.target.value.toUpperCase())}
                     style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
@@ -1090,7 +1085,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                     options={customerOptions}
                     value={customerName}
                     onChange={setCustomerName}
-                    placeholder={isAr ? 'اختر العميل' : 'Select customer'}
                   />
                 </div>
 
@@ -1126,7 +1120,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                       );
                       setSupplierAccountName(found ? (found.nameAr || found.nameEn || found.name || found.code) : '');
                     }}
-                    placeholder={isAr ? 'اختر المورد' : 'Select supplier'}
                   />
                 </div>
 
@@ -1140,7 +1133,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                       options={employeeOptions}
                       value={employeeName}
                       onChange={(val) => setEmployeeName(val || '')}
-                      placeholder={isAr ? 'اختر موظف الاسترجاع' : 'Select employee'}
                       allowCustomValue
                     />
                   </div>
@@ -1161,11 +1153,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                     <h3 className="font-bold text-[14px] text-[#111827]">
                       {isAr ? 'تحديد المسافرين واحتساب الفروقات والخصومات' : 'Passenger Refunds & Deductions'}
                     </h3>
-                    <p className="text-[11.5px] text-slate-500">
-                      {refundType === 'FULL'
-                        ? (isAr ? 'استرجاع كامل: تم تصفير كافة الخصومات تلقائياً.' : 'Full refund: all deductions zeroed out.')
-                        : (isAr ? 'أدخل غرامة الطيران أو استقطاع الشركة لتحديث صافي المبلغ للعميل فورياً.' : 'Enter airline penalties or company retention.')}
-                    </p>
                   </div>
                 </div>
 
@@ -1189,13 +1176,12 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                       </div>
 
                       {/* Bulk Airline Refund */}
-                      <div className="flex items-center gap-1.5 bg-[#FFF5F5] border border-rose-200 px-2 py-0.5 rounded-[7px]">
-                        <span className="text-[11px] font-bold text-rose-700">{isAr ? 'استرجاع الطيران:' : 'Airline Refund:'}</span>
+                      <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-[7px]">
+                        <span className="text-[11px] font-bold text-slate-700">{isAr ? 'استرجاع الطيران:' : 'Airline Refund:'}</span>
                         <input
                           type="text"
                           inputMode="numeric"
                           dir="ltr"
-                          placeholder="0"
                           value={bulkAirlineRefund}
                           onChange={(e) => {
                             const raw = e.target.value;
@@ -1204,18 +1190,17 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                             setBulkAirlineRefund(clean);
                           }}
                           style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          className="w-28 h-[26px] px-2 text-center bg-white border border-rose-200 rounded font-mono font-bold text-xs text-rose-800 outline-none"
+                          className="w-28 h-[26px] px-2 text-center bg-white border border-slate-200 rounded font-mono font-bold text-xs text-slate-900 outline-none"
                         />
                       </div>
 
                       {/* Bulk Company Refund */}
-                      <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-[7px]">
-                        <span className="text-[11px] font-bold text-emerald-800">{isAr ? 'استرجاع الشركة:' : 'Company Refund:'}</span>
+                      <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-[7px]">
+                        <span className="text-[11px] font-bold text-slate-700">{isAr ? 'استرجاع الشركة:' : 'Company Refund:'}</span>
                         <input
                           type="text"
                           inputMode="numeric"
                           dir="ltr"
-                          placeholder="0"
                           value={bulkCompanyRefund}
                           onChange={(e) => {
                             const raw = e.target.value;
@@ -1224,7 +1209,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                             setBulkCompanyRefund(clean);
                           }}
                           style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                          className="w-28 h-[26px] px-2 text-center bg-white border border-emerald-200 rounded font-mono font-bold text-xs text-emerald-800 outline-none"
+                          className="w-28 h-[26px] px-2 text-center bg-white border border-slate-200 rounded font-mono font-bold text-xs text-slate-900 outline-none"
                         />
                       </div>
 
@@ -1261,10 +1246,10 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                       <th className="p-2.5 whitespace-nowrap">{isAr ? 'رقم التذكرة / PNR' : 'Ticket / PNR'}</th>
                       <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'مسترجع الشراء (الأساس)' : 'Buy Refund'}</th>
                       <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'مسترجع البيع (الأساس)' : 'Sell Refund'}</th>
-                      <th className="p-2.5 whitespace-nowrap text-left text-rose-700 bg-rose-50/40">{isAr ? 'استرجاع الطيران' : 'Airline Refund'}</th>
-                      <th className="p-2.5 whitespace-nowrap text-left text-emerald-800 bg-emerald-50/40">{isAr ? 'استرجاع الشركة (العميل)' : 'Company Refund'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'استرجاع الطيران' : 'Airline Refund'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left">{isAr ? 'استرجاع الشركة' : 'Company Refund'}</th>
                       <th className="p-2.5 whitespace-nowrap text-left text-[#F45A0A]">{isAr ? 'الصافي للعميل' : 'Net to Customer'}</th>
-                      <th className="p-2.5 whitespace-nowrap text-left text-emerald-700">{isAr ? 'الربح المحقق' : 'Profit'}</th>
+                      <th className="p-2.5 whitespace-nowrap text-left text-[#078B61]">{isAr ? 'الربح' : 'Profit'}</th>
                       <th className="p-2.5 text-center w-10">{isAr ? 'حذف' : 'Del'}</th>
                     </tr>
                   </thead>
@@ -1323,7 +1308,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                               <input
                                 type="text"
                                 dir="ltr"
-                                placeholder="Ticket #"
                                 value={p.ticketNumber}
                                 onChange={(e) => updatePassenger(p.id, 'ticketNumber', e.target.value)}
                                 style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
@@ -1332,7 +1316,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                               <input
                                 type="text"
                                 dir="ltr"
-                                placeholder="PNR"
                                 value={p.pnr || ''}
                                 onChange={(e) => updatePassenger(p.id, 'pnr', e.target.value.toUpperCase())}
                                 style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
@@ -1368,34 +1351,32 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                           </td>
 
                           {/* Airline Refund (What Airline Returns) */}
-                          <td className="p-2.5 text-left bg-rose-50/20">
+                          <td className="p-2.5 text-left">
                             <input
                               type="text"
                               inputMode="numeric"
                               dir="ltr"
                               disabled={refundType === 'FULL'}
-                              placeholder="0"
                               value={p.airlineRefund !== undefined ? (p.airlineRefund ? p.airlineRefund.toLocaleString('en-US') : '0') : (p.buyRefund ? p.buyRefund.toLocaleString('en-US') : '0')}
                               onChange={(e) => updatePassenger(p.id, 'airlineRefund', parseCleanNumber(e.target.value))}
                               style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                              className={`w-32 h-[36px] px-2.5 rounded-[8px] border border-rose-200 text-xs font-mono font-bold text-rose-800 text-left outline-none hover:border-rose-400 focus:border-2 focus:border-rose-500 bg-rose-50/40 ${
+                              className={`w-32 h-[36px] px-2.5 rounded-[8px] border border-slate-200 text-xs font-mono font-bold text-slate-900 text-left outline-none hover:border-slate-400 focus:border-2 focus:border-[#F45A0A] bg-white ${
                                 refundType === 'FULL' ? 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400' : ''
                               }`}
                             />
                           </td>
 
                           {/* Company Refund to Customer */}
-                          <td className="p-2.5 text-left bg-emerald-50/20">
+                          <td className="p-2.5 text-left">
                             <input
                               type="text"
                               inputMode="numeric"
                               dir="ltr"
                               disabled={refundType === 'FULL'}
-                              placeholder="0"
                               value={p.companyRefund !== undefined ? (p.companyRefund ? p.companyRefund.toLocaleString('en-US') : '0') : (p.sellRefund ? p.sellRefund.toLocaleString('en-US') : '0')}
                               onChange={(e) => updatePassenger(p.id, 'companyRefund', parseCleanNumber(e.target.value))}
                               style={{ fontFamily: "'JetBrains Mono', 'Consolas', 'Roboto', monospace" }}
-                              className={`w-32 h-[36px] px-2.5 rounded-[8px] border border-emerald-200 text-xs font-mono font-bold text-emerald-800 text-left outline-none hover:border-emerald-400 focus:border-2 focus:border-emerald-500 bg-emerald-50/40 ${
+                              className={`w-32 h-[36px] px-2.5 rounded-[8px] border border-slate-200 text-xs font-mono font-bold text-slate-900 text-left outline-none hover:border-slate-400 focus:border-2 focus:border-[#F45A0A] bg-white ${
                                 refundType === 'FULL' ? 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400' : ''
                               }`}
                             />
@@ -1448,18 +1429,9 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder={isAr ? 'أسباب الاسترجاع، تفاصيل التذكرة، توجيهات...' : 'Refund reason, policy notes...'}
+                  placeholder={isAr ? 'ملاحظات...' : 'Notes...'}
                   className="w-full p-2.5 rounded-[8px] bg-[#FAFAFA] border border-[#E5E7EB] text-xs font-medium text-[#111827] outline-none hover:border-[#D1D5DB] focus:border-2 focus:border-[#F45A0A] transition-colors"
                 />
-
-                <div className="p-2.5 rounded-[8px] bg-[#F8FAFC] border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
-                  <ShieldCheck size={16} className="text-emerald-600 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed">
-                    {isAr
-                      ? 'سيقوم النظام بتوليد قيد اليومية المزدوج، وتحديث أرصدة العملاء والموردين تلقائياً.'
-                      : 'Automatic double-entry journal vouchers will be generated and account balances updated instantly.'}
-                  </p>
-                </div>
               </div>
             </div>
 
@@ -1479,9 +1451,6 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                     <h4 className="font-bold text-[15px] text-[#111827] leading-tight">
                       {isAr ? 'الملخص المالي للاسترجاع' : 'Financial Summary'}
                     </h4>
-                    <span className="text-[11px] text-[#6B7280]">
-                      {isAr ? 'الصافي والأرباح والغرامات' : 'Net refund, profit & penalties'}
-                    </span>
                   </div>
                 </div>
 
@@ -1503,12 +1472,12 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                 </div>
 
                 {/* 2. Company Refund to Customer */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100">
-                  <span className="text-[12px] font-semibold text-emerald-800">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-[12px] font-semibold text-slate-700">
                     {isAr ? 'استرجاع الشركة (للعميل)' : 'Company Refund (Customer)'}
                   </span>
-                  <span className="font-mono font-bold text-emerald-800 text-sm tabular-nums" dir="ltr">
-                    {formatNumberEnglish(totalCompanyRefund)} <span className="text-[10px] text-emerald-500 font-sans">{currency}</span>
+                  <span className="font-mono font-bold text-slate-900 text-sm tabular-nums" dir="ltr">
+                    {formatNumberEnglish(totalCompanyRefund)} <span className="text-[10px] text-slate-400 font-sans">{currency}</span>
                   </span>
                 </div>
 
@@ -1555,70 +1524,19 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
                   </span>
                 </div>
               </div>
-
-              {/* Action Buttons in Sidebar */}
-              <div className="pt-3 border-t border-slate-100 space-y-2">
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={handleSaveRefund}
-                  className="w-full h-[44px] rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-bold text-[13.5px] shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Check size={18} strokeWidth={2.4} />
-                  <span>{isAr ? 'حفظ وترحيل الاسترجاع' : 'Save & Post Refund'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full h-[38px] rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
-                >
-                  {isAr ? 'إلغاء ومغادرة' : 'Cancel'}
-                </button>
-              </div>
-
             </div>
           </div>
-
         </div>
-
       </div>
 
       {/* ── 3. Bottom Slim Sticky Bar ── */}
       <footer className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md text-slate-900 border-t border-slate-200 px-6 py-2.5 z-50 flex items-center justify-between flex-wrap gap-4 shadow-[0_-4px_20px_rgba(0,0,0,0.06)] font-sans text-xs">
-        {/* Left / Leading Stats */}
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-[11.5px] font-bold text-slate-500">{isAr ? 'رقم السند:' : 'Voucher #:'}</span>
-            <span className="px-2.5 py-0.5 rounded-lg bg-[#FFF3E8] border border-orange-200 text-[#F45A0A] font-mono font-bold text-xs tracking-wider select-all" dir="ltr">
-              {refundNumber}
-            </span>
-          </div>
-
-          <div className="h-4 w-px bg-slate-200 hidden sm:block" />
-
-          {/* Quick KPI stats */}
-          <div className="hidden lg:flex items-center gap-4 font-mono text-xs" dir="ltr">
-            <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'استرجاع الطيران: ' : 'Airline: '}</span>
-              <span className="font-bold text-slate-800">{formatNumberEnglish(isSupplierRefunded ? totalAirlineRefund : 0)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'استرجاع الشركة: ' : 'Company: '}</span>
-              <span className="font-bold text-slate-800">{formatNumberEnglish(totalCompanyRefund)}</span>
-            </div>
-            <div>
-              <span className="text-slate-400 font-sans">{isAr ? 'الربح المحقق: ' : 'Profit: '}</span>
-              <span className="font-bold text-emerald-700">{totalRealizedProfit > 0 ? `+${formatNumberEnglish(totalRealizedProfit)}` : formatNumberEnglish(totalRealizedProfit)}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-orange-50 border border-orange-200">
-            <span className="text-[#F45A0A] font-bold font-sans text-xs">{isAr ? 'الصافي للعميل: ' : 'Net Customer: '}</span>
-            <span className="font-black font-mono text-sm text-[#F45A0A]" dir="ltr">
-              {formatNumberEnglish(totalCompanyRefund)} <span className="text-[11px] font-sans font-bold">{currency}</span>
-            </span>
-          </div>
+        {/* Left / Leading Voucher Number */}
+        <div className="flex items-center gap-2">
+          <span className="text-[11.5px] font-bold text-slate-500">{isAr ? 'رقم السند:' : 'Voucher #:'}</span>
+          <span className="px-2.5 py-0.5 rounded-lg bg-[#FFF3E8] border border-orange-200 text-[#F45A0A] font-mono font-bold text-xs tracking-wider select-all" dir="ltr">
+            {refundNumber}
+          </span>
         </div>
 
         {/* Right / Actions */}
