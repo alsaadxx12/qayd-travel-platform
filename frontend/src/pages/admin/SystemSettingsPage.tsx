@@ -135,6 +135,34 @@ export interface ServicesAccountsConfig {
   purchasesCostAccountId: string;
 }
 
+
+/*
+ * شجرة الحسابات تُجلب مرة واحدة لكل فتحة، لا أربع مرات.
+ *
+ * كانت الصفحة تنادي getFlat() في أربعة مواضع — للقوائم المنسدلة، ولخريطة طرق
+ * الدفع، ولحسابات الخدمات، وللحسابات الأساسية — وكل نداء يحمّل النسخة الكاملة:
+ * 2.6 ميغابايت في نحو 1.6 ثانية. أي عشرة ميغابايت وسبع ثوانٍ قبل أن تُرسم
+ * الشاشة، وكلها القائمة نفسها.
+ *
+ * والنسخة المخفَّفة تكفي: الصفحة تبني قوائم اختيار ولا تعرض رصيداً. فصار وعدٌ
+ * واحد يتشاركه الجميع، ويُبطَل عند كل فتحة كي لا تُعرض شجرةٌ قديمة.
+ */
+let sharedAccountsPromise: Promise<any[]> | null = null;
+
+const loadAccountsOnce = (): Promise<any[]> => {
+  if (!sharedAccountsPromise) {
+    sharedAccountsPromise = accountsApi
+      .getFlat(undefined, undefined, true)
+      .then((d: any) => (Array.isArray(d) ? d : d?.data || []))
+      .catch(() => []);
+  }
+  return sharedAccountsPromise;
+};
+
+const resetSharedAccounts = () => {
+  sharedAccountsPromise = null;
+};
+
 export const SystemSettingsPage: React.FC = () => {
   const { data: currentTenant } = useQuery({
     queryKey: ['current-tenant'],
@@ -435,8 +463,11 @@ export const SystemSettingsPage: React.FC = () => {
         ]);
       });
 
+    // كل فتحة للصفحة تبدأ بشجرة طازجة، ثم تتشاركها بقية النداءات.
+    resetSharedAccounts();
+
     // Fetch all accounts for dropdowns
-    accountsApi.getFlat()
+    loadAccountsOnce()
       .then((accs) => {
         if (Array.isArray(accs)) {
           setAccountsList(accs);
@@ -450,7 +481,7 @@ export const SystemSettingsPage: React.FC = () => {
         if (res && res.config && Array.isArray(res.config.mappings) && res.config.mappings.length > 0) {
           setPaymentMappings(res.config.mappings);
         } else {
-          accountsApi.getFlat().then((allAccs) => {
+          loadAccountsOnce().then((allAccs) => {
             if (!Array.isArray(allAccs) || allAccs.length === 0) return;
             const masterAccounts = allAccs.filter(a =>
               a.code.startsWith('1343') ||
@@ -520,7 +551,7 @@ export const SystemSettingsPage: React.FC = () => {
         if (res && res.config && res.config.flightRevenueAccountId) {
           setServicesAccounts(res.config);
         } else {
-          accountsApi.getFlat().then((allAccs) => {
+          loadAccountsOnce().then((allAccs) => {
             if (Array.isArray(allAccs) && allAccs.length > 0) {
               const suggested = getSuggestedServicesAccounts(allAccs);
               setServicesAccounts(suggested);
@@ -537,7 +568,7 @@ export const SystemSettingsPage: React.FC = () => {
           setCoreAccounts(res.config);
         } else {
           // Initialize suggestions from accounts list
-          accountsApi.getFlat().then((allAccs) => {
+          loadAccountsOnce().then((allAccs) => {
             if (Array.isArray(allAccs) && allAccs.length > 0) {
               const suggested = getSuggestedCoreAccounts(allAccs);
               setCoreAccounts(suggested);
