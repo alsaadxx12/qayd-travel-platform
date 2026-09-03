@@ -52,7 +52,7 @@ import { employeesApi } from '../../api/employees';
 import { ticketsApi } from '../../api/tickets';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { showSuccessNotification, showErrorNotification, showInfoNotification } from '../../utils/notifications';
-import { getNextSequenceNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber } from '../../utils/sequenceUtils';
 import { formatCurrency, getCurrencySymbol, getCurrencyLabel } from '../../utils/currencyUtils';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -748,10 +748,10 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       setIsDirty(false);
     } else {
       // Create Mode: generate new invoice sequence
-      const nextNum = getNextSequenceNumber('tickets');
+      // الرقم يُخصَّص من الخادم، فيصل بعد لحظة ويُملأ الحقل حين يصل.
+      allocateDocumentNumber('tickets').then(setInvoiceNumber);
       const settings = loadTicketPageSettings(user?.companyId, 'tickets');
       setPageSettings(settings);
-      setInvoiceNumber(nextNum || `TK-${Date.now().toString().slice(-6)}`);
       const today = new Date();
       setIssueDate(settings.datesDefaultToday ? today : new Date());
       setTravelDate(settings.datesDefaultToday ? new Date(today) : new Date());

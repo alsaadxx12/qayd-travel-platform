@@ -71,18 +71,27 @@ export interface GroupCustomer {
   notes?: string;
 }
 
+export type GroupSourcingType = 'READY_PACKAGE' | 'CUSTOM_ASSEMBLED' | 'FLIGHT_ONLY';
+
 export interface GroupDesign {
   groupName: string;
   groupType: string;
+  sourcingType?: GroupSourcingType;
   country: string;
   routeFrom: string;
   routeTo: string;
   travelDate: string;
+  returnDate?: string;
   buyDate: string;
   seats: number;
   currency: 'IQD' | 'USD';
   /** سعر بيع المقعد المقترح — يُملأ به كل عميل جديد ثم يُعدَّل عند الحاجة. */
   seatPrice: number;
+  /** المورد المباشر وسعر شراء الكروب الإجمالي في حال كان الكروب جاهزاً من مورد */
+  supplierName?: string;
+  supplierAccountId?: string;
+  packageTotalCost?: number;
+  packageCostPerSeat?: number;
   active: boolean;
   notes: string;
   templates: GroupTemplate[];
@@ -118,14 +127,20 @@ export const emptyDesign = (): GroupDesign => {
   return {
     groupName: '',
     groupType: 'FULL',
+    sourcingType: 'READY_PACKAGE',
     country: 'العراق',
     routeFrom: '',
     routeTo: '',
     travelDate: '',
+    returnDate: '',
     buyDate: new Date().toISOString().slice(0, 10),
     seats: 1,
     currency: 'USD',
     seatPrice: 0,
+    supplierName: '',
+    supplierAccountId: '',
+    packageTotalCost: 0,
+    packageCostPerSeat: 0,
     active: true,
     notes: '',
     templates: [defaultTpl],
@@ -207,10 +222,9 @@ export const computeGroupTotals = (design: GroupDesign) => {
     sumExpectedSale += tplTotals.totalSale;
   });
 
-  const effectiveSeats = Math.max(design.seats, sumSeats) || 1;
-  const costPerSeat = Math.round((sumCost / effectiveSeats) * 100) / 100;
-
   const soldSeats = (design.customers || []).length;
+  const effectiveSeats = Math.max(soldSeats, Number(design.seats) || 0, sumSeats, 1);
+  const costPerSeat = Math.round((sumCost / effectiveSeats) * 100) / 100;
   const salesTotal = (design.customers || []).reduce((sum, c) => sum + (Number(c.sale) || 0), 0);
 
   return {
@@ -251,8 +265,14 @@ export const encodeDesignIntoNotes = (userNotes: string, design: GroupDesign): s
     components: design.components,
     customers: design.customers,
     groupType: design.groupType,
+    sourcingType: design.sourcingType || 'READY_PACKAGE',
     country: design.country,
     seatPrice: design.seatPrice,
+    supplierName: design.supplierName,
+    supplierAccountId: design.supplierAccountId,
+    packageTotalCost: design.packageTotalCost,
+    packageCostPerSeat: design.packageCostPerSeat,
+    returnDate: design.returnDate,
     active: design.active,
     buyDate: design.buyDate,
   };
@@ -311,14 +331,20 @@ export const designFromTicket = (ticket?: TicketData | null): GroupDesign => {
     ...base,
     groupName: (ticket as any).groupName || ticket.reference || ticket.invoiceNumber || '',
     groupType: payload?.groupType || base.groupType,
+    sourcingType: payload?.sourcingType || (payload?.components?.length > 0 ? 'CUSTOM_ASSEMBLED' : 'READY_PACKAGE'),
     country: payload?.country || base.country,
     routeFrom: routeParts[0] || '',
     routeTo: routeParts[1] || '',
     travelDate: ticket.travelDate ? String(ticket.travelDate).slice(0, 10) : '',
+    returnDate: payload?.returnDate || (ticket.returnDate ? String(ticket.returnDate).slice(0, 10) : ''),
     buyDate: payload?.buyDate || (ticket.issueDate ? String(ticket.issueDate).slice(0, 10) : base.buyDate),
     seats: Math.max(seats, Number(payload?.customers?.length) || 1),
     currency: (String(ticket.currency || 'USD').toUpperCase() === 'IQD' ? 'IQD' : 'USD') as 'IQD' | 'USD',
     seatPrice: Number(payload?.seatPrice) || 0,
+    supplierName: payload?.supplierName || ticket.supplierAccountName || '',
+    supplierAccountId: payload?.supplierAccountId || ticket.supplierAccountId || '',
+    packageTotalCost: Number(payload?.packageTotalCost ?? (payload?.packageCostPerSeat ? (payload.packageCostPerSeat * (payload.seats || 1)) : 0)),
+    packageCostPerSeat: Number(payload?.packageCostPerSeat) || 0,
     active: payload?.active !== false,
     notes: userNotes,
     templates: restoredTemplates,

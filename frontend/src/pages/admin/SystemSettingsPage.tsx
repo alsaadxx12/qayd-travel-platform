@@ -13,6 +13,7 @@ import {
   IconCheck,
   IconTypography,
   IconPlane,
+  IconTicket,
   IconEPassport,
   IconUsers,
   IconRotate,
@@ -62,6 +63,7 @@ import {
   formatSequencePreview,
   type SequenceConfig,
 } from '../../utils/sequenceUtils';
+import { sequencesApi } from '../../api/sequences';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { fetchPrintTemplate, savePrintTemplate } from '../../api/printTemplates';
 import {
@@ -996,10 +998,63 @@ export const SystemSettingsPage: React.FC = () => {
     });
   };
 
-  const handleSaveAll = () => {
+  /*
+   * الحفظ يذهب إلى القاعدة لا إلى المتصفّح.
+   *
+   * كان يُكتب في localStorage، فيضبط المدير الترقيم على جهازه ويبقى بقية
+   * الموظفين على الافتراضي — ثم يتصادم عدّاداهم. صار صفّاً واحداً للشركة يقرأه
+   * الجميع، والنسخة المحلية تُحفظ معه ليعمل العرض بلا انتظار.
+   */
+  const handleSaveAll = async () => {
     saveSequenceSettings(sequences, selectedBranchId);
-    showSuccessNotification('تم الحفظ', `تم حفظ إعدادات وتسلسلات فرع (${selectedBranchCode}) بنجاح`);
+    try {
+      await sequencesApi.save(
+        Object.values(sequences).map((c: any) => ({
+          docType: c.id,
+          prefix: c.prefix,
+          branchCode: selectedBranchCode,
+          includeYear: c.includeYear,
+          nextNumber: c.nextNumber,
+          padding: c.padding,
+          separator: c.separator,
+        })),
+      );
+      showSuccessNotification('تم الحفظ', `حُفظ الترقيم على الخادم — يسري على كل الأجهزة والموظفين`);
+    } catch (err: any) {
+      showErrorNotification(
+        'تعذّر الحفظ على الخادم',
+        err?.message || 'حُفظت النسخة المحلية فقط، ولن تسري على بقية الأجهزة',
+      );
+    }
   };
+
+  /* التسلسلات المحفوظة في القاعدة هي المرجع، فتُقرأ عند فتح التبويب. */
+  useEffect(() => {
+    if (activeSection !== 'sequences') return;
+    sequencesApi
+      .list(selectedBranchCode)
+      .then((rows) => {
+        if (!Array.isArray(rows) || rows.length === 0) return;
+        setSequences((prev) => {
+          const merged: any = { ...prev };
+          rows.forEach((r: any) => {
+            const key = r.docType === 'groups' && merged.groupFare ? 'groups' : r.docType;
+            if (!merged[key]) return;
+            merged[key] = {
+              ...merged[key],
+              prefix: r.prefix,
+              branchCode: r.branchCode || selectedBranchCode,
+              includeYear: r.includeYear,
+              nextNumber: r.nextNumber,
+              padding: r.padding,
+              separator: r.separator,
+            };
+          });
+          return merged;
+        });
+      })
+      .catch(() => undefined);
+  }, [activeSection, selectedBranchCode]);
 
   const navGroups = [
     {
@@ -1027,8 +1082,9 @@ export const SystemSettingsPage: React.FC = () => {
 
   const sequenceItemsMeta = [
     { key: 'tickets', icon: IconPlane, color: 'blue', tag: 'تذاكر الطيران' },
+    { key: 'groupFare', icon: IconTicket, color: 'orange', tag: 'تذاكر كروب فير' },
+    { key: 'groups', icon: IconUsers, color: 'violet', tag: 'الكروبات والرحلات السياحية' },
     { key: 'visas', icon: IconEPassport, color: 'teal', tag: 'الفيزا والتأشيرات' },
-    { key: 'groups', icon: IconUsers, color: 'violet', tag: 'الكروبات والرحلات' },
     { key: 'refunds', icon: IconRotate, color: 'rose', tag: 'الاسترجاع والمرتجعات' },
     { key: 'changes', icon: IconRefresh, color: 'amber', tag: 'التغيرات وتعديل التذاكر' },
     { key: 'receiptVouchers', icon: IconReceipt, color: 'emerald', tag: 'سندات القبض' },

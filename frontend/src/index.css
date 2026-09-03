@@ -3,6 +3,22 @@
 @import "@mantine/notifications/styles.css";
 @import "@mantine/dates/styles.css";
 
+/* إزالة وتعطيل كافة الإشعارات المنبثقة من النظام بالكامل */
+.mantine-Notifications-root,
+.mantine-Notification-root,
+[data-notifications-container],
+div[class*="mantine-Notification"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
 /* Enterprise Desktop Accounting Workspace Design Tokens */
 :root {
   --font-arabic: 'IBM Plex Sans Arabic', 'Segoe UI', system-ui, sans-serif;

@@ -52,6 +52,7 @@ export const GroupsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'POSTED' | 'DRAFT'>('ALL');
   const [currencyFilter, setCurrencyFilter] = useState<'ALL' | 'IQD' | 'USD'>('ALL');
+  const [sourcingFilter, setSourcingFilter] = useState<'ALL' | 'READY_PACKAGE' | 'CUSTOM_ASSEMBLED' | 'FLIGHT_ONLY'>('ALL');
 
   // Workspaces State
   const [groupFareWorkspaceOpen, setGroupFareWorkspaceOpen] = useState(false);
@@ -60,6 +61,27 @@ export const GroupsPage: React.FC = () => {
   const [opening, setOpening] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TicketData | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Helper to extract sourcing type
+  const getSourcingType = useCallback((t: any): 'READY_PACKAGE' | 'CUSTOM_ASSEMBLED' | 'FLIGHT_ONLY' => {
+    try {
+      const start = (t.notes || '').indexOf('<<<GROUP_DESIGN:');
+      if (start >= 0) {
+        const end = t.notes.indexOf(':GROUP_DESIGN>>>', start);
+        if (end > start) {
+          const payload = JSON.parse(t.notes.slice(start + 16, end));
+          return payload.sourcingType || (payload.components?.length > 0 ? 'CUSTOM_ASSEMBLED' : 'READY_PACKAGE');
+        }
+      }
+    } catch {
+      // fallback
+    }
+    const rawInv = String(t.invoiceNumber || '').toUpperCase();
+    if (rawInv.includes('-GRP-') && (t.passengers || []).length > 0 && !(t.notes || '').includes('<<<GROUP_DESIGN:')) {
+      return 'FLIGHT_ONLY';
+    }
+    return 'READY_PACKAGE';
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,7 +105,7 @@ export const GroupsPage: React.FC = () => {
     load();
   }, [load]);
 
-  // Filtered rows by search, status, and currency
+  // Filtered rows by search, status, currency, and sourcing
   const filtered = useMemo(() => {
     return rows.filter((t: any) => {
       // Status filter
@@ -92,6 +114,12 @@ export const GroupsPage: React.FC = () => {
 
       // Currency filter
       if (currencyFilter !== 'ALL' && (t.currency || 'IQD') !== currencyFilter) return false;
+
+      // Sourcing filter
+      if (sourcingFilter !== 'ALL') {
+        const model = getSourcingType(t);
+        if (model !== sourcingFilter) return false;
+      }
 
       // Text Search
       if (search.trim()) {
@@ -252,13 +280,17 @@ export const GroupsPage: React.FC = () => {
         width: 'w-44',
         isPinned: true,
         render: (r) => (
-          <div className="flex items-center gap-2 py-0.5">
+          <div
+            className="flex items-center gap-2 py-0.5 cursor-pointer"
+            onClick={() => openDesignEditor(r)}
+            title={isAr ? 'انقر لفتح وتعديل الكروب وقوالب الأسعار' : 'Click to edit group and prices'}
+          >
             <div className="w-8 h-8 rounded-lg bg-[#FFF3E8] border border-[#FED7AA] text-[#F45A0A] flex items-center justify-center shrink-0 font-bold">
               <Layers size={15} />
             </div>
             <div className="leading-tight min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-mono font-black text-[12px] text-slate-900 select-all" dir="ltr">
+                <span className="font-mono font-black text-[12px] text-slate-900 select-all hover:text-[#F45A0A] transition-colors" dir="ltr">
                   {r.invoiceNumber || '—'}
                 </span>
                 {r.pnr && (
@@ -289,12 +321,16 @@ export const GroupsPage: React.FC = () => {
         headerText: isAr ? 'المستفيد (العميل)' : 'Beneficiary / Customer',
         isWide: true,
         render: (r) => (
-          <div className="flex items-center gap-2 py-0.5 min-w-0">
+          <div
+            className="flex items-center gap-2 py-0.5 min-w-0 cursor-pointer"
+            onClick={() => openDesignEditor(r)}
+            title={isAr ? 'انقر لفتح وتعديل الكروب وقوالب الأسعار' : 'Click to edit group and prices'}
+          >
             <div className="w-7 h-7 rounded-full bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center shrink-0 font-bold text-xs">
               {(r.customerName || 'ع')[0]}
             </div>
             <div className="leading-tight min-w-0">
-              <span className="font-bold text-[12.5px] text-slate-900 block truncate">
+              <span className="font-bold text-[12.5px] text-slate-900 block truncate hover:text-[#F45A0A] transition-colors">
                 {r.customerName || (isAr ? '— بلا عميل —' : '— No Customer —')}
               </span>
               {r.supplierAccountName && (
@@ -306,6 +342,36 @@ export const GroupsPage: React.FC = () => {
             </div>
           </div>
         ),
+      },
+      {
+        field: 'sourcingType',
+        headerText: isAr ? 'نموذج الكروب' : 'Group Model',
+        width: 'w-36',
+        render: (r) => {
+          const model = getSourcingType(r);
+          if (model === 'READY_PACKAGE') {
+            return (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 text-[#F45A0A] border border-orange-200 text-[11px] font-black">
+                <Package size={12} />
+                <span>{isAr ? 'باكج جاهز' : 'Ready Package'}</span>
+              </span>
+            );
+          }
+          if (model === 'CUSTOM_ASSEMBLED') {
+            return (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 text-[11px] font-black">
+                <Layers size={12} />
+                <span>{isAr ? 'كروب مجمّع' : 'Custom Tour'}</span>
+              </span>
+            );
+          }
+          return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 text-[11px] font-black">
+              <Plane size={12} />
+              <span>{isAr ? 'مقاعد طيران' : 'Flight Block'}</span>
+            </span>
+          );
+        },
       },
       {
         field: 'route',
@@ -513,6 +579,21 @@ export const GroupsPage: React.FC = () => {
                 </button>
               )}
             </div>
+
+            {/* Sourcing Model Filter */}
+            <SegmentedControl
+              size="sm"
+              radius="md"
+              value={sourcingFilter}
+              onChange={(val) => setSourcingFilter(val as any)}
+              data={[
+                { value: 'ALL', label: isAr ? 'كافة النماذج' : 'All Models' },
+                { value: 'READY_PACKAGE', label: isAr ? 'باكجات جاهزة' : 'Ready' },
+                { value: 'CUSTOM_ASSEMBLED', label: isAr ? 'كروبات مجمعة' : 'Custom' },
+                { value: 'FLIGHT_ONLY', label: isAr ? 'مقاعد طيران' : 'Flight' },
+              ]}
+              className="bg-[#F1F5F9] border border-slate-200"
+            />
 
             {/* Status Segmented Control */}
             <SegmentedControl

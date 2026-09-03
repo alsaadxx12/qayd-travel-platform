@@ -48,7 +48,7 @@ import { showSuccessNotification, showErrorNotification, showInfoNotification } 
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
-import { getNextSequenceNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber } from '../../utils/sequenceUtils';
 
 export interface RefundPassengerLine {
   id: string;
@@ -243,7 +243,8 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
     if (opened) {
       if (initialData) {
         const isExistingRefund = initialData.tripType === 'REFUND' || String(initialData.invoiceNumber || '').startsWith('REF-');
-        setRefundNumber(isExistingRefund ? (initialData.invoiceNumber || '') : getNextSequenceNumber('refunds'));
+        if (isExistingRefund) setRefundNumber(initialData.invoiceNumber || '');
+        else allocateDocumentNumber('refunds').then(setRefundNumber);
         if (!isExistingRefund) {
           setSelectedOriginalTicket(initialData);
         }
@@ -325,7 +326,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
           ]);
         }
       } else {
-        setRefundNumber(getNextSequenceNumber('refunds'));
+        allocateDocumentNumber('refunds').then(setRefundNumber);
         setEmployeeName(user?.name || '');
         setPassengers([
           {

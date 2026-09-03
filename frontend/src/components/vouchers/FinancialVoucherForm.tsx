@@ -39,7 +39,7 @@ import {
 import { apiRequest, invalidateApiCache } from '../../api/client';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
-import { getNextSequenceNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber } from '../../utils/sequenceUtils';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
 import { FormattedNumberInput } from '../common/FormattedNumberInput';
 import { AccountingDatePicker } from '../common/date/AccountingDatePicker';
@@ -281,9 +281,14 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
   };
 
   // Sync initial sequence number
-  const generateNewSequenceNumber = (type: 'RECEIPT' | 'PAYMENT' | 'EXCHANGE' | 'JOURNAL') => {
-    const key = type === 'RECEIPT' ? 'receiptVouchers' : type === 'PAYMENT' ? 'paymentVouchers' : type === 'EXCHANGE' ? 'exchange' : 'journalEntries';
-    return getNextSequenceNumber(key);
+  /*
+   * رقم السند يُخصَّص في القاعدة لا في المتصفّح، فيصل بعد لحظة ويُملأ الحقل حين
+   * يصل. وهذا ما يمنع موظفَين من أخذ الرقم نفسه.
+   */
+  const applyNewSequenceNumber = (type: 'RECEIPT' | 'PAYMENT' | 'EXCHANGE' | 'JOURNAL') => {
+    const key =
+      type === 'RECEIPT' ? 'receiptVouchers' : type === 'PAYMENT' ? 'paymentVouchers' : type === 'EXCHANGE' ? 'exchange' : 'journalEntries';
+    allocateDocumentNumber(key).then(setVoucherNumber);
   };
 
   // Fast load config on open + Auto-detect employee's cashbox + Load Payment Methods
@@ -841,7 +846,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
     setEditingVoucherId(null);
     setVoucherType(finalType);
     setDate(getTodayDate());
-    setVoucherNumber(generateNewSequenceNumber(finalType));
+    applyNewSequenceNumber(finalType);
     setAmount('');
     setCurrency(defaults.defaultCurrency || 'IQD');
     setIsManualDescription(false);
@@ -1423,7 +1428,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     type="button"
                     onClick={() => {
                       setVoucherType('RECEIPT');
-                      if (currentVoucherIndex === -1) setVoucherNumber(generateNewSequenceNumber('RECEIPT'));
+                      if (currentVoucherIndex === -1) applyNewSequenceNumber('RECEIPT');
                     }}
                     className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
                       voucherType === 'RECEIPT'
@@ -1439,7 +1444,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     type="button"
                     onClick={() => {
                       setVoucherType('PAYMENT');
-                      if (currentVoucherIndex === -1) setVoucherNumber(generateNewSequenceNumber('PAYMENT'));
+                      if (currentVoucherIndex === -1) applyNewSequenceNumber('PAYMENT');
                     }}
                     className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
                       voucherType === 'PAYMENT'
@@ -1455,7 +1460,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     type="button"
                     onClick={() => {
                       setVoucherType('EXCHANGE');
-                      if (currentVoucherIndex === -1) setVoucherNumber(generateNewSequenceNumber('EXCHANGE'));
+                      if (currentVoucherIndex === -1) applyNewSequenceNumber('EXCHANGE');
                     }}
                     className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
                       voucherType === 'EXCHANGE'
@@ -1471,7 +1476,7 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
                     type="button"
                     onClick={() => {
                       setVoucherType('JOURNAL');
-                      if (currentVoucherIndex === -1) setVoucherNumber(generateNewSequenceNumber('JOURNAL'));
+                      if (currentVoucherIndex === -1) applyNewSequenceNumber('JOURNAL');
                     }}
                     className={`flex-1 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 ${
                       voucherType === 'JOURNAL'

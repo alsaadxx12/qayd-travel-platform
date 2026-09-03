@@ -19,6 +19,7 @@ import { RolesModule } from './roles/roles.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { PrintTemplatesModule } from './print-templates/print-templates.module';
+import { SequencesModule } from './sequences/sequences.module';
 import { PdfModule } from './pdf/pdf.module';
 import { SystemModule } from './system/system.module';
 import { EmailModule } from './email/email.module';
@@ -57,6 +58,7 @@ import { StatementPortalModule } from './statement-portal/statement-portal.modul
     TicketsModule,
     DepartmentsModule,
     PrintTemplatesModule,
+    SequencesModule,
     PdfModule,
     SystemModule,
     EmailModule,

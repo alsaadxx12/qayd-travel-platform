@@ -46,7 +46,7 @@ import { showSuccessNotification, showErrorNotification } from '../../utils/noti
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
-import { getNextSequenceNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber } from '../../utils/sequenceUtils';
 
 export interface VisaRefundApplicantLine {
   id: string;
@@ -213,7 +213,8 @@ export const VisaRefundEditorWorkspace: React.FC<VisaRefundEditorWorkspaceProps>
     if (opened) {
       if (initialData) {
         const isExistingRefund = initialData.tripType === 'REFUND' || String(initialData.invoiceNumber || '').startsWith('REF-');
-        setRefundNumber(isExistingRefund ? (initialData.invoiceNumber || '') : getNextSequenceNumber('refunds'));
+        if (isExistingRefund) setRefundNumber(initialData.invoiceNumber || '');
+        else allocateDocumentNumber('refunds').then(setRefundNumber);
         if (!isExistingRefund) {
           setSelectedOriginalVisa(initialData);
         }
@@ -283,7 +284,7 @@ export const VisaRefundEditorWorkspace: React.FC<VisaRefundEditorWorkspaceProps>
           ]);
         }
       } else {
-        setRefundNumber(getNextSequenceNumber('refunds'));
+        allocateDocumentNumber('refunds').then(setRefundNumber);
         setEmployeeName(user?.name || '');
         setApplicants([
           {

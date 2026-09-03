@@ -70,7 +70,7 @@ import { employeesApi } from '../../api/employees';
 import { ticketsApi } from '../../api/tickets';
 import { fetchPrintTemplate, savePrintTemplate } from '../../api/printTemplates';
 import { showSuccessNotification, showErrorNotification, showInfoNotification } from '../../utils/notifications';
-import { getNextSequenceNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber } from '../../utils/sequenceUtils';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -916,8 +916,7 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
     } else {
       // Create Mode — seeded from this employee's saved page defaults.
       const defaults = loadTicketPageSettings(user?.companyId, 'visas');
-      const nextNum = getNextSequenceNumber('visas') || `VISA-${Date.now().toString().slice(-6)}`;
-      setInvoiceNumber(nextNum);
+      allocateDocumentNumber('visas').then(setInvoiceNumber);
       setIssueDate(new Date());
       setSupplierAccount('');
       setSupplierAccountName('');

@@ -45,7 +45,7 @@ import { showSuccessNotification, showErrorNotification, showInfoNotification } 
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
-import { getNextSequenceNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber } from '../../utils/sequenceUtils';
 
 export interface GroupFarePnrLine {
   id: string;
@@ -531,7 +531,8 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
   useEffect(() => {
     if (opened) {
       if (initialData) {
-        setInvoiceNumber(initialData.invoiceNumber || getNextSequenceNumber('groups'));
+        if (initialData.invoiceNumber) setInvoiceNumber(initialData.invoiceNumber);
+        else allocateDocumentNumber('groups').then(setInvoiceNumber);
         setIssueDate(initialData.issueDate ? new Date(initialData.issueDate) : new Date());
         setTravelDate(initialData.travelDate ? new Date(initialData.travelDate) : null);
         setReturnDate(initialData.returnDate ? new Date(initialData.returnDate) : null);
@@ -594,7 +595,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
           ]);
         }
       } else {
-        setInvoiceNumber(getNextSequenceNumber('groups'));
+        allocateDocumentNumber('groups').then(setInvoiceNumber);
         setEmployeeName(user?.name || '');
         setPaymentType('نقدي');
         setPaymentMethod('CASH_HAND');

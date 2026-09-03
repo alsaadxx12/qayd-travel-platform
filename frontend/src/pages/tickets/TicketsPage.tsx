@@ -387,6 +387,36 @@ export const TicketsPage: React.FC = () => {
     setModalOpen(true);
   }, []);
 
+  // Helper to check whether a ticket record belongs to Group Fare
+  const isGroupFareTicket = useCallback((ticketRowOrRaw: any): boolean => {
+    if (!ticketRowOrRaw) return false;
+    const raw = ticketRowOrRaw.rawInvoice || ticketRowOrRaw;
+    const invNum = String(raw.invoiceNumber || raw.number || ticketRowOrRaw.invoiceNumber || ticketRowOrRaw.number || '').toUpperCase();
+    const tripType = String(raw.tripType || ticketRowOrRaw.tripType || '').toUpperCase();
+    const ticketType = String(raw.ticketType || ticketRowOrRaw.ticketType || '').toUpperCase();
+
+    return (
+      tripType === 'GROUP_FARE' ||
+      tripType.includes('GROUP') ||
+      ticketType === 'GROUP_FARE' ||
+      invNum.includes('-GRP-') ||
+      invNum.startsWith('GRP-')
+    );
+  }, []);
+
+  // Smart editor opener: opens GroupFareEditorWorkspace for group fare invoices, and TicketInvoiceEditorWorkspace for normal tickets
+  const handleOpenTicketEditor = useCallback((ticketRowOrRaw: any) => {
+    const raw = ticketRowOrRaw?.rawInvoice || ticketRowOrRaw;
+    if (!raw) return;
+    if (isGroupFareTicket(ticketRowOrRaw)) {
+      setGroupFareEditingTicket(raw);
+      setGroupFareWorkspaceOpen(true);
+    } else {
+      setEditingTicketData(raw);
+      setModalOpen(true);
+    }
+  }, [isGroupFareTicket]);
+
   // Context Menu & Deletion States
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; ticket: any } | null>(null);
   const [refundWorkspaceOpen, setRefundWorkspaceOpen] = useState(false);
@@ -1311,8 +1341,7 @@ export const TicketsPage: React.FC = () => {
                       key={tRow.id || idx}
                       className="h-[66px] hover:bg-[#FFFDFC] transition-colors group cursor-pointer select-none"
                       onClick={() => {
-                        setEditingTicketData(tRow.rawInvoice || tRow);
-                        setModalOpen(true);
+                        handleOpenTicketEditor(tRow);
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -1516,8 +1545,7 @@ export const TicketsPage: React.FC = () => {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setEditingTicketData(tRow.rawInvoice || tRow);
-                            setModalOpen(true);
+                            handleOpenTicketEditor(tRow);
                           }}
                           className="w-7 h-7 rounded-lg bg-slate-100 text-slate-500 hover:bg-orange-50 hover:text-[#F45A0A] flex items-center justify-center transition-colors cursor-pointer mx-auto"
                         >
@@ -1541,8 +1569,7 @@ export const TicketsPage: React.FC = () => {
                       key={dRow.rowId || idx}
                       className="h-[64px] hover:bg-orange-50/20 transition-colors group cursor-pointer select-none"
                       onClick={() => {
-                        setEditingTicketData(dRow.rawInvoice);
-                        setModalOpen(true);
+                        handleOpenTicketEditor(dRow);
                       }}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -1730,8 +1757,7 @@ export const TicketsPage: React.FC = () => {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setEditingTicketData(dRow.rawInvoice);
-                            setModalOpen(true);
+                            handleOpenTicketEditor(dRow);
                           }}
                           className="w-7 h-7 rounded-lg bg-slate-100 text-slate-500 hover:bg-orange-50 hover:text-[#F45A0A] flex items-center justify-center transition-colors cursor-pointer mx-auto"
                         >
@@ -1764,8 +1790,7 @@ export const TicketsPage: React.FC = () => {
                 <div
                   key={tRow.id || idx}
                   onClick={() => {
-                    setEditingTicketData(tRow.rawInvoice || tRow);
-                    setModalOpen(true);
+                    handleOpenTicketEditor(tRow);
                   }}
                   className="bg-white border border-slate-200/90 hover:border-[#F45A0A]/40 rounded-xl p-3 shadow-2xs space-y-2.5 active:bg-orange-50/10 cursor-pointer transition-all"
                 >
@@ -1881,8 +1906,7 @@ export const TicketsPage: React.FC = () => {
                 <div
                   key={dRow.rowId || idx}
                   onClick={() => {
-                    setEditingTicketData(dRow.rawInvoice);
-                    setModalOpen(true);
+                    handleOpenTicketEditor(dRow);
                   }}
                   className="bg-white border border-slate-200/90 rounded-xl p-3 shadow-2xs space-y-2 cursor-pointer"
                 >
@@ -2154,6 +2178,24 @@ export const TicketsPage: React.FC = () => {
 
           {/* Primary Actions */}
           <div className="py-1">
+            <button
+              type="button"
+              onClick={() => {
+                handleOpenTicketEditor(contextMenu.ticket);
+                setContextMenu(null);
+              }}
+              className="w-full px-3.5 py-2 text-slate-700 hover:bg-orange-50 hover:text-[#F45A0A] flex items-center gap-2.5 transition-colors cursor-pointer text-start font-medium"
+            >
+              <Edit3 size={15} className="text-[#F45A0A]" />
+              <span>
+                {language === 'ar'
+                  ? isGroupFareTicket(contextMenu.ticket)
+                    ? 'تعديل فاتورة كروب فير'
+                    : 'تعديل فاتورة التذاكر'
+                  : 'Edit Invoice'}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() => {

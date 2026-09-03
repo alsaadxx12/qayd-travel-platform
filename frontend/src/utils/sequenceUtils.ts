@@ -69,10 +69,22 @@ export function getDefaultSequencesForBranch(branchCode: string = 'KAB'): Record
       separator: '-',
       category: 'visas',
     },
+    groupFare: {
+      id: 'groupFare',
+      nameAr: 'فواتير تذاكر كروب فير (Group Fare)',
+      nameEn: 'Group Fare Invoices',
+      prefix: 'GRP',
+      branchCode: code,
+      includeYear: true,
+      nextNumber: 1001,
+      padding: 5,
+      separator: '-',
+      category: 'groups',
+    },
     groups: {
       id: 'groups',
-      nameAr: 'فواتير الكروبات والرحلات الجماعية',
-      nameEn: 'Group Tour Invoices',
+      nameAr: 'فواتير الكروبات والرحلات السياحية (Tour Groups)',
+      nameEn: 'Tour Group Invoices',
       prefix: 'GRP',
       branchCode: code,
       includeYear: true,
@@ -227,4 +239,31 @@ export function getNextSequenceNumber(key: string, branchId?: string, defaultBra
   saveSequenceSettings(settings, targetBranchId);
 
   return formatted;
+}
+
+/*
+ * ── الترقيم الرسمي: من الخادم ──
+ *
+ * ما تحت هذا السطر هو الطريق الصحيح لأخذ رقم مستند. والدوال التي فوقه بقيت
+ * لأن شاشة الإعدادات تعرض بها المعاينة، ولأنها ملاذٌ أخير حين يتعذّر الوصول
+ * إلى الخادم — لكنها لا تُستعمل لترقيم مستندٍ يُحفظ.
+ */
+import { sequencesApi } from '../api/sequences';
+
+/**
+ * الرقم التالي لنوع مستند، مخصَّصاً في القاعدة.
+ *
+ * وإن سقط الاتصال يُرجع رقماً موسوماً بالوقت — فريداً بطبعه — بدل أن يمنع
+ * الموظف من الحفظ أو يعطيه رقماً قد يكون مأخوذاً.
+ */
+export async function allocateDocumentNumber(docType: string): Promise<string> {
+  const { branchCode } = getActiveBranchIdAndCode();
+  try {
+    const res = await sequencesApi.next(docType, branchCode);
+    if (res?.number) return res.number;
+  } catch {
+    /* يُكمَل بالبديل أدناه */
+  }
+  const prefix = (getDefaultSequencesForBranch(branchCode)[docType]?.prefix || docType.slice(0, 3)).toUpperCase();
+  return `${branchCode}-${prefix}-${new Date().getFullYear()}-T${Date.now().toString().slice(-6)}`;
 }

@@ -38,7 +38,7 @@ import { hotelsApi, HotelBookingItem, HotelRoomLine } from '../../api/hotels';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { WORLD_CITIES, WorldCity } from '../../data/worldCities';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
-import { getNextSequenceNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber } from '../../utils/sequenceUtils';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
@@ -331,8 +331,7 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
 
   // Reset form to blank new voucher
   const handleNewBooking = useCallback(() => {
-    const generated = getNextSequenceNumber('hotels');
-    setInvoiceNumber(generated);
+    allocateDocumentNumber('hotels').then(setInvoiceNumber);
     setIssueDate(new Date());
     setCheckInDate(new Date());
     setCheckOutDate(new Date(Date.now() + 86400000));

@@ -320,28 +320,29 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant           Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users            User[]
-  roles            Role[]
-  accounts         Account[]
-  fiscalYears      FiscalYear[]
-  fiscalPeriods    FiscalPeriod[]
-  journalEntries   JournalEntry[]
-  receiptVouchers  ReceiptVoucher[]
-  paymentVouchers  PaymentVoucher[]
-  cashboxes        Cashbox[]
-  banks            Bank[]
-  customers        Customer[]
-  suppliers        Supplier[]
-  auditLogs        AuditLog[]
-  balanceAuditLogs BalanceAuditLog[]
-  attachments      Attachment[]
-  branches         Branch[]
-  airlines         Airline[]
-  departments      Department[]
-  employees        Employee[]
-  tickets          Ticket[]
-  printTemplates   PrintTemplate[]
+  tenant            Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users             User[]
+  roles             Role[]
+  accounts          Account[]
+  fiscalYears       FiscalYear[]
+  fiscalPeriods     FiscalPeriod[]
+  journalEntries    JournalEntry[]
+  receiptVouchers   ReceiptVoucher[]
+  paymentVouchers   PaymentVoucher[]
+  cashboxes         Cashbox[]
+  banks             Bank[]
+  customers         Customer[]
+  suppliers         Supplier[]
+  auditLogs         AuditLog[]
+  balanceAuditLogs  BalanceAuditLog[]
+  attachments       Attachment[]
+  branches          Branch[]
+  airlines          Airline[]
+  departments       Department[]
+  employees         Employee[]
+  tickets           Ticket[]
+  printTemplates    PrintTemplate[]
+  documentSequences DocumentSequence[]
 
   @@index([tenantId])
   @@map("companies")
@@ -955,7 +956,7 @@ model Ticket {
   supplierAccountId   String?   @map("supplier_account_id")
   airlineId           String?   @map("airline_id")
   cashboxAccountId    String?   @map("cashbox_account_id")
-  invoiceNumber       String    @unique
+  invoiceNumber       String
   issueDate           DateTime  @default(now())
   travelDate          DateTime?
   returnDate          DateTime?
@@ -1008,6 +1009,7 @@ model Ticket {
   branch             Branch?           @relation("TicketBranch", fields: [branchId], references: [id], onDelete: SetNull)
   passengers         TicketPassenger[]
 
+  @@unique([companyId, invoiceNumber])
   @@index([tenantId])
   @@index([companyId, createdAt])
   @@index([companyId, tripType, createdAt])
@@ -1228,4 +1230,34 @@ model StatementAccessToken {
   @@index([customerId])
   @@index([supplierId])
   @@map("statement_access_tokens")
+}
+
+/// تسلسل ترقيم المستندات — عدّادٌ واحد في القاعدة بدل عدّادٍ في كل متصفّح.
+///
+/// كان الترقيم يُحفظ في localStorage لكل جهاز، فيبدأ موظفان من الرقم نفسه
+/// ويصطدمان: أحدهما يحفظ والآخر يفشل. والعدّاد هنا يُخصَّص بعبارة SQL واحدة
+/// ذرّية، فلا يأخذ اثنان رقماً واحداً مهما تزامنا.
+model DocumentSequence {
+  id          String   @id @default(uuid())
+  companyId   String
+  /// null يعني تسلسلاً عاماً للشركة كلها، لا لفرعٍ بعينه.
+  branchId    String?
+  /// tickets | visas | groups | refunds | changes | receiptVouchers | paymentVouchers | journalEntries | hotels | exchange
+  docType     String
+  prefix      String
+  branchCode  String   @default("")
+  includeYear Boolean  @default(true)
+  /// السنة التي يعود إليها العدّاد الحالي؛ تغيّرها يعيد الترقيم من البداية.
+  year        Int?
+  nextNumber  Int      @default(1001)
+  padding     Int      @default(5)
+  separator   String   @default("-")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, branchId, docType])
+  @@index([companyId, docType])
+  @@map("document_sequences")
 }
