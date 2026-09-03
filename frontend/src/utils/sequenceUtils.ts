@@ -69,18 +69,6 @@ export function getDefaultSequencesForBranch(branchCode: string = 'KAB'): Record
       separator: '-',
       category: 'visas',
     },
-    groupFare: {
-      id: 'groupFare',
-      nameAr: 'فواتير تذاكر كروب فير (Group Fare)',
-      nameEn: 'Group Fare Invoices',
-      prefix: 'GRP',
-      branchCode: code,
-      includeYear: true,
-      nextNumber: 1001,
-      padding: 5,
-      separator: '-',
-      category: 'groups',
-    },
     groups: {
       id: 'groups',
       nameAr: 'فواتير الكروبات والرحلات السياحية (Tour Groups)',
@@ -290,4 +278,20 @@ export async function allocateDocumentNumber(docType: string): Promise<string> {
   }
   const prefix = (getDefaultSequencesForBranch(branchCode)[docType]?.prefix || docType.slice(0, 3)).toUpperCase();
   return `${branchCode}-${prefix}-${new Date().getFullYear()}-T${Date.now().toString().slice(-6)}`;
+}
+
+/**
+ * الرقم المتوقّع للعرض عند فتح النافذة — لا يحجز شيئاً.
+ *
+ * التخصيص الحقيقي يجري عند الحفظ وحده؛ فمن فتح نافذةً وألغاها لم يحرق رقماً،
+ * ولا تنشأ فجواتٌ في التسلسل من مجرّد التصفّح.
+ */
+export async function peekDocumentNumber(docType: string): Promise<string> {
+  const { branchCode } = getActiveBranchIdAndCode();
+  try {
+    const res = await sequencesApi.peek(docType, branchCode);
+    return res?.number || '';
+  } catch {
+    return '';
+  }
 }

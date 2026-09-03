@@ -47,7 +47,7 @@ import { SmartVisaImportModal } from './SmartVisaImportModal';
 import { InvoiceAuditLogModal, type AuditLogItem } from '../tickets/InvoiceAuditLogModal';
 import { apiRequest } from '../../api/client';
 import { ticketsApi, type TicketData } from '../../api/tickets';
-import { allocateDocumentNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber, peekDocumentNumber } from '../../utils/sequenceUtils';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useAuthStore } from '../../store/useAuthStore';
 import { IconSparkles } from '@tabler/icons-react';
@@ -409,7 +409,7 @@ export const VisaIssueModal: React.FC<VisaIssueModalProps> = ({
     setCurrentVisaIndex(index);
     setActiveVisaId(record.id);
     if (record.invoiceNumber) setInvoiceNumber(record.invoiceNumber);
-    else allocateDocumentNumber('visas').then(setInvoiceNumber);
+    else peekDocumentNumber('visas').then(setInvoiceNumber);
     setIssueDate(
       record.issueDate
         ? new Date(record.issueDate).toISOString().slice(0, 10)
@@ -509,13 +509,13 @@ export const VisaIssueModal: React.FC<VisaIssueModalProps> = ({
   // Generate sequence invoice number on open
   useEffect(() => {
     if (opened && !initialVisaId && currentVisaIndex === -1) {
-      allocateDocumentNumber('visas').then(setInvoiceNumber);
+      peekDocumentNumber('visas').then(setInvoiceNumber);
     }
   }, [opened, initialVisaId, currentVisaIndex]);
 
   // Reset form
   const handleResetForm = () => {
-    allocateDocumentNumber('visas').then(setInvoiceNumber);
+    peekDocumentNumber('visas').then(setInvoiceNumber);
     setCurrentVisaIndex(-1);
     setActiveVisaId(undefined);
 
@@ -537,7 +537,7 @@ export const VisaIssueModal: React.FC<VisaIssueModalProps> = ({
       if (initialVisaData) {
         setActiveVisaId(initialVisaData.id);
         if (initialVisaData.invoiceNumber) setInvoiceNumber(initialVisaData.invoiceNumber);
-        else allocateDocumentNumber('visas').then(setInvoiceNumber);
+        else peekDocumentNumber('visas').then(setInvoiceNumber);
         setIssueDate(
           initialVisaData.issueDate
             ? new Date(initialVisaData.issueDate).toISOString().slice(0, 10)
@@ -696,7 +696,7 @@ export const VisaIssueModal: React.FC<VisaIssueModalProps> = ({
     }
 
     const payload: any = {
-      invoiceNumber: invoiceNumber || (await allocateDocumentNumber('visas')),
+      invoiceNumber: activeVisaId && invoiceNumber ? invoiceNumber : await allocateDocumentNumber('visas'),
       issueDate: new Date(issueDate),
       customerName: customerName,
       customerAccountId: customerId,

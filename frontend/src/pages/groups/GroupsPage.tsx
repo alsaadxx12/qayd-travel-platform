@@ -28,7 +28,7 @@ import { Loader, Modal, Tooltip, SegmentedControl, Badge } from '@mantine/core';
 import { AccountingGrid, AccountingColumnDef, AccountingActionMenuItem } from '../../components/common/AccountingGrid';
 import { GroupFareEditorWorkspace } from '../../components/tickets/GroupFareEditorWorkspace';
 import { GroupDesignWorkspace } from '../../components/groups/GroupDesignWorkspace';
-import { matchesSearchTokens } from '../../components/ui/SearchableCombobox';
+import { SearchableCombobox, matchesSearchTokens } from '../../components/ui/SearchableCombobox';
 import { ticketsApi, TicketData } from '../../api/tickets';
 import { showSuccessNotification, showErrorNotification, showInfoNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -105,17 +105,10 @@ export const GroupsPage: React.FC = () => {
     load();
   }, [load]);
 
-  // Filtered rows by search, status, currency, and sourcing
+  // Filtered rows by search and sourcing model
   const filtered = useMemo(() => {
     return rows.filter((t: any) => {
-      // Status filter
-      if (statusFilter === 'POSTED' && String(t.status || '').toUpperCase() !== 'POSTED') return false;
-      if (statusFilter === 'DRAFT' && String(t.status || '').toUpperCase() === 'POSTED') return false;
-
-      // Currency filter
-      if (currencyFilter !== 'ALL' && (t.currency || 'IQD') !== currencyFilter) return false;
-
-      // Sourcing filter
+      // Sourcing model filter
       if (sourcingFilter !== 'ALL') {
         const model = getSourcingType(t);
         if (model !== sourcingFilter) return false;
@@ -143,7 +136,7 @@ export const GroupsPage: React.FC = () => {
 
       return true;
     });
-  }, [rows, search, statusFilter, currencyFilter]);
+  }, [rows, search, sourcingFilter]);
 
   // High-level KPI Totals
   const totals = useMemo(() => {
@@ -580,48 +573,20 @@ export const GroupsPage: React.FC = () => {
               )}
             </div>
 
-            {/* Sourcing Model Filter */}
-            <SegmentedControl
-              size="sm"
-              radius="md"
-              value={sourcingFilter}
-              onChange={(val) => setSourcingFilter(val as any)}
-              data={[
-                { value: 'ALL', label: isAr ? 'كافة النماذج' : 'All Models' },
-                { value: 'READY_PACKAGE', label: isAr ? 'باكجات جاهزة' : 'Ready' },
-                { value: 'CUSTOM_ASSEMBLED', label: isAr ? 'كروبات مجمعة' : 'Custom' },
-                { value: 'FLIGHT_ONLY', label: isAr ? 'مقاعد طيران' : 'Flight' },
-              ]}
-              className="bg-[#F1F5F9] border border-slate-200"
-            />
-
-            {/* Status Segmented Control */}
-            <SegmentedControl
-              size="sm"
-              radius="md"
-              value={statusFilter}
-              onChange={(val) => setStatusFilter(val as any)}
-              data={[
-                { value: 'ALL', label: isAr ? 'الكل' : 'All' },
-                { value: 'POSTED', label: isAr ? 'مرحَّل' : 'Posted' },
-                { value: 'DRAFT', label: isAr ? 'مسودات' : 'Drafts' },
-              ]}
-              className="bg-[#F1F5F9] border border-slate-200"
-            />
-
-            {/* Currency Filter */}
-            <SegmentedControl
-              size="sm"
-              radius="md"
-              value={currencyFilter}
-              onChange={(val) => setCurrencyFilter(val as any)}
-              data={[
-                { value: 'ALL', label: isAr ? 'كافة العملات' : 'All Currencies' },
-                { value: 'IQD', label: 'IQD' },
-                { value: 'USD', label: 'USD' },
-              ]}
-              className="bg-[#F1F5F9] border border-slate-200"
-            />
+            {/* Single Unified Dropdown for Models (ازل الفلاتر الموجودة يجب ان يكون دروب داون واحد) */}
+            <div className="w-52">
+              <SearchableCombobox
+                value={sourcingFilter}
+                onChange={(val: any) => setSourcingFilter(val || 'ALL')}
+                options={[
+                  { value: 'ALL', label: isAr ? 'كافة نماذج الكروبات' : 'All Group Models' },
+                  { value: 'READY_PACKAGE', label: isAr ? 'باكجات جاهزة' : 'Ready Packages' },
+                  { value: 'CUSTOM_ASSEMBLED', label: isAr ? 'كروبات مجمعة' : 'Custom Tours' },
+                  { value: 'FLIGHT_ONLY', label: isAr ? 'مقاعد طيران' : 'Flight Blocks' },
+                ]}
+                clearable={false}
+              />
+            </div>
 
             {/* Refresh Button */}
             <Tooltip label={isAr ? 'تحديث السجلات' : 'Refresh'} withArrow position="bottom">
@@ -629,20 +594,20 @@ export const GroupsPage: React.FC = () => {
                 type="button"
                 onClick={load}
                 disabled={loading}
-                className="h-[38px] w-[38px] rounded-xl border border-[#E5E7EB] bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-colors flex items-center justify-center shadow-2xs disabled:opacity-50"
+                className="h-[46px] w-[46px] rounded-[11px] border border-[#E5E7EB] bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-colors flex items-center justify-center shadow-2xs disabled:opacity-50"
               >
-                <RefreshCw size={15} className={loading ? 'animate-spin text-[#F45A0A]' : ''} />
+                <RefreshCw size={16} className={loading ? 'animate-spin text-[#F45A0A]' : ''} />
               </button>
             </Tooltip>
 
-            {/* New Group Button (Opens GroupDesignWorkspace) */}
+            {/* Design Group Button (زر تصميم الكروب - يفتح النافذة المنبثقة) */}
             <button
               type="button"
               onClick={() => openDesignEditor()}
-              className="h-[38px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-black text-xs cursor-pointer transition-all flex items-center gap-1.5 shadow-xs"
+              className="h-[46px] px-5 rounded-[11px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-black text-xs cursor-pointer transition-all flex items-center gap-2 shadow-xs"
             >
-              <Plus size={16} strokeWidth={2.4} />
-              <span>{isAr ? 'كروب جديد' : 'New Group'}</span>
+              <Plus size={17} strokeWidth={2.4} />
+              <span>{isAr ? 'تصميم الكروب' : 'Design Group'}</span>
             </button>
 
           </div>

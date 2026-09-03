@@ -54,8 +54,8 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
   status,
   airline,
   airlineLogo,
-  fromAirport = 'MHD',
-  toAirport = 'BGW',
+  fromAirport = '',
+  toAirport = '',
   travelDate,
   pnr,
   passengersCount,
@@ -270,7 +270,7 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
           {/* Short Route Pill */}
           <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-center">
             <span className="text-sm font-bold text-slate-900 font-mono tracking-wider block" dir="ltr">
-              {fromAirport || 'MHD'} → {toAirport || 'BGW'}
+              {fromAirport && toAirport ? `${fromAirport} → ${toAirport}` : (isAr ? 'لم يحدد المسار بعد' : 'Route not set')}
             </span>
           </div>
 

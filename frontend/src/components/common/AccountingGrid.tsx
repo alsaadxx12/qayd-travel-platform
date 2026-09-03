@@ -82,6 +82,7 @@ interface AccountingGridProps {
   hideFilters?: boolean;
   hideDateFilter?: boolean;
   hideSearch?: boolean;
+  hideActionsButton?: boolean;
   hideClearFiltersButton?: boolean;
   hideHeaderCard?: boolean;
   hideFooter?: boolean;
@@ -121,6 +122,7 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
   hideFilters = false,
   hideDateFilter = false,
   hideSearch = false,
+  hideActionsButton = false,
   hideClearFiltersButton = false,
   hideHeaderCard = false,
   hideFooter = false,
@@ -574,92 +576,94 @@ export const AccountingGrid: React.FC<AccountingGridProps> = ({
 
             {/* Left side (RTL End): "إجراءات" Dropdown & Refresh Button */}
             <div className="flex items-center gap-1.5 shrink-0">
-              <Menu position="bottom-end" shadow="md" width={220} withinPortal={false}>
-                <Menu.Target>
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    color="gray"
-                    className="h-8 px-3 font-bold text-xs border-slate-300 bg-white hover:bg-slate-50 shadow-2xs"
-                    leftSection={<IconDotsVertical size={14} />}
-                    rightSection={<IconChevronDown size={13} />}
-                  >
-                    {isAr ? 'إجراءات' : 'Actions'}
-                  </Button>
-                </Menu.Target>
-
-                <Menu.Dropdown p="xs" className="space-y-1">
-                  {onOpenBatchStatements && (
-                    <Menu.Item
-                      leftSection={<IconFileText size={15} className="text-emerald-600" />}
-                      onClick={() => onOpenBatchStatements(Array.from(selectedRowIds))}
-                      className="font-bold text-xs"
+              {!hideActionsButton && (
+                <Menu position="bottom-end" shadow="md" width={220} withinPortal={false}>
+                  <Menu.Target>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      color="gray"
+                      className="h-8 px-3 font-bold text-xs border-slate-300 bg-white hover:bg-slate-50 shadow-2xs"
+                      leftSection={<IconDotsVertical size={14} />}
+                      rightSection={<IconChevronDown size={13} />}
                     >
-                      {selectedRowIds.size > 0
-                        ? `سحب الكشوفات المحددة (${selectedRowIds.size})`
-                        : 'سحب الكشوفات'}
-                    </Menu.Item>
-                  )}
+                      {isAr ? 'إجراءات' : 'Actions'}
+                    </Button>
+                  </Menu.Target>
 
-                  {onSendEmail && (
-                    <Menu.Item
-                      leftSection={<IconMail size={15} className="text-indigo-600" />}
-                      onClick={() => onSendEmail(Array.from(selectedRowIds))}
-                      className="font-bold text-xs"
-                    >
-                      إرسال عبر الإيميل
-                    </Menu.Item>
-                  )}
+                  <Menu.Dropdown p="xs" className="space-y-1">
+                    {onOpenBatchStatements && (
+                      <Menu.Item
+                        leftSection={<IconFileText size={15} className="text-emerald-600" />}
+                        onClick={() => onOpenBatchStatements(Array.from(selectedRowIds))}
+                        className="font-bold text-xs"
+                      >
+                        {selectedRowIds.size > 0
+                          ? `سحب الكشوفات المحددة (${selectedRowIds.size})`
+                          : 'سحب الكشوفات'}
+                      </Menu.Item>
+                    )}
 
-                  {!hideExport && (
-                    <Menu.Item
-                      leftSection={<IconFileSpreadsheet size={15} className="text-emerald-600" />}
-                      onClick={handleExportExcel}
-                      className="font-bold text-xs"
-                    >
-                      تصدير Excel
-                    </Menu.Item>
-                  )}
+                    {onSendEmail && (
+                      <Menu.Item
+                        leftSection={<IconMail size={15} className="text-indigo-600" />}
+                        onClick={() => onSendEmail(Array.from(selectedRowIds))}
+                        className="font-bold text-xs"
+                      >
+                        إرسال عبر الإيميل
+                      </Menu.Item>
+                    )}
 
-                  {!hidePrint && (
-                    <Menu.Item
-                      leftSection={<IconPrinter size={15} className="text-blue-600" />}
-                      onClick={() => window.print()}
-                      className="font-bold text-xs"
-                    >
-                      طباعة التقرير
-                    </Menu.Item>
-                  )}
+                    {!hideExport && (
+                      <Menu.Item
+                        leftSection={<IconFileSpreadsheet size={15} className="text-emerald-600" />}
+                        onClick={handleExportExcel}
+                        className="font-bold text-xs"
+                      >
+                        تصدير Excel
+                      </Menu.Item>
+                    )}
 
-                  <Menu.Divider />
+                    {!hidePrint && (
+                      <Menu.Item
+                        leftSection={<IconPrinter size={15} className="text-blue-600" />}
+                        onClick={() => window.print()}
+                        className="font-bold text-xs"
+                      >
+                        طباعة التقرير
+                      </Menu.Item>
+                    )}
 
-                  <Menu.Label className="font-bold text-[11px] text-slate-500 flex items-center justify-between">
-                    <span>تحكم الأعمدة</span>
-                    <button
-                      type="button"
-                      onClick={handleResetColumns}
-                      className="text-[10px] text-teal-700 hover:text-teal-900 font-bold flex items-center gap-0.5 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200"
-                      title="إعادة الترتيب الإفتراضي"
-                    >
-                      <IconRotate size={10} />
-                      إعادة ضبط
-                    </button>
-                  </Menu.Label>
+                    <Menu.Divider />
 
-                  <div className="max-h-48 overflow-y-auto space-y-1 pt-1 px-1">
-                    {columnDefs.map((col) => (
-                      <Checkbox
-                        key={col.field}
-                        size="xs"
-                        label={col.headerText}
-                        checked={!hiddenCols.has(col.field)}
-                        onChange={() => toggleColumnVisibility(col.field)}
-                        className="cursor-pointer text-xs"
-                      />
-                    ))}
-                  </div>
-                </Menu.Dropdown>
-              </Menu>
+                    <Menu.Label className="font-bold text-[11px] text-slate-500 flex items-center justify-between">
+                      <span>تحكم الأعمدة</span>
+                      <button
+                        type="button"
+                        onClick={handleResetColumns}
+                        className="text-[10px] text-teal-700 hover:text-teal-900 font-bold flex items-center gap-0.5 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200"
+                        title="إعادة الترتيب الإفتراضي"
+                      >
+                        <IconRotate size={10} />
+                        إعادة ضبط
+                      </button>
+                    </Menu.Label>
+
+                    <div className="max-h-48 overflow-y-auto space-y-1 pt-1 px-1">
+                      {columnDefs.map((col) => (
+                        <Checkbox
+                          key={col.field}
+                          size="xs"
+                          label={col.headerText}
+                          checked={!hiddenCols.has(col.field)}
+                          onChange={() => toggleColumnVisibility(col.field)}
+                          className="cursor-pointer text-xs"
+                        />
+                      ))}
+                    </div>
+                  </Menu.Dropdown>
+                </Menu>
+              )}
 
               {onRefresh && (
                 <ActionIcon variant="light" color="gray" className="w-8 h-8 rounded-md border border-slate-200" onClick={onRefresh} title="تحديث البيانات">

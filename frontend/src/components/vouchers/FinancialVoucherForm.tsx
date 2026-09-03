@@ -39,7 +39,7 @@ import {
 import { apiRequest, invalidateApiCache } from '../../api/client';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
-import { allocateDocumentNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber, peekDocumentNumber } from '../../utils/sequenceUtils';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
 import { FormattedNumberInput } from '../common/FormattedNumberInput';
 import { AccountingDatePicker } from '../common/date/AccountingDatePicker';
@@ -288,7 +288,8 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
   const applyNewSequenceNumber = (type: 'RECEIPT' | 'PAYMENT' | 'EXCHANGE' | 'JOURNAL') => {
     const key =
       type === 'RECEIPT' ? 'receiptVouchers' : type === 'PAYMENT' ? 'paymentVouchers' : type === 'EXCHANGE' ? 'exchange' : 'journalEntries';
-    allocateDocumentNumber(key).then(setVoucherNumber);
+    // معاينة للعرض — التنقّل بين قبض/دفع/صرافة/قيد كان يحرق رقماً في كل نقرة.
+    peekDocumentNumber(key).then(setVoucherNumber);
   };
 
   // Fast load config on open + Auto-detect employee's cashbox + Load Payment Methods
@@ -988,10 +989,12 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       const endpoint = isEditing ? `/api/journal-entries/${editingVoucherId}` : '/api/journal-entries';
       const method = isEditing ? 'PATCH' : 'POST';
 
+      const finalJvNumber = isEditing && voucherNumber ? voucherNumber : await allocateDocumentNumber('journalEntries');
+
       const payload = {
         date,
-        entryNumber: voucherNumber,
-        reference: voucherNumber,
+        entryNumber: finalJvNumber,
+        reference: finalJvNumber,
         description: description || 'سند قيد محاسبي',
         // The rate is the entry's own, not the system's: the backend converts the
         // lines into the ledger's currency with exactly this number and stores both.
@@ -1155,8 +1158,13 @@ export const FinancialVoucherForm: React.FC<FinancialVoucherFormProps> = ({
       description || (isReceipt ? 'سند قبض مالي' : 'سند دفع مالي'),
     );
 
+    const finalVoucherNumber =
+      isEditing && voucherNumber
+        ? voucherNumber
+        : await allocateDocumentNumber(isReceipt ? 'receiptVouchers' : 'paymentVouchers');
+
     const payload = {
-      voucherNumber,
+      voucherNumber: finalVoucherNumber,
       amount: numAmount,
       currency,
       exchangeRate: currency === 'USD' ? Number(exchangeRate) || 1 : 1,

@@ -70,7 +70,7 @@ import { employeesApi } from '../../api/employees';
 import { ticketsApi } from '../../api/tickets';
 import { fetchPrintTemplate, savePrintTemplate } from '../../api/printTemplates';
 import { showSuccessNotification, showErrorNotification, showInfoNotification } from '../../utils/notifications';
-import { allocateDocumentNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber, peekDocumentNumber } from '../../utils/sequenceUtils';
 import { formatCurrency } from '../../utils/currencyUtils';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -916,7 +916,7 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
     } else {
       // Create Mode — seeded from this employee's saved page defaults.
       const defaults = loadTicketPageSettings(user?.companyId, 'visas');
-      allocateDocumentNumber('visas').then(setInvoiceNumber);
+      peekDocumentNumber('visas').then(setInvoiceNumber);
       setIssueDate(new Date());
       setSupplierAccount('');
       setSupplierAccountName('');
@@ -1544,7 +1544,12 @@ export const VisaInvoiceEditorWorkspace: React.FC<VisaInvoiceEditorWorkspaceProp
       const isCashSale = paymentType === 'نقدي' || paymentType === 'CASH' || paymentType === 'DEBIT';
 
       const payload: any = {
-        invoiceNumber: String(invoiceNumber || '').startsWith('VISA-NEW') ? undefined : String(invoiceNumber || ''),
+        // معاينةُ الفتح لا تُرسَل: الجديد يخصَّص رقمه هنا ذرّياً.
+        invoiceNumber:
+          (initialData?.rawInvoice?.id || (initialData?.id && !String(initialData.id).startsWith('TK-AUTO-') && !String(initialData.id).startsWith('VISA-NEW'))) &&
+          invoiceNumber && !String(invoiceNumber).startsWith('VISA-NEW')
+            ? String(invoiceNumber)
+            : await allocateDocumentNumber('visas'),
         issueDate: issueDate.toISOString(),
         entryDate: entryDate.toISOString(),
         customerName: finalCustomer || null,

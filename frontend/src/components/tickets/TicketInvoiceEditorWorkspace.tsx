@@ -52,7 +52,7 @@ import { employeesApi } from '../../api/employees';
 import { ticketsApi } from '../../api/tickets';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { showSuccessNotification, showErrorNotification, showInfoNotification } from '../../utils/notifications';
-import { allocateDocumentNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber, peekDocumentNumber } from '../../utils/sequenceUtils';
 import { formatCurrency, getCurrencySymbol, getCurrencyLabel } from '../../utils/currencyUtils';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -116,10 +116,10 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH_HAND');
   const [receivingCashbox, setReceivingCashbox] = useState<string>('');
   const [payingCashbox, setPayingCashbox] = useState<string>('');
-  const [fromAirport, setFromAirport] = useState<string>('MHD');
-  const [toAirport, setToAirport] = useState<string>('BGW');
+  const [fromAirport, setFromAirport] = useState<string>('');
+  const [toAirport, setToAirport] = useState<string>('');
   const [stopovers, setStopovers] = useState<string[]>([]);
-  const [fullRouteText, setFullRouteText] = useState<string>('MHD - BGW');
+  const [fullRouteText, setFullRouteText] = useState<string>('');
   const [entryDate, setEntryDate] = useState<Date>(new Date());
   const [reference, setReference] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
@@ -748,8 +748,9 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       setIsDirty(false);
     } else {
       // Create Mode: generate new invoice sequence
-      // الرقم يُخصَّص من الخادم، فيصل بعد لحظة ويُملأ الحقل حين يصل.
-      allocateDocumentNumber('tickets').then(setInvoiceNumber);
+      // المعروض عند الفتح معاينةٌ لا حجزاً — الرقم الحقيقي يُخصَّص عند الحفظ،
+      // فمن فتح النافذة وألغاها لم يحرق رقماً ولا فجوة في التسلسل.
+      peekDocumentNumber('tickets').then(setInvoiceNumber);
       const settings = loadTicketPageSettings(user?.companyId, 'tickets');
       setPageSettings(settings);
       const today = new Date();
@@ -767,10 +768,10 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
       setExchangeRate(settings.defaultCurrency === 'USD' ? adoptedEx.adoptedRate || 1 : 1);
       setPaymentType(settings.defaultPaymentType || 'نقدي');
       setPaymentMethod(settings.defaultPaymentMethod || 'CASH_HAND');
-      setFromAirport('MHD');
-      setToAirport('BGW');
+      setFromAirport('');
+      setToAirport('');
       setStopovers([]);
-      setFullRouteText('MHD - BGW');
+      setFullRouteText('');
       setReference('');
       setNotes('');
       setStatus('DRAFT');
@@ -1356,8 +1357,15 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
         }
       }
 
+      /* الرقم الحقيقي يُخصَّص الآن؛ ما عُرض كان معاينة. */
+      const finalInvoiceNumber =
+        (initialData?.id || initialData?.invoiceNumber) && invoiceNumber
+          ? invoiceNumber
+          : await allocateDocumentNumber('tickets');
+      if (finalInvoiceNumber !== invoiceNumber) setInvoiceNumber(finalInvoiceNumber);
+
       const payload: any = {
-        invoiceNumber,
+        invoiceNumber: finalInvoiceNumber,
         issueDate: issueDate.toISOString(),
         travelDate: travelDate ? travelDate.toISOString() : null,
         customerName: customerName.trim(),

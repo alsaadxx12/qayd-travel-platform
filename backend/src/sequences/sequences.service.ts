@@ -227,4 +227,52 @@ export class SequencesService {
 
     return { docType, number: parts.join(row.separator || '-') };
   }
+
+  /**
+   * معاينة الرقم التالي — بلا حرق.
+   *
+   * كانت النوافذ تستدعي التخصيص الذرّي عند الفتح لتعرض الرقم، فمن فتح نافذةً
+   * وألغاها استهلك رقماً — وهذا مصدر الفجوات التي بدت خربطةً في الترقيم.
+   * المعاينة تقرأ ولا تزيد؛ والرقم الحقيقي يُخصَّص عند الحفظ وحده.
+   */
+  async peek(companyId: string, docTypeRaw: string, branchCode?: string) {
+    const docType = canonicalDocType(docTypeRaw);
+    const year = new Date().getFullYear();
+    await this.list(companyId, branchCode || '');
+    const row = await this.prisma.documentSequence.findFirst({
+      where: { companyId, branchId: null, docType },
+    });
+    if (!row) return { docType, number: '' };
+    const next = row.includeYear && (row.year ?? year) !== year ? 1001 : row.nextNumber;
+    const parts: string[] = [];
+    const bc = branchCode || row.branchCode;
+    if (bc) parts.push(String(bc).toUpperCase());
+    if (row.prefix) parts.push(String(row.prefix).toUpperCase());
+    if (row.includeYear) parts.push(String(year));
+    parts.push(String(next).padStart(row.padding || 5, '0'));
+    return { docType, number: parts.join(row.separator || '-') };
+  }
+
+  /**
+   * إصلاح العدّادات: كلٌّ يقف فوق أعلى رقم مستعمل فعلاً في بياناته.
+   *
+   * تُستدعى بعد عبثٍ بالعدّادات — تصفيرٌ اصطدم بأرقام محفوظة، أو أرقامٌ حُرقت
+   * اختباراً — فتُعاد كل التسلسلات إلى الحقيقة: ما لا بيانات له يعود إلى 1001،
+   * وما له بيانات يكمل من بعدها.
+   */
+  async repair(companyId: string) {
+    const seeded = await this.seedStartingPoints(companyId);
+    const rows = await this.prisma.documentSequence.findMany({ where: { companyId, branchId: null } });
+    const year = new Date().getFullYear();
+    const report: Array<{ docType: string; from: number; to: number }> = [];
+    for (const row of rows) {
+      const to = seeded[row.docType] || 1001;
+      await this.prisma.documentSequence.update({
+        where: { id: row.id },
+        data: { nextNumber: to, year },
+      });
+      report.push({ docType: row.docType, from: row.nextNumber, to });
+    }
+    return { repaired: report.length, report };
+  }
 }

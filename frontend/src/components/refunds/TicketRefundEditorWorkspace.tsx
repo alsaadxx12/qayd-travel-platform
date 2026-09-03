@@ -48,7 +48,7 @@ import { showSuccessNotification, showErrorNotification, showInfoNotification } 
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
-import { allocateDocumentNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber, peekDocumentNumber } from '../../utils/sequenceUtils';
 
 export interface RefundPassengerLine {
   id: string;
@@ -244,7 +244,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
       if (initialData) {
         const isExistingRefund = initialData.tripType === 'REFUND' || String(initialData.invoiceNumber || '').startsWith('REF-');
         if (isExistingRefund) setRefundNumber(initialData.invoiceNumber || '');
-        else allocateDocumentNumber('refunds').then(setRefundNumber);
+        else peekDocumentNumber('refunds').then(setRefundNumber);
         if (!isExistingRefund) {
           setSelectedOriginalTicket(initialData);
         }
@@ -326,7 +326,7 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
           ]);
         }
       } else {
-        allocateDocumentNumber('refunds').then(setRefundNumber);
+        peekDocumentNumber('refunds').then(setRefundNumber);
         setEmployeeName(user?.name || '');
         setPassengers([
           {
@@ -712,7 +712,11 @@ export const TicketRefundEditorWorkspace: React.FC<TicketRefundEditorWorkspacePr
     setSubmitting(true);
     try {
       const payload: any = {
-        invoiceNumber: refundNumber,
+        // تعديل استرجاعٍ قائم يحتفظ برقمه؛ الجديد يخصَّص رقمه الآن لا عند الفتح.
+        invoiceNumber:
+          (initialData?.tripType === 'REFUND' || String(initialData?.invoiceNumber || '').startsWith('REF-')) && refundNumber
+            ? refundNumber
+            : await allocateDocumentNumber('refunds'),
         issueDate: issueDate.toISOString(),
         travelDate: travelDate ? travelDate.toISOString() : null,
         pnr: pnr || activePassengers[0]?.pnr || undefined,

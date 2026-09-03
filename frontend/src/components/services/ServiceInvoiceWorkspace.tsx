@@ -15,7 +15,7 @@ import { AccountFinderModal, type AccountFinderResult } from '../common/AccountF
 import { ticketsApi, type TicketData } from '../../api/tickets';
 import { partnersApi } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
-import { allocateDocumentNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber, peekDocumentNumber } from '../../utils/sequenceUtils';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import {
@@ -93,7 +93,7 @@ export const ServiceInvoiceWorkspace: React.FC<Props> = ({ kind, opened, onClose
       setNotes(userNotes);
     } else {
       setInvoiceNumber('');
-      allocateDocumentNumber(def.sequenceKey).then(setInvoiceNumber);
+      peekDocumentNumber(def.sequenceKey).then(setInvoiceNumber);
       setIssueDate(new Date().toISOString().slice(0, 10));
       setCustomerName('');
       setSupplierAccount('');
@@ -144,7 +144,8 @@ export const ServiceInvoiceWorkspace: React.FC<Props> = ({ kind, opened, onClose
 
     setSaving(true);
     try {
-      const number = invoiceNumber || (await allocateDocumentNumber(def.sequenceKey));
+      const number =
+        (initialData as any)?.id && invoiceNumber ? invoiceNumber : await allocateDocumentNumber(def.sequenceKey);
       const payload: any = {
         invoiceNumber: number,
         issueDate,

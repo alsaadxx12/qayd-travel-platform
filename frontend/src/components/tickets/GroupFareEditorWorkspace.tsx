@@ -45,7 +45,7 @@ import { showSuccessNotification, showErrorNotification, showInfoNotification } 
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
-import { allocateDocumentNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber, peekDocumentNumber } from '../../utils/sequenceUtils';
 
 export interface GroupFarePnrLine {
   id: string;
@@ -532,7 +532,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
     if (opened) {
       if (initialData) {
         if (initialData.invoiceNumber) setInvoiceNumber(initialData.invoiceNumber);
-        else allocateDocumentNumber('groups').then(setInvoiceNumber);
+        else peekDocumentNumber('groups').then(setInvoiceNumber);
         setIssueDate(initialData.issueDate ? new Date(initialData.issueDate) : new Date());
         setTravelDate(initialData.travelDate ? new Date(initialData.travelDate) : null);
         setReturnDate(initialData.returnDate ? new Date(initialData.returnDate) : null);
@@ -595,7 +595,7 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
           ]);
         }
       } else {
-        allocateDocumentNumber('groups').then(setInvoiceNumber);
+        peekDocumentNumber('groups').then(setInvoiceNumber);
         setEmployeeName(user?.name || '');
         setPaymentType('نقدي');
         setPaymentMethod('CASH_HAND');
@@ -1002,8 +1002,12 @@ export const GroupFareEditorWorkspace: React.FC<GroupFareEditorWorkspaceProps> =
       const mainPnr = activeLines[0]?.pnr.trim().toUpperCase();
       const pnrListStr = activeLines.map((l) => l.pnr.trim().toUpperCase()).join(' - ');
 
+      const finalGroupNumber =
+        (initialData as any)?.id && invoiceNumber ? invoiceNumber : await allocateDocumentNumber('groups');
+      if (finalGroupNumber !== invoiceNumber) setInvoiceNumber(finalGroupNumber);
+
       const payload: any = {
-        invoiceNumber,
+        invoiceNumber: finalGroupNumber,
         issueDate: issueDate.toISOString(),
         travelDate: travelDate ? travelDate.toISOString() : null,
         returnDate: returnDate ? returnDate.toISOString() : null,

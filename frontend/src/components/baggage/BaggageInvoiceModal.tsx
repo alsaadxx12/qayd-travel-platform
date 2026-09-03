@@ -15,7 +15,8 @@ import { AccountFinderModal, type AccountFinderResult } from '../common/AccountF
 import { ticketsApi, type TicketData } from '../../api/tickets';
 import { partnersApi, type Customer, type Supplier } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
-import { allocateDocumentNumber } from '../../utils/sequenceUtils';
+import { fetchPrintTemplate } from '../../api/printTemplates';
+import { allocateDocumentNumber, peekDocumentNumber } from '../../utils/sequenceUtils';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { decodeServiceExtras, encodeServiceExtras } from '../services/serviceKinds';
@@ -70,9 +71,10 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
   // PNR only
   const [pnr, setPnr] = useState('');
 
-  // Payment & Currency (Default strictly USD as requested)
+  // Payment, Receiving Method, and Currency (strictly USD by default)
   const [currency, setCurrency] = useState<'USD' | 'IQD'>('USD');
   const [paymentType, setPaymentType] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
+  const [paymentMethod, setPaymentMethod] = useState<string>('CASH_HAND');
   const [cashboxAccountId, setCashboxAccountId] = useState('');
 
   // Advanced Account Finder Modal State
@@ -98,12 +100,13 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Dropdown options
+  // Dropdown options from backend
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [cashboxes, setCashboxes] = useState<any[]>([]);
+  const [paymentMethodsConfig, setPaymentMethodsConfig] = useState<any[]>([]);
 
-  // ── Load Dropdowns ──
+  // ── Load Dropdowns and Settings ──
   useEffect(() => {
     if (!opened) return;
 
@@ -124,6 +127,14 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
         setCashboxes(list.filter((a: any) => a.category === 'CASH' && !a.isParent));
       })
       .catch(() => undefined);
+
+    fetchPrintTemplate('payment_methods_mapping')
+      .then((res: any) => {
+        if (res && res.config && Array.isArray(res.config.mappings) && res.config.mappings.length > 0) {
+          setPaymentMethodsConfig(res.config.mappings.filter((m: any) => m.isActive !== false));
+        }
+      })
+      .catch(() => undefined);
   }, [opened]);
 
   // ── Initialize or Reset on Open ──
@@ -141,10 +152,10 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
       setSupplierAccountName(initialData.supplierAccountName || '');
       setSupplierAccountId(initialData.supplierAccountId || '');
       setPnr((initialData.pnr || extras.pnr || '').toUpperCase());
-      // Default to USD unless strictly specified IQD
       setCurrency(String(initialData.currency || '').toUpperCase() === 'IQD' ? 'IQD' : 'USD');
       setPaymentType(String(initialData.paymentType || 'DEBIT') === 'CREDIT' ? 'CREDIT' : 'DEBIT');
-      setCashboxAccountId((initialData as any).cashboxAccountId || '');
+      setPaymentMethod((initialData as any).paymentMethod || 'CASH_HAND');
+      setCashboxAccountId((initialData as any).cashboxAccountId || (initialData as any).receivingCashbox || '');
       setNotes(userNotes);
 
       const rawPax = initialData.passengers || [];
@@ -175,9 +186,8 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
       }
     } else {
       setInvoiceNumber('');
-      allocateDocumentNumber('baggage')
-        .then(setInvoiceNumber)
-        .catch(() => setInvoiceNumber('WGT-0001'));
+      // معاينة لا حجز — والفشل يترك الحقل فارغاً بدل رقمٍ مختلَق.
+      peekDocumentNumber('baggage').then(setInvoiceNumber);
 
       setIssueDate(new Date().toISOString().slice(0, 10));
       setCustomerId('');
@@ -190,6 +200,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
       // Strictly default to USD as requested
       setCurrency('USD');
       setPaymentType('DEBIT');
+      setPaymentMethod('CASH_HAND');
       setCashboxAccountId('');
       setNotes('');
       setPassengers([
@@ -358,7 +369,8 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
     };
 
     const payload: any = {
-      invoiceNumber: invoiceNumber.trim(),
+      invoiceNumber:
+        (initialData as any)?.id && invoiceNumber.trim() ? invoiceNumber.trim() : await allocateDocumentNumber('baggage'),
       issueDate: new Date(issueDate).toISOString(),
       tripType: 'BAGGAGE',
       customerName: customerName.trim(),
@@ -370,6 +382,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
       supplierAccountId: resolvedSupplierAccountId || undefined,
       currency,
       paymentType,
+      paymentMethod: paymentType === 'DEBIT' ? paymentMethod : undefined,
       cashboxAccountId: paymentType === 'DEBIT' ? cashboxAccountId || undefined : undefined,
       receivingCashbox: paymentType === 'DEBIT' ? cashboxAccountId || undefined : undefined,
       pnr: pnr.trim().toUpperCase(),
@@ -440,6 +453,43 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
     [cashboxes]
   );
 
+  // Dropdown options for Payment Type (نقد / آجل كدروب داون كما طلب المستخدم)
+  const paymentTypeOptions = useMemo(
+    () => [
+      { value: 'DEBIT', label: isAr ? 'نقدي (تحصيل فوري)' : 'Cash (Immediate)' },
+      { value: 'CREDIT', label: isAr ? 'آجل (ذمة المستفيد)' : 'Credit (On Account)' },
+    ],
+    [isAr]
+  );
+
+  // Dropdown options for Receiving Method (طريقة الاستلام)
+  const paymentMethodOptions: { value: string; label: string; targetAccountId?: string }[] = useMemo(() => {
+    if (Array.isArray(paymentMethodsConfig) && paymentMethodsConfig.length > 0) {
+      return paymentMethodsConfig.map((pm: any) => ({
+        value: pm.key || pm.id || pm.nameAr,
+        label: isAr ? pm.nameAr || pm.key : pm.nameEn || pm.nameAr || pm.key,
+        targetAccountId: pm.targetAccountId,
+      }));
+    }
+    return [
+      { value: 'CASH_HAND', label: isAr ? 'كاش باليد (نقدي)' : 'Cash in Hand', targetAccountId: undefined },
+      { value: 'ZAIN_CASH', label: isAr ? 'زين كاش (Zain Cash)' : 'Zain Cash', targetAccountId: undefined },
+      { value: 'FIB', label: isAr ? 'مصرف العراق الأول (FIB)' : 'First Iraqi Bank (FIB)', targetAccountId: undefined },
+      { value: 'QI_CARD', label: isAr ? 'كي كارد (Qi Card)' : 'Qi Card', targetAccountId: undefined },
+      { value: 'BANK_TRANSFER', label: isAr ? 'تحويل مصرفي / بنكي' : 'Bank Transfer', targetAccountId: undefined },
+      { value: 'MASTER_CARD', label: isAr ? 'ماستر كارد (MasterCard)' : 'MasterCard', targetAccountId: undefined },
+    ];
+  }, [paymentMethodsConfig, isAr]);
+
+  // Dropdown options for Currency (افتراضياً دولار - رموز فقط بدون نصوص زائدة)
+  const currencyOptions = useMemo(
+    () => [
+      { value: 'USD', label: 'USD' },
+      { value: 'IQD', label: 'IQD' },
+    ],
+    []
+  );
+
   return (
     <>
       <Modal
@@ -486,10 +536,19 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
           {/* ══════════════════════════════════════════════════════════════
               2. BODY (حقول موحدة الارتفاع 46px تماماً لجميع العناصر)
              ══════════════════════════════════════════════════════════════ */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+          {/*
+            * حاوية واحدة بدل أربع.
+            *
+            * كانت الشاشة أربعة صناديق مؤطَّرة على أرضية رمادية، وداخل أحدها
+            * صندوقان آخران للجدول ولمجاميعه — فتتزاحم الحدود ويضيع ما يهم بين
+            * ما لا يهم. الآن بطاقة واحدة، وما يفصل أقسامها خطٌّ رفيع لا إطار،
+            * والتمييز بالمسافة والخط لا بمزيد من الحواف.
+            */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs divide-y divide-slate-100">
 
-            {/* ── CARD 1: الحقول الأساسية والسداد موحدة الارتفاع ── */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3.5 space-y-3">
+            {/* ── القسم الأول: الفاتورة وأطرافها ── */}
+            <div className="p-4 space-y-3">
               
               {/* Row 1: 4 Main Fields - All 46px Height, Aligned Labels */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -579,9 +638,51 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* Row 2: Financial & Payment Controls - All 46px Height, Aligned Labels */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2.5 border-t border-slate-100">
-                {/* Cashbox (if Cash) */}
+              {/* Row 2: Financial & Payment Dropdowns - All 46px Height, Aligned Labels */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2.5 border-t border-slate-100">
+                {/* Payment Type (نقدي / آجل) كدروب داون كما طلب المستخدم */}
+                <div>
+                  <SearchableCombobox
+                    label={isAr ? 'نوع السداد' : 'Payment Type'}
+                    value={paymentType}
+                    onChange={(val) => setPaymentType((val as 'DEBIT' | 'CREDIT') || 'DEBIT')}
+                    options={paymentTypeOptions}
+                    clearable={false}
+                  />
+                </div>
+
+                {/* طريقة الاستلام (دروب داون) */}
+                <div>
+                  {paymentType === 'DEBIT' ? (
+                    <SearchableCombobox
+                      label={isAr ? 'طريقة الاستلام' : 'Receiving Method'}
+                      value={paymentMethod}
+                      onChange={(val) => {
+                        const nextMethod = val || 'CASH_HAND';
+                        setPaymentMethod(nextMethod);
+                        const matched = paymentMethodOptions.find((pm: any) => pm.value === nextMethod);
+                        if (matched?.targetAccountId) {
+                          setCashboxAccountId(matched.targetAccountId);
+                        }
+                      }}
+                      options={paymentMethodOptions}
+                      clearable={false}
+                    />
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between gap-2 min-h-[20px] mb-[7px]">
+                        <label className="block text-[12.5px] font-medium text-[#6B7280] leading-[20px] truncate">
+                          {isAr ? 'طريقة الاستلام' : 'Receiving Method'}
+                        </label>
+                      </div>
+                      <div className="h-[46px] px-3.5 rounded-[11px] border border-slate-200 bg-slate-50 text-slate-400 text-xs font-medium flex items-center">
+                        <span>{isAr ? 'غير منطبق (بيع آجل)' : 'Not applicable'}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cashbox / Status */}
                 <div>
                   {paymentType === 'DEBIT' ? (
                     <SearchableCombobox
@@ -595,7 +696,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                     <div>
                       <div className="flex items-center justify-between gap-2 min-h-[20px] mb-[7px]">
                         <label className="block text-[12.5px] font-medium text-[#6B7280] leading-[20px] truncate">
-                          {isAr ? 'حالة السداد' : 'Payment Status'}
+                          {isAr ? 'حالة القيد المحاسبي' : 'Ledger Status'}
                         </label>
                       </div>
                       <div className="h-[46px] px-3.5 rounded-[11px] border border-slate-200 bg-slate-50 text-slate-600 text-xs font-medium flex items-center">
@@ -605,80 +706,25 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                   )}
                 </div>
 
-                {/* Payment Method - Exactly 46px Height */}
+                {/* Currency Dropdown - Strictly Default USD */}
                 <div>
-                  <div className="flex items-center justify-between gap-2 min-h-[20px] mb-[7px]">
-                    <label className="block text-[12.5px] font-medium text-[#6B7280] leading-[20px] truncate">
-                      {isAr ? 'طريقة السداد' : 'Payment Method'}
-                    </label>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5 h-[46px]">
-                    <button
-                      type="button"
-                      onClick={() => setPaymentType('DEBIT')}
-                      className={`h-[46px] rounded-[11px] text-xs font-bold transition-all cursor-pointer border flex items-center justify-center ${
-                        paymentType === 'DEBIT'
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                          : 'bg-[#FAFAFA] border-[#E5E7EB] text-slate-700 hover:bg-white hover:border-[#D1D5DB]'
-                      }`}
-                    >
-                      {isAr ? 'نقدي' : 'Cash'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentType('CREDIT')}
-                      className={`h-[46px] rounded-[11px] text-xs font-bold transition-all cursor-pointer border flex items-center justify-center ${
-                        paymentType === 'CREDIT'
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                          : 'bg-[#FAFAFA] border-[#E5E7EB] text-slate-700 hover:bg-white hover:border-[#D1D5DB]'
-                      }`}
-                    >
-                      {isAr ? 'آجل (ذمة)' : 'Credit'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Currency - Exactly 46px Height, Default USD */}
-                <div>
-                  <div className="flex items-center justify-between gap-2 min-h-[20px] mb-[7px]">
-                    <label className="block text-[12.5px] font-medium text-[#6B7280] leading-[20px] truncate">
-                      {isAr ? 'العملة' : 'Currency'}
-                    </label>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5 h-[46px]">
-                    <button
-                      type="button"
-                      onClick={() => setCurrency('USD')}
-                      className={`h-[46px] rounded-[11px] font-mono text-xs font-bold transition-all cursor-pointer border flex items-center justify-center ${
-                        currency === 'USD'
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                          : 'bg-[#FAFAFA] border-[#E5E7EB] text-slate-700 hover:bg-white hover:border-[#D1D5DB]'
-                      }`}
-                    >
-                      ($) USD
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCurrency('IQD')}
-                      className={`h-[46px] rounded-[11px] font-mono text-xs font-bold transition-all cursor-pointer border flex items-center justify-center ${
-                        currency === 'IQD'
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                          : 'bg-[#FAFAFA] border-[#E5E7EB] text-slate-700 hover:bg-white hover:border-[#D1D5DB]'
-                      }`}
-                    >
-                      (د.ع) IQD
-                    </button>
-                  </div>
+                  <SearchableCombobox
+                    label={isAr ? 'العملة المعتمدة' : 'Operating Currency'}
+                    value={currency}
+                    onChange={(val) => setCurrency((val as 'USD' | 'IQD') || 'USD')}
+                    options={currencyOptions}
+                    clearable={false}
+                  />
                 </div>
 
               </div>
             </div>
 
-            {/* ── CARD 2: جدول المسافرين والأوزان (كل الحقول بارتفاع موحد 38px) ── */}
-            <div className="bg-white rounded-xl border border-slate-200 p-3.5 space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            {/* ── القسم الثاني: المسافرون وأوزانهم ── */}
+            <div className="p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-xs text-slate-900">
+                  <span className="font-black text-xs text-slate-900">
                     {isAr ? 'المسافرين وأوزانهم' : 'Passengers & Weights'}
                   </span>
                   <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
@@ -696,14 +742,13 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                 </button>
               </div>
 
-              {/* Table with standard 38px inputs */}
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
+              {/* الجدول بلا إطار: عناوينه تكفي لتحديده، ولا حاجة لصندوقٍ داخل صندوق. */}
+              <div className="overflow-x-auto -mx-1">
                 <table className="w-full text-start border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                    <tr className="text-slate-500 font-bold border-b border-slate-200">
                       <th className="py-2 px-2.5 w-8 text-center">#</th>
                       <th className="py-2 px-2.5 text-start">{isAr ? 'اسم المسافر *' : 'Passenger Name *'}</th>
-                      <th className="py-2 px-2.5 text-start w-36">{isAr ? 'رقم الجواز *' : 'Passport *'}</th>
                       <th className="py-2 px-2.5 text-center w-36">{isAr ? 'الوزن *' : 'Weight *'}</th>
                       <th className="py-2 px-2.5 text-end w-28">{isAr ? 'الشراء' : 'Buy'}</th>
                       <th className="py-2 px-2.5 text-end w-32">{isAr ? 'البيع (المطلوب) *' : 'Sell *'}</th>
@@ -728,19 +773,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                               value={pax.name}
                               onChange={(e) => handleUpdatePassenger(idx, 'name', e.target.value)}
                               placeholder={isAr ? 'اسم المسافر…' : 'Passenger name…'}
-                              className="w-full h-[38px] px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-[#F45A0A] transition-all"
-                            />
-                          </td>
-
-                          {/* Passport - 38px */}
-                          <td className="py-2 px-2.5">
-                            <input
-                              type="text"
-                              value={pax.passportNumber}
-                              onChange={(e) => handleUpdatePassenger(idx, 'passportNumber', e.target.value.toUpperCase())}
-                              placeholder="A12345678"
-                              className="w-full h-[38px] px-3 rounded-lg border border-slate-200 bg-white text-xs font-mono font-bold text-slate-800 outline-none hover:border-slate-300 focus:border-[#F45A0A] uppercase transition-all"
-                              dir="ltr"
+                              className="w-full h-[38px] px-3 rounded-lg border border-transparent bg-slate-50/80 text-xs font-medium text-slate-900 outline-none hover:bg-white hover:border-slate-200 focus:bg-white focus:border-[#F45A0A] transition-all"
                             />
                           </td>
 
@@ -752,13 +785,13 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                                 value={pax.weight || ''}
                                 onChange={(e) => handleUpdatePassenger(idx, 'weight', parseNumber(e.target.value))}
                                 placeholder="20"
-                                className="w-full h-[38px] px-2 rounded-lg border border-slate-200 bg-white text-xs font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-[#F45A0A] text-center transition-all"
+                                className="w-full h-[38px] px-2 rounded-lg border border-transparent bg-slate-50/80 text-xs font-mono font-bold text-slate-900 outline-none hover:bg-white hover:border-slate-200 focus:bg-white focus:border-[#F45A0A] text-center transition-all"
                                 dir="ltr"
                               />
                               <select
                                 value={pax.unit || 'KG'}
                                 onChange={(e) => handleUpdatePassenger(idx, 'unit', e.target.value as any)}
-                                className="h-[38px] px-2 rounded-lg border border-slate-200 bg-slate-50 text-[11px] font-medium text-slate-700 outline-none cursor-pointer hover:border-slate-300 focus:border-[#F45A0A] transition-all shrink-0"
+                                className="h-[38px] px-2 rounded-lg border border-transparent bg-slate-50/80 text-[11px] font-medium text-slate-700 outline-none cursor-pointer hover:bg-white hover:border-slate-200 focus:bg-white focus:border-[#F45A0A] transition-all shrink-0"
                               >
                                 <option value="KG">{isAr ? 'كغم' : 'KG'}</option>
                                 <option value="PIECE">{isAr ? 'قطعة' : 'Pc'}</option>
@@ -773,7 +806,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                               value={pax.fareBuy ? formatNumber(pax.fareBuy) : ''}
                               onChange={(e) => handleUpdatePassenger(idx, 'fareBuy', parseNumber(e.target.value))}
                               placeholder="0"
-                              className="w-full h-[38px] px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-mono text-slate-700 outline-none hover:border-slate-300 focus:border-[#F45A0A] text-end transition-all"
+                              className="w-full h-[38px] px-2.5 rounded-lg border border-transparent bg-slate-50/80 text-xs font-mono text-slate-700 outline-none hover:bg-white hover:border-slate-200 focus:bg-white focus:border-[#F45A0A] text-end transition-all"
                               dir="ltr"
                             />
                           </td>
@@ -785,7 +818,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                               value={pax.fareSell ? formatNumber(pax.fareSell) : ''}
                               onChange={(e) => handleUpdatePassenger(idx, 'fareSell', parseNumber(e.target.value))}
                               placeholder="0"
-                              className="w-full h-[38px] px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-mono font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-[#F45A0A] text-end transition-all"
+                              className="w-full h-[38px] px-2.5 rounded-lg border border-transparent bg-slate-50/80 text-xs font-mono font-bold text-slate-900 outline-none hover:bg-white hover:border-slate-200 focus:bg-white focus:border-[#F45A0A] text-end transition-all"
                               dir="ltr"
                             />
                           </td>
@@ -827,51 +860,50 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
                 </table>
               </div>
 
-              {/* Total Summary Row */}
-              <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between flex-wrap gap-2 text-xs">
-                <div className="flex items-center gap-4 flex-wrap">
-                  <div>
-                    <span className="text-slate-500">{isAr ? 'إجمالي الوزن: ' : 'Total Weight: '}</span>
+              {/* المجاميع سطرٌ يفصله خط، لا صندوقٌ ثالث. والتمييز بالخط لا بالإطار. */}
+              <div className="flex items-center justify-between flex-wrap gap-x-5 gap-y-1.5 pt-2.5 border-t border-slate-100 text-xs">
+                <div className="flex items-center gap-x-5 gap-y-1.5 flex-wrap">
+                  <span className="text-slate-500">
+                    {isAr ? 'الوزن' : 'Weight'}{' '}
                     <span className="font-mono font-bold text-slate-800" dir="ltr">
                       {formatNumber(totals.totalWeight)} {isAr ? 'كغم' : 'KG'}
                     </span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500">{isAr ? 'إجمالي الشراء: ' : 'Total Buy: '}</span>
+                  </span>
+                  <span className="text-slate-500">
+                    {isAr ? 'الشراء' : 'Buy'}{' '}
                     <span className="font-mono font-bold text-slate-800" dir="ltr">
                       {formatNumber(totals.totalBuy)} {currency === 'USD' ? '$' : 'IQD'}
                     </span>
-                  </div>
-
-                  <div>
-                    <span className="text-slate-500">{isAr ? 'المطلوب: ' : 'Total Sell: '}</span>
-                    <span className="font-mono font-black text-slate-900" dir="ltr">
+                  </span>
+                  <span className="text-slate-500">
+                    {isAr ? 'المطلوب' : 'Sell'}{' '}
+                    <span className="font-mono font-black text-slate-900 text-[13px]" dir="ltr">
                       {formatNumber(totals.totalSell)} {currency === 'USD' ? '$' : 'IQD'}
                     </span>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-slate-500">{isAr ? 'الصافي: ' : 'Profit: '}</span>
-                  <span className="font-mono font-black text-[#078B61]" dir="ltr">
-                    +{formatNumber(totals.profit)} {currency === 'USD' ? '$' : 'IQD'}
                   </span>
                 </div>
+
+                <span className="text-slate-500">
+                  {isAr ? 'الصافي' : 'Profit'}{' '}
+                  <span className="font-mono font-black text-[#078B61] text-[13px]" dir="ltr">
+                    +{formatNumber(totals.profit)} {currency === 'USD' ? '$' : 'IQD'}
+                  </span>
+                </span>
               </div>
             </div>
 
-            {/* ── Notes ── */}
-            <div>
+            {/* ── الملاحظات: حقل هادئ بلا إطار، فهي اختيارية ولا ينبغي أن تصيح ── */}
+            <div className="px-4 py-2.5">
               <input
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder={isAr ? 'ملاحظات (اختياري)…' : 'Notes (optional)…'}
-                className="w-full h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs text-slate-700 outline-none hover:border-slate-300 focus:border-[#F45A0A] transition-all"
+                className="w-full h-9 px-1 bg-transparent border-0 text-xs text-slate-700 outline-none placeholder:text-slate-300 focus:bg-slate-50/70 rounded-lg transition-colors"
               />
             </div>
 
+            </div>
           </div>
 
           {/* ══════════════════════════════════════════════════════════════

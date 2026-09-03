@@ -46,7 +46,7 @@ import { showSuccessNotification, showErrorNotification } from '../../utils/noti
 import { useLanguageStore } from '../../store/useLanguageStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useAdoptedExchangeRate } from '../../hooks/useAdoptedExchangeRate';
-import { allocateDocumentNumber } from '../../utils/sequenceUtils';
+import { allocateDocumentNumber, peekDocumentNumber } from '../../utils/sequenceUtils';
 
 export interface VisaRefundApplicantLine {
   id: string;
@@ -214,7 +214,7 @@ export const VisaRefundEditorWorkspace: React.FC<VisaRefundEditorWorkspaceProps>
       if (initialData) {
         const isExistingRefund = initialData.tripType === 'REFUND' || String(initialData.invoiceNumber || '').startsWith('REF-');
         if (isExistingRefund) setRefundNumber(initialData.invoiceNumber || '');
-        else allocateDocumentNumber('refunds').then(setRefundNumber);
+        else peekDocumentNumber('refunds').then(setRefundNumber);
         if (!isExistingRefund) {
           setSelectedOriginalVisa(initialData);
         }
@@ -284,7 +284,7 @@ export const VisaRefundEditorWorkspace: React.FC<VisaRefundEditorWorkspaceProps>
           ]);
         }
       } else {
-        allocateDocumentNumber('refunds').then(setRefundNumber);
+        peekDocumentNumber('refunds').then(setRefundNumber);
         setEmployeeName(user?.name || '');
         setApplicants([
           {
@@ -551,7 +551,11 @@ export const VisaRefundEditorWorkspace: React.FC<VisaRefundEditorWorkspaceProps>
     setSubmitting(true);
     try {
       const payload: any = {
-        invoiceNumber: refundNumber,
+        // تعديل استرجاعٍ قائم يحتفظ برقمه؛ الجديد يخصَّص رقمه الآن لا عند الفتح.
+        invoiceNumber:
+          (initialData?.tripType === 'REFUND' || String(initialData?.invoiceNumber || '').startsWith('REF-')) && refundNumber
+            ? refundNumber
+            : await allocateDocumentNumber('refunds'),
         issueDate: issueDate.toISOString(),
         pnr: orderNumber || activeApplicants[0]?.orderNumber || undefined,
         customerName: customerName.trim() || activeApplicants[0].name.trim(),

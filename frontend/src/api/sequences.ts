@@ -27,6 +27,10 @@ export const sequencesApi = {
   save: (configs: Partial<DocumentSequence>[]): Promise<DocumentSequence[]> =>
     apiRequest('/sequences', { method: 'PUT', body: JSON.stringify({ configs }) }),
 
+  /** معاينة الرقم المتوقّع بلا حجزه — للعرض عند فتح النافذة. */
+  peek: (docType: string, branchCode?: string): Promise<{ docType: string; number: string }> =>
+    apiRequest(`/sequences/${encodeURIComponent(docType)}/peek${branchCode ? `?branchCode=${encodeURIComponent(branchCode)}` : ''}`, { noCache: true }),
+
   next: (docType: string, branchCode?: string): Promise<{ docType: string; number: string }> =>
     apiRequest(`/sequences/${encodeURIComponent(docType)}/next`, {
       method: 'POST',

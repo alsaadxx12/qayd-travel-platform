@@ -150,6 +150,13 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
     open: false,
   });
 
+  // User State (مطابق لخانة User في الصورة)
+  const [selectedUser, setSelectedUser] = useState(user?.name || 'علي السعدي');
+  const [usersList, setUsersList] = useState<ComboboxOption[]>([
+    { value: user?.name || 'علي السعدي', label: user?.name || 'علي السعدي' },
+    { value: 'علي السعدي', label: 'علي السعدي' },
+  ]);
+
   useEffect(() => {
     if (!opened) return;
     setActiveStep(1);
@@ -617,13 +624,28 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
   if (!opened) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-9998 bg-[#F8FAFC] flex flex-col font-sans select-none"
-      dir={direction}
-      style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
+    <>
+      <Modal
+        opened={opened}
+      onClose={onClose}
+      size="1150px"
+      radius="20px"
+      centered
+      padding={0}
+      withCloseButton={false}
+      overlayProps={{ backgroundOpacity: 0.45, blur: 2 }}
+      styles={{
+        content: { overflow: 'hidden' },
+        body: { padding: 0 },
+      }}
     >
-      {/* ── 1. HEADER HERO BAR ── */}
-      <div className="bg-white border-b border-[#E5E7EB] shadow-2xs shrink-0">
+      <div
+        className="bg-[#F8FAFC] flex flex-col font-sans select-none max-h-[92vh] overflow-hidden"
+        dir={direction}
+        style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
+      >
+        {/* ── 1. HEADER HERO BAR ── */}
+        <div className="bg-white border-b border-[#E5E7EB] shadow-2xs shrink-0">
         <div className="max-w-[1720px] mx-auto w-full px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
           
           {/* Identity */}
@@ -748,377 +770,240 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
           
           {activeStep === 1 ? (
             /* ══════════════════════════════════════════════════════════════
-               STEP 1: GROUP GENERAL INFORMATION (معلومات وهوية الكروب)
+               STEP 1: GROUP GENERAL INFORMATION (مطابق تماماً للصورة 2 و 3)
                ══════════════════════════════════════════════════════════════ */
-            /* ══════════════════════════════════════════════════════════════
-               STEP 1: SMART GROUP SOURCING & IDENTITY (معلومات وهوية الكروب)
-               ══════════════════════════════════════════════════════════════ */
-            <div className="space-y-4">
-              
-              {/* Card 1: Sourcing Model Selector (جاهز من مورد أو مجمع أو طيران) */}
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 sm:p-6 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-xl bg-[#FFF3E8] border border-[#FED7AA] text-[#F45A0A] flex items-center justify-center">
-                      <Sparkles size={18} />
-                    </div>
-                    <div>
-                      <span className="font-black text-[14px] text-slate-900 block leading-tight">
-                        {isAr ? 'نموذج الكروب ومصدر التجهيز الذكي' : 'Group Sourcing & Operational Model'}
-                      </span>
-                      <span className="text-[11.5px] text-slate-500 font-medium block mt-0.5">
-                        {isAr ? 'اختر طريقة تجهيز الكروب: باكج جاهز من مورد، أو تجميع مخصص، أو مقاعد طيران فقط' : 'Select how this group is sourced: Ready package, custom assembled, or seat block'}
-                      </span>
-                    </div>
+            <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 sm:p-6 space-y-5">
+              {/* Top Row: User in Top Right (User / علي السعدي) */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-[#FFF3E8] border border-[#FED7AA] text-[#F45A0A] flex items-center justify-center">
+                    <Package size={20} />
+                  </div>
+                  <div>
+                    <span className="font-black text-sm text-slate-900 block leading-tight">
+                      {isAr ? 'تصميم الكروب (الخطوة 1)' : 'Group Design (Step 1)'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-bold block mt-0.5">
+                      {isAr ? 'أدخل تفاصيل الكروب الأساسية ثم اضغط التالي' : 'Enter basic group details then click Next'}
+                    </span>
                   </div>
                 </div>
 
-                {/* 3 Interactive Sourcing Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                  {/* Card 1: Ready Package */}
-                  <div
-                    onClick={() => {
-                      patch({ sourcingType: 'READY_PACKAGE', groupType: 'PACKAGE' });
-                      if (!design.templates || design.templates.length === 0) {
-                        patch({ templates: [createDefaultTemplate(design.seats, design.currency, design.seatPrice)] });
-                      }
-                    }}
-                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                      (design.sourcingType || 'READY_PACKAGE') === 'READY_PACKAGE'
-                        ? 'bg-orange-50/40 border-[#F45A0A] shadow-xs ring-2 ring-orange-500/15'
-                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/40'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        (design.sourcingType || 'READY_PACKAGE') === 'READY_PACKAGE'
-                          ? 'bg-[#F45A0A] text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        <Package size={20} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-black text-[13.5px] text-slate-900 block truncate">
-                            {isAr ? 'باكج كامل جاهز من مورد' : 'Ready All-Inclusive Package'}
-                          </span>
-                          {(design.sourcingType || 'READY_PACKAGE') === 'READY_PACKAGE' && (
-                            <CheckCircle2 size={15} className="text-[#F45A0A] shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-[11.5px] text-slate-500 font-medium mt-1 leading-relaxed">
-                          {isAr
-                            ? 'برنامج متكامل (طيران + فندق + خدمات) تم شراؤه كحزمة واحدة من شركة موردة أو منظم رحلات بسعر مقعد محدد'
-                            : 'Full tour package bought ready from a tour operator or wholesaler with fixed seat cost'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 2: Custom Assembled Group */}
-                  <div
-                    onClick={() => {
-                      patch({ sourcingType: 'CUSTOM_ASSEMBLED', groupType: 'FULL' });
-                    }}
-                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                      design.sourcingType === 'CUSTOM_ASSEMBLED'
-                        ? 'bg-orange-50/40 border-[#F45A0A] shadow-xs ring-2 ring-orange-500/15'
-                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/40'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        design.sourcingType === 'CUSTOM_ASSEMBLED'
-                          ? 'bg-[#F45A0A] text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        <Layers size={20} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-black text-[13.5px] text-slate-900 block truncate">
-                            {isAr ? 'كروب مجمّع ومفصّل' : 'Custom Assembled Group'}
-                          </span>
-                          {design.sourcingType === 'CUSTOM_ASSEMBLED' && (
-                            <CheckCircle2 size={15} className="text-[#F45A0A] shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-[11.5px] text-slate-500 font-medium mt-1 leading-relaxed">
-                          {isAr
-                            ? 'تجميع تذاكر الطيران، الفنادق، الفيزا، والنقل من عدة مصادر وموردين محلياً وتحديد كلفة كل مكوّن'
-                            : 'Assemble flights, hotels, visas, and transfers from multiple vendors with itemized cost tracking'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 3: Flight Seats Block Only */}
-                  <div
-                    onClick={() => {
-                      patch({ sourcingType: 'FLIGHT_ONLY', groupType: 'FLIGHT' });
-                    }}
-                    className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                      design.sourcingType === 'FLIGHT_ONLY'
-                        ? 'bg-orange-50/40 border-[#F45A0A] shadow-xs ring-2 ring-orange-500/15'
-                        : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/40'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        design.sourcingType === 'FLIGHT_ONLY'
-                          ? 'bg-[#F45A0A] text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        <Plane size={20} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-black text-[13.5px] text-slate-900 block truncate">
-                            {isAr ? 'مقاعد طيران جماعية فقط' : 'Flight Seats Block Only'}
-                          </span>
-                          {design.sourcingType === 'FLIGHT_ONLY' && (
-                            <CheckCircle2 size={15} className="text-[#F45A0A] shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-[11.5px] text-slate-500 font-medium mt-1 leading-relaxed">
-                          {isAr
-                            ? 'حجز مقاعد طيران جماعية (بلوك تذاكر كروب فير) مع شركة الطيران دون خدمات أو برامج أرضية'
-                            : 'Group airline seats block with airline carrier without ground arrangements'}
-                        </p>
-                      </div>
-                    </div>
+                {/* User Dropdown in Top Right (User / المستخدم) */}
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-700 shrink-0">
+                    {isAr ? 'المستخدم :' : 'User :'}
+                  </label>
+                  <div className="w-56">
+                    <SearchableCombobox
+                      value={selectedUser}
+                      onChange={(val: any) => setSelectedUser(val || user?.name || 'علي السعدي')}
+                      options={usersList}
+                      clearable={false}
+                    />
                   </div>
                 </div>
-
-                {/* If Ready Package: Fast Supplier & Seat Pricing Box */}
-                {(design.sourcingType || 'READY_PACKAGE') === 'READY_PACKAGE' && (
-                  <div className="p-4 rounded-xl bg-[#FFF8F2] border border-[#FDE3CF] space-y-3 mt-2">
-                    <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-[#FED7AA]/60">
-                      <span className="font-black text-[12.5px] text-[#9A3412] flex items-center gap-1.5">
-                        <Briefcase size={15} className="text-[#F45A0A]" />
-                        <span>{isAr ? 'تحديد المورد وسعر شراء الكروب' : 'Package Supplier & Purchase Price'}</span>
-                      </span>
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {isAr ? 'أدخل المورد المجهز وسعر شراء الكروب فقط — يتم توزيع التكاليف في القوالب تلقائياً' : 'Enter supplier and total group buy price only'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5 items-end">
-                      {/* Supplier Selection */}
-                      <div className="sm:col-span-7 lg:col-span-8">
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-[11.5px] font-bold text-slate-700 block">
-                            {isAr ? 'المورد / المنظم السياحي *' : 'Tour Supplier / Wholesaler *'}
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFinder({
-                                open: true,
-                                onSelectCallback: (acc) => {
-                                  handleSyncPackageCost(design.packageTotalCost || 0, acc.name, acc.id);
-                                },
-                              });
-                            }}
-                            className="text-[10.5px] text-[#F45A0A] hover:underline font-bold flex items-center gap-1 cursor-pointer"
-                          >
-                            <Search size={11} />
-                            <span>{isAr ? 'بحث في شجرة الحسابات' : 'Browse Chart'}</span>
-                          </button>
-                        </div>
-                        <SearchableCombobox
-                          label=""
-                          value={design.supplierAccountId || design.supplierName}
-                          onChange={(val) => {
-                            const found = suppliersList.find((s) => (s.accountId || s.account?.id || s.id) === val);
-                            const name = found?.nameAr || found?.nameEn || val || '';
-                            handleSyncPackageCost(design.packageTotalCost || 0, name, val || '');
-                          }}
-                          options={supplierOptions}
-                          placeholder={isAr ? 'اختر المورد أو الشركة السياحية المجهزة...' : 'Select package supplier...'}
-                        />
-                      </div>
-
-                      {/* Group Total Buy Price (سعر شراء الكروب فقط) */}
-                      <div className="sm:col-span-5 lg:col-span-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-[11.5px] font-bold text-slate-700 block">
-                            {isAr ? 'سعر شراء الكروب من المورد *' : 'Group Total Buy Price *'}
-                          </label>
-                          {Number(design.packageTotalCost || 0) > 0 && totals.soldSeats > 0 && (
-                            <span className="text-[10px] font-mono text-emerald-700 font-bold" dir="ltr">
-                              ~{money(Number(design.packageTotalCost) / totals.soldSeats, design.currency)} / seat
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center h-[46px] rounded-[11px] border border-[#E5E7EB] bg-white hover:border-slate-300 focus-within:border-2 focus-within:border-[#F45A0A] transition-all shadow-2xs overflow-hidden px-3.5" dir="ltr">
-                          <input
-                            value={design.packageTotalCost || ''}
-                            onChange={(e) => {
-                              const cost = numeric(e.target.value);
-                              handleSyncPackageCost(cost);
-                            }}
-                            placeholder="0.00"
-                            dir="ltr"
-                            className="flex-1 w-full bg-transparent text-[14px] font-mono font-black text-slate-900 outline-none"
-                          />
-                          <span className="font-mono text-[11px] font-bold text-slate-400 ps-2 shrink-0 select-none" dir="ltr">
-                            {design.currency}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* Card 2: Trip Route, Dates, Seats & Currency */}
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-2xs p-5 sm:p-6 space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
-                      <MapPin size={18} />
-                    </div>
-                    <div>
-                      <span className="font-black text-[14px] text-slate-900 block leading-tight">
-                        {isAr ? 'بيانات وهوية الرحلة والمسار' : 'Trip Route, Travel Dates & Capacity'}
-                      </span>
-                      <span className="text-[11.5px] text-slate-500 font-medium block mt-0.5">
-                        {isAr ? 'حدد مسار الرحلة، ومواعيد الذهاب والعودة، وسعة المقاعد' : 'Specify route endpoints, travel window, and passenger capacity'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {tripDuration && (
-                    <div className="px-3 py-1 rounded-full bg-[#FFF3E8] border border-[#FED7AA] text-[#F45A0A] font-bold text-xs flex items-center gap-1.5">
-                      <CalendarRange size={13} />
-                      <span>{isAr ? tripDuration.labelAr : tripDuration.labelEn}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Form Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* Group Name + Auto-Generate */}
-                  <div className="sm:col-span-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[11.5px] font-bold text-slate-700 block">
-                        {isAr ? 'اسم الكروب أو الرحلة *' : 'Group Name *'}
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleAutoGenerateGroupName}
-                        className="text-[10.5px] text-[#F45A0A] hover:underline font-bold flex items-center gap-1 cursor-pointer"
-                        title={isAr ? 'توليد اسم الكروب بناءً على المسار والتاريخ' : 'Auto generate group name from route & date'}
-                      >
-                        <Sparkles size={11} />
-                        <span>{isAr ? 'توليد اسم تلقائي' : 'Auto Generate'}</span>
-                      </button>
-                    </div>
-                    <input
-                      value={design.groupName}
-                      onChange={(e) => patch({ groupName: e.target.value })}
-                      placeholder={isAr ? 'مثال: BGW-IST 18-09-2026' : 'e.g. BGW-IST 18-09-2026'}
-                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
-                    />
-                  </div>
-
-                  {/* Route From */}
-                  <div>
-                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'محطة الانطلاق (من)' : 'Departure (From)'}
+              {/* Main Content: Left Column Form, Right Column Summary Box */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                {/* Left Column (8 cols): Form Fields */}
+                <div className="md:col-span-7 lg:col-span-8 space-y-3.5">
+                  {/* Buy Date */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                    <label className="sm:col-span-4 text-xs font-bold text-slate-700">
+                      {isAr ? 'تاريخ الشراء' : 'Buy Date'}
                     </label>
-                    <input
-                      value={design.routeFrom}
-                      onChange={(e) => patch({ routeFrom: e.target.value.toUpperCase() })}
-                      placeholder="BGW"
-                      dir="ltr"
-                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-mono font-black text-center text-slate-900 uppercase outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
-                    />
-                  </div>
-
-                  {/* Route To */}
-                  <div>
-                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'الوجهة (إلى)' : 'Destination (To)'}
-                    </label>
-                    <input
-                      value={design.routeTo}
-                      onChange={(e) => patch({ routeTo: e.target.value.toUpperCase() })}
-                      placeholder="IST"
-                      dir="ltr"
-                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-mono font-black text-center text-slate-900 uppercase outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
-                    />
+                    <div className="sm:col-span-8">
+                      <SegmentedDatePicker
+                        value={design.buyDate}
+                        onChange={(d, iso) => patch({ buyDate: iso ? iso.slice(0, 16) : '' })}
+                        placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
+                      />
+                    </div>
                   </div>
 
                   {/* Travel Date */}
-                  <div>
-                    <SegmentedDatePicker
-                      label={isAr ? 'تاريخ السفر (الذهاب)' : 'Travel Date (Departure)'}
-                      value={design.travelDate}
-                      onChange={(d, iso) => patch({ travelDate: iso ? iso.slice(0, 10) : '' })}
-                      placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
-                    />
-                  </div>
-
-                  {/* Return Date */}
-                  <div>
-                    <SegmentedDatePicker
-                      label={isAr ? 'تاريخ العودة (اختياري)' : 'Return Date (Optional)'}
-                      value={design.returnDate || ''}
-                      onChange={(d, iso) => patch({ returnDate: iso ? iso.slice(0, 10) : '' })}
-                      placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
-                      clearable
-                    />
-                  </div>
-
-                  {/* Buy / Booking Date */}
-                  <div>
-                    <SegmentedDatePicker
-                      label={isAr ? 'تاريخ الشراء / الحجز' : 'Booking Date'}
-                      value={design.buyDate}
-                      onChange={(d, iso) => patch({ buyDate: iso ? iso.slice(0, 10) : '' })}
-                      placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
-                    />
-                  </div>
-
-                  {/* Destination Country */}
-                  <div>
-                    <SearchableCombobox
-                      label={isAr ? 'الوجهة / الدولة' : 'Destination Country'}
-                      value={design.country}
-                      onChange={(val) => patch({ country: val || 'العراق' })}
-                      options={countryOptions}
-                      placeholder={isAr ? 'اختر الدولة...' : 'Select country...'}
-                    />
-                  </div>
-
-                  {/* Currency */}
-                  <div>
-                    <SearchableCombobox
-                      label={isAr ? 'العملة المعتمدة' : 'Operating Currency'}
-                      value={design.currency}
-                      onChange={(val) => patch({ currency: (val as 'IQD' | 'USD') || 'USD' })}
-                      options={currencyOptions}
-                      placeholder={isAr ? 'اختر العملة...' : 'Currency...'}
-                    />
-                  </div>
-
-                  {/* Group Notes */}
-                  <div className="sm:col-span-2">
-                    <label className="text-[11.5px] font-bold text-slate-700 block mb-1">
-                      {isAr ? 'ملاحظات وتفاصيل الكروب' : 'Group Notes & Instructions'}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                    <label className="sm:col-span-4 text-xs font-bold text-slate-700">
+                      {isAr ? 'تاريخ السفر' : 'Travel Date'}
                     </label>
-                    <input
-                      value={design.notes}
-                      onChange={(e) => patch({ notes: e.target.value })}
-                      placeholder={isAr ? 'أي شروط أو تفاصيل تخص برنامج الرحلة والفنادق...' : 'Any conditions or trip notes...'}
-                      className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[12.5px] font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
-                    />
+                    <div className="sm:col-span-8">
+                      <SegmentedDatePicker
+                        value={design.travelDate}
+                        onChange={(d, iso) => patch({ travelDate: iso ? iso.slice(0, 16) : '' })}
+                        placeholder={isAr ? 'سنة/شهر/يوم' : 'YYYY/MM/DD'}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Group Name */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                    <label className="sm:col-span-4 text-xs font-bold text-slate-700">
+                      {isAr ? 'اسم الكروب' : 'Group Name'}
+                    </label>
+                    <div className="sm:col-span-8 relative">
+                      <input
+                        value={design.groupName}
+                        onChange={(e) => patch({ groupName: e.target.value })}
+                        placeholder={isAr ? 'أدخل اسم الكروب...' : 'Enter group name...'}
+                        className="w-full h-[42px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-white text-[13px] font-bold text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Group Type (NoN / Full / Part) matching Image 3 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                    <label className="sm:col-span-4 text-xs font-bold text-slate-700">
+                      {isAr ? 'نوع الكروب' : 'Group Type'}
+                    </label>
+                    <div className="sm:col-span-8">
+                      <SearchableCombobox
+                        value={design.groupType || 'NoN'}
+                        onChange={(val) => patch({ groupType: val || 'NoN' })}
+                        options={[
+                          { value: 'NoN', label: isAr ? 'NoN (غير محدد)' : 'NoN' },
+                          { value: 'Full', label: isAr ? 'Full (شامل)' : 'Full' },
+                          { value: 'Part', label: isAr ? 'Part (جزئي)' : 'Part' },
+                        ]}
+                        clearable={false}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Country */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                    <label className="sm:col-span-4 text-xs font-bold text-slate-700">
+                      {isAr ? 'البلد' : 'Country'}
+                    </label>
+                    <div className="sm:col-span-8">
+                      <SearchableCombobox
+                        value={design.country || (isAr ? 'العراق' : 'Iraq')}
+                        onChange={(val) => patch({ country: val || 'Iraq' })}
+                        options={countryOptions}
+                        clearable={false}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Active (On/Off switch matching Image 2 & 3) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                    <label className="sm:col-span-4 text-xs font-bold text-slate-700">
+                      {isAr ? 'الحالة' : 'Active'}
+                    </label>
+                    <div className="sm:col-span-8 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => patch({ active: !design.active })}
+                        className={`h-8 px-4 rounded-md font-mono font-bold text-xs flex items-center gap-2 cursor-pointer transition-all border ${
+                          design.active
+                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                            : 'bg-slate-200 text-slate-600 border-slate-300'
+                        }`}
+                      >
+                        <div className={`w-2 h-2 rounded-full ${design.active ? 'bg-white' : 'bg-slate-400'}`} />
+                        <span>{design.active ? (isAr ? 'On (نشط)' : 'On') : (isAr ? 'Off (معطل)' : 'Off')}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start">
+                    <label className="sm:col-span-4 text-xs font-bold text-slate-700 pt-2">
+                      {isAr ? 'ملاحظات' : 'Notes'}
+                    </label>
+                    <div className="sm:col-span-8">
+                      <textarea
+                        rows={3}
+                        value={design.notes}
+                        onChange={(e) => patch({ notes: e.target.value })}
+                        placeholder={isAr ? 'ملاحظات وتفاصيل الكروب...' : 'Notes...'}
+                        className="w-full p-3 rounded-xl border border-[#E5E7EB] bg-white text-xs font-medium text-slate-900 outline-none hover:border-slate-300 focus:border-2 focus:border-[#F45A0A] transition-all resize-none shadow-2xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column (4 cols): Summary Box (مطابق تماماً للصورة 2 و 3) */}
+                <div className="md:col-span-5 lg:col-span-4">
+                  <div className="bg-white rounded-2xl border border-slate-300 p-4 space-y-3 shadow-2xs">
+                    <div className="pb-2 border-b border-slate-200">
+                      <span className="font-sans font-black text-sm text-slate-900">
+                        {isAr ? 'الملخص' : 'Summary'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs font-mono">
+                      {/* Customers */}
+                      <div className="flex items-center justify-between">
+                        <span className="font-sans font-medium text-slate-600">
+                          {isAr ? 'العملاء :' : 'Customers :'}
+                        </span>
+                        <span className="font-bold text-slate-800" dir="ltr">
+                          {(design.customers || []).length}
+                        </span>
+                      </div>
+
+                      {/* Buy */}
+                      <div className="flex items-center justify-between">
+                        <span className="font-sans font-medium text-slate-600">
+                          {isAr ? 'الشراء :' : 'Buy :'}
+                        </span>
+                        <span className="font-bold text-slate-800" dir="ltr">
+                          {formatEnglishNumber(totals.sumBuy)}
+                        </span>
+                      </div>
+
+                      {/* Expenses */}
+                      <div className="flex items-center justify-between">
+                        <span className="font-sans font-medium text-slate-600">
+                          {isAr ? 'المصاريف :' : 'Expenses :'}
+                        </span>
+                        <span className="font-bold text-slate-800" dir="ltr">
+                          {formatEnglishNumber(totals.sumExpenses)}
+                        </span>
+                      </div>
+
+                      {/* Costs */}
+                      <div className="flex items-center justify-between">
+                        <span className="font-sans font-medium text-slate-600">
+                          {isAr ? 'التكاليف :' : 'Costs:'}
+                        </span>
+                        <span className="font-bold text-slate-800" dir="ltr">
+                          {formatEnglishNumber(totals.sumCost)}
+                        </span>
+                      </div>
+
+                      {/* Sale */}
+                      <div className="flex items-center justify-between">
+                        <span className="font-sans font-medium text-slate-600">
+                          {isAr ? 'البيع :' : 'Sale :'}
+                        </span>
+                        <span className="font-bold text-slate-800" dir="ltr">
+                          {formatEnglishNumber(totals.salesTotal || totals.expectedSales)}
+                        </span>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="pt-2 border-t border-slate-300 flex items-center justify-between">
+                        <span className="font-sans font-black text-slate-900">
+                          {isAr ? 'إجمالي الربح :' : 'Total Profit :'}
+                        </span>
+                        <span
+                          className={`font-black text-sm ${
+                            (totals.realisedProfit || totals.expectedProfit) >= 0
+                              ? 'text-[#078B61]'
+                              : 'text-rose-600'
+                          }`}
+                          dir="ltr"
+                        >
+                          {formatEnglishNumber(totals.realisedProfit || totals.expectedProfit)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-
             </div>
           ) : activeStep === 2 ? (
             /* ══════════════════════════════════════════════════════════════
@@ -2129,11 +2014,16 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
             {activeStep === 1 && (
               <button
                 type="button"
-                onClick={() => setActiveStep(2)}
-                className="h-[42px] px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs transition-all active:scale-[0.98]"
+                onClick={() => {
+                  if (!design.groupName.trim()) {
+                    patch({ groupName: `${design.country || 'Group'} - ${design.travelDate || new Date().toISOString().slice(0, 10)}` });
+                  }
+                  setActiveStep(2);
+                }}
+                className="h-[42px] px-8 rounded-xl bg-[#cbf6dc] hover:bg-[#a7f3c7] border border-slate-700 text-slate-900 text-xs font-black cursor-pointer flex items-center gap-2 shadow-xs transition-all active:scale-[0.98]"
               >
-                <span>{isAr ? 'التالي: مشتريات وتكاليف الخدمات' : 'Next: Purchases & Costs'}</span>
-                {direction === 'rtl' ? <ArrowLeft size={15} /> : <ArrowRight size={15} />}
+                <span>{isAr ? 'التالي ..' : 'Next ..'}</span>
+                {direction === 'rtl' ? <ArrowLeft size={16} /> : <ArrowRight size={16} />}
               </button>
             )}
 
@@ -2207,6 +2097,8 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
 
         </div>
       </div>
+    </div>
+  </Modal>
 
       {/* ══════════════════════════════════════════════════════════════
           4. PRICES TEMPLATE MODAL (قالب الأسعار - الصورة 2 و 4)
@@ -2289,7 +2181,7 @@ export const GroupDesignWorkspace: React.FC<Props> = ({ opened, onClose, onSucce
           setFinder({ open: false });
         }}
       />
-    </div>
+    </>
   );
 };
 

@@ -1070,7 +1070,7 @@ export const SystemSettingsPage: React.FC = () => {
         setSequences((prev) => {
           const merged: any = { ...prev };
           rows.forEach((r: any) => {
-            const key = r.docType === 'groups' && merged.groupFare ? 'groups' : r.docType;
+            const key = r.docType;
             if (!merged[key]) return;
             merged[key] = {
               ...merged[key],
@@ -1114,7 +1114,6 @@ export const SystemSettingsPage: React.FC = () => {
 
   const sequenceItemsMeta = [
     { key: 'tickets', icon: IconPlane, color: 'blue', tag: 'تذاكر الطيران' },
-    { key: 'groupFare', icon: IconTicket, color: 'orange', tag: 'تذاكر كروب فير' },
     { key: 'groups', icon: IconUsers, color: 'violet', tag: 'الكروبات والرحلات السياحية' },
     { key: 'visas', icon: IconEPassport, color: 'teal', tag: 'الفيزا والتأشيرات' },
     { key: 'refunds', icon: IconRotate, color: 'rose', tag: 'الاسترجاع والمرتجعات' },
