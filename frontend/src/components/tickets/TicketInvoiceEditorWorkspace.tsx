@@ -894,6 +894,18 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
     );
   }, [airline, airlinesList]);
 
+  const airlineDisplayName = useMemo(() => {
+    if (selectedAirlineItem) {
+      return isAr
+        ? (selectedAirlineItem.nameAr || selectedAirlineItem.nameEn || selectedAirlineItem.code)
+        : (selectedAirlineItem.nameEn || selectedAirlineItem.nameAr || selectedAirlineItem.code);
+    }
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(airline || '')) {
+      return '';
+    }
+    return airline || '';
+  }, [selectedAirlineItem, airline, isAr]);
+
   // Active adopted exchange rate
   const activeExchangeRate = useMemo(() => {
     return adoptedEx.adoptedRate || 1320;
@@ -1147,7 +1159,11 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
   const validateForm = (isPosting: boolean): boolean => {
     const errs: Record<string, string> = {};
 
-    if (!invoiceNumber.trim()) errs.invoiceNumber = isAr ? 'رقم الفاتورة مطلوب' : 'Invoice number is required';
+    /*
+     * لا يُشترط رقم الفاتورة قبل الحفظ: المعروض عند الفتح معاينةٌ قد تتأخر أو
+     * تفشل، والرقم الحقيقي يُخصَّص ذرّياً في الحفظ نفسه. اشتراطه هنا كان يُفشل
+     * حفظ المسودة — بملاحظتها وكل ما كُتب — كلما تأخّرت المعاينة.
+     */
 
     if (isPosting) {
       // Airline is strictly optional per business requirement
@@ -2141,14 +2157,18 @@ export const TicketInvoiceEditorWorkspace: React.FC<TicketInvoiceEditorWorkspace
               <TicketFinancialSummary
                 invoiceNumber={invoiceNumber}
                 status={status}
-                airline={airline}
+                airline={airlineDisplayName}
                 airlineLogo={selectedAirlineItem?.logo}
                 fromAirport={fromAirport}
                 toAirport={toAirport}
                 travelDate={travelDate}
                 pnr={pnr}
-                passengersCount={passengers.length}
-                passengersNamedCount={passengersNamedCount}
+                passengersCount={
+                  passengers.filter(
+                    (p) => p.name?.trim() || p.ticketNumber?.trim() || (p.fareSell && Number(p.fareSell) > 0)
+                  ).length
+                }
+                passengersNamedCount={passengers.filter((p) => p.name?.trim()).length}
                 totalBuy={totalBuy}
                 totalSell={totalSell}
                 totalTaxesBuy={totalTaxesBuy}

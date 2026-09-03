@@ -255,14 +255,16 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
             {airlineLogo && (
               <img
                 src={airlineLogo}
-                alt={airline || 'Airline'}
+                alt={airline && !/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(airline) ? airline : 'Airline'}
                 className="w-4 h-4 object-contain shrink-0 rounded"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
                 }}
               />
             )}
-            <span className="text-xs text-slate-700 font-medium truncate">{airline || (isAr ? 'طيران' : 'Airline')}</span>
+            <span className="text-xs text-slate-700 font-medium truncate">
+              {airline && !/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(airline) ? airline : (isAr ? 'شركة الطيران' : 'Airline')}
+            </span>
           </div>
         </div>
 
@@ -276,8 +278,8 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
 
           <div className="flex items-center justify-between text-slate-600 font-normal text-[12.5px]">
             <span>{isAr ? 'تاريخ السفر:' : 'Travel Date:'}</span>
-            <span className="font-mono text-slate-900 font-medium">
-              {travelDate ? travelDate.toLocaleDateString(isAr ? 'ar-IQ' : 'en-GB') : (isAr ? 'لم يحدد بعد' : 'Not set')}
+            <span className="font-mono font-bold text-slate-900 tabular-nums" dir="ltr">
+              {travelDate ? travelDate.toLocaleDateString('en-GB') : (isAr ? 'لم يحدد بعد' : 'Not set')}
             </span>
           </div>
 
@@ -291,7 +293,7 @@ export const TicketFinancialSummary: React.FC<TicketFinancialSummaryProps> = ({
           <div className="flex items-center justify-between text-slate-600 font-normal text-[12.5px]">
             <span>{isAr ? 'عدد المسافرين:' : 'Passengers:'}</span>
             <span className="font-medium text-slate-900">
-              {passengersCount} {isAr ? 'مسافر' : 'Pax'}
+              {passengersCount > 0 ? `${passengersCount} ${isAr ? 'مسافر' : 'Pax'}` : (isAr ? 'لا يوجد مسافرين' : '0 Pax')}
             </span>
           </div>
         </div>
