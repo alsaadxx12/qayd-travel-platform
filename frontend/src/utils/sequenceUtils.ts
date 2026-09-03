@@ -141,6 +141,18 @@ export function getDefaultSequencesForBranch(branchCode: string = 'KAB'): Record
       separator: '-',
       category: 'vouchers',
     },
+    expenses: {
+      id: 'expenses',
+      nameAr: 'سندات المصاريف',
+      nameEn: 'Expense Vouchers',
+      prefix: 'EXP',
+      branchCode: code,
+      includeYear: true,
+      nextNumber: 1001,
+      padding: 5,
+      separator: '-',
+      category: 'vouchers',
+    },
     journalEntries: {
       id: 'journalEntries',
       nameAr: 'سندات وقيود اليومية',

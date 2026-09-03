@@ -27,6 +27,8 @@ const DEFAULTS: Array<{ docType: string; prefix: string; nameAr: string }> = [
   { docType: 'hotels', prefix: 'HTL', nameAr: 'حجوزات الفنادق' },
   { docType: 'receiptVouchers', prefix: 'RV', nameAr: 'سندات القبض' },
   { docType: 'paymentVouchers', prefix: 'PV', nameAr: 'سندات الدفع' },
+  // المصاريف تُحفظ سندات دفع، لكن ترقيمها مستقلّ كي لا يتداخل مع سندات الدفع العادية.
+  { docType: 'expenses', prefix: 'EXP', nameAr: 'سندات المصاريف' },
   { docType: 'journalEntries', prefix: 'JV', nameAr: 'قيود اليومية' },
   { docType: 'exchange', prefix: 'FX', nameAr: 'عمليات الصرافة' },
 ];
@@ -119,7 +121,12 @@ export class SequencesService {
         this.prisma.journalEntry.findMany({ where: { companyId }, select: { entryNumber: true } }),
       ]);
       rv.forEach((v) => bump('receiptVouchers', tail(v.voucherNumber)));
-      pv.forEach((v) => bump('paymentVouchers', tail(v.voucherNumber)));
+      pv.forEach((v) => {
+        const n = tail(v.voucherNumber);
+        // المصاريف وسندات الدفع تتشاركان جدولاً واحداً، فيبدأ عدّاداهما فوق أعلى ما فيه.
+        bump('paymentVouchers', n);
+        bump('expenses', n);
+      });
       je.forEach((v) => bump('journalEntries', tail(v.entryNumber)));
     } catch (err: any) {
       this.logger.warn(`Sequence seeding scan failed: ${err?.message || err}`);

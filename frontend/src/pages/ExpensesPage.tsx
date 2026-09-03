@@ -35,6 +35,7 @@ import { employeesApi } from '../api/employees';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLanguageStore } from '../store/useLanguageStore';
 import { useAdoptedExchangeRate } from '../hooks/useAdoptedExchangeRate';
+import { allocateDocumentNumber } from '../utils/sequenceUtils';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { CurrencySegmentedControl } from '../components/ui/CurrencySegmentedControl';
 import { SegmentedDatePicker } from '../components/ui/SegmentedDatePicker';
@@ -903,7 +904,7 @@ export const ExpensesPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs: Record<string, string> = {};
 
@@ -928,7 +929,17 @@ export const ExpensesPage: React.FC = () => {
       return;
     }
 
+    /*
+     * رقم سند المصروف يُخصَّص من التسلسل.
+     *
+     * كانت الصفحة ترسل الحمولة بلا رقم، فيولّده الخادم من عدّاده الاحتياطي
+     * (PV-2026-0001) متجاوزاً إعدادات الترقيم كلها — ولهذا ظهرت في بياناتك
+     * صيغتان لسندات الدفع. أما التعديل فيحتفظ برقمه ولا يأخذ رقماً جديداً.
+     */
+    const voucherNumber = activeExpenseId ? undefined : await allocateDocumentNumber('expenses');
+
     const payload = {
+      ...(voucherNumber ? { voucherNumber } : {}),
       date: expenseDate,
       amount: Number(amount),
       currency,

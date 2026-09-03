@@ -1089,6 +1089,7 @@ export const SystemSettingsPage: React.FC = () => {
     { key: 'changes', icon: IconRefresh, color: 'amber', tag: 'التغيرات وتعديل التذاكر' },
     { key: 'receiptVouchers', icon: IconReceipt, color: 'emerald', tag: 'سندات القبض' },
     { key: 'paymentVouchers', icon: IconReceiptOff, color: 'indigo', tag: 'سندات الدفع' },
+    { key: 'expenses', icon: IconReceiptOff, color: 'orange', tag: 'سندات المصاريف' },
   
     { key: 'journalEntries', icon: IconReceipt, color: 'slate', tag: 'قيود اليومية' },
     { key: 'hotels', icon: IconReceipt, color: 'cyan', tag: 'حجوزات فنادق' },
