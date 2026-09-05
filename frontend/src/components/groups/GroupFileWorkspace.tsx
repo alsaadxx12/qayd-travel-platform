@@ -1208,8 +1208,8 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                     </span>
                   </span>
                 </div>
-                <div className="w-full h-[46px] px-3.5 rounded-[11px] bg-[#FAFAFA] border border-[#E5E7EB] flex items-center justify-between shadow-2xs font-sans">
-                  <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-full h-[46px] px-3.5 rounded-[11px] bg-[#FAFAFA] border border-[#E5E7EB] flex items-center shadow-2xs font-sans">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <div className="shrink-0 text-slate-400">
                       <User size={15} />
                     </div>
@@ -1217,9 +1217,6 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                       {g.createdByName || currentUserName}
                     </span>
                   </div>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 shrink-0">
-                    {isAr ? 'المستخدم الحالي' : 'Current User'}
-                  </span>
                 </div>
               </div>
 
@@ -3722,8 +3719,8 @@ export const NewGroupModal: React.FC<{
                 </span>
               </span>
             </div>
-            <div className="w-full h-[46px] px-3.5 rounded-[11px] bg-[#FAFAFA] border border-[#E5E7EB] flex items-center justify-between shadow-2xs font-sans">
-              <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-full h-[46px] px-3.5 rounded-[11px] bg-[#FAFAFA] border border-[#E5E7EB] flex items-center shadow-2xs font-sans">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <div className="shrink-0 text-slate-400">
                   <User size={15} />
                 </div>
@@ -3731,9 +3728,6 @@ export const NewGroupModal: React.FC<{
                   {currentUserName || (isAr ? 'مدير النظام' : 'System Admin')}
                 </span>
               </div>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 shrink-0">
-                {isAr ? 'المستخدم الحالي' : 'Current User'}
-              </span>
             </div>
           </div>
 
