@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Users,
   Plus,
@@ -45,6 +46,7 @@ const fmt = (n: number) => Number(n || 0).toLocaleString('en-US', { maximumFract
 const money = (n: number, c: string) => `${fmt(n)} ${c === 'USD' ? '$' : 'IQD'}`;
 
 export const GroupsPage: React.FC = () => {
+  const location = useLocation();
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
 
@@ -59,6 +61,15 @@ export const GroupsPage: React.FC = () => {
   const [fileGroupId, setFileGroupId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TourGroup | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // فتح ملف الكروب تلقائياً عند التوجيه من كشف الحساب
+  useEffect(() => {
+    const openId = (location.state as any)?.openGroupId;
+    if (openId) {
+      setFileGroupId(openId);
+      setFileOpen(true);
+    }
+  }, [location.state]);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);

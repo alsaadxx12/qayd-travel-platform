@@ -236,6 +236,31 @@ export class TourGroupsService {
           })),
         });
       }
+
+      // انتشار التخطيط إلى المسافرين الحاليين على هذا النظام: تُحدَّث التكلفة
+      // المتوقّعة (وعملتها) لكل خدمةٍ بحسب بندها، والمورّد الافتراضي حيث لا مورّد
+      // بعد — دون أي مساسٍ بالشراء الفعلي (Final Buy) أو أسعار البيع الفردية.
+      const paxIds = (
+        await tx.groupPassenger.findMany({
+          where: { groupId, priceSystemId: id, state: { not: 'CANCELLED' } },
+          select: { id: true },
+        })
+      ).map((p) => p.id);
+      if (paxIds.length) {
+        for (const it of items) {
+          const kind = String(it.kind).toUpperCase();
+          await tx.groupPassengerService.updateMany({
+            where: { passengerId: { in: paxIds }, kind },
+            data: { expectedBuy: new Prisma.Decimal(dec(it.expectedBuy)), currency: it.currency || data.currency },
+          });
+          if (it.supplierName || it.supplierAccountId) {
+            await tx.groupPassengerService.updateMany({
+              where: { passengerId: { in: paxIds }, kind, supplierName: null },
+              data: { supplierName: it.supplierName || null, supplierAccountId: it.supplierAccountId || null },
+            });
+          }
+        }
+      }
       return id!;
     });
 

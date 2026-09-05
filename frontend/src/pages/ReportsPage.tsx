@@ -788,12 +788,13 @@ export const ReportsPage: React.FC = () => {
 
   // Real-Time Data Fetching (Zero Stale Delay)
   const fetchBaseData = useCallback(async (_force = false) => {
-    const [entries, tickets, customers] = await Promise.all([
+    const [entries, tickets, customers, groups] = await Promise.all([
       apiRequest('/api/journal-entries').catch(() => []),
       apiRequest('/api/tickets').catch(() => []),
       apiRequest('/api/partners/customers').catch(() => []),
+      apiRequest('/api/tour-groups').catch(() => []),
     ]);
-    return [entries, tickets, customers];
+    return [entries, tickets, customers, groups];
   }, []);
 
   useEffect(() => {
@@ -814,7 +815,7 @@ export const ReportsPage: React.FC = () => {
           }
         }
 
-        const [entries, tickets, customers] = await fetchBaseData(forceRefresh);
+        const [entries, tickets, customers, groups] = await fetchBaseData(forceRefresh);
 
         const targetAcc = accounts.find((a) => a.id === selectedAccountId);
         const targetAccId = selectedAccountId;
@@ -835,6 +836,21 @@ export const ReportsPage: React.FC = () => {
             if (k && !ticketByRef.has(k)) ticketByRef.set(k, t);
           });
         });
+
+        // فهرس الكروبات لتجميع مسافري وحركات الكروب الواحد في سطر واحد بالكشف
+        const groupList: any[] = Array.isArray(groups) ? groups : [];
+        const groupById = new Map<string, any>();
+        const groupByPaxId = new Map<string, any>();
+        const groupByName = new Map<string, any>();
+        groupList.forEach((g: any) => {
+          if (g?.id) groupById.set(String(g.id).toLowerCase(), g);
+          if (g?.groupName) groupByName.set(String(g.groupName).trim().toLowerCase(), g);
+          (g.passengers || []).forEach((p: any) => {
+            if (p?.id) groupByPaxId.set(String(p.id).toLowerCase(), g);
+          });
+        });
+
+        const groupConsolidated = new Map<string, any>();
 
         // 1. Process Journal Entries
         if (Array.isArray(entries)) {
@@ -865,6 +881,93 @@ export const ReportsPage: React.FC = () => {
                 : SERVICE_SOURCE_TYPES.has(srcType)
                 ? resolveServiceKind(null, srcType, `${e.entryNumber || ''} ${e.reference || ''}`)
                 : null;
+
+            // إذا كان القيد تابعاً لكروب سياحي، يتم تجميعه ليظهر كـ «سطر واحد» شامل لكافة مسافريه
+            const isGroupEntry =
+              entryServiceKind === 'GROUP' ||
+              srcType === 'GROUP' ||
+              (e.reference && /^GRP-/i.test(String(e.reference))) ||
+              (e.description && e.description.includes('كروب')) ||
+              e.lines.some((l: any) => l.description && l.description.includes('كروب'));
+
+            if (isGroupEntry) {
+              const accLines = e.lines.filter((l: any) => l.accountId === targetAccId);
+              if (accLines.length > 0) {
+                let matchedGroup: any = null;
+                if (e.sourceId) {
+                  matchedGroup = groupByPaxId.get(String(e.sourceId).toLowerCase()) || groupById.get(String(e.sourceId).toLowerCase());
+                }
+                if (!matchedGroup && e.reference) {
+                  const refClean = String(e.reference).replace(/^GRP-/i, '').trim().toLowerCase();
+                  matchedGroup = groupByPaxId.get(refClean) || groupById.get(refClean);
+                }
+                if (!matchedGroup) {
+                  const allText = `${e.description || ''} ${accLines.map((l: any) => l.description || '').join(' ')}`.toLowerCase();
+                  for (const [name, g] of groupByName.entries()) {
+                    if (allText.includes(name)) {
+                      matchedGroup = g;
+                      break;
+                    }
+                  }
+                }
+
+                let groupName = matchedGroup?.groupName || '';
+                if (!groupName) {
+                  const m = `${e.description || ''} ${accLines[0]?.description || ''}`.match(/كروب\s+([A-Za-z0-9\-_ ]+?)(?:\s*[:—\-]|\s+ALI|\s*\()/i);
+                  groupName = m ? m[1].trim() : (e.reference ? e.reference.replace(/^GRP-/i, '').trim() : (isAr ? 'كروب' : 'Group'));
+                }
+                const groupKey = matchedGroup?.id || groupName.toLowerCase();
+
+                let agg = groupConsolidated.get(groupKey);
+                if (!agg) {
+                  agg = {
+                    groupKey,
+                    groupId: matchedGroup?.id || null,
+                    groupName,
+                    date: e.date,
+                    entryDate: e.createdAt || e.date,
+                    entryNumber: e.entryNumber || `GRP-${groupName}`,
+                    totalDebit: 0,
+                    totalCredit: 0,
+                    currency: (accLines[0]?.currency || e.currency || 'IQD').toUpperCase().includes('USD') ? 'USD' : 'IQD',
+                    passengers: new Set<string>(),
+                    entryUser: e.createdBy?.name || (isAr ? 'مدير النظام' : 'System Admin'),
+                    user: e.createdBy?.name || (isAr ? 'مدير النظام' : 'System Admin'),
+                    firstEntry: e,
+                  };
+                  groupConsolidated.set(groupKey, agg);
+                }
+
+                if (matchedGroup?.passengers) {
+                  matchedGroup.passengers.forEach((p: any) => {
+                    const matchAcc =
+                      p.customerAccountId === targetAccId ||
+                      (targetAccName && (p.customerName || '').toLowerCase().includes(targetAccName));
+                    if (matchAcc && p.passengerName) {
+                      agg.passengers.add(p.passengerName.trim());
+                    }
+                  });
+                }
+
+                accLines.forEach((l: any) => {
+                  agg.totalDebit += Number(l.debit || 0);
+                  agg.totalCredit += Number(l.credit || 0);
+
+                  const paxMatch = String(l.description || e.description || '').match(/(?:—|:)\s*([A-Za-z\u0600-\u06FF ]+?)(?:\s*\(|$)/);
+                  if (paxMatch && paxMatch[1]) {
+                    const cleanP = paxMatch[1].trim();
+                    if (cleanP && !cleanP.includes('سداد') && !cleanP.includes('تحصيل') && !cleanP.includes('كروب')) {
+                      agg.passengers.add(cleanP);
+                    }
+                  }
+                });
+
+                [e.reference, e.voucherNumber, e.entryNumber].filter(Boolean).forEach((k: string) => {
+                  processedVoucherNumbers.add(k.toLowerCase());
+                });
+                return;
+              }
+            }
 
             let hasTargetAcc = false;
             /*
@@ -969,6 +1072,51 @@ export const ReportsPage: React.FC = () => {
             }
           });
         }
+
+        // إضافة الكروبات مجمعة كسطر واحد لكل كروب مع كامل مسافريه ومبالغه
+        groupConsolidated.forEach((agg: any) => {
+          const paxArray: string[] = Array.from(agg.passengers || []);
+          const cleanDocNumber = agg.groupName;
+
+          rawLines.push({
+            id: `group_consolidated_${agg.groupKey}`,
+            groupId: agg.groupId,
+            parentRowId: null,
+            isServiceSettlement: false,
+            ticketDetails: {
+              passengers: paxArray.map((pName: any) => ({ name: String(pName), ticketType: isAr ? 'مسافر' : 'Pax' })),
+              route: agg.groupName,
+              pnr: agg.groupName,
+              airline: '',
+            },
+            date: agg.date,
+            entryDate: agg.entryDate,
+            entryNumber: agg.entryNumber,
+            docType: isAr ? 'كروب' : 'Group',
+            serviceKind: 'GROUP',
+            ticketRaw: null,
+            ticketId: null,
+            voucherNumber: cleanDocNumber,
+            reference: cleanDocNumber,
+            docNumber: cleanDocNumber,
+            description: isAr
+              ? `مبيعات كروب ${cleanDocNumber}${paxArray.length > 0 ? ` — ${paxArray.join('، ')}` : ''}`
+              : `Tour Group ${cleanDocNumber}${paxArray.length > 0 ? ` — ${paxArray.join(', ')}` : ''}`,
+            accountingDescription: isAr ? `مبيعات كروب ${cleanDocNumber}` : `Tour Group ${cleanDocNumber}`,
+            debit: agg.totalDebit,
+            credit: agg.totalCredit,
+            costCenter: isAr ? 'قسم الكروبات السياحية' : 'Tour Groups Dept',
+            entryUser: agg.entryUser,
+            user: agg.user,
+            currency: agg.currency,
+            status: 'POSTED',
+            voucherType: 'GROUP',
+            passengersList: paxArray,
+            passengersDetail: paxArray.map((pName: any) => ({ name: String(pName), ticketType: isAr ? 'مسافر' : 'Pax' })),
+            journalEntryId: agg.firstEntry?.id,
+            rawEntry: agg.firstEntry,
+          });
+        });
 
         // 2. Process Tickets
         if (Array.isArray(tickets)) {
@@ -1671,6 +1819,62 @@ export const ReportsPage: React.FC = () => {
         isWide: true,
         render: (r) => {
           const renderBody = () => {
+          if (r.voucherType === 'GROUP' || r.serviceKind === 'GROUP' || r.docType?.includes('كروب') || r.docType?.includes('Group')) {
+            const pDetails: Array<{ name: string; ticketNumber?: string; ticketType?: string }> =
+              r.passengersDetail && r.passengersDetail.length > 0
+                ? r.passengersDetail
+                : (r.passengersList || []).map((p: string) => ({ name: p, ticketType: isAr ? 'مسافر' : 'Pax' }));
+            const groupName = r.docNumber || r.ticketDetails?.route || r.reference || (isAr ? 'كروب' : 'Group');
+
+            return (
+              <div className="py-1 space-y-1.5 text-slate-900 text-xs">
+                {/* Line 1: Group Name Badge, Pax Count Badge */}
+                <div className="flex items-center gap-2 font-bold flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 bg-[#FFF3E8] text-[#F45A0A] border border-orange-200/80 px-2.5 py-0.5 rounded-md text-[11px] font-bold shadow-2xs">
+                    <IconUsers size={12} className="text-[#F45A0A]" />
+                    <span>{isAr ? `مبيعات كروب: ${groupName}` : `Tour Group: ${groupName}`}</span>
+                  </span>
+
+                  {pDetails.length > 0 && (
+                    <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-md text-[10.5px] font-bold">
+                      <IconUser size={11} className="text-amber-700 shrink-0" />
+                      <span>{isAr ? 'العدد' : 'Pax'}</span>
+                      <span className="w-4 h-4 rounded-full bg-amber-600 text-white text-[9.5px] font-bold flex items-center justify-center font-mono">
+                        {pDetails.length}
+                      </span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Line 2: Horizontal Clean Passenger Chips */}
+                {pDetails.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11.5px]">
+                    {pDetails.map((pass, idx) => (
+                      <div
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 text-slate-800 font-bold bg-slate-50/90 px-2 py-0.5 rounded-md border border-slate-200/80 shadow-2xs"
+                      >
+                        <IconUser size={12} className="text-amber-600 shrink-0" />
+                        <span className="text-slate-900 font-mono font-bold">{pass.name.trim()}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(pass.name.trim());
+                          }}
+                          title={isAr ? 'نسخ اسم المسافر' : 'Copy Passenger Name'}
+                          className="hover:bg-slate-200 p-0.5 rounded text-slate-400 hover:text-slate-800 cursor-pointer transition-colors"
+                        >
+                          <IconCopy size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           if (r.voucherType === 'TICKET' || r.docType?.includes('تذكرة') || r.docType?.includes('Ticket')) {
             const pDetails: Array<{ name: string; ticketNumber?: string; ticketType?: string }> = r.passengersDetail || [];
             const pnrVal = r.pnr || r.reference || '';
@@ -1898,6 +2102,15 @@ export const ReportsPage: React.FC = () => {
      * تعذّر الجلب نُكمل بالنسخة المتوفرة بدل أن نترك المستخدم أمام لا شيء.
      */
     const serviceKind = String(row.serviceKind || '').toUpperCase();
+    if (serviceKind === 'GROUP' || row.groupId || row.voucherType === 'GROUP') {
+      if (row.groupId) {
+        navigate('/groups', { state: { openGroupId: row.groupId } });
+        return;
+      }
+      navigate('/groups');
+      return;
+    }
+
     if (serviceKind) {
       const docId = row.ticketId || row.ticketRaw?.id || null;
       let record: any = row.ticketRaw || row.ticket || null;
