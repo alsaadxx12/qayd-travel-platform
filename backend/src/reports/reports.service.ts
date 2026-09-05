@@ -1279,4 +1279,80 @@ export class ReportsService {
       tickets,
     };
   }
+
+  /**
+   * أرباح الموظفين: يجمع ربح المستندات على موظّف الإصدار، ويقسمه بين الموظف
+   * والشركة وفق هامش الربح المحفوظ لكل موظف (وإلا الهامش الافتراضي). الهوامش
+   * تُخزَّن كإعدادٍ باسم employee_profit_margins في مخزن القوالب.
+   */
+  async getEmployeeProfits(companyId: string, branchId?: string, startDate?: string, endDate?: string) {
+    const start = startDate ? new Date(startDate.includes('T') ? startDate : `${startDate}T00:00:00.000Z`) : undefined;
+    const end = endDate ? new Date(endDate.includes('T') ? endDate : `${endDate}T23:59:59.999Z`) : undefined;
+    const dateFilter = start || end
+      ? { OR: [
+          { issueDate: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } },
+          { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } },
+        ] }
+      : {};
+    const branchFilter = branchId && branchId !== 'ALL' ? { branchId } : {};
+
+    const [tickets, marginRow] = await Promise.all([
+      this.prisma.ticket.findMany({
+        where: { companyId, status: { not: 'CANCELLED' }, ...branchFilter, ...dateFilter },
+        select: { employeeName: true, profit: true, netSell: true, totalSell: true, netBuy: true, totalBuy: true, tripType: true },
+      }),
+      this.prisma.printTemplate.findFirst({ where: { companyId, docType: 'employee_profit_margins' } }),
+    ]);
+
+    let marginByName: Record<string, number> = {};
+    let defaultEmployeeMargin = 0;
+    try {
+      const cfg = JSON.parse(marginRow?.config || '{}');
+      marginByName = cfg.employees || {};
+      defaultEmployeeMargin = Number(cfg.defaultEmployeeMargin) || 0;
+    } catch {
+      /* إعداد غائب أو تالف — تُستعمل القيم الافتراضية */
+    }
+
+    const norm = (s: string | null | undefined) => String(s || '').trim();
+    const map = new Map<string, { employeeName: string; docCount: number; totalSales: number; totalBuy: number; totalProfit: number }>();
+    for (const t of tickets) {
+      const name = norm(t.employeeName) || 'غير محدّد';
+      const row = map.get(name) || { employeeName: name, docCount: 0, totalSales: 0, totalBuy: 0, totalProfit: 0 };
+      row.docCount += 1;
+      row.totalSales += Number(t.netSell ?? t.totalSell) || 0;
+      row.totalBuy += Number(t.netBuy ?? t.totalBuy) || 0;
+      row.totalProfit += Number(t.profit) || 0;
+      map.set(name, row);
+    }
+
+    const rows = Array.from(map.values())
+      .map((r) => {
+        const raw = marginByName[r.employeeName];
+        const employeeMargin = Math.max(0, Math.min(100, raw !== undefined && raw !== null ? Number(raw) : defaultEmployeeMargin));
+        const employeeShare = (r.totalProfit * employeeMargin) / 100;
+        return {
+          ...r,
+          employeeMargin,
+          companyMargin: 100 - employeeMargin,
+          employeeShare,
+          companyShare: r.totalProfit - employeeShare,
+        };
+      })
+      .sort((a, b) => b.totalProfit - a.totalProfit);
+
+    const totals = rows.reduce(
+      (acc, r) => ({
+        docCount: acc.docCount + r.docCount,
+        totalSales: acc.totalSales + r.totalSales,
+        totalBuy: acc.totalBuy + r.totalBuy,
+        totalProfit: acc.totalProfit + r.totalProfit,
+        employeeShare: acc.employeeShare + r.employeeShare,
+        companyShare: acc.companyShare + r.companyShare,
+      }),
+      { docCount: 0, totalSales: 0, totalBuy: 0, totalProfit: 0, employeeShare: 0, companyShare: 0 },
+    );
+
+    return { rows, totals, defaultEmployeeMargin };
+  }
 }

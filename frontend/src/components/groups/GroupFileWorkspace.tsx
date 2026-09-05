@@ -241,8 +241,9 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   const [openPax, setOpenPax] = useState<string | null>(null);
   const [paxModal, setPaxModal] = useState<{
     open: boolean;
-    initialCustomer?: { name: string; id?: string | null; accountId?: string | null } | null;
-  }>({ open: false, initialCustomer: null });
+    initialCustomer?: { name: string; id?: string | null; accountId?: string | null; agent?: string } | null;
+    editingPassenger?: GroupPassenger | null;
+  }>({ open: false, initialCustomer: null, editingPassenger: null });
   const [beneficiaryModalOpen, setBeneficiaryModalOpen] = useState(false);
   const [activeBeneficiaries, setActiveBeneficiaries] = useState<
     Array<{ name: string; accountId?: string | null; id?: string | null }>
@@ -262,6 +263,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
     groupType: 'FULL',
     currency: 'IQD',
     notes: '',
+    agent: '',
   });
 
   useEffect(() => {
@@ -273,6 +275,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
         groupType: g.groupType || 'FULL',
         currency: g.currency || 'IQD',
         notes: g.notes || '',
+        agent: g.passengers?.find((p) => p.agent)?.agent || '',
       });
     }
   }, [g]);
@@ -480,6 +483,8 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
         opened={opened}
         direction={direction}
         isAr={isAr}
+        currentUserName={currentUserName}
+        employeeOptions={employeeOptions}
         onClose={onClose}
         onCreated={(created) => {
           setG(created);
@@ -1023,9 +1028,19 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                                   passengers={bg.passengers}
                                   isAr={isAr}
                                   supplierOptions={supplierOptions}
-                                  openPax={openPax}
-                                  setOpenPax={setOpenPax}
                                   run={run}
+                                  onEditPax={(pax) => {
+                                    setPaxModal({
+                                      open: true,
+                                      initialCustomer: {
+                                        name: bg.name,
+                                        accountId: bg.accountId,
+                                        id: bg.customerId,
+                                        agent: pax.agent || undefined,
+                                      },
+                                      editingPassenger: pax,
+                                    });
+                                  }}
                                 />
                               )}
                             </div>
@@ -1050,6 +1065,8 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           busy={busy}
           groupCurrency={g.currency}
           supplierOptions={supplierOptions}
+          currentUserName={currentUserName}
+          employeeOptions={employeeOptions}
           onClose={() => setPsModal(null)}
           onSave={async (dto) => {
             const ok = await run(() => tourGroupsApi.savePriceSystem(g.id, dto), isAr ? 'حُفظ نظام الأسعار' : 'Saved');
@@ -1078,6 +1095,8 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
         <NewBeneficiaryModal
           isAr={isAr}
           direction={direction}
+          currentUserName={currentUserName}
+          employeeOptions={employeeOptions}
           onClose={() => setBeneficiaryModalOpen(false)}
           onSelect={(b) => {
             setActiveBeneficiaries((prev) => {
@@ -1106,11 +1125,21 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           errorMsg={errorMsg}
           customerOptions={customerOptions}
           initialCustomer={paxModal.initialCustomer}
+          editingPassenger={paxModal.editingPassenger}
+          currentUserName={currentUserName}
+          employeeOptions={employeeOptions}
           onClose={() => {
             setErrorMsg('');
-            setPaxModal({ open: false, initialCustomer: null });
+            setPaxModal({ open: false, initialCustomer: null, editingPassenger: null });
           }}
           onSave={async (dto) => {
+            if (paxModal.editingPassenger) {
+              const ok = await run(
+                () => tourGroupsApi.updatePassenger(g.id, paxModal.editingPassenger!.id, dto),
+                isAr ? 'تم تعديل بيانات المسافر بنجاح' : 'Passenger updated',
+              );
+              return !!ok;
+            }
             const ok = await run(
               () => tourGroupsApi.addPassenger(g.id, dto),
               isAr ? 'أُضيف المسافر بنجاح' : 'Passenger added',
@@ -1153,7 +1182,23 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
               </button>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 font-bold">{isAr ? 'مدخل البيانات:' : 'Data Entry:'}</span>
+                <span className="font-black text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 font-sans">
+                  {g.createdByName || currentUserName}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[#F45A0A] font-bold shrink-0">{isAr ? 'موظف الإصدار / المصدر:' : 'Issuer:'}</span>
+                <span className="font-black text-slate-800 truncate">
+                  {editGroupData.agent || (isAr ? 'لم يُحدد' : 'Not set')}
+                </span>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* اسم الكروب */}
               <div className="sm:col-span-2">
                 <label className="text-xs font-bold text-slate-700 block mb-1">
                   {isAr ? 'اسم الكروب *' : 'Group Name *'}
@@ -1163,6 +1208,20 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                   onChange={(e) => setEditGroupData({ ...editGroupData, groupName: e.target.value })}
                   className={inputClass}
                   placeholder={isAr ? 'اسم الكروب' : 'Group Name'}
+                />
+              </div>
+
+              {/* موظف الإصدار */}
+              <div className="sm:col-span-2">
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  {isAr ? 'موظف الإصدار / المصدر' : 'Issuing Employee / Issuer'}
+                </label>
+                <SearchableCombobox
+                  value={editGroupData.agent}
+                  onChange={(val) => setEditGroupData({ ...editGroupData, agent: val || '' })}
+                  options={employeeOptions || []}
+                  placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
+                  allowCustomValue
                 />
               </div>
 
@@ -1367,7 +1426,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                     userName: g.createdByName || (isAr ? 'مدير النظام' : 'System Admin'),
                     action: 'CREATE',
                     actionTitle: isAr ? 'إنشاء ملف الكروب السياحي' : 'Create tour group file',
-                    details: `${isAr ? 'تم إنشاء ملف الكروب' : 'Created group file'}: ${g.groupName} (${g.country || ''})`,
+                    notes: `${isAr ? 'تم إنشاء ملف الكروب' : 'Created group file'}: ${g.groupName} (${g.country || ''})`,
                   },
                 ]
               : undefined
@@ -1378,127 +1437,210 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   );
 };
 
-/* ── صف المسافر: كارد أنيق قابل للطي مع الخدمات والمبالغ ── */
-/* ── جدول المسافرين: كثيف وسريع، يحلّ محلّ البطاقات ──
- * صفٌّ لكل مسافر، وصفٌّ منسدلٌ لخدماته يُركَّب فقط عند التوسيع (فلا تُحسب
- * الحقول الثقيلة إلا لما هو مفتوح). أرقامٌ جدولية محاذاة، وإجراءات مدمجة. */
+/* ── جدول المسافرين: سطر واحد لكل مسافر، لا أسطر فرعية، كليك يمين للتعديل ── */
 const PassengerTable: React.FC<{
   g: TourGroup;
   passengers: GroupPassenger[];
   isAr: boolean;
   supplierOptions: Array<{ value: string; label: string; code?: string }>;
-  openPax: string | null;
-  setOpenPax: (id: string | null) => void;
   run: (op: () => Promise<TourGroup>, ok?: string) => Promise<TourGroup | null>;
-}> = ({ g, passengers, isAr, supplierOptions, openPax, setOpenPax, run }) => {
+  onEditPax: (p: GroupPassenger) => void;
+}> = ({ g, passengers, isAr, run, onEditPax }) => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const th = 'px-2.5 py-2 text-[10.5px] font-black text-slate-500 whitespace-nowrap';
-  const td = 'px-2.5 py-1.5 text-[11.5px] whitespace-nowrap';
+  const th = 'px-3 py-2.5 text-[11px] font-black text-slate-600 whitespace-nowrap select-none';
+  const td = 'px-3 py-2 text-[12px] whitespace-nowrap';
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
       <table className="w-full border-collapse text-start">
         <thead>
-          <tr className="bg-slate-50 border-b border-slate-200 text-start">
-            <th className={`${th} w-8`}></th>
+          <tr className="bg-slate-50/80 border-b border-slate-200 text-start">
+            <th className={`${th} w-10 text-center`}>#</th>
             <th className={`${th} text-start`}>{isAr ? 'المسافر' : 'Passenger'}</th>
-            <th className={`${th} text-start`}>{isAr ? 'الحالة' : 'Status'}</th>
-            <th className={`${th} text-end`}>{isAr ? 'سعر البيع' : 'Sale'}</th>
-            <th className={`${th} text-end`}>{isAr ? 'المحصّل' : 'Paid'}</th>
+            <th className={`${th} text-start`}>{isAr ? 'الخدمة / البكج' : 'Package / Service'}</th>
+            <th className={`${th} text-start`}>{isAr ? 'المورد' : 'Supplier'}</th>
+            <th className={`${th} text-center`}>{isAr ? 'الحالة' : 'Status'}</th>
+            <th className={`${th} text-end`}>{isAr ? 'سعر الشراء' : 'Buy Cost'}</th>
+            <th className={`${th} text-end`}>{isAr ? 'سعر البيع' : 'Sale Price'}</th>
+            <th className={`${th} text-end`}>{isAr ? 'المحصّل' : 'Collected'}</th>
             <th className={`${th} text-end`}>{isAr ? 'المتبقي' : 'Due'}</th>
-            <th className={`${th} text-end`}>{isAr ? 'التكلفة' : 'Cost'}</th>
             <th className={`${th} text-end`}>{isAr ? 'الربح' : 'Profit'}</th>
-            <th className={`${th} text-center w-px`}>{isAr ? 'إجراءات' : ''}</th>
+            <th className={`${th} text-start`}>{isAr ? 'موظف الإصدار' : 'Issuer'}</th>
+            <th className={`${th} text-center w-24`}>{isAr ? 'إجراءات' : 'Actions'}</th>
           </tr>
         </thead>
-        <tbody>
-          {passengers.map((p) => {
+        <tbody className="divide-y divide-slate-100">
+          {passengers.map((p, idx) => {
             const cancelled = p.state === 'CANCELLED';
             const done = p.services.length > 0 && p.services.every((s) => s.status === 'COMPLETE');
             const sale = Number(p.salePrice) || 0;
             const paid = Number(p.collectedAmount) || 0;
             const due = sale - paid;
-            const cost = p.services.reduce((a, s) => a + (s.finalBuy !== null && s.finalBuy !== undefined ? Number(s.finalBuy) : 0), 0);
+
+            let cost = 0;
+            if (Array.isArray(p.services) && p.services.length > 0) {
+              for (const sv of p.services) {
+                const fb = (sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0) ? Number(sv.finalBuy) : 0;
+                const eb = Number(sv.expectedBuy) || 0;
+                cost += (fb > 0 ? fb : eb);
+              }
+            } else if (p.priceSystemId && Array.isArray(g.priceSystems)) {
+              const ps = g.priceSystems.find((s) => s.id === p.priceSystemId);
+              if (ps && Array.isArray(ps.items)) {
+                for (const it of ps.items) {
+                  cost += Number(it.expectedBuy) || 0;
+                }
+              }
+            }
             const profit = sale - cost;
-            const isOpen = openPax === p.id;
+
+            let serviceName = '';
+            if (p.priceSystemId && g.priceSystems) {
+              const ps = g.priceSystems.find((s) => s.id === p.priceSystemId);
+              if (ps) serviceName = ps.name;
+            }
+            if (!serviceName && Array.isArray(p.services) && p.services.length > 0) {
+              serviceName = p.services.map((s) => (s as any).description || (KIND_META[s.kind]?.ar || s.kind)).filter(Boolean).join(' + ');
+            }
+            if (!serviceName) {
+              serviceName = isAr ? 'بكج كامل' : 'Full Package';
+            }
+
+            let supplierName = '';
+            if (Array.isArray(p.services) && p.services.length > 0) {
+              supplierName = p.services.map((s) => s.supplierName).filter(Boolean).join(', ');
+            }
+            if (!supplierName && p.priceSystemId && g.priceSystems) {
+              const ps = g.priceSystems.find((s) => s.id === p.priceSystemId);
+              if (ps && ps.items) {
+                supplierName = ps.items.map((it: any) => it.supplierName).filter(Boolean).join(', ');
+              }
+            }
+
             return (
-              <React.Fragment key={p.id}>
-                <tr
-                  className={`border-b border-slate-100 hover:bg-orange-50/30 transition-colors ${cancelled ? 'opacity-50' : ''}`}
-                >
-                  <td className={`${td} text-center`}>
+              <tr
+                key={p.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  onEditPax(p);
+                }}
+                onDoubleClick={() => onEditPax(p)}
+                title={isAr ? 'انقر بالزر الأيمن أو مرتين لتعديل بيانات المسافر' : 'Right-click or double-click to edit passenger'}
+                className={`transition-colors hover:bg-orange-50/50 cursor-pointer select-none group ${
+                  cancelled ? 'opacity-50 bg-slate-50/60' : ''
+                }`}
+              >
+                <td className={`${td} text-center font-mono text-[11px] font-bold text-slate-400`}>
+                  {idx + 1}
+                </td>
+                <td className={`${td} text-start`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {cancelled ? (
+                      <Ban size={14} className="text-slate-400 shrink-0" />
+                    ) : done ? (
+                      <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                    ) : (
+                      <Clock size={14} className="text-amber-500 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <span className="font-black text-slate-900 truncate block group-hover:text-[#F45A0A] transition-colors">
+                        {p.passengerName}
+                      </span>
+                      {p.passport && (
+                        <span className="text-[10px] font-mono font-bold text-slate-400 block truncate" dir="ltr">
+                          {p.passport}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </td>
+                <td className={`${td} text-start`}>
+                  <span className="font-bold text-slate-800 text-[11.5px] truncate block max-w-[160px]" title={serviceName}>
+                    {serviceName}
+                  </span>
+                </td>
+                <td className={`${td} text-start`}>
+                  <span className="font-bold text-slate-600 text-[11px] truncate block max-w-[130px]" title={supplierName || '—'}>
+                    {supplierName || '—'}
+                  </span>
+                </td>
+                <td className={`${td} text-center`}>
+                  <span
+                    className={`text-[10px] font-black rounded-md px-2 py-0.5 border inline-block ${
+                      cancelled
+                        ? 'bg-slate-100 text-slate-500 border-slate-200'
+                        : done
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}
+                  >
+                    {cancelled ? (isAr ? 'ملغى' : 'Cancelled') : done ? (isAr ? 'مكتمل' : 'Complete') : (isAr ? 'معلّق' : 'Pending')}
+                  </span>
+                </td>
+                <td className={`${td} text-end font-mono font-bold text-slate-700 tabular-nums`} dir="ltr">
+                  {cost > 0 ? money(cost, p.currency || g.currency) : '—'}
+                </td>
+                <td className={`${td} text-end font-mono font-black text-slate-900 tabular-nums`} dir="ltr">
+                  {money(sale, p.currency || g.currency)}
+                </td>
+                <td className={`${td} text-end font-mono font-black text-emerald-700 tabular-nums`} dir="ltr">
+                  {money(paid, p.currency || g.currency)}
+                </td>
+                <td className={`${td} text-end font-mono font-black tabular-nums ${due > 0 ? 'text-rose-600' : 'text-slate-400'}`} dir="ltr">
+                  {due > 0 ? money(due, p.currency || g.currency) : '—'}
+                </td>
+                <td className={`${td} text-end font-mono font-black tabular-nums ${profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`} dir="ltr">
+                  {money(profit, p.currency || g.currency)}
+                </td>
+                <td className={`${td} text-start`}>
+                  {p.agent ? (
+                    <span className="text-[10.5px] font-bold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200/80 inline-block truncate max-w-[120px]" title={p.agent}>
+                      {p.agent}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 text-[11px]">—</span>
+                  )}
+                </td>
+                <td className={`${td} text-center`} onClick={(e) => e.stopPropagation()}>
+                  <div className="inline-flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => setOpenPax(isOpen ? null : p.id)}
-                      className="w-6 h-6 rounded-md hover:bg-slate-100 text-slate-400 inline-flex items-center justify-center cursor-pointer"
-                      title={isAr ? 'الخدمات' : 'Services'}
+                      onClick={() => onEditPax(p)}
+                      title={isAr ? 'تعديل بيانات المسافر (أو كليك يمين)' : 'Edit passenger (or right-click)'}
+                      className="w-7 h-7 rounded-lg text-[#F45A0A] hover:bg-orange-50 border border-transparent hover:border-orange-200 inline-flex items-center justify-center cursor-pointer transition-colors"
                     >
-                      {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      <Edit2 size={13} />
                     </button>
-                  </td>
-                  <td className={`${td} text-start`}>
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {cancelled ? <Ban size={13} className="text-slate-400 shrink-0" /> : done ? <CheckCircle2 size={13} className="text-emerald-600 shrink-0" /> : <Clock size={13} className="text-amber-500 shrink-0" />}
-                      <span className="font-black text-slate-900 truncate">{p.passengerName}</span>
-                    </div>
-                  </td>
-                  <td className={td}>
-                    <span className={`text-[9.5px] font-black rounded px-1.5 py-0.5 border ${cancelled ? 'bg-slate-100 text-slate-500 border-slate-200' : done ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                      {cancelled ? (isAr ? 'ملغى' : 'Cancelled') : done ? (isAr ? 'مكتمل' : 'Complete') : (isAr ? 'معلّق' : 'Pending')}
-                    </span>
-                  </td>
-                  <td className={`${td} text-end font-mono font-black text-slate-900 tabular-nums`} dir="ltr">{money(sale, p.currency)}</td>
-                  <td className={`${td} text-end font-mono font-bold text-emerald-700 tabular-nums`} dir="ltr">{money(paid, p.currency)}</td>
-                  <td className={`${td} text-end font-mono font-black tabular-nums ${due > 0 ? 'text-rose-600' : 'text-slate-400'}`} dir="ltr">{due > 0 ? money(due, p.currency) : '—'}</td>
-                  <td className={`${td} text-end font-mono font-bold text-slate-600 tabular-nums`} dir="ltr">{cost > 0 ? money(cost, p.currency) : '—'}</td>
-                  <td className={`${td} text-end font-mono font-black tabular-nums ${profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`} dir="ltr">{money(profit, p.currency)}</td>
-                  <td className={`${td} text-center`}>
-                    <div className="inline-flex items-center gap-1">
-                      {!cancelled && (
-                        <button
-                          type="button"
-                          onClick={() => run(() => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'CANCELLED' }), isAr ? 'أُلغي' : 'Cancelled')}
-                          title={isAr ? 'إلغاء الحجز' : 'Cancel'}
-                          className="w-6 h-6 rounded-md text-amber-500 hover:bg-amber-50 inline-flex items-center justify-center cursor-pointer"
-                        >
-                          <Ban size={13} />
-                        </button>
-                      )}
+                    {!cancelled ? (
                       <button
                         type="button"
-                        onClick={() => setConfirmDeleteId(p.id)}
-                        title={isAr ? 'حذف نهائي' : 'Delete'}
-                        className="w-6 h-6 rounded-md text-rose-500 hover:bg-rose-50 inline-flex items-center justify-center cursor-pointer"
+                        onClick={() => run(() => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'CANCELLED' }), isAr ? 'أُلغي الحجز' : 'Cancelled')}
+                        title={isAr ? 'إلغاء الحجز' : 'Cancel'}
+                        className="w-7 h-7 rounded-lg text-amber-500 hover:bg-amber-50 border border-transparent hover:border-amber-200 inline-flex items-center justify-center cursor-pointer transition-colors"
                       >
-                        <Trash2 size={13} />
+                        <Ban size={13} />
                       </button>
-                    </div>
-                  </td>
-                </tr>
-                {isOpen && (
-                  <tr className="bg-slate-50/60">
-                    <td colSpan={9} className="px-3 py-2.5">
-                      <div className="space-y-1.5">
-                        {p.services.map((sv) => (
-                          <ServiceLine key={sv.id} g={g} sv={sv} isAr={isAr} supplierOptions={supplierOptions} run={run} disabled={cancelled} />
-                        ))}
-                        {p.services.length === 0 && (
-                          <p className="text-[11px] font-bold text-slate-400">{isAr ? 'لا خدمات لهذا المسافر' : 'No services'}</p>
-                        )}
-                        {!cancelled && (
-                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/70 flex-wrap">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[11px] font-bold text-slate-600">{isAr ? 'تحصيل:' : 'Collect:'}</span>
-                              <CollectBox g={g} p={p} isAr={isAr} run={run} />
-                              <PassengerPriceEdit g={g} p={p} isAr={isAr} run={run} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => run(() => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'RESERVED' }), isAr ? 'تم تفعيل الحجز' : 'Restored')}
+                        title={isAr ? 'استعادة الحجز' : 'Restore'}
+                        className="w-7 h-7 rounded-lg text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-200 inline-flex items-center justify-center cursor-pointer transition-colors"
+                      >
+                        <CheckCircle2 size={13} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(p.id)}
+                      title={isAr ? 'حذف نهائي' : 'Delete'}
+                      className="w-7 h-7 rounded-lg text-rose-500 hover:bg-rose-50 border border-transparent hover:border-rose-200 inline-flex items-center justify-center cursor-pointer transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
             );
           })}
         </tbody>
@@ -1600,6 +1742,12 @@ const PassengerRow: React.FC<{
           >
             {cancelled ? (isAr ? 'ملغى' : 'Cancelled') : done ? (isAr ? 'مكتمل' : 'Complete') : (isAr ? 'معلّق' : 'Pending')}
           </span>
+          {p.agent && (
+            <span className="text-[10px] font-bold text-orange-700 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 shrink-0 truncate max-w-[120px]">
+              <span className="text-[9px] text-orange-400 font-sans me-0.5">{isAr ? 'مصدّر:' : 'Issuer:'}</span>
+              {p.agent}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0 text-xs font-mono font-black flex-wrap" dir="ltr">
@@ -1609,10 +1757,14 @@ const PassengerRow: React.FC<{
             {money(paxCost, p.currency)}
           </span>
 
-          {/* على المستفيد (البيع) */}
-          <span className="text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]" title={isAr ? 'على المستفيد (سعر البيع)' : 'Sale Price'}>
-            <span className="text-[10px] text-slate-400 font-sans me-1">{isAr ? 'ب:' : 'S:'}</span>
-            {money(p.salePrice, p.currency)}
+          {/* على المستفيد (البيع) مع زر تعديل سريع */}
+          <span
+            className="text-slate-900 bg-slate-50 hover:bg-orange-50 hover:border-orange-300 px-2 py-0.5 rounded border border-slate-200 text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+            title={isAr ? 'سعر البيع — افتح لتعديل السعر' : 'Sale Price — Open to edit'}
+          >
+            <span className="text-[10px] text-slate-400 font-sans me-0.5">{isAr ? 'ب:' : 'S:'}</span>
+            <span>{money(p.salePrice, p.currency)}</span>
+            <Edit2 size={10} className="text-slate-400" />
           </span>
 
           {/* ربح المسافر */}
@@ -1746,10 +1898,11 @@ const PassengerPriceEdit: React.FC<{
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-[11px] font-bold hover:bg-slate-50 cursor-pointer"
+        className="h-8 px-2.5 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 text-[#F45A0A] text-[11px] font-black cursor-pointer flex items-center gap-1 shadow-2xs transition-colors"
         title={isAr ? 'تعديل سعر البيع' : 'Edit sale price'}
       >
-        {isAr ? 'تعديل السعر' : 'Edit price'}
+        <Edit2 size={12} />
+        <span>{isAr ? 'تعديل سعر المبيع' : 'Edit price'}</span>
       </button>
     );
   }
@@ -2470,17 +2623,20 @@ const ChargeModal: React.FC<{
   );
 };
 
-/* ── نافذة إضافة ملف مستفيد جديد ── */
+/* ── نافذة إضافة ملف مستفيد جديد: مع إظهار مدخل البيانات وموظف الإصدار ── */
 const NewBeneficiaryModal: React.FC<{
   isAr: boolean;
   direction: string;
+  currentUserName?: string;
+  employeeOptions?: Array<{ value: string; label: string }>;
   onClose: () => void;
-  onSelect: (beneficiary: { name: string; accountId: string | null; id?: string | null }) => void;
-}> = ({ isAr, direction, onClose, onSelect }) => {
+  onSelect: (beneficiary: { name: string; accountId: string | null; id?: string | null; agent?: string }) => void;
+}> = ({ isAr, direction, currentUserName, employeeOptions, onClose, onSelect }) => {
   const [selectedAccount, setSelectedAccount] = useState<{ id: string | null; name: string }>({
     id: null,
     name: '',
   });
+  const [issuerEmployee, setIssuerEmployee] = useState<string>(currentUserName || '');
   const [accountFinder, setAccountFinder] = useState<{ open: boolean; query: string }>({
     open: false,
     query: '',
@@ -2491,6 +2647,7 @@ const NewBeneficiaryModal: React.FC<{
     onSelect({
       name: selectedAccount.name.trim(),
       accountId: selectedAccount.id,
+      agent: issuerEmployee || undefined,
     });
   };
 
@@ -2531,6 +2688,16 @@ const NewBeneficiaryModal: React.FC<{
           </button>
         </div>
 
+        {/* تنويه مدخل البيانات */}
+        <div className="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-bold">{isAr ? 'مدخل البيانات:' : 'Data Entry:'}</span>
+            <span className="font-black text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 font-sans">
+              {currentUserName || (isAr ? 'مدير النظام' : 'System Admin')}
+            </span>
+          </div>
+        </div>
+
         <Field
           label={isAr ? 'اسم المستفيد / العميل / الحساب *' : 'Beneficiary / Client Account *'}
           action={
@@ -2556,6 +2723,16 @@ const NewBeneficiaryModal: React.FC<{
                 name: pick.name,
               });
             }}
+          />
+        </Field>
+
+        <Field label={isAr ? 'موظف الإصدار / المصدر' : 'Issuing Employee / Issuer'}>
+          <SearchableCombobox
+            value={issuerEmployee}
+            onChange={(val) => setIssuerEmployee(val || '')}
+            options={employeeOptions || []}
+            placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
+            allowCustomValue
           />
         </Field>
 
@@ -2606,44 +2783,98 @@ const PassengerModal: React.FC<{
   direction: string;
   g: TourGroup;
   customerOptions: any[];
-  initialCustomer?: { name: string; id?: string | null; accountId?: string | null } | null;
+  initialCustomer?: { name: string; id?: string | null; accountId?: string | null; agent?: string } | null;
+  editingPassenger?: GroupPassenger | null;
+  currentUserName?: string;
+  employeeOptions?: Array<{ value: string; label: string }>;
   onClose: () => void;
   onSave: (dto: any) => Promise<boolean>;
   busy?: boolean;
   errorMsg?: string;
-}> = ({ isAr, direction, g, customerOptions, initialCustomer, onClose, onSave, busy, errorMsg }) => {
+}> = ({
+  isAr,
+  direction,
+  g,
+  customerOptions,
+  initialCustomer,
+  editingPassenger,
+  currentUserName,
+  employeeOptions,
+  onClose,
+  onSave,
+  busy,
+  errorMsg,
+}) => {
+  const isEditing = !!editingPassenger;
   const activeSystems = g.priceSystems.filter((s) => s.active);
   const user = useAuthStore((s) => s.user);
+  const currentUserAgent = currentUserName || user?.name || (user as any)?.fullName || (user as any)?.username || (isAr ? 'مدير النظام' : 'System Admin');
   const passengerInputRef = useRef<HTMLInputElement>(null);
   const [addedCount, setAddedCount] = useState(0);
   const [lastAddedName, setLastAddedName] = useState('');
 
-  const [d, setD] = useState<any>({
-    priceSystemId: activeSystems[0]?.id || '',
-    passengerName: '',
-    customerName: initialCustomer?.name || '',
-    customerId: initialCustomer?.id || null,
-    customerAccountId: initialCustomer?.accountId || null,
-    passport: '',
-    agent: '',
-    payType: 'CASH',
-    paymentMethod: 'CASH_HAND',
-    paymentAccountId: null,
-    voucherNumber: '',
-    currency: activeSystems[0]?.currency || g.currency || 'USD',
-    salePrice: activeSystems[0] ? Number(activeSystems[0].salePrice) : 0,
+  const [d, setD] = useState<any>(() => {
+    if (editingPassenger) {
+      return {
+        priceSystemId: editingPassenger.priceSystemId || activeSystems[0]?.id || '',
+        passengerName: editingPassenger.passengerName || '',
+        customerName: editingPassenger.customerName || '',
+        customerId: editingPassenger.customerId || null,
+        customerAccountId: (editingPassenger as any).customerAccountId || null,
+        passport: editingPassenger.passport || '',
+        agent: editingPassenger.agent || currentUserAgent,
+        payType: editingPassenger.payType || 'CASH',
+        paymentMethod: (editingPassenger as any).paymentMethod || 'CASH_HAND',
+        paymentAccountId: editingPassenger.paymentAccountId || null,
+        voucherNumber: editingPassenger.voucherNumber || '',
+        currency: editingPassenger.currency || g.currency || 'IQD',
+        salePrice: editingPassenger.salePrice !== undefined ? Number(editingPassenger.salePrice) : (activeSystems[0] ? Number(activeSystems[0].salePrice) : 0),
+      };
+    }
+    return {
+      priceSystemId: activeSystems[0]?.id || '',
+      passengerName: '',
+      customerName: initialCustomer?.name || '',
+      customerId: initialCustomer?.id || null,
+      customerAccountId: initialCustomer?.accountId || null,
+      passport: '',
+      agent: (initialCustomer as any)?.agent || currentUserAgent,
+      payType: 'CASH',
+      paymentMethod: 'CASH_HAND',
+      paymentAccountId: null,
+      voucherNumber: '',
+      currency: activeSystems[0]?.currency || g.currency || 'IQD',
+      salePrice: activeSystems[0] ? Number(activeSystems[0].salePrice) : 0,
+    };
   });
 
   useEffect(() => {
-    if (initialCustomer) {
+    if (editingPassenger) {
+      setD({
+        priceSystemId: editingPassenger.priceSystemId || activeSystems[0]?.id || '',
+        passengerName: editingPassenger.passengerName || '',
+        customerName: editingPassenger.customerName || '',
+        customerId: editingPassenger.customerId || null,
+        customerAccountId: (editingPassenger as any).customerAccountId || null,
+        passport: editingPassenger.passport || '',
+        agent: editingPassenger.agent || currentUserAgent,
+        payType: editingPassenger.payType || 'CASH',
+        paymentMethod: (editingPassenger as any).paymentMethod || 'CASH_HAND',
+        paymentAccountId: editingPassenger.paymentAccountId || null,
+        voucherNumber: editingPassenger.voucherNumber || '',
+        currency: editingPassenger.currency || g.currency || 'IQD',
+        salePrice: editingPassenger.salePrice !== undefined ? Number(editingPassenger.salePrice) : (activeSystems[0] ? Number(activeSystems[0].salePrice) : 0),
+      });
+    } else if (initialCustomer) {
       setD((prev: any) => ({
         ...prev,
         customerName: initialCustomer.name || '',
         customerAccountId: initialCustomer.accountId || null,
         customerId: initialCustomer.id || null,
+        agent: (initialCustomer as any)?.agent || prev.agent || currentUserAgent,
       }));
     }
-  }, [initialCustomer]);
+  }, [editingPassenger, initialCustomer, currentUserAgent]);
 
   const [paymentAccounts, setPaymentAccounts] = useState<any[]>([]);
   const [employeesList, setEmployeesList] = useState<any[]>([]);
@@ -2806,6 +3037,20 @@ const PassengerModal: React.FC<{
     return foundMaster || masterAccounts[0] || null;
   }, [masterAccounts]);
 
+  const issuerComboboxOptions = useMemo(() => {
+    const list =
+      employeeOptions && employeeOptions.length > 0
+        ? [...employeeOptions]
+        : employeesList.map((e: any) => ({
+            value: e.fullName || e.name || e.id,
+            label: e.fullName || e.name || e.username || '',
+          }));
+    if (currentUserAgent && !list.some((o) => o.value === currentUserAgent || o.label === currentUserAgent)) {
+      list.unshift({ value: currentUserAgent, label: currentUserAgent });
+    }
+    return list;
+  }, [employeeOptions, employeesList, currentUserAgent]);
+
   useEffect(() => {
     if (d.payType === 'CASH') {
       if (d.paymentMethod === 'MASTER') {
@@ -2840,25 +3085,31 @@ const PassengerModal: React.FC<{
   const handleSave = async () => {
     if (busy || !d.passengerName.trim() || !d.priceSystemId) return;
     const nameToAdd = d.passengerName.trim();
+    const resolvedAgent = String(d.agent || currentUserAgent || '').trim();
     const ok = await onSave({
       ...d,
       passengerName: nameToAdd,
+      agent: resolvedAgent,
       salePrice: Number(String(d.salePrice || 0).replace(/,/g, '')) || 0,
-      currency: d.currency || g.currency || 'USD',
+      currency: d.currency || g.currency || 'IQD',
       transferImage: transferImage || null,
     });
     if (ok) {
-      setAddedCount((c) => c + 1);
-      setLastAddedName(nameToAdd);
-      setD((prev: any) => ({
-        ...prev,
-        passengerName: '',
-        passport: '',
-      }));
-      setTransferImage(null);
-      setTimeout(() => {
-        passengerInputRef.current?.focus();
-      }, 60);
+      if (isEditing) {
+        onClose();
+      } else {
+        setAddedCount((c) => c + 1);
+        setLastAddedName(nameToAdd);
+        setD((prev: any) => ({
+          ...prev,
+          passengerName: '',
+          passport: '',
+        }));
+        setTransferImage(null);
+        setTimeout(() => {
+          passengerInputRef.current?.focus();
+        }, 60);
+      }
     }
   };
 
@@ -2883,9 +3134,9 @@ const PassengerModal: React.FC<{
             </div>
             <div>
               <h3 className="font-black text-sm text-slate-900">
-                {isAr ? 'إضافة مسافر' : 'Add Passenger'}
+                {isEditing ? (isAr ? 'تعديل بيانات المسافر' : 'Edit Passenger') : (isAr ? 'إضافة مسافر' : 'Add Passenger')}
               </h3>
-              {addedCount > 0 && (
+              {!isEditing && addedCount > 0 && (
                 <p className="text-[10.5px] font-bold text-emerald-600">
                   {isAr ? `أُضيف ${addedCount} مسافرين في هذه الجلسة` : `${addedCount} passengers added`}
                 </p>
@@ -2940,6 +3191,22 @@ const PassengerModal: React.FC<{
             {errorMsg}
           </div>
         )}
+
+        {/* بيانات مدخل البيانات وموظف الإصدار */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-bold">{isAr ? 'مدخل البيانات:' : 'Data Entry:'}</span>
+            <span className="font-black text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 font-sans">
+              {currentUserName || user?.name || (isAr ? 'مدير النظام' : 'System Admin')}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[#F45A0A] font-bold shrink-0">{isAr ? 'موظف الإصدار / المصدر:' : 'Issuer:'}</span>
+            <span className="font-black text-slate-800 truncate">
+              {d.agent || currentUserAgent || (isAr ? 'لم يُحدد' : 'Not set')}
+            </span>
+          </div>
+        </div>
 
         <Field label={isAr ? 'نظام الأسعار *' : 'Price System *'}>
           <SearchableCombobox
@@ -3045,12 +3312,13 @@ const PassengerModal: React.FC<{
               placeholder=""
             />
           </Field>
-          <Field label={isAr ? 'الوكيل' : 'Agent'}>
-            <input
-              value={d.agent}
-              onChange={(e) => setD({ ...d, agent: e.target.value })}
-              className={inputClass}
-              placeholder=""
+          <Field label={isAr ? 'موظف الإصدار / المصدر *' : 'Issuing Employee / Issuer *'}>
+            <SearchableCombobox
+              value={d.agent || currentUserAgent}
+              onChange={(val) => setD({ ...d, agent: val || currentUserAgent })}
+              options={issuerComboboxOptions}
+              placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
+              allowCustomValue
             />
           </Field>
 
@@ -3275,6 +3543,11 @@ const PassengerModal: React.FC<{
                   <Loader size={13} color="white" />
                   <span>{isAr ? 'جارٍ الحفظ…' : 'Saving…'}</span>
                 </>
+              ) : isEditing ? (
+                <>
+                  <Save size={14} />
+                  <span>{isAr ? 'حفظ التعديلات' : 'Save Changes'}</span>
+                </>
               ) : (
                 <>
                   <UserPlus size={14} />
@@ -3333,9 +3606,11 @@ export const NewGroupModal: React.FC<{
   opened: boolean;
   direction: string;
   isAr: boolean;
+  currentUserName?: string;
+  employeeOptions?: Array<{ value: string; label: string }>;
   onClose: () => void;
   onCreated: (g: TourGroup) => void;
-}> = ({ opened, direction, isAr, onClose, onCreated }) => {
+}> = ({ opened, direction, isAr, currentUserName, employeeOptions, onClose, onCreated }) => {
   const [d, setD] = useState<any>({
     groupName: '',
     groupType: 'FULL',
@@ -3343,6 +3618,7 @@ export const NewGroupModal: React.FC<{
     travelDate: new Date(),
     buyDate: new Date(),
     currency: 'IQD',
+    agent: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -3379,6 +3655,22 @@ export const NewGroupModal: React.FC<{
           </button>
         </div>
 
+        {/* تنويه مدخل البيانات وموظف الإصدار */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-bold">{isAr ? 'مدخل البيانات:' : 'Data Entry:'}</span>
+            <span className="font-black text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 font-sans">
+              {currentUserName || (isAr ? 'مدير النظام' : 'System Admin')}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[#F45A0A] font-bold shrink-0">{isAr ? 'موظف الإصدار / المصدر:' : 'Issuer:'}</span>
+            <span className="font-black text-slate-800 truncate">
+              {d.agent || (isAr ? 'لم يُحدد' : 'Not set')}
+            </span>
+          </div>
+        </div>
+
         {/* الحقول المقتضبة */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {/* اسم الكروب */}
@@ -3391,6 +3683,20 @@ export const NewGroupModal: React.FC<{
               onChange={(e) => setD({ ...d, groupName: e.target.value })}
               className={inputClass}
               placeholder={isAr ? 'اسم الكروب' : 'Group Name'}
+            />
+          </div>
+
+          {/* موظف الإصدار */}
+          <div className="sm:col-span-2">
+            <label className="text-xs font-bold text-slate-700 block mb-1">
+              {isAr ? 'موظف الإصدار / المصدر' : 'Issuing Employee / Issuer'}
+            </label>
+            <SearchableCombobox
+              value={d.agent}
+              onChange={(val) => setD({ ...d, agent: val || '' })}
+              options={employeeOptions || []}
+              placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
+              allowCustomValue
             />
           </div>
 

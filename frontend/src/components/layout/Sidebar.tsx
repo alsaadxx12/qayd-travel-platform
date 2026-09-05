@@ -119,6 +119,7 @@ const DEFAULT_SIDEBAR_SECTIONS: NavSection[] = [
     iconKey: 'FileText',
     items: [
       { id: 'debts-report', title: 'تقرير الديون والذمم', path: '/debts-report', iconKey: 'Scale' },
+      { id: 'employee-profits', title: 'أرباح الموظفين', path: '/employee-profits', iconKey: 'TrendingUp' },
       { id: 'income-statement', title: 'القوائم المالية', path: '/income-statement', iconKey: 'FileText' },
     ],
   },

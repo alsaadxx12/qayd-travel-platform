@@ -67,6 +67,7 @@ import {
 import { sequencesApi } from '../../api/sequences';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { fetchPrintTemplate, savePrintTemplate } from '../../api/printTemplates';
+import { EmployeesMarginsSection } from './EmployeesMarginsSection';
 import {
   PrintableAccountStatementSheet,
   type StatementMovementItem,
@@ -1104,6 +1105,7 @@ export const SystemSettingsPage: React.FC = () => {
       isAccountingGroup: false,
       items: [
         { id: 'company_logo', label: 'إعدادات الشركة والشعار', icon: IconPhoto },
+        { id: 'employees', label: 'الموظفون وهوامش الأرباح', icon: IconUsers },
         ...(currentTenant?.isRoot ? [{ id: 'database', label: 'قاعدة البيانات والتخزين', icon: IconDatabase }] : []),
         { id: 'appearance', label: 'المظهر والخطوط', icon: IconTypography },
       ],
@@ -3260,6 +3262,8 @@ export const SystemSettingsPage: React.FC = () => {
           )}
 
           {/* Section 7: Appearance & Fonts */}
+          {activeSection === 'employees' && <EmployeesMarginsSection />}
+
           {activeSection === 'appearance' && (
             <div className="space-y-4 text-xs">
               <h3 className="font-extrabold text-sm text-slate-900 border-b pb-1 flex items-center gap-2">

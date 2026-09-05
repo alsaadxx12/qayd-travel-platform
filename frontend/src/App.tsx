@@ -22,6 +22,7 @@ const ExpensesPage = lazy(() => import('./pages/ExpensesPage').then((m) => ({ de
 const CashboxesBanksPage = lazy(() => import('./pages/CashboxesBanksPage').then((m) => ({ default: m.CashboxesBanksPage })));
 const PartnersPage = lazy(() => import('./pages/PartnersPage').then((m) => ({ default: m.PartnersPage })));
 const ProfitsPage = lazy(() => import('./pages/ProfitsPage').then((m) => ({ default: m.ProfitsPage })));
+const EmployeeProfitsPage = lazy(() => import('./pages/EmployeeProfitsPage').then((m) => ({ default: m.EmployeeProfitsPage })));
 const IncomeStatementPage = lazy(() => import('./pages/IncomeStatementPage').then((m) => ({ default: m.IncomeStatementPage })));
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const DebtsReportPage = lazy(() => import('./pages/DebtsReportPage').then((m) => ({ default: m.DebtsReportPage })));
@@ -243,6 +244,14 @@ export const App: React.FC = () => {
               element={
                 <PermissionRouteGuard routePath="/profits">
                   <ProfitsPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/employee-profits"
+              element={
+                <PermissionRouteGuard routePath="/employee-profits">
+                  <EmployeeProfitsPage />
                 </PermissionRouteGuard>
               }
             />

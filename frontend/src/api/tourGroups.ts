@@ -7,6 +7,8 @@ export interface TourGroupSummary {
   sales: number; collected: number; outstanding: number;
   plannedCost: number; actualCost: number; buy: number; globalBuy: number; expenses: number;
   plannedProfit: number; actualProfit: number;
+  beneficiariesCount?: number;
+  unitBuyPrice?: number;
 }
 
 export interface GroupTemplateItem {
@@ -40,7 +42,7 @@ export interface TourGroup {
   buyDate?: string | null; travelDate?: string | null; active: boolean; status: string;
   openSale: boolean; currency: string; exchangeRate: number; notes?: string | null;
   priceSystems: GroupPriceSystem[]; charges: GroupCharge[]; passengers: GroupPassenger[];
-  summary: TourGroupSummary; createdAt?: string;
+  summary: TourGroupSummary; createdAt?: string; createdById?: string | null; createdByName?: string;
 }
 
 const J = (b: any) => ({ headers: undefined, body: JSON.stringify(b) });

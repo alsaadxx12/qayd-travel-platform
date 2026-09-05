@@ -189,3 +189,37 @@ export function getDebtAmountTrace(accountId: string, signal?: AbortSignal) {
     },
   );
 }
+
+export interface EmployeeProfitRow {
+  employeeName: string;
+  docCount: number;
+  totalSales: number;
+  totalBuy: number;
+  totalProfit: number;
+  employeeMargin: number;
+  companyMargin: number;
+  employeeShare: number;
+  companyShare: number;
+}
+
+export interface EmployeeProfitsResponse {
+  rows: EmployeeProfitRow[];
+  totals: {
+    docCount: number;
+    totalSales: number;
+    totalBuy: number;
+    totalProfit: number;
+    employeeShare: number;
+    companyShare: number;
+  };
+  defaultEmployeeMargin: number;
+}
+
+export function getEmployeeProfits(params?: { startDate?: string; endDate?: string; branchId?: string }) {
+  const q = new URLSearchParams();
+  if (params?.startDate) q.set('startDate', params.startDate);
+  if (params?.endDate) q.set('endDate', params.endDate);
+  if (params?.branchId) q.set('branchId', params.branchId);
+  const suffix = q.toString() ? `?${q.toString()}` : '';
+  return apiRequest<EmployeeProfitsResponse>(`/api/reports/employee-profits${suffix}`, { noCache: true, timeoutMs: 20000 });
+}

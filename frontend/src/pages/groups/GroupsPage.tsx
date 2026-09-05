@@ -23,6 +23,7 @@ import {
   ArrowUpRight,
   Check,
   Receipt,
+  User,
 } from 'lucide-react';
 import { Loader, Modal, Tooltip } from '@mantine/core';
 import { GroupFileWorkspace } from '../../components/groups/GroupFileWorkspace';
@@ -31,19 +32,42 @@ import { tourGroupsApi, type TourGroup } from '../../api/tourGroups';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 
-/*
- * صفحة تذاكر الكروبات والسياحة — متوافقة تماماً مع نظام التصميم المعتمد.
- *
- * تتضمن:
- * 1. ترويسة النظام الرسمية بالأبيض والبرتقالي (#F45A0A).
- * 2. بطاقات المؤشرات المالية والتشغيلية (KPIs) بأرقام إنجليزية واضحة وبطاقات بيضاء ناصعة.
- * 3. شريط أدوات بحث وتصفية متقدم (بحث، فلترة الحالة، العملة، والتبديل بين عرض الجدول وعرض البطاقات).
- * 4. جدول محاسبي مفصل ومنظم + عرض بطاقات حديث وديناميكي.
- * 5. النافذة الواحدة لملف الكروب (GroupFileWorkspace) بكامل عملياتها التشغيلية والمالية.
- */
-
 const fmt = (n: number) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 const money = (n: number, c: string) => `${fmt(n)} ${c === 'USD' ? '$' : 'IQD'}`;
+
+const getBeneficiariesCount = (g: TourGroup) => {
+  if (g.summary?.beneficiariesCount !== undefined && g.summary.beneficiariesCount > 0) {
+    return g.summary.beneficiariesCount;
+  }
+  const set = new Set<string>();
+  (g.passengers || []).forEach((p) => {
+    const k = p.customerAccountId || (p.customerName || '').trim().toLowerCase();
+    if (k) set.add(k);
+  });
+  return set.size || (g.passengers?.length > 0 ? 1 : 0);
+};
+
+const getUnitBuyPrice = (g: TourGroup) => {
+  if (g.summary?.unitBuyPrice !== undefined && g.summary.unitBuyPrice > 0) return g.summary.unitBuyPrice;
+  const activePs = g.priceSystems?.find((ps) => ps.active !== false) || g.priceSystems?.[0];
+  if (activePs?.items && activePs.items.length > 0) {
+    return activePs.items.reduce((acc, it) => acc + Number(it.expectedBuy || 0), 0);
+  }
+  return 0;
+};
+
+const getTotalBuyCost = (g: TourGroup) => {
+  const s = g.summary;
+  if (s?.actualCost && s.actualCost > 0) return s.actualCost;
+  if (s?.plannedCost && s.plannedCost > 0) return s.plannedCost;
+  const unit = getUnitBuyPrice(g);
+  return unit * (g.passengers?.length || 0);
+};
+
+const getProfit = (g: TourGroup) => {
+  const totalBuy = getTotalBuyCost(g);
+  return Number(g.summary?.sales || 0) - totalBuy;
+};
 
 export const GroupsPage: React.FC = () => {
   const location = useLocation();
@@ -420,83 +444,100 @@ export const GroupsPage: React.FC = () => {
               <table className="w-full text-xs text-right border-collapse" dir={direction}>
                 <thead>
                   <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-700 font-bold">
-                    <th className="py-3 px-3.5 text-center w-12">#</th>
+                    <th className="py-3 px-3 text-center w-10">#</th>
                     <th className="py-3 px-3.5">{isAr ? 'اسم الكروب' : 'Group Name'}</th>
-                    <th className="py-3 px-3.5">{isAr ? 'الوجهة / الدولة' : 'Destination'}</th>
-                    <th className="py-3 px-3.5">{isAr ? 'تاريخ السفر' : 'Travel Date'}</th>
-                    <th className="py-3 px-3.5 text-center">{isAr ? 'المسافرون' : 'Passengers'}</th>
-                    <th className="py-3 px-3.5 text-center">{isAr ? 'المبيعات' : 'Sales'}</th>
-                    <th className="py-3 px-3.5 text-center">{isAr ? 'المحصّل' : 'Collected'}</th>
-                    <th className="py-3 px-3.5 text-center">{isAr ? 'التكلفة الفعلية' : 'Actual Cost'}</th>
-                    <th className="py-3 px-3.5 text-center">{isAr ? 'الربح الفعلي' : 'Profit'}</th>
-                    <th className="py-3 px-3.5 text-center">{isAr ? 'حالة البيع' : 'Sale Status'}</th>
-                    <th className="py-3 px-3.5 text-center w-24">{isAr ? 'الإجراءات' : 'Actions'}</th>
+                    <th className="py-3 px-3">{isAr ? 'الوجهة' : 'Destination'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'سعر الشراء' : 'Buy Price'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'إجمالي الشراء' : 'Total Buy'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'إجمالي المبيعات' : 'Total Sales'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'الربح' : 'Profit'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'المسافرون' : 'Pax'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'المستفيدين' : 'Beneficiaries'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'من أنشأ الكروب' : 'Created By'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'حالة البيع' : 'Sale Status'}</th>
+                    <th className="py-3 px-3 text-center w-20">{isAr ? 'الإجراءات' : 'Actions'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-bold">
                   {filtered.map((g, idx) => {
                     const s = g.summary;
+                    const unitBuy = getUnitBuyPrice(g);
+                    const totalBuy = getTotalBuyCost(g);
+                    const profit = getProfit(g);
+                    const beneficiaries = getBeneficiariesCount(g);
+                    const createdBy = g.createdByName || (isAr ? 'مدير النظام' : 'System Admin');
+
                     return (
                       <tr
                         key={g.id}
                         onClick={() => openFile(g.id)}
                         className="hover:bg-orange-50/30 transition-colors cursor-pointer group"
                       >
-                        <td className="py-3 px-3.5 text-center text-slate-400 font-mono" dir="ltr">
+                        <td className="py-3 px-3 text-center text-slate-400 font-mono" dir="ltr">
                           {idx + 1}
                         </td>
                         <td className="py-3 px-3.5">
-                          <span className="font-black text-slate-900 group-hover:text-[#F45A0A] transition-colors">
+                          <span className="font-black text-slate-900 group-hover:text-[#F45A0A] transition-colors block truncate max-w-[200px]" title={g.groupName}>
                             {g.groupName}
                           </span>
+                          {g.travelDate && (
+                            <span className="text-[10px] text-slate-400 font-mono block mt-0.5" dir="ltr">
+                              {new Date(g.travelDate).toLocaleDateString('en-GB')}
+                            </span>
+                          )}
                         </td>
-                        <td className="py-3 px-3.5 text-slate-600">
-                          <span className="inline-flex items-center gap-1.5">
-                            <MapPin size={13} className="text-[#F45A0A]" />
-                            <span>{g.country || '—'}</span>
+                        <td className="py-3 px-3 text-slate-600">
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin size={12} className="text-[#F45A0A] shrink-0" />
+                            <span className="truncate max-w-[120px]">{g.country || '—'}</span>
                           </span>
                         </td>
-                        <td className="py-3 px-3.5 text-slate-600 font-mono" dir="ltr">
-                          {g.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : '—'}
+                        <td className="py-3 px-3 text-center font-mono font-black text-slate-700 bg-slate-50/50" dir="ltr">
+                          {money(unitBuy, g.currency)}
                         </td>
-                        <td className="py-3 px-3.5 text-center">
-                          <span className="font-mono font-black text-slate-800" dir="ltr">
-                            {g.passengers.length}
-                          </span>
-                          <span className="text-[10.5px] text-slate-400 block mt-0.5">
-                            {isAr ? 'مسافر' : 'pax'}
-                          </span>
+                        <td className="py-3 px-3 text-center font-mono font-black text-slate-900" dir="ltr">
+                          {money(totalBuy, g.currency)}
                         </td>
-                        <td className="py-3 px-3.5 text-center font-mono font-black text-slate-900" dir="ltr">
+                        <td className="py-3 px-3 text-center font-mono font-black text-slate-900" dir="ltr">
                           {money(s.sales, g.currency)}
                         </td>
-                        <td className="py-3 px-3.5 text-center font-mono font-black text-emerald-700" dir="ltr">
-                          {money(s.collected, g.currency)}
-                        </td>
-                        <td className="py-3 px-3.5 text-center font-mono font-black text-slate-800" dir="ltr">
-                          {money(s.actualCost, g.currency)}
-                        </td>
                         <td
-                          className={`py-3 px-3.5 text-center font-mono font-black ${
-                            s.actualProfit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
+                          className={`py-3 px-3 text-center font-mono font-black ${
+                            profit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
                           }`}
                           dir="ltr"
                         >
-                          {money(s.actualProfit, g.currency)}
+                          {money(profit, g.currency)}
                         </td>
-                        <td className="py-3 px-3.5 text-center">
+                        <td className="py-3 px-3 text-center">
+                          <span className="font-mono font-black text-slate-900 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200" dir="ltr">
+                            {g.passengers.length}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="font-mono font-black text-[#F45A0A] px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200" dir="ltr">
+                            {beneficiaries}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-slate-100/80 px-2 py-0.5 rounded-md">
+                            <User size={11} className="text-slate-500" />
+                            <span className="truncate max-w-[110px]">{createdBy}</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
                           <span
-                            className={`inline-flex items-center gap-1 text-[11px] font-black rounded-lg px-2 py-0.5 border ${
+                            className={`inline-flex items-center gap-1 text-[10.5px] font-black rounded-lg px-2 py-0.5 border ${
                               g.openSale
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                 : 'bg-amber-50 text-amber-800 border-amber-200'
                             }`}
                           >
                             {g.openSale ? <Unlock size={11} /> : <Lock size={11} />}
-                            <span>{g.openSale ? (isAr ? 'مفتوح للبيع' : 'Open') : isAr ? 'مقفل' : 'Closed'}</span>
+                            <span>{g.openSale ? (isAr ? 'مفتوح' : 'Open') : (isAr ? 'مقفل' : 'Closed')}</span>
                           </span>
                         </td>
-                        <td className="py-3 px-3.5 text-center">
+                        <td className="py-3 px-3 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
@@ -505,7 +546,7 @@ export const GroupsPage: React.FC = () => {
                                 openFile(g.id);
                               }}
                               title={isAr ? 'فتح ملف الكروب' : 'Open group'}
-                              className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:border-[#F45A0A] hover:text-[#F45A0A] text-slate-500 flex items-center justify-center transition-all cursor-pointer"
+                              className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:border-[#F45A0A] hover:text-[#F45A0A] text-slate-500 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                             >
                               <FolderOpen size={13} />
                             </button>
@@ -516,7 +557,7 @@ export const GroupsPage: React.FC = () => {
                                 setDeleteTarget(g);
                               }}
                               title={isAr ? 'حذف' : 'Delete'}
-                              className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:border-rose-300 hover:text-rose-600 text-slate-400 flex items-center justify-center transition-all cursor-pointer"
+                              className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:border-rose-300 hover:text-rose-600 text-slate-400 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
                             >
                               <Trash2 size={13} />
                             </button>

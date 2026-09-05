@@ -304,6 +304,18 @@ export const PERMISSION_REGISTRY: ModuleDefinition[] = [
     ],
   },
 
+  // ── 15b. أرباح الموظفين ──
+  {
+    id: 'employee-profits',
+    title: 'أرباح الموظفين',
+    route: '/employee-profits',
+    category: 'التقارير',
+    iconName: 'IconReportAnalytics',
+    permissions: [
+      { code: 'employeeProfits.view', label: 'استعراض أرباح الموظفين وتقسيمها', actionType: 'ViewProfit', isSensitive: true },
+    ],
+  },
+
   // ── 16. كشف الحساب والتقارير المالية ──
   {
     id: 'reports',

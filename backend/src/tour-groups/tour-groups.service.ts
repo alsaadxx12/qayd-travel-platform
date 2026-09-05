@@ -70,6 +70,20 @@ export class TourGroupsService {
     const actualCost = buy + globalBuy + expenses;
     const plannedCost = plannedBuy + globalBuy + expenses;
 
+    // عدد المستفيدين في هذا الكروب
+    const beneficiariesSet = new Set<string>();
+    passengers.forEach((p: any) => {
+      const bKey = p.customerAccountId || (p.customerName || '').trim().toLowerCase();
+      if (bKey) beneficiariesSet.add(bKey);
+    });
+    const beneficiariesCount = beneficiariesSet.size || (passengers.length > 0 ? 1 : 0);
+
+    // سعر شراء الباقة أو المقعد الفردي من نظام الأسعار الفعّال
+    const activePs = (group.priceSystems || []).find((s: any) => s.active !== false) || (group.priceSystems || [])[0];
+    const unitBuyPrice = activePs?.items?.length
+      ? activePs.items.reduce((a: number, it: any) => a + dec(it.expectedBuy), 0)
+      : (passengers[0]?.services ? passengers[0].services.reduce((a: number, sv: any) => a + dec(sv.expectedBuy), 0) : 0);
+
     return {
       seats,
       sold,
@@ -87,6 +101,8 @@ export class TourGroupsService {
       expenses,
       plannedProfit: sales - plannedCost,
       actualProfit: sales - actualCost,
+      beneficiariesCount,
+      unitBuyPrice,
     };
   }
 
@@ -103,7 +119,21 @@ export class TourGroupsService {
       orderBy: { createdAt: 'desc' },
       take: 200,
     });
-    return groups.map((g) => ({ ...g, summary: this.computeSummary(g) }));
+
+    const userIds = Array.from(new Set(groups.map((g) => g.createdById).filter(Boolean))) as string[];
+    const users = userIds.length > 0
+      ? await this.prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const userMap = new Map<string, string>(users.map((u) => [u.id, u.name || 'مدير النظام']));
+
+    return groups.map((g) => ({ 
+      ...g, 
+      createdByName: (g.createdById && userMap.get(g.createdById)) || 'مدير النظام',
+      summary: this.computeSummary(g) 
+    }));
   }
 
   /**
@@ -122,8 +152,19 @@ export class TourGroupsService {
       }),
     ]);
     if (!g) throw new NotFoundException('الكروب غير موجود');
-    const full = { ...g, priceSystems, charges, passengers };
-    return { ...full, summary: this.computeSummary(full) };
+
+    const user = g.createdById
+      ? await this.prisma.user.findUnique({ where: { id: g.createdById }, select: { name: true } })
+      : null;
+
+    return {
+      ...g,
+      createdByName: user?.name || 'مدير النظام',
+      priceSystems,
+      charges,
+      passengers,
+      summary: this.computeSummary({ ...g, priceSystems, charges, passengers }),
+    };
   }
 
   /** تحقق ملكيةٍ خفيف قبل التعديل: استعلام واحد بدل جلب الملف كاملاً. */
@@ -157,7 +198,7 @@ export class TourGroupsService {
         travelDate: dto.travelDate ? new Date(dto.travelDate) : null,
         active: dto.active !== false,
         openSale: Boolean(dto.openSale),
-        currency: dto.currency || 'USD',
+        currency: dto.currency || 'IQD',
         exchangeRate: new Prisma.Decimal(dec(dto.exchangeRate) || 1),
         notes: dto.notes || null,
         createdById: userId || null,
@@ -454,6 +495,12 @@ export class TourGroupsService {
     const salePrice = dto.salePrice !== undefined ? dec(dto.salePrice) : dec(ps.salePrice);
     const payType = dto.payType === 'CREDIT' ? 'CREDIT' : (dto.payType === 'MASTER' ? 'MASTER' : 'CASH');
 
+    let agentName = dto.agent ? String(dto.agent).trim() : '';
+    if (!agentName && userId) {
+      const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+      agentName = u?.name || '';
+    }
+
     const passengerId = await this.prisma.$transaction(async (tx) => {
       const pax = await tx.groupPassenger.create({
         data: {
@@ -464,7 +511,7 @@ export class TourGroupsService {
           customerAccountId: dto.customerAccountId || null,
           passengerName: String(dto.passengerName || '').trim(),
           passport: dto.passport || null,
-          agent: dto.agent || null,
+          agent: agentName || null,
           salePrice: new Prisma.Decimal(salePrice),
           currency: dto.currency || ps.currency,
           payType,
@@ -524,13 +571,22 @@ export class TourGroupsService {
     }
     if (dto.state === 'CANCELLED' && pax.state !== 'CANCELLED') changes.push('إلغاء المسافر');
 
+    let updateAgent = dto.agent !== undefined ? (dto.agent ? String(dto.agent).trim() : null) : undefined;
+    if ((updateAgent === undefined || !updateAgent) && userId && !pax.agent) {
+      const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+      if (u?.name) updateAgent = u.name;
+    }
+
     await this.prisma.groupPassenger.update({
       where: { id: paxId },
       data: {
         ...(dto.customerName !== undefined && { customerName: dto.customerName }),
+        ...(dto.customerId !== undefined && { customerId: dto.customerId || null }),
+        ...(dto.customerAccountId !== undefined && { customerAccountId: dto.customerAccountId || null }),
+        ...(dto.priceSystemId !== undefined && { priceSystemId: dto.priceSystemId || null }),
         ...(dto.passengerName !== undefined && { passengerName: dto.passengerName }),
         ...(dto.passport !== undefined && { passport: dto.passport }),
-        ...(dto.agent !== undefined && { agent: dto.agent }),
+        ...(updateAgent !== undefined && { agent: updateAgent }),
         ...(dto.salePrice !== undefined && { salePrice: new Prisma.Decimal(dec(dto.salePrice)) }),
         ...(dto.currency !== undefined && { currency: dto.currency }),
         ...(dto.payType !== undefined && {

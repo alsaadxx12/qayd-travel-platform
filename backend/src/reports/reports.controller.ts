@@ -64,4 +64,15 @@ export class ReportsController {
   async getBalanceSheet(@Req() req: any) {
     return this.reportsService.getBalanceSheet(req.user.companyId);
   }
+
+  @Get('employee-profits')
+  @ApiOperation({ summary: 'أرباح الموظفين وتقسيمها بين الموظف والشركة وفق هوامش الربح' })
+  async getEmployeeProfits(
+    @Req() req: any,
+    @Query('branchId') branchId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getEmployeeProfits(req.user.companyId, branchId, startDate, endDate);
+  }
 }
