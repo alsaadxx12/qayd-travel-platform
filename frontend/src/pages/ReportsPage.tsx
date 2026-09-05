@@ -1414,102 +1414,94 @@ export const ReportsPage: React.FC = () => {
 
     const rows: any[] = [];
     const isOpeningCredit = (selectedAcc as any)?.openingNature === 'CREDIT';
+    const wantIQD = currency === 'ALL' || currency === 'IQD' || currency === 'كلاهما';
+    const wantUSD = currency === 'ALL' || currency === 'USD' || currency === 'كلاهما';
 
-    if (isOpeningActive && (currency === 'ALL' || currency === 'IQD' || currency === 'كلاهما') && accOpeningBalIQD > 0) {
-      const deb = isOpeningCredit ? 0 : accOpeningBalIQD;
-      const cred = isOpeningCredit ? accOpeningBalIQD : 0;
-      const netIQD = isOpeningCredit ? -accOpeningBalIQD : accOpeningBalIQD;
-      runningBalanceIQD += netIQD;
-      sumDebitIQD += deb;
-      sumCreditIQD += cred;
+    // الرصيد الافتتاحي يُعرض دائماً ما دام مرشّحه مفعّلاً — حتى وهو صفر، لأنه
+    // نقطة بداية الكشف. كان يُحذف عند الصفر فيبدأ الكشف بلا افتتاحية.
+    const pushOpening = (curr: 'IQD' | 'USD', amount: number) => {
+      const deb = isOpeningCredit ? 0 : amount;
+      const cred = isOpeningCredit ? amount : 0;
+      const net = isOpeningCredit ? -amount : amount;
+      if (curr === 'IQD') {
+        runningBalanceIQD += net;
+        sumDebitIQD += deb;
+        sumCreditIQD += cred;
+      } else {
+        runningBalanceUSD += net;
+        sumDebitUSD += deb;
+        sumCreditUSD += cred;
+      }
+      const running = curr === 'IQD' ? runningBalanceIQD : runningBalanceUSD;
       rows.push({
-        id: 'opening_balance_iqd_row',
+        id: `opening_balance_${curr.toLowerCase()}_row`,
         date: startDate || new Date().toISOString(),
-        entryNumber: '000',
+        entryNumber: curr === 'IQD' ? '000' : '000-$',
         docType: isAr ? 'رصيد افتتاحي' : 'Opening Balance',
-        voucherNumber: 'OPEN-IQD',
+        voucherNumber: `OPEN-${curr}`,
         description: isAr ? 'الرصيد الافتتاحي' : 'Opening Balance',
         debit: deb,
         credit: cred,
-        runningBalance: runningBalanceIQD,
-        balanceNature: runningBalanceIQD >= 0 ? (isAr ? 'مدين' : 'Debit') : (isAr ? 'دائن' : 'Credit'),
+        runningBalance: running,
+        balanceNature: running >= 0 ? (isAr ? 'مدين' : 'Debit') : (isAr ? 'دائن' : 'Credit'),
         voucherType: 'OPENING',
         isBalanceRow: true,
-        currency: 'IQD',
+        currency: curr,
       });
+    };
+
+    if (isOpeningActive) {
+      const showIQD = wantIQD && accOpeningBalIQD !== 0;
+      const showUSD = wantUSD && accOpeningBalUSD !== 0;
+      if (showIQD) pushOpening('IQD', accOpeningBalIQD);
+      if (showUSD) pushOpening('USD', accOpeningBalUSD);
+      // كلاهما صفر: سطرٌ افتتاحي واحد صفري بالعملة المناسبة، فلا يختفي.
+      if (!showIQD && !showUSD) pushOpening(currency === 'USD' ? 'USD' : 'IQD', 0);
     }
 
-    if (isOpeningActive && (currency === 'ALL' || currency === 'USD' || currency === 'كلاهما') && accOpeningBalUSD > 0) {
-      const deb = isOpeningCredit ? 0 : accOpeningBalUSD;
-      const cred = isOpeningCredit ? accOpeningBalUSD : 0;
-      const netUSD = isOpeningCredit ? -accOpeningBalUSD : accOpeningBalUSD;
-      runningBalanceUSD += netUSD;
-      sumDebitUSD += deb;
-      sumCreditUSD += cred;
+    // الرصيد السابق يُعرض أيضاً دائماً عند تفعيل مرشّحه، حتى وهو صفر — إلا إذا
+    // كان مطابقاً تماماً للرصيد الافتتاحي غير الصفري فلا يُكرَّر.
+    const pushPrev = (curr: 'IQD' | 'USD', amount: number) => {
+      const deb = amount >= 0 ? amount : 0;
+      const cred = amount < 0 ? Math.abs(amount) : 0;
+      if (curr === 'IQD') {
+        runningBalanceIQD += amount;
+        sumDebitIQD += deb;
+        sumCreditIQD += cred;
+      } else {
+        runningBalanceUSD += amount;
+        sumDebitUSD += deb;
+        sumCreditUSD += cred;
+      }
+      const running = curr === 'IQD' ? runningBalanceIQD : runningBalanceUSD;
       rows.push({
-        id: 'opening_balance_usd_row',
+        id: `previous_balance_${curr.toLowerCase()}_row`,
         date: startDate || new Date().toISOString(),
-        entryNumber: '000-$',
-        docType: isAr ? 'رصيد افتتاحي' : 'Opening Balance',
-        voucherNumber: 'OPEN-USD',
-        description: isAr ? 'الرصيد الافتتاحي' : 'Opening Balance',
-        debit: deb,
-        credit: cred,
-        runningBalance: runningBalanceUSD,
-        balanceNature: runningBalanceUSD >= 0 ? (isAr ? 'مدين' : 'Debit') : (isAr ? 'دائن' : 'Credit'),
-        voucherType: 'OPENING',
-        isBalanceRow: true,
-        currency: 'USD',
-      });
-    }
-
-    // Only add previous carried balance if not already represented by opening balance
-    const isDistinctPrevIQD = accPrevBalIQD !== 0 && (!isOpeningActive || accOpeningBalIQD === 0 || accPrevBalIQD !== (isOpeningCredit ? -accOpeningBalIQD : accOpeningBalIQD));
-    if (isPrevActive && isDistinctPrevIQD && (currency === 'ALL' || currency === 'IQD' || currency === 'كلاهما')) {
-      const deb = accPrevBalIQD >= 0 ? accPrevBalIQD : 0;
-      const cred = accPrevBalIQD < 0 ? Math.abs(accPrevBalIQD) : 0;
-      runningBalanceIQD += accPrevBalIQD;
-      sumDebitIQD += deb;
-      sumCreditIQD += cred;
-      rows.push({
-        id: 'previous_balance_iqd_row',
-        date: startDate || new Date().toISOString(),
-        entryNumber: '000-P',
+        entryNumber: curr === 'IQD' ? '000-P' : '000-P$',
         docType: isAr ? 'رصيد سابق' : 'Previous Balance',
-        voucherNumber: 'PREV-IQD',
+        voucherNumber: `PREV-${curr}`,
         description: isAr ? 'الرصيد السابق' : 'Previous Balance',
         debit: deb,
         credit: cred,
-        runningBalance: runningBalanceIQD,
-        balanceNature: runningBalanceIQD >= 0 ? (isAr ? 'مدين' : 'Debit') : (isAr ? 'دائن' : 'Credit'),
+        runningBalance: running,
+        balanceNature: running >= 0 ? (isAr ? 'مدين' : 'Debit') : (isAr ? 'دائن' : 'Credit'),
         voucherType: 'PREVIOUS',
         isBalanceRow: true,
-        currency: 'IQD',
+        currency: curr,
       });
-    }
+    };
 
-    const isDistinctPrevUSD = accPrevBalUSD !== 0 && (!isOpeningActive || accOpeningBalUSD === 0 || accPrevBalUSD !== (isOpeningCredit ? -accOpeningBalUSD : accOpeningBalUSD));
-    if (isPrevActive && isDistinctPrevUSD && (currency === 'ALL' || currency === 'USD' || currency === 'كلاهما')) {
-      const deb = accPrevBalUSD >= 0 ? accPrevBalUSD : 0;
-      const cred = accPrevBalUSD < 0 ? Math.abs(accPrevBalUSD) : 0;
-      runningBalanceUSD += accPrevBalUSD;
-      sumDebitUSD += deb;
-      sumCreditUSD += cred;
-      rows.push({
-        id: 'previous_balance_usd_row',
-        date: startDate || new Date().toISOString(),
-        entryNumber: '000-P$',
-        docType: isAr ? 'رصيد سابق' : 'Previous Balance',
-        voucherNumber: 'PREV-USD',
-        description: isAr ? 'الرصيد السابق' : 'Previous Balance',
-        debit: deb,
-        credit: cred,
-        runningBalance: runningBalanceUSD,
-        balanceNature: runningBalanceUSD >= 0 ? (isAr ? 'مدين' : 'Debit') : (isAr ? 'دائن' : 'Credit'),
-        voucherType: 'PREVIOUS',
-        isBalanceRow: true,
-        currency: 'USD',
-      });
+    if (isPrevActive) {
+      const dupIQD = isOpeningActive && accOpeningBalIQD !== 0 && accPrevBalIQD === (isOpeningCredit ? -accOpeningBalIQD : accOpeningBalIQD);
+      const dupUSD = isOpeningActive && accOpeningBalUSD !== 0 && accPrevBalUSD === (isOpeningCredit ? -accOpeningBalUSD : accOpeningBalUSD);
+      const showIQD = wantIQD && !dupIQD;
+      const showUSD = wantUSD && !dupUSD;
+      if (showIQD && accPrevBalIQD !== 0) pushPrev('IQD', accPrevBalIQD);
+      if (showUSD && accPrevBalUSD !== 0) pushPrev('USD', accPrevBalUSD);
+      // كلاهما صفر (ولم يُكرَّر): سطرٌ سابقٌ واحد صفري كي لا يغيب.
+      if (accPrevBalIQD === 0 && accPrevBalUSD === 0 && (showIQD || showUSD)) {
+        pushPrev(currency === 'USD' ? 'USD' : 'IQD', 0);
+      }
     }
 
     // Movements older than the selected period are summarised into one carried-forward
