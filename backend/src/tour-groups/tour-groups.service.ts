@@ -62,6 +62,8 @@ export class TourGroupsService {
     const expenses = (group.charges || [])
       .filter((c: any) => c.chargeType === 'EXPENSE')
       .reduce((a: number, c: any) => a + dec(c.amount), 0);
+    const actualCost = buy + globalBuy + expenses;
+    const plannedCost = plannedBuy + globalBuy + expenses;
 
     return {
       seats,
@@ -73,13 +75,13 @@ export class TourGroupsService {
       sales,
       collected,
       outstanding: sales - collected,
-      plannedCost: plannedBuy + globalBuy,
-      actualCost: buy + globalBuy,
+      plannedCost,
+      actualCost,
       buy,
       globalBuy,
       expenses,
-      plannedProfit: sales - (plannedBuy + globalBuy) - expenses,
-      actualProfit: sales - buy - globalBuy - expenses,
+      plannedProfit: sales - plannedCost,
+      actualProfit: sales - actualCost,
     };
   }
 

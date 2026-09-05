@@ -30,6 +30,7 @@ import {
   UploadCloud,
   Eye,
   FileText,
+  Receipt,
 } from 'lucide-react';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
@@ -96,7 +97,7 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
   const C = g.currency;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
       {/* 1. إجمالي المسافرين */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
         <div className="flex items-center justify-between">
@@ -120,7 +121,7 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
         </div>
       </div>
 
-      {/* 2. المبيعات */}
+      {/* 2. المبيعات والتحصيل */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-500">{isAr ? 'المبيعات والتحصيل' : 'Sales'}</span>
@@ -140,16 +141,35 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
         </div>
       </div>
 
-      {/* 3. الذمم المتبقية */}
+      {/* 3. التكلفة الفعلية للكروب */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-500">{isAr ? 'التكلفة الفعلية' : 'Actual Cost'}</span>
+          <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
+            <Receipt size={16} />
+          </div>
+        </div>
+        <div className="mt-2">
+          <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+            {money(s.actualCost, C)}
+          </div>
+          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mt-1 font-mono" dir="ltr">
+            <span>{isAr ? 'شراء:' : 'Buy:'} {money(s.buy + s.globalBuy, C)}</span>
+            <span>{isAr ? 'مصاريف:' : 'Exp:'} {money(s.expenses, C)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. الذمم المتبقية */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-500">{isAr ? 'الذمم المتبقية' : 'Outstanding'}</span>
-          <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100">
+          <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
             <Banknote size={16} />
           </div>
         </div>
         <div className="mt-2">
-          <div className={`text-2xl font-black font-mono tracking-tight ${s.outstanding > 0 ? 'text-rose-600' : 'text-slate-400'}`} dir="ltr">
+          <div className={`text-2xl font-black font-mono tracking-tight ${s.outstanding > 0 ? 'text-amber-700' : 'text-slate-400'}`} dir="ltr">
             {money(s.outstanding, C)}
           </div>
           <div className="text-[11px] font-bold text-slate-400 mt-1">
@@ -158,7 +178,7 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
         </div>
       </div>
 
-      {/* 4. صافي الأرباح */}
+      {/* 5. صافي الأرباح الفعلية */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-500">{isAr ? 'صافي الربح' : 'Net Profit'}</span>
@@ -175,13 +195,8 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
           >
             {money(s.actualProfit, C)}
           </div>
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mt-1">
-            <span className="font-mono" dir="ltr">
-              {isAr ? 'تكلفة:' : 'Cost:'} {money(s.actualCost, C)}
-            </span>
-            <span className="font-mono text-slate-400" dir="ltr">
-              {isAr ? 'مصاريف:' : 'Exp:'} {money(s.expenses, C)}
-            </span>
+          <div className="text-[11px] font-bold text-slate-500 mt-1">
+            {isAr ? 'الربح الفعلي' : 'Actual profit'}
           </div>
         </div>
       </div>

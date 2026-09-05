@@ -71,6 +71,20 @@ export const accountsApi = {
     return mapAccountsToNodes(rawData);
   },
 
+  /**
+   * بحثٌ في الخادم لمنتقي الحسابات: يُرجع المطابقين فقط (يشمل حسابات الحظر)،
+   * فلا نُحمّل آلاف الصفوف ولا يختفي حسابٌ لسياسته الائتمانية.
+   */
+  search: async (
+    q: string,
+    scope: 'ALL' | 'CUSTOMER' | 'SUPPLIER' = 'ALL',
+    limit = 40,
+  ): Promise<Array<{ id: string; code: string; nameAr: string; nameEn?: string; category?: string }>> => {
+    const params = new URLSearchParams({ q: q || '', scope, limit: String(limit) });
+    const data = await apiRequest(`/accounts/search?${params.toString()}`, { ttl: 15_000 });
+    return Array.isArray(data) ? data : [];
+  },
+
   getById: async (id: string): Promise<any> => {
     return apiRequest(`/accounts/${id}`);
   },

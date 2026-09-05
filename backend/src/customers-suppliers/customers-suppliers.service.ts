@@ -19,7 +19,7 @@ export class CustomersSuppliersService {
     const result: any[] = [];
 
     customers.forEach((c) => {
-      if (c.account?.overduePolicy === 'BLOCK') return;
+      if (c.account?.overduePolicy === 'BLOCK' && (c.account as any)?.paymentMode === 'BLOCKED') return;
       seenAccountIds.add(c.accountId);
       seenCodes.add(c.code);
       result.push({
@@ -40,7 +40,7 @@ export class CustomersSuppliersService {
         companyId,
         category: AccountCategory.CUSTOMER,
         isParent: false,
-        overduePolicy: { not: 'BLOCK' },
+        NOT: { overduePolicy: 'BLOCK', paymentMode: 'BLOCKED' },
       },
       orderBy: { nameAr: 'asc' },
     });
@@ -82,7 +82,7 @@ export class CustomersSuppliersService {
     const result: any[] = [];
 
     suppliers.forEach((s) => {
-      if (s.account?.overduePolicy === 'BLOCK') return;
+      if (s.account?.overduePolicy === 'BLOCK' && (s.account as any)?.paymentMode === 'BLOCKED') return;
       seenAccountIds.add(s.accountId);
       seenCodes.add(s.code);
       result.push({
@@ -104,7 +104,7 @@ export class CustomersSuppliersService {
         companyId,
         category: AccountCategory.SUPPLIER,
         isParent: false,
-        overduePolicy: { not: 'BLOCK' },
+        NOT: { overduePolicy: 'BLOCK', paymentMode: 'BLOCKED' },
       },
       orderBy: { nameAr: 'asc' },
     });

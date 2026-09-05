@@ -47,6 +47,25 @@ export class AccountsController {
     );
   }
 
+  @Get('search')
+  @ApiOperation({ summary: 'بحث سريع في حسابات العملاء والموردين لمنتقي الحسابات (يشمل حسابات الحظر)' })
+  async search(
+    @Req() req: any,
+    @Query('q') q?: string,
+    @Query('scope') scope?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const sc = String(scope || 'ALL').toUpperCase();
+    const scoped = sc === 'CUSTOMER' || sc === 'SUPPLIER' ? (sc as 'CUSTOMER' | 'SUPPLIER') : 'ALL';
+    const lim = Number(limit);
+    return this.accountsService.searchPickable(
+      req.user.companyId,
+      q || '',
+      scoped,
+      Number.isFinite(lim) && lim > 0 ? lim : 40,
+    );
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'تفاصيل حساب محاسبي محدد' })
   async findOne(@Param('id') id: string, @Req() req: any) {

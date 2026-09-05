@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Loader } from '@mantine/core';
 import { IconSearch, IconUser, IconTruck, IconX, IconArrowLeft } from '@tabler/icons-react';
-import { matchesSearchTokens } from '../ui/SearchableCombobox';
 import { accountsApi } from '../../api/accounts';
 import { useLanguageStore } from '../../store/useLanguageStore';
 
@@ -27,19 +26,6 @@ interface AccountFinderModalProps {
   zIndex?: number;
 }
 
-const roleOf = (account: any): AccountFinderResult['role'] => {
-  const category = String(account?.category || '').toUpperCase();
-  const role = String(account?.accountRole || '').toUpperCase();
-  const code = String(account?.code || '');
-  if (category === 'SUPPLIER' || role === 'SUPPLIER' || code.startsWith('261') || code.startsWith('21')) {
-    return 'SUPPLIER';
-  }
-  if (category === 'CUSTOMER' || role === 'CUSTOMER' || code.startsWith('161') || code.startsWith('14')) {
-    return 'CUSTOMER';
-  }
-  return 'OTHER';
-};
-
 /**
  * البحث المتقدّم: حين لا تُسعف القائمةُ المنسدلة.
  *
@@ -62,9 +48,10 @@ export const AccountFinderModal: React.FC<AccountFinderModalProps> = ({
 
   const [query, setQuery] = useState(initialQuery);
   const [scope, setScope] = useState<'ALL' | 'SUPPLIER' | 'CUSTOMER'>(initialScope);
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [results, setResults] = useState<AccountFinderResult[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchSeq = useRef(0);
 
   useEffect(() => {
     if (!opened) return;
@@ -73,54 +60,40 @@ export const AccountFinderModal: React.FC<AccountFinderModalProps> = ({
     window.setTimeout(() => inputRef.current?.focus(), 60);
   }, [opened, initialQuery, initialScope]);
 
-  // الشجرة كاملة تُجلب مرة واحدة عند أول فتح، ثم تبقى في الذاكرة لبقية الجلسة.
+  // بحثٌ في الخادم مع إمهالٍ قصير: لا نُحمّل آلاف الحسابات ثم نُرشّح، بل نطلب
+  // المطابقين فقط عند كل كتابة. آخر طلبٍ وحده يُعتمد، فلا يسبق ردٌّ بطيء ردّاً أحدث.
   useEffect(() => {
-    if (!opened || accounts.length > 0) return;
+    if (!opened) return;
     let cancelled = false;
+    const seq = ++searchSeq.current;
     setLoading(true);
-    accountsApi
-      .getFlat(undefined, undefined, true)
-      .then((data: any) => {
-        if (cancelled) return;
-        setAccounts(Array.isArray(data) ? data : (data?.data || []));
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const handle = window.setTimeout(() => {
+      accountsApi
+        .search(query.trim(), scope, 50)
+        .then((rows) => {
+          if (cancelled || seq !== searchSeq.current) return;
+          setResults(
+            rows.map((a) => ({
+              id: a.id,
+              code: String(a.code || ''),
+              name: (isAr ? a.nameAr : a.nameEn || a.nameAr) || a.nameAr || '',
+              category: a.category,
+              role: (a.category === 'SUPPLIER' ? 'SUPPLIER' : 'CUSTOMER') as AccountFinderResult['role'],
+            })),
+          );
+        })
+        .catch(() => {
+          if (!cancelled && seq === searchSeq.current) setResults([]);
+        })
+        .finally(() => {
+          if (!cancelled && seq === searchSeq.current) setLoading(false);
+        });
+    }, 220);
     return () => {
       cancelled = true;
+      window.clearTimeout(handle);
     };
-  }, [opened, accounts.length]);
-
-  const pool = useMemo(() => {
-    return accounts
-      .filter((a: any) => !a.isGroup && !a.isParent)
-      .map((a: any) => ({
-        id: a.id,
-        code: String(a.code || ''),
-        name: (isAr ? a.nameAr || a.name : a.nameEn || a.nameAr || a.name) || '',
-        category: a.category,
-        role: roleOf(a),
-      }))
-      .filter((a) => a.role !== 'OTHER' && a.name);
-  }, [accounts, isAr]);
-
-  const results = useMemo(() => {
-    const scoped = scope === 'ALL' ? pool : pool.filter((a) => a.role === scope);
-    const q = query.trim();
-    const matched = q ? scoped.filter((a) => matchesSearchTokens(`${a.name} ${a.code}`, q)) : scoped;
-    return matched.slice(0, 300);
-  }, [pool, scope, query]);
-
-  const counts = useMemo(
-    () => ({
-      ALL: pool.length,
-      SUPPLIER: pool.filter((a) => a.role === 'SUPPLIER').length,
-      CUSTOMER: pool.filter((a) => a.role === 'CUSTOMER').length,
-    }),
-    [pool]
-  );
+  }, [opened, query, scope, isAr]);
 
   const scopes: Array<{ key: 'SUPPLIER' | 'CUSTOMER' | 'ALL'; label: string; icon: any }> = [
     { key: 'SUPPLIER', label: isAr ? 'الموردون' : 'Suppliers', icon: IconTruck },
@@ -200,13 +173,6 @@ export const AccountFinderModal: React.FC<AccountFinderModalProps> = ({
                 >
                   <Icon size={13} />
                   <span>{s.label}</span>
-                  <span
-                    className={`font-mono text-[10px] px-1 rounded ${
-                      active ? 'bg-white/20' : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    {counts[s.key]}
-                  </span>
                 </button>
               );
             })}
@@ -216,7 +182,7 @@ export const AccountFinderModal: React.FC<AccountFinderModalProps> = ({
             {loading ? (
               <div className="h-64 flex items-center justify-center gap-2 text-xs font-bold text-slate-500">
                 <Loader size="sm" color="orange" />
-                <span>{isAr ? 'جارٍ تحميل شجرة الحسابات…' : 'Loading the chart of accounts…'}</span>
+                <span>{isAr ? 'جارٍ البحث…' : 'Searching…'}</span>
               </div>
             ) : results.length === 0 ? (
               <div className="h-64 flex flex-col items-center justify-center gap-1 text-slate-400">
@@ -258,9 +224,6 @@ export const AccountFinderModal: React.FC<AccountFinderModalProps> = ({
                       </span>
                       <div className="min-w-0">
                         <div className="text-[12px] font-black text-slate-900 truncate">{a.name}</div>
-                        <div className="text-[10px] font-mono font-bold text-slate-500" dir="ltr">
-                          {a.code}
-                        </div>
                       </div>
                     </div>
                     <span className="text-[10px] font-black text-[#F45A0A] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shrink-0">
@@ -276,8 +239,8 @@ export const AccountFinderModal: React.FC<AccountFinderModalProps> = ({
           {!loading && results.length > 0 && (
             <div className="text-[10.5px] text-slate-500 font-bold text-center">
               {isAr
-                ? `${results.length.toLocaleString('en-US')} نتيجة${results.length === 300 ? ' (اكتب أكثر لتضييق البحث)' : ''}`
-                : `${results.length.toLocaleString('en-US')} result(s)${results.length === 300 ? ' — type more to narrow' : ''}`}
+                ? `${results.length.toLocaleString('en-US')} نتيجة${results.length >= 50 ? ' (اكتب أكثر لتضييق البحث)' : ''}`
+                : `${results.length.toLocaleString('en-US')} result(s)${results.length >= 50 ? ' — type more to narrow' : ''}`}
             </div>
           )}
         </div>

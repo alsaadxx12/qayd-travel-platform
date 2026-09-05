@@ -880,6 +880,42 @@ export class AccountsService {
     return tree;
   }
 
+  /**
+   * بحثٌ في الخادم لمنتقي الحسابات: يُرجع المطابقين فقط لا الشجرة كلها.
+   *
+   * كان المنتقي ينقل آلاف الصفوف ثم يُرشّح في المتصفح — بطءٌ ظاهر. هنا يُرشّح
+   * في القاعدة ويعود بحفنةٍ صغيرة. وخلافاً لقائمة العملاء، لا يستثني هذا حسابات
+   * سياسة الحظر (overduePolicy=BLOCK): الحظرُ يُطبَّق عند القيد لا بإخفاء الحساب
+   * من البحث، فيظهر مثلُ «سلف علي السعدي» مباشرةً بلا حاجةٍ للبحث المتقدم.
+   */
+  async searchPickable(companyId: string, q: string, scope: 'ALL' | 'CUSTOMER' | 'SUPPLIER', limit = 40) {
+    const term = String(q || '').trim();
+    const categories =
+      scope === 'CUSTOMER'
+        ? [AccountCategory.CUSTOMER]
+        : scope === 'SUPPLIER'
+          ? [AccountCategory.SUPPLIER]
+          : [AccountCategory.CUSTOMER, AccountCategory.SUPPLIER];
+
+    // كل كلمةٍ يجب أن تطابق الاسم أو الرمز — يوافق منطقَ الرموز في الواجهة.
+    const tokens = term.split(/\s+/).filter(Boolean).slice(0, 6);
+    const and = tokens.map((tok) => ({
+      OR: [
+        { nameAr: { contains: tok, mode: 'insensitive' as const } },
+        { nameEn: { contains: tok, mode: 'insensitive' as const } },
+        { code: { contains: tok, mode: 'insensitive' as const } },
+      ],
+    }));
+
+    const rows = await this.prisma.account.findMany({
+      where: { companyId, category: { in: categories }, isParent: false, ...(and.length ? { AND: and } : {}) },
+      select: { id: true, code: true, nameAr: true, nameEn: true, category: true },
+      orderBy: { nameAr: 'asc' },
+      take: Math.min(Math.max(limit, 1), 100),
+    });
+    return rows;
+  }
+
   async findAll(
     companyId: string,
     type?: AccountType,

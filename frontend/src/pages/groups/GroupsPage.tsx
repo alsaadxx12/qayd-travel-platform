@@ -21,6 +21,7 @@ import {
   Filter,
   ArrowUpRight,
   Check,
+  Receipt,
 } from 'lucide-react';
 import { Loader, Modal, Tooltip } from '@mantine/core';
 import { GroupFileWorkspace } from '../../components/groups/GroupFileWorkspace';
@@ -109,10 +110,12 @@ export const GroupsPage: React.FC = () => {
           sold: a.sold + g.summary.sold,
           seats: a.seats + g.summary.seats,
           sales: a.sales + g.summary.sales,
+          collected: a.collected + (g.summary.collected || 0),
+          cost: a.cost + (g.summary.actualCost || 0),
           outstanding: a.outstanding + g.summary.outstanding,
           profit: a.profit + g.summary.actualProfit,
         }),
-        { groups: 0, sold: 0, seats: 0, sales: 0, outstanding: 0, profit: 0 },
+        { groups: 0, sold: 0, seats: 0, sales: 0, collected: 0, cost: 0, outstanding: 0, profit: 0 },
       ),
     [rows],
   );
@@ -174,7 +177,7 @@ export const GroupsPage: React.FC = () => {
         </div>
 
         {/* ── 2. بطاقات المؤشرات المالية والتشغيلية (KPIs) ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
           {/* بطاقة 1: الكروبات */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
             <div className="flex items-center justify-between">
@@ -200,7 +203,7 @@ export const GroupsPage: React.FC = () => {
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500">{isAr ? 'المبيعات' : 'Sales'}</span>
-              <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
                 <Coins size={16} />
               </div>
             </div>
@@ -208,13 +211,34 @@ export const GroupsPage: React.FC = () => {
               <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
                 ${fmt(totals.sales)}
               </div>
-              <div className="text-[11px] font-bold text-slate-500 mt-1">
-                {isAr ? 'إجمالي المبيعات' : 'Total sales'}
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mt-1">
+                <span>{isAr ? 'المحصّل' : 'Collected'}</span>
+                <span className="font-mono text-emerald-700 font-black" dir="ltr">
+                  ${fmt(totals.collected)}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* بطاقة 3: الذمم غير المحصلة */}
+          {/* بطاقة 3: التكلفة الفعلية */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">{isAr ? 'التكلفة الفعلية' : 'Actual Cost'}</span>
+              <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
+                <Receipt size={16} />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+                ${fmt(totals.cost)}
+              </div>
+              <div className="text-[11px] font-bold text-slate-500 mt-1">
+                {isAr ? 'إجمالي تكاليف الكروبات' : 'Total group costs'}
+              </div>
+            </div>
+          </div>
+
+          {/* بطاقة 4: الذمم غير المحصلة */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500">{isAr ? 'الذمم' : 'Outstanding'}</span>
@@ -232,19 +256,24 @@ export const GroupsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* بطاقة 4: صافي الربح الفعلي */}
+          {/* بطاقة 5: صافي الربح الفعلي */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500">{isAr ? 'صافي الربح' : 'Net Profit'}</span>
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+              <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
                 <TrendingUp size={16} />
               </div>
             </div>
             <div className="mt-2">
-              <div className="text-2xl font-black text-emerald-700 font-mono tracking-tight" dir="ltr">
+              <div
+                className={`text-2xl font-black font-mono tracking-tight ${
+                  totals.profit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
+                }`}
+                dir="ltr"
+              >
                 ${fmt(totals.profit)}
               </div>
-              <div className="text-[11px] font-bold text-emerald-700/80 mt-1">
+              <div className="text-[11px] font-bold text-slate-500 mt-1">
                 {isAr ? 'الربح الفعلي' : 'Actual profit'}
               </div>
             </div>
@@ -387,6 +416,7 @@ export const GroupsPage: React.FC = () => {
                     <th className="py-3 px-3.5 text-center">{isAr ? 'المسافرون' : 'Passengers'}</th>
                     <th className="py-3 px-3.5 text-center">{isAr ? 'المبيعات' : 'Sales'}</th>
                     <th className="py-3 px-3.5 text-center">{isAr ? 'المحصّل' : 'Collected'}</th>
+                    <th className="py-3 px-3.5 text-center">{isAr ? 'التكلفة الفعلية' : 'Actual Cost'}</th>
                     <th className="py-3 px-3.5 text-center">{isAr ? 'الربح الفعلي' : 'Profit'}</th>
                     <th className="py-3 px-3.5 text-center">{isAr ? 'حالة البيع' : 'Sale Status'}</th>
                     <th className="py-3 px-3.5 text-center w-24">{isAr ? 'الإجراءات' : 'Actions'}</th>
@@ -431,6 +461,9 @@ export const GroupsPage: React.FC = () => {
                         </td>
                         <td className="py-3 px-3.5 text-center font-mono font-black text-emerald-700" dir="ltr">
                           {money(s.collected, g.currency)}
+                        </td>
+                        <td className="py-3 px-3.5 text-center font-mono font-black text-slate-800" dir="ltr">
+                          {money(s.actualCost, g.currency)}
                         </td>
                         <td
                           className={`py-3 px-3.5 text-center font-mono font-black ${
@@ -567,8 +600,8 @@ export const GroupsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* المربعات المالية الثلاثية */}
-                    <div className="grid grid-cols-3 gap-2 text-center">
+                    {/* المربعات المالية الرباعية */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                       <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-2">
                         <span className="text-[10px] font-bold text-slate-500 block mb-0.5">{isAr ? 'المبيعات' : 'Sales'}</span>
                         <span className="text-xs font-mono font-black text-slate-900 block" dir="ltr">
@@ -579,6 +612,12 @@ export const GroupsPage: React.FC = () => {
                         <span className="text-[10px] font-bold text-emerald-800 block mb-0.5">{isAr ? 'المحصَّل' : 'Collected'}</span>
                         <span className="text-xs font-mono font-black text-emerald-700 block" dir="ltr">
                           {money(s.collected, g.currency)}
+                        </span>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-2">
+                        <span className="text-[10px] font-bold text-slate-500 block mb-0.5">{isAr ? 'التكلفة الفعلية' : 'Actual Cost'}</span>
+                        <span className="text-xs font-mono font-black text-slate-800 block" dir="ltr">
+                          {money(s.actualCost, g.currency)}
                         </span>
                       </div>
                       <div className="rounded-xl bg-orange-50/40 border border-orange-200/60 p-2">
