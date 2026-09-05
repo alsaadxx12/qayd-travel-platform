@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Param, Query, Headers, HttpCode, Res } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StatementPortalService } from './statement-portal.service';
 
@@ -27,6 +28,8 @@ export class StatementPortalController {
   }
 
   @Post(':token/verify')
+  // التحقق بأربعة أرقام فقط — بلا كابحٍ يُستنفد فضاؤها كله في دقائق.
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @HttpCode(200)
   @ApiOperation({ summary: 'التحقق بآخر أربعة أرقام من الهاتف، ويعيد جلسة قصيرة لقراءة الكشف' })
   async verify(@Param('token') token: string, @Body() body: { last4?: string }) {

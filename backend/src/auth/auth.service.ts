@@ -231,7 +231,6 @@ export class AuthService {
         name: true,
         phone: true,
         isActive: true,
-        plainPassword: true,
         createdAt: true,
         role: {
           select: {
@@ -295,7 +294,6 @@ export class AuthService {
         name: data.name,
         email: data.email,
         password: hashedPassword,
-        plainPassword: data.password,
         companyId: data.companyId,
         roleId: data.roleId || null,
         phone: data.phone || null,
@@ -306,7 +304,6 @@ export class AuthService {
         name: true,
         phone: true,
         isActive: true,
-        plainPassword: true,
         role: { select: { id: true, name: true } },
       },
     });
@@ -375,7 +372,6 @@ export class AuthService {
     if (data.phone !== undefined) updateData.phone = data.phone;
     if (data.password) {
       updateData.password = await bcrypt.hash(data.password, 10);
-      updateData.plainPassword = data.password;
     }
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
@@ -386,7 +382,6 @@ export class AuthService {
         name: true,
         phone: true,
         isActive: true,
-        plainPassword: true,
         role: { select: { id: true, name: true } },
       },
     });
@@ -413,7 +408,7 @@ export class AuthService {
     const hashedNew = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { password: hashedNew, plainPassword: newPassword },
+      data: { password: hashedNew },
     });
 
     return { message: 'تم تغيير كلمة المرور بنجاح' };

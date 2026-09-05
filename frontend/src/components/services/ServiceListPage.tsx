@@ -380,34 +380,34 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
         </div>
       </div>
 
-      {/* ── 2. Stat Cards (تصميم نقي موحد حسب النظام: فواتير | تكلفة الشراء | إجمالي المبيعات | صافي الربح) ── */}
+      {/* ── 2. Stat Cards (تصميم نقي موحد حسب النظام: فواتير | مشتريات | مبيعات | ربح صافي) ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Card 1: عدد الفواتير */}
         <StatCard
-          label={isAr ? 'عدد فواتير الوزن' : 'Total Invoices'}
+          label={isAr ? 'الفواتير' : 'Invoices'}
           value={formatNum(totals.count)}
           subValue={isAr ? 'فاتورة مسجلة' : 'Recorded'}
         />
 
-        {/* Card 2: تكلفة الشراء (بدل بطاقة عدد الكيلوات تماماً كما طلب المستخدم) */}
+        {/* Card 2: المشتريات */}
         <StatCard
-          label={isAr ? 'تكلفة الشراء (الموردين)' : 'Total Buy Cost'}
-          value={formatNum(totals.buy)}
-          subValue={isAr ? 'إجمالي كلفة الشراء' : 'Total Cost'}
+          label={isAr ? 'المشتريات' : 'Cost'}
+          value={`$${formatNum(totals.buy)}`}
+          subValue={isAr ? 'كلفة الشراء' : 'Total Cost'}
         />
 
-        {/* Card 3: إجمالي المبيعات */}
+        {/* Card 3: المبيعات */}
         <StatCard
-          label={isAr ? 'إجمالي المبيعات' : 'Total Sales'}
-          value={formatNum(totals.sell)}
-          subValue={isAr ? 'المطلوب من العملاء' : 'Total revenue'}
+          label={isAr ? 'المبيعات' : 'Sales'}
+          value={`$${formatNum(totals.sell)}`}
+          subValue={isAr ? 'إجمالي البيع' : 'Total Revenue'}
         />
 
-        {/* Card 4: صافي الأرباح */}
+        {/* Card 4: الربح الصافي */}
         <StatCard
-          label={isAr ? 'صافي أرباح الوزن' : 'Net Profit'}
-          value={`+${formatNum(totals.profit)}`}
-          subValue={isAr ? 'فرق البيع والشراء' : 'Profit difference'}
+          label={isAr ? 'الربح الصافي' : 'Net Profit'}
+          value={`+$${formatNum(totals.profit)}`}
+          subValue={isAr ? 'الربح' : 'Net Profit'}
         />
       </div>
 

@@ -13,8 +13,16 @@ import {
   Lock,
   Unlock,
   FolderOpen,
+  LayoutGrid,
+  List,
+  MapPin,
+  Calendar,
+  DollarSign,
+  Filter,
+  ArrowUpRight,
+  Check,
 } from 'lucide-react';
-import { Loader, Modal } from '@mantine/core';
+import { Loader, Modal, Tooltip } from '@mantine/core';
 import { GroupFileWorkspace } from '../../components/groups/GroupFileWorkspace';
 import { matchesSearchTokens } from '../../components/ui/SearchableCombobox';
 import { tourGroupsApi, type TourGroup } from '../../api/tourGroups';
@@ -22,11 +30,14 @@ import { showSuccessNotification, showErrorNotification } from '../../utils/noti
 import { useLanguageStore } from '../../store/useLanguageStore';
 
 /*
- * صفحة الكروبات — قائمة ملفات، لا قائمة تذاكر.
+ * صفحة تذاكر الكروبات والسياحة — متوافقة تماماً مع نظام التصميم المعتمد.
  *
- * كل بطاقة كروبٌ حقيقي من جداول tour_groups بملخّصه المحسوب في الخادم:
- * المقاعد والمبيع والمتبقي، المبيعات والمحصَّل، والربح الفعلي. الضغط عليها
- * يفتح النافذة الواحدة (ملف الكروب) حيث يجري كل شيء.
+ * تتضمن:
+ * 1. ترويسة النظام الرسمية بالأبيض والبرتقالي (#F45A0A).
+ * 2. بطاقات المؤشرات المالية والتشغيلية (KPIs) بأرقام إنجليزية واضحة وبطاقات بيضاء ناصعة.
+ * 3. شريط أدوات بحث وتصفية متقدم (بحث، فلترة الحالة، العملة، والتبديل بين عرض الجدول وعرض البطاقات).
+ * 4. جدول محاسبي مفصل ومنظم + عرض بطاقات حديث وديناميكي.
+ * 5. النافذة الواحدة لملف الكروب (GroupFileWorkspace) بكامل عملياتها التشغيلية والمالية.
  */
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -39,6 +50,10 @@ export const GroupsPage: React.FC = () => {
   const [rows, setRows] = useState<TourGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('ALL');
+  const [currencyFilter, setCurrencyFilter] = useState<'ALL' | 'USD' | 'IQD'>('ALL');
+  const [viewMode, setViewMode] = useState<'CARDS' | 'TABLE'>('TABLE');
+
   const [fileOpen, setFileOpen] = useState(false);
   const [fileGroupId, setFileGroupId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TourGroup | null>(null);
@@ -61,12 +76,30 @@ export const GroupsPage: React.FC = () => {
   }, [load]);
 
   const filtered = useMemo(() => {
+    let result = rows;
+
+    // Status filter
+    if (statusFilter === 'OPEN') {
+      result = result.filter((g) => g.openSale);
+    } else if (statusFilter === 'CLOSED') {
+      result = result.filter((g) => !g.openSale);
+    }
+
+    // Currency filter
+    if (currencyFilter !== 'ALL') {
+      result = result.filter((g) => g.currency === currencyFilter);
+    }
+
+    // Search query
     const q = search.trim();
-    if (!q) return rows;
-    return rows.filter((g) =>
-      matchesSearchTokens(q, [g.groupName, g.country || '', ...g.passengers.map((p) => p.passengerName)].join(' ')),
-    );
-  }, [rows, search]);
+    if (q) {
+      result = result.filter((g) =>
+        matchesSearchTokens(q, [g.groupName, g.country || '', ...g.passengers.map((p) => p.passengerName)].join(' ')),
+      );
+    }
+
+    return result;
+  }, [rows, search, statusFilter, currencyFilter]);
 
   const totals = useMemo(
     () =>
@@ -84,178 +117,515 @@ export const GroupsPage: React.FC = () => {
     [rows],
   );
 
+  const openCount = useMemo(() => rows.filter((g) => g.openSale).length, [rows]);
+  const closedCount = useMemo(() => rows.filter((g) => !g.openSale).length, [rows]);
+
   const openFile = (id: string | null) => {
     setFileGroupId(id);
     setFileOpen(true);
   };
 
   return (
-    <div className="min-h-full bg-[#F7F8FA] font-sans" dir={direction}>
-      <div className="max-w-[1500px] mx-auto w-full px-4 sm:px-6 py-4 space-y-4">
-        {/* ── الترويسة ── */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#F45A0A] to-[#f59e0b] text-white flex items-center justify-center shadow-xs">
-              <Users size={22} strokeWidth={2.2} />
+    <div className="min-h-full bg-[#F8FAFC] font-sans pb-10" dir={direction}>
+      <div className="max-w-[1540px] mx-auto w-full px-4 sm:px-6 py-4 space-y-4">
+        
+        {/* ── 1. الترويسة الرئيسية للنظام ── */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-orange-50 border border-orange-200/80 text-[#F45A0A] flex items-center justify-center shadow-2xs shrink-0">
+              <Users size={22} strokeWidth={2.4} />
             </div>
             <div>
-              <h1 className="font-black text-base text-slate-900">{isAr ? 'الكروبات' : 'Tour Groups'}</h1>
-              <p className="text-[11.5px] font-bold text-slate-500 mt-0.5">
-                {isAr ? 'كل كروب ملف مالي وتشغيلي كامل — افتحه لترى ملخّصه ومسافريه' : 'Each group is a full financial file'}
+              <div className="flex items-center gap-2.5">
+                <h1 className="font-black text-base sm:text-lg text-slate-900 leading-none">
+                  {isAr ? 'تذاكر الكروبات والسياحة' : 'Tour Groups & Travel'}
+                </h1>
+                <span className="px-2 py-0.5 rounded-full text-xs font-black bg-orange-50 text-[#F45A0A] border border-orange-200/70 font-mono" dir="ltr">
+                  {rows.length}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-slate-500 mt-1">
+                {isAr
+                  ? 'إدارة الكروبات السياحية والمسافرين والمتابعة المالية'
+                  : 'Manage tour groups, passengers and financial tracking'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => load()}
-              className="h-[38px] w-[38px] rounded-[9px] bg-white border border-slate-200 text-slate-500 hover:text-[#F45A0A] hover:border-[#FED7AA] flex items-center justify-center transition-all cursor-pointer"
-            >
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            </button>
+          <div className="flex items-center gap-2.5">
+            <Tooltip label={isAr ? 'تحديث البيانات' : 'Refresh'}>
+              <button
+                type="button"
+                onClick={() => load()}
+                className="h-[38px] w-[38px] rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-[#F45A0A] hover:border-orange-300 hover:bg-orange-50/40 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+              >
+                <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              </button>
+            </Tooltip>
             <button
               type="button"
               onClick={() => openFile(null)}
-              className="h-[38px] px-4 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-bold text-[13px] shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="h-[38px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-black text-xs shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
             >
-              <Plus size={15} strokeWidth={2.4} />
-              {isAr ? 'كروب جديد' : 'New group'}
+              <Plus size={16} strokeWidth={2.5} />
+              <span>{isAr ? 'إنشاء كروب جديد' : 'New Tour Group'}</span>
             </button>
           </div>
         </div>
 
-        {/* ── بطاقات الإجمالي: برتقالي وأبيض فقط ── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: isAr ? 'الكروبات' : 'Groups', value: String(totals.groups), sub: `${totals.sold}/${totals.seats} ${isAr ? 'مقعداً مبيعاً' : 'seats sold'}` },
-            { label: isAr ? 'المبيعات' : 'Sales', value: fmt(totals.sales), sub: isAr ? 'مجموع بيع المقاعد' : 'total seat sales' },
-            { label: isAr ? 'الذمم' : 'Outstanding', value: fmt(totals.outstanding), sub: isAr ? 'غير محصَّل بعد' : 'not collected yet' },
-            { label: isAr ? 'الربح الفعلي' : 'Actual profit', value: fmt(totals.profit), sub: isAr ? 'بعد الشراء والمصاريف' : 'after buy & expenses' },
-          ].map((c) => (
-            <div key={c.label} className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/90 shadow-xs p-4 min-h-[118px] flex flex-col justify-center">
-              <span className="absolute inset-y-0 start-0 w-1.5 bg-gradient-to-b from-[#F45A0A] to-[#f59e0b]" />
-              <p className="text-[11px] font-bold text-slate-500">{c.label}</p>
-              <p className="text-2xl font-black text-slate-900 mt-1 font-mono" dir="ltr">{c.value}</p>
-              <p className="text-[10.5px] font-bold text-[#F45A0A]/70 mt-1">{c.sub}</p>
+        {/* ── 2. بطاقات المؤشرات المالية والتشغيلية (KPIs) ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {/* بطاقة 1: الكروبات */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">{isAr ? 'الكروبات' : 'Groups'}</span>
+              <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
+                <Users size={16} />
+              </div>
             </div>
-          ))}
+            <div className="mt-2">
+              <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+                {totals.groups}
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mt-1">
+                <span>{isAr ? 'المسافرون' : 'Pax'}</span>
+                <span className="font-mono text-[#F45A0A] font-black" dir="ltr">
+                  {totals.sold}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* بطاقة 2: المبيعات */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">{isAr ? 'المبيعات' : 'Sales'}</span>
+              <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
+                <Coins size={16} />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+                ${fmt(totals.sales)}
+              </div>
+              <div className="text-[11px] font-bold text-slate-500 mt-1">
+                {isAr ? 'إجمالي المبيعات' : 'Total sales'}
+              </div>
+            </div>
+          </div>
+
+          {/* بطاقة 3: الذمم غير المحصلة */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">{isAr ? 'الذمم' : 'Outstanding'}</span>
+              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
+                <Clock size={16} />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-black text-amber-700 font-mono tracking-tight" dir="ltr">
+                ${fmt(totals.outstanding)}
+              </div>
+              <div className="text-[11px] font-bold text-amber-700/80 mt-1">
+                {isAr ? 'قيد التحصيل' : 'Pending'}
+              </div>
+            </div>
+          </div>
+
+          {/* بطاقة 4: صافي الربح الفعلي */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-500">{isAr ? 'صافي الربح' : 'Net Profit'}</span>
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                <TrendingUp size={16} />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-black text-emerald-700 font-mono tracking-tight" dir="ltr">
+                ${fmt(totals.profit)}
+              </div>
+              <div className="text-[11px] font-bold text-emerald-700/80 mt-1">
+                {isAr ? 'الربح الفعلي' : 'Actual profit'}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* ── البحث ── */}
-        <div className="relative">
-          <Search size={15} className={`absolute top-1/2 -translate-y-1/2 text-slate-400 ${direction === 'rtl' ? 'right-3' : 'left-3'}`} />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={isAr ? 'ابحث باسم الكروب أو الوجهة أو مسافر…' : 'Search…'}
-            className={`w-full h-[42px] rounded-xl bg-white border border-slate-200 text-[13px] font-bold text-slate-900 outline-none focus:border-[#F45A0A] focus:ring-2 focus:ring-orange-100 transition-all ${direction === 'rtl' ? 'pr-9 pl-3' : 'pl-9 pr-3'}`}
-          />
+        {/* ── 3. شريط أدوات البحث والتصفية والعرض ── */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-1 min-w-[260px]">
+            {/* حقل البحث */}
+            <div className="relative flex-1 max-w-[420px]">
+              <Search
+                size={15}
+                className={`absolute top-1/2 -translate-y-1/2 text-slate-400 ${
+                  direction === 'rtl' ? 'right-3' : 'left-3'
+                }`}
+              />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={isAr ? 'بحث باسم الكروب، الوجهة، أو اسم مسافر…' : 'Search group, destination, or passenger…'}
+                className={`w-full h-[38px] rounded-xl bg-slate-50 focus:bg-white border border-slate-200 text-xs font-bold text-slate-900 outline-none focus:border-[#F45A0A] focus:ring-1 focus:ring-orange-100 transition-all ${
+                  direction === 'rtl' ? 'pr-9 pl-3' : 'pl-9 pr-3'
+                }`}
+              />
+            </div>
+
+            {/* فلتر حالة البيع */}
+            <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200/80 text-xs">
+              <button
+                type="button"
+                onClick={() => setStatusFilter('ALL')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                  statusFilter === 'ALL'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {isAr ? `الكل (${rows.length})` : `All (${rows.length})`}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('OPEN')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  statusFilter === 'OPEN'
+                    ? 'bg-emerald-500 text-white shadow-2xs'
+                    : 'text-emerald-700 hover:text-emerald-900'
+                }`}
+              >
+                <Unlock size={12} />
+                <span>{isAr ? `مفتوح (${openCount})` : `Open (${openCount})`}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('CLOSED')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  statusFilter === 'CLOSED'
+                    ? 'bg-amber-600 text-white shadow-2xs'
+                    : 'text-amber-700 hover:text-amber-900'
+                }`}
+              >
+                <Lock size={12} />
+                <span>{isAr ? `مقفل (${closedCount})` : `Closed (${closedCount})`}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* تبديل طريقة العرض */}
+            <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => setViewMode('CARDS')}
+                title={isAr ? 'عرض البطاقات' : 'Cards view'}
+                className={`h-[30px] px-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'CARDS'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <LayoutGrid size={14} />
+                <span className="hidden sm:inline">{isAr ? 'بطاقات' : 'Cards'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('TABLE')}
+                title={isAr ? 'عرض الجدول' : 'Table view'}
+                className={`h-[30px] px-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === 'TABLE'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <List size={14} />
+                <span className="hidden sm:inline">{isAr ? 'جدول' : 'Table'}</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* ── القائمة ── */}
+        {/* ── 4. المحتوى: تحميل، فارغ، أو قائمة البيانات ── */}
         {loading && rows.length === 0 ? (
-          <div className="py-24 flex items-center justify-center gap-3 text-sm font-bold text-slate-500">
-            <Loader size="sm" color="orange" /> {isAr ? 'جارٍ جلب الكروبات…' : 'Loading…'}
+          <div className="py-24 bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center gap-3 text-xs font-bold text-slate-500">
+            <Loader size="sm" color="orange" />
+            <span>{isAr ? 'جارٍ تحميل ملفات الكروبات والسياحة…' : 'Loading tour groups…'}</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="py-20 text-center space-y-2">
-            <p className="text-sm font-black text-slate-600">{isAr ? 'لا كروبات بعد' : 'No groups yet'}</p>
-            <p className="text-xs font-bold text-slate-400">
-              {isAr ? 'أنشئ كروباً، صمّم أنظمة أسعاره، افتح البيع، ثم بِع المقاعد' : 'Create a group, add price systems, open sale'}
+          <div className="py-20 bg-white rounded-xl border border-slate-200 text-center space-y-2.5 p-6">
+            <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#F45A0A] mx-auto flex items-center justify-center border border-orange-200/70">
+              <Users size={24} />
+            </div>
+            <p className="text-sm font-black text-slate-800">
+              {isAr ? 'لا توجد كروبات سياحية مطابقة' : 'No tour groups found'}
             </p>
+            <p className="text-xs font-bold text-slate-400 max-w-md mx-auto">
+              {isAr
+                ? 'يمكنك إنشاء كروب جديد، ضبط المقاعد وأنظمة الأسعار والخدمات، وفتح البيع للمسافرين.'
+                : 'Create a new group file, configure seat allocation, price systems, and start selling.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => openFile(null)}
+              className="mt-2 h-[36px] px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            >
+              <Plus size={15} strokeWidth={2.4} />
+              <span>{isAr ? 'إنشاء كروب الآن' : 'Create Group Now'}</span>
+            </button>
+          </div>
+        ) : viewMode === 'TABLE' ? (
+          /* ── عرض الجدول المحاسبي المنظم ── */
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-right border-collapse" dir={direction}>
+                <thead>
+                  <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-700 font-bold">
+                    <th className="py-3 px-3.5 text-center w-12">#</th>
+                    <th className="py-3 px-3.5">{isAr ? 'اسم الكروب' : 'Group Name'}</th>
+                    <th className="py-3 px-3.5">{isAr ? 'الوجهة / الدولة' : 'Destination'}</th>
+                    <th className="py-3 px-3.5">{isAr ? 'تاريخ السفر' : 'Travel Date'}</th>
+                    <th className="py-3 px-3.5 text-center">{isAr ? 'المسافرون' : 'Passengers'}</th>
+                    <th className="py-3 px-3.5 text-center">{isAr ? 'المبيعات' : 'Sales'}</th>
+                    <th className="py-3 px-3.5 text-center">{isAr ? 'المحصّل' : 'Collected'}</th>
+                    <th className="py-3 px-3.5 text-center">{isAr ? 'الربح الفعلي' : 'Profit'}</th>
+                    <th className="py-3 px-3.5 text-center">{isAr ? 'حالة البيع' : 'Sale Status'}</th>
+                    <th className="py-3 px-3.5 text-center w-24">{isAr ? 'الإجراءات' : 'Actions'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-bold">
+                  {filtered.map((g, idx) => {
+                    const s = g.summary;
+                    return (
+                      <tr
+                        key={g.id}
+                        onClick={() => openFile(g.id)}
+                        className="hover:bg-orange-50/30 transition-colors cursor-pointer group"
+                      >
+                        <td className="py-3 px-3.5 text-center text-slate-400 font-mono" dir="ltr">
+                          {idx + 1}
+                        </td>
+                        <td className="py-3 px-3.5">
+                          <span className="font-black text-slate-900 group-hover:text-[#F45A0A] transition-colors">
+                            {g.groupName}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3.5 text-slate-600">
+                          <span className="inline-flex items-center gap-1.5">
+                            <MapPin size={13} className="text-[#F45A0A]" />
+                            <span>{g.country || '—'}</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-3.5 text-slate-600 font-mono" dir="ltr">
+                          {g.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : '—'}
+                        </td>
+                        <td className="py-3 px-3.5 text-center">
+                          <span className="font-mono font-black text-slate-800" dir="ltr">
+                            {g.passengers.length}
+                          </span>
+                          <span className="text-[10.5px] text-slate-400 block mt-0.5">
+                            {isAr ? 'مسافر' : 'pax'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3.5 text-center font-mono font-black text-slate-900" dir="ltr">
+                          {money(s.sales, g.currency)}
+                        </td>
+                        <td className="py-3 px-3.5 text-center font-mono font-black text-emerald-700" dir="ltr">
+                          {money(s.collected, g.currency)}
+                        </td>
+                        <td
+                          className={`py-3 px-3.5 text-center font-mono font-black ${
+                            s.actualProfit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
+                          }`}
+                          dir="ltr"
+                        >
+                          {money(s.actualProfit, g.currency)}
+                        </td>
+                        <td className="py-3 px-3.5 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-black rounded-lg px-2 py-0.5 border ${
+                              g.openSale
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}
+                          >
+                            {g.openSale ? <Unlock size={11} /> : <Lock size={11} />}
+                            <span>{g.openSale ? (isAr ? 'مفتوح للبيع' : 'Open') : isAr ? 'مقفل' : 'Closed'}</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-3.5 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openFile(g.id);
+                              }}
+                              title={isAr ? 'فتح ملف الكروب' : 'Open group'}
+                              className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:border-[#F45A0A] hover:text-[#F45A0A] text-slate-500 flex items-center justify-center transition-all cursor-pointer"
+                            >
+                              <FolderOpen size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteTarget(g);
+                              }}
+                              title={isAr ? 'حذف' : 'Delete'}
+                              className="h-7 w-7 rounded-lg border border-slate-200 bg-white hover:border-rose-300 hover:text-rose-600 text-slate-400 flex items-center justify-center transition-all cursor-pointer"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          /* ── عرض البطاقات الحديثة ── */
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
             {filtered.map((g) => {
               const s = g.summary;
+              const fillPct = s.seats > 0 ? Math.min(100, Math.round((s.sold / s.seats) * 100)) : 0;
               return (
                 <div
                   key={g.id}
                   onClick={() => openFile(g.id)}
-                  className="group bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md hover:border-[#FED7AA] transition-all cursor-pointer p-4 space-y-3"
+                  className="group bg-white rounded-xl border border-slate-200 shadow-2xs hover:shadow-md hover:border-orange-300 transition-all cursor-pointer p-4 space-y-3.5 flex flex-col justify-between"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-black text-[13.5px] text-slate-900 truncate">{g.groupName}</h3>
+                  <div className="space-y-3">
+                    {/* رأس البطاقة: الاسم، الوجهة، وحالة البيع */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-black text-sm text-slate-900 group-hover:text-[#F45A0A] transition-colors truncate">
+                            {g.groupName}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-500 mt-1">
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin size={12} className="text-[#F45A0A]" />
+                            <span>{g.country || '—'}</span>
+                          </span>
+                          <span>•</span>
+                          <span className="inline-flex items-center gap-1 font-mono" dir="ltr">
+                            <Calendar size={12} className="text-slate-400" />
+                            <span>{g.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : (isAr ? 'بلا تاريخ' : 'No date')}</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <span
-                          className={`inline-flex items-center gap-1 text-[10px] font-black rounded px-1.5 py-0.5 border shrink-0 ${
-                            g.openSale ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'
+                          className={`inline-flex items-center gap-1 text-[11px] font-black rounded-lg px-2 py-0.5 border ${
+                            g.openSale
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : 'bg-amber-50 text-amber-800 border-amber-200'
                           }`}
                         >
-                          {g.openSale ? <Unlock size={10} /> : <Lock size={10} />}
-                          {g.openSale ? (isAr ? 'البيع مفتوح' : 'Open') : isAr ? 'مقفل' : 'Closed'}
+                          {g.openSale ? <Unlock size={11} /> : <Lock size={11} />}
+                          <span>{g.openSale ? (isAr ? 'البيع مفتوح' : 'Open') : isAr ? 'مقفل' : 'Closed'}</span>
                         </span>
                       </div>
-                      <p className="text-[11px] font-bold text-slate-500 mt-0.5 truncate">
-                        {g.country || '—'} · {g.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : isAr ? 'بلا تاريخ' : 'no date'}
-                      </p>
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openFile(g.id);
-                        }}
-                        title={isAr ? 'فتح الملف' : 'Open file'}
-                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-[#F45A0A] hover:bg-orange-50 flex items-center justify-center cursor-pointer"
-                      >
-                        <FolderOpen size={14} />
-                      </button>
+
+                    {/* مؤشر المقاعد والطاقة الاستيعابية */}
+                    <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span className="inline-flex items-center gap-1.5 text-slate-700">
+                          <Armchair size={13} className="text-[#F45A0A]" />
+                          <span>{isAr ? 'المقاعد المبيعة:' : 'Sold Seats:'}</span>
+                        </span>
+                        <div className="flex items-center gap-1.5 font-mono" dir="ltr">
+                          <span className="font-black text-slate-900">{s.sold}</span>
+                          <span className="text-slate-400">/</span>
+                          <span className="text-slate-600 font-bold">{s.seats}</span>
+                          <span className="text-[10px] text-[#F45A0A] font-bold">({fillPct}%)</span>
+                        </div>
+                      </div>
+
+                      {/* شريط التقدم */}
+                      <div className="h-2 rounded-full bg-slate-200/70 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-[#F45A0A] to-[#f59e0b] transition-all"
+                          style={{ width: `${fillPct}%` }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-500">
+                        <span>{s.remaining > 0 ? `${s.remaining} ${isAr ? 'مقعداً شاغراً' : 'seats left'}` : (isAr ? 'المقاعد مكتملة بالكامل' : 'Fully booked')}</span>
+                        {s.notComplete > 0 && (
+                          <span className="text-amber-700 flex items-center gap-1">
+                            <Clock size={11} />
+                            <span>{s.notComplete} {isAr ? 'معلّق' : 'pending'}</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* المربعات المالية الثلاثية */}
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-xl bg-slate-50 border border-slate-200/70 p-2">
+                        <span className="text-[10px] font-bold text-slate-500 block mb-0.5">{isAr ? 'المبيعات' : 'Sales'}</span>
+                        <span className="text-xs font-mono font-black text-slate-900 block" dir="ltr">
+                          {money(s.sales, g.currency)}
+                        </span>
+                      </div>
+                      <div className="rounded-xl bg-emerald-50/50 border border-emerald-200/60 p-2">
+                        <span className="text-[10px] font-bold text-emerald-800 block mb-0.5">{isAr ? 'المحصَّل' : 'Collected'}</span>
+                        <span className="text-xs font-mono font-black text-emerald-700 block" dir="ltr">
+                          {money(s.collected, g.currency)}
+                        </span>
+                      </div>
+                      <div className="rounded-xl bg-orange-50/40 border border-orange-200/60 p-2">
+                        <span className="text-[10px] font-bold text-orange-800 block mb-0.5">{isAr ? 'الربح' : 'Profit'}</span>
+                        <span
+                          className={`text-xs font-mono font-black block ${
+                            s.actualProfit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
+                          }`}
+                          dir="ltr"
+                        >
+                          {money(s.actualProfit, g.currency)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* الجزء السفلي وأزرار الإجراءات */}
+                  <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="text-[11px] font-bold text-slate-400">
+                      {s.passengers} {isAr ? 'مسافراً مسجلاً' : 'registered passengers'}
+                    </span>
+
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeleteTarget(g);
                         }}
-                        title={isAr ? 'حذف' : 'Delete'}
-                        className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer"
+                        title={isAr ? 'حذف الكروب' : 'Delete'}
+                        className="h-8 w-8 rounded-lg border border-slate-200 bg-white hover:border-rose-300 hover:text-rose-600 text-slate-400 flex items-center justify-center transition-all cursor-pointer"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openFile(g.id);
+                        }}
+                        className="h-8 px-3 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <FolderOpen size={13} />
+                        <span>{isAr ? 'فتح الملف' : 'Open'}</span>
                       </button>
                     </div>
                   </div>
-
-                  {/* شريط المقاعد */}
-                  <div>
-                    <div className="flex items-center justify-between text-[10.5px] font-black text-slate-600 mb-1">
-                      <span className="inline-flex items-center gap-1">
-                        <Armchair size={11} className="text-[#F45A0A]" /> {s.sold}/{s.seats} {isAr ? 'مقعداً' : 'seats'}
-                      </span>
-                      <span className={s.remaining > 0 ? 'text-slate-500' : 'text-rose-600'}>
-                        {s.remaining > 0 ? `${s.remaining} ${isAr ? 'متبقٍ' : 'left'}` : isAr ? 'نفدت' : 'full'}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#F45A0A] to-[#f59e0b] transition-all"
-                        style={{ width: `${s.seats > 0 ? Math.min(100, (s.sold / s.seats) * 100) : 0}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-xl bg-slate-50 py-2">
-                      <p className="text-[10px] font-bold text-slate-500 flex items-center justify-center gap-1"><Coins size={10} /> {isAr ? 'مبيعات' : 'Sales'}</p>
-                      <p className="text-[12px] font-mono font-black text-slate-900 mt-0.5" dir="ltr">{money(s.sales, g.currency)}</p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 py-2">
-                      <p className="text-[10px] font-bold text-slate-500 flex items-center justify-center gap-1"><CheckCircle2 size={10} /> {isAr ? 'محصَّل' : 'Collected'}</p>
-                      <p className="text-[12px] font-mono font-black text-emerald-700 mt-0.5" dir="ltr">{money(s.collected, g.currency)}</p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 py-2">
-                      <p className="text-[10px] font-bold text-slate-500 flex items-center justify-center gap-1"><TrendingUp size={10} /> {isAr ? 'ربح فعلي' : 'Profit'}</p>
-                      <p className={`text-[12px] font-mono font-black mt-0.5 ${s.actualProfit >= 0 ? 'text-slate-900' : 'text-rose-600'}`} dir="ltr">{money(s.actualProfit, g.currency)}</p>
-                    </div>
-                  </div>
-
-                  {s.notComplete > 0 && (
-                    <p className="text-[10.5px] font-bold text-amber-700 flex items-center gap-1">
-                      <Clock size={11} /> {s.notComplete} {isAr ? 'مسافراً بخدمات غير مكتملة' : 'passengers not complete'}
-                    </p>
-                  )}
                 </div>
               );
             })}
@@ -263,7 +633,7 @@ export const GroupsPage: React.FC = () => {
         )}
       </div>
 
-      {/* النافذة الواحدة */}
+      {/* ── 5. النافذة الواحدة لإدارة ملف الكروب ── */}
       <GroupFileWorkspace
         opened={fileOpen}
         groupId={fileGroupId}
@@ -275,21 +645,31 @@ export const GroupsPage: React.FC = () => {
         onChanged={() => load(true)}
       />
 
-      {/* تأكيد الحذف */}
-      <Modal opened={!!deleteTarget} onClose={() => setDeleteTarget(null)} centered radius="lg" withCloseButton={false} zIndex={10050}>
+      {/* ── 6. مودال تأكيد الحذف ── */}
+      <Modal
+        opened={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        centered
+        radius="lg"
+        withCloseButton={false}
+        zIndex={10050}
+      >
         {deleteTarget && (
-          <div className="space-y-3 font-sans" dir={direction}>
-            <p className="font-black text-sm text-slate-900">{isAr ? 'حذف الكروب؟' : 'Delete group?'}</p>
+          <div className="space-y-3 font-sans p-1" dir={direction}>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center">
+              <Trash2 size={20} />
+            </div>
+            <p className="font-black text-sm text-slate-900">{isAr ? 'حذف الكروب السياحي؟' : 'Delete Tour Group?'}</p>
             <p className="text-xs font-bold text-slate-600 leading-relaxed">
               {isAr
-                ? `سيُحذف «${deleteTarget.groupName}» بكل أنظمته ومسافريه وخدماتهم (${deleteTarget.summary.passengers} مسافراً) نهائياً.`
-                : `"${deleteTarget.groupName}" and everything in it will be deleted.`}
+                ? `سيتم حذف الكروب «${deleteTarget.groupName}» نهائياً بما يتضمن أنظمته ومسافريه وخدماتهم المسجلة (${deleteTarget.summary.passengers} مسافراً). هل أنت متأكد؟`
+                : `Are you sure you want to delete "${deleteTarget.groupName}" and all associated passenger files?`}
             </p>
-            <div className="flex items-center justify-end gap-2 pt-1">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="h-9 px-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer"
+                className="h-9 px-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 {isAr ? 'إلغاء' : 'Cancel'}
               </button>
@@ -300,7 +680,7 @@ export const GroupsPage: React.FC = () => {
                   setDeleting(true);
                   try {
                     await tourGroupsApi.remove(deleteTarget.id);
-                    showSuccessNotification(isAr ? 'حُذف' : 'Deleted', deleteTarget.groupName);
+                    showSuccessNotification(isAr ? 'تم الحذف' : 'Deleted', deleteTarget.groupName);
                     setDeleteTarget(null);
                     load(true);
                   } catch (e: any) {
@@ -309,10 +689,10 @@ export const GroupsPage: React.FC = () => {
                     setDeleting(false);
                   }
                 }}
-                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-black cursor-pointer flex items-center gap-1.5"
+                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-2xs"
               >
                 {deleting && <Loader size={12} color="white" />}
-                {isAr ? 'حذف نهائي' : 'Delete'}
+                <span>{isAr ? 'تأكيد الحذف' : 'Confirm Delete'}</span>
               </button>
             </div>
           </div>

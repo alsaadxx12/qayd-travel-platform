@@ -280,9 +280,6 @@ export class EmployeesService {
           data: {
             email: emailToUse,
             password: hashedPassword,
-            // Kept so the admin screens can show the credential they set instead of
-            // falling back to a placeholder and overwriting it on the next save.
-            plainPassword: rawPassword,
             name: fullName,
             phone: dto.phone,
             companyId,
@@ -338,7 +335,7 @@ export class EmployeesService {
           data: {
             name: updated.fullName,
             phone: updated.phone,
-            ...(dto.password && { password: hashedPassword, plainPassword: dto.password }),
+            ...(dto.password && { password: hashedPassword }),
             ...(dto.permissionGroupId !== undefined && { roleId: dto.permissionGroupId || null }),
           },
         });
@@ -347,7 +344,6 @@ export class EmployeesService {
           data: {
             email: emailToUse,
             password: hashedPassword,
-            plainPassword: rawPassword,
             name: updated.fullName,
             phone: updated.phone,
             companyId,

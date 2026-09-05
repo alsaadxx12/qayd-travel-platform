@@ -236,7 +236,9 @@ export const BranchesStructurePage: React.FC = () => {
             id: u.id,
             fullName: u.name || u.fullName || '',
             email: u.email || '',
-            password: u.plainPassword || '',
+            // الخادم لم يعد يحفظ كلمة المرور نصاً صريحاً ولا يعيدها؛ الصندوق الفارغ
+            // يعني «أبقِ الحالية»، والتغيير يكون بكتابة كلمة جديدة.
+            password: '',
             branchName: u.role?.allowedBranches || (isAr ? 'جميع الفروع' : 'All Branches'),
             role: u.role?.name || '',
             roleId: u.role?.id || null,

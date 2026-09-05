@@ -1030,17 +1030,16 @@ export const TicketsPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 items-baseline">
-                  <div>
-                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dollar')}</span>
-                    <span className="text-[14px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                  <div className="flex items-baseline gap-1" dir="ltr">
+                    <span className="text-[14px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight">
                       ${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dinar')}</span>
-                    <span className="text-[13px] sm:text-[14px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
-                      {kpis.totalSellIQD.toLocaleString()} <span className="text-[8.5px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                  <div className="flex items-baseline gap-1" dir="ltr">
+                    <span className="text-[13px] sm:text-[14px] font-black font-mono text-[#111827] tabular-nums leading-tight">
+                      {kpis.totalSellIQD.toLocaleString()}
                     </span>
+                    <span className="text-[9.5px] font-mono font-bold text-slate-400">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                   </div>
                 </div>
               )}
@@ -1069,17 +1068,16 @@ export const TicketsPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 items-baseline">
-                  <div>
-                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dollar')}</span>
-                    <span className="text-[14px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
+                  <div className="flex items-baseline gap-1" dir="ltr">
+                    <span className="text-[14px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight">
                       ${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dinar')}</span>
-                    <span className="text-[13px] sm:text-[14px] font-black font-mono text-[#111827] tabular-nums leading-tight block">
-                      {kpis.totalBuyIQD.toLocaleString()} <span className="text-[8.5px] font-sans font-bold text-[#64748B]">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                  <div className="flex items-baseline gap-1" dir="ltr">
+                    <span className="text-[13px] sm:text-[14px] font-black font-mono text-[#111827] tabular-nums leading-tight">
+                      {kpis.totalBuyIQD.toLocaleString()}
                     </span>
+                    <span className="text-[9.5px] font-mono font-bold text-slate-400">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                   </div>
                 </div>
               )}
@@ -1090,7 +1088,7 @@ export const TicketsPage: React.FC = () => {
           <div className="bg-white border border-[#E5E7EB] rounded-[12px] px-3.5 py-2 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all sm:col-span-2 md:col-span-1">
             <div className="flex items-center justify-between mb-0.5">
               <span className="text-[11.5px] font-bold text-slate-800">{t('tickets.netProfit')}</span>
-              <div className="w-[26px] h-[26px] rounded-[7px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
+              <div className="w-[26px] h-[26px] rounded-[7px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
                 <TrendingUp size={14} strokeWidth={1.85} />
               </div>
             </div>
@@ -1108,17 +1106,16 @@ export const TicketsPage: React.FC = () => {
                 </div>
               ) : canViewProfits ? (
                 <div className="grid grid-cols-2 gap-2 items-baseline">
-                  <div>
-                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dollar')}</span>
-                    <span className={`text-[14px] sm:text-[15px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                  <div className="flex items-baseline gap-1" dir="ltr">
+                    <span className={`text-[14px] sm:text-[15px] font-black font-mono tabular-nums leading-tight ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
                       {kpis.totalProfitUSD > 0 ? `+$${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : kpis.totalProfitUSD < 0 ? `-$${Math.abs(kpis.totalProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `$0.00`}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-[9px] font-semibold text-[#64748B] block leading-none mb-0.5">{t('currency.dinar')}</span>
-                    <span className={`text-[13px] sm:text-[14px] font-black font-mono tabular-nums leading-tight block ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
-                      {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`} <span className="text-[8.5px] font-sans font-bold">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
+                  <div className="flex items-baseline gap-1" dir="ltr">
+                    <span className={`text-[13px] sm:text-[14px] font-black font-mono tabular-nums leading-tight ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
+                      {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`}
                     </span>
+                    <span className="text-[9.5px] font-mono font-bold text-slate-400">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
                   </div>
                 </div>
               ) : (

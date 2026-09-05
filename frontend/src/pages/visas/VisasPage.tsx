@@ -1006,24 +1006,23 @@ export const VisasPage: React.FC = () => {
         {/* Card 1: Total Sales */}
         <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'إجمالي مبيعات التأشيرات' : 'Total Visa Sales'}</span>
+            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'المبيعات' : 'Sales'}</span>
             <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
               <Banknote size={20} strokeWidth={1.85} />
             </div>
           </div>
           <div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دولار ($)' : 'USD ($)'}</span>
-                <span className="text-[18px] font-black text-[#111827] tabular-nums leading-tight block">
+            <div className="grid grid-cols-2 gap-2 items-baseline">
+              <div className="flex items-baseline gap-1" dir="ltr">
+                <span className="text-[17px] font-black font-mono text-[#111827] tabular-nums leading-tight">
                   {financialDataReady ? `$${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                 </span>
               </div>
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دينار (IQD)' : 'IQD'}</span>
-                <span className="text-[18px] font-black text-[#111827] tabular-nums leading-tight block">
+              <div className="flex items-baseline gap-1" dir="ltr">
+                <span className="text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight">
                   {financialDataReady ? kpis.totalSellIQD.toLocaleString() : '—'}
                 </span>
+                <span className="text-[9.5px] font-mono font-bold text-slate-400">{isAr ? 'د.ع' : 'IQD'}</span>
               </div>
             </div>
           </div>
@@ -1032,24 +1031,23 @@ export const VisasPage: React.FC = () => {
         {/* Card 2: Total Buy Cost */}
         <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'إجمالي تكلفة الشراء' : 'Total Purchase Cost'}</span>
+            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'المشتريات' : 'Cost'}</span>
             <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
               <ReceiptText size={20} strokeWidth={1.85} />
             </div>
           </div>
           <div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دولار ($)' : 'USD ($)'}</span>
-                <span className="text-[18px] font-black text-[#111827] tabular-nums leading-tight block">
+            <div className="grid grid-cols-2 gap-2 items-baseline">
+              <div className="flex items-baseline gap-1" dir="ltr">
+                <span className="text-[17px] font-black font-mono text-[#111827] tabular-nums leading-tight">
                   {financialDataReady ? `$${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                 </span>
               </div>
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دينار (IQD)' : 'IQD'}</span>
-                <span className="text-[18px] font-black text-[#111827] tabular-nums leading-tight block">
+              <div className="flex items-baseline gap-1" dir="ltr">
+                <span className="text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight">
                   {financialDataReady ? kpis.totalBuyIQD.toLocaleString() : '—'}
                 </span>
+                <span className="text-[9.5px] font-mono font-bold text-slate-400">{isAr ? 'د.ع' : 'IQD'}</span>
               </div>
             </div>
           </div>
@@ -1058,24 +1056,23 @@ export const VisasPage: React.FC = () => {
         {/* Card 3: Net Profit */}
         <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'صافي أرباح التأشيرات' : 'Net Visa Profit'}</span>
+            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'الربح الصافي' : 'Net Profit'}</span>
             <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
               <TrendingUp size={20} strokeWidth={1.85} />
             </div>
           </div>
           <div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دولار ($)' : 'USD ($)'}</span>
-                <span className={`text-[18px] font-black tabular-nums leading-tight block ${kpis.totalProfitUSD >= 0 ? 'text-[#078B61]' : 'text-[#DC2626]'}`}>
+            <div className="grid grid-cols-2 gap-2 items-baseline">
+              <div className="flex items-baseline gap-1" dir="ltr">
+                <span className={`text-[17px] font-black font-mono tabular-nums leading-tight ${kpis.totalProfitUSD >= 0 ? 'text-[#078B61]' : 'text-[#DC2626]'}`}>
                   {!financialDataReady ? '—' : kpis.totalProfitUSD >= 0 ? `+$${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `-$${Math.abs(kpis.totalProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                 </span>
               </div>
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دينار (IQD)' : 'IQD'}</span>
-                <span className={`text-[18px] font-black tabular-nums leading-tight block ${kpis.totalProfitIQD >= 0 ? 'text-[#078B61]' : 'text-[#DC2626]'}`}>
+              <div className="flex items-baseline gap-1" dir="ltr">
+                <span className={`text-[16px] font-black font-mono tabular-nums leading-tight ${kpis.totalProfitIQD >= 0 ? 'text-[#078B61]' : 'text-[#DC2626]'}`}>
                   {!financialDataReady ? '—' : kpis.totalProfitIQD >= 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}`}
                 </span>
+                <span className="text-[9.5px] font-mono font-bold text-slate-400">{isAr ? 'د.ع' : 'IQD'}</span>
               </div>
             </div>
           </div>
@@ -1093,7 +1090,7 @@ export const VisasPage: React.FC = () => {
           title={isAr ? 'تصفية حسب حالة التدقيق' : 'Filter by audit status'}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'حالة التدقيق المالي' : 'Financial Audit'}</span>
+            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'التدقيق المالي' : 'Audit'}</span>
             <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
               <ShieldCheck size={20} strokeWidth={1.85} />
             </div>

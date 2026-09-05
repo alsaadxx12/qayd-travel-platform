@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { AccountsModule } from './accounts/accounts.module';
@@ -34,6 +36,10 @@ import { StatementPortalModule } from './statement-portal/statement-portal.modul
 
 @Module({
   imports: [
+    // حدُّ معدلٍ عام لكل عنوان: سقفٌ رحب لا يشعر به الاستعمال الطبيعي (بما فيه
+    // استطلاع السندات كل ثلاث ثوانٍ)، ويكبح الإغراق وتخمين كلمات المرور بالجملة.
+    // نقاط الدخول والتحقق لها سقوف أشد بمرسوم @Throttle في مكانها.
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 600 }]),
     PrismaModule,
     TenantsModule,
     SubscriptionsModule,
@@ -67,5 +73,6 @@ import { StatementPortalModule } from './statement-portal/statement-portal.modul
     FiscalYearsModule,
     StatementPortalModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

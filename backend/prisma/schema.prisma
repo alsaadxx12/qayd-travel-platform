@@ -353,7 +353,6 @@ model User {
   id                 String   @id @default(uuid())
   email              String   @unique
   password           String
-  plainPassword      String?  @map("plain_password") // For admin display only
   name               String
   phone              String?
   roleId             String?

@@ -498,39 +498,6 @@ export const HotelsPage: React.FC = () => {
             <Plus size={17} strokeWidth={2.4} />
             <span>{isAr ? '+ إصدار حجز فندقي جديد' : '+ New Hotel Booking'}</span>
           </button>
-
-          {/* Refresh Button */}
-          <button
-            type="button"
-            onClick={() => refetch()}
-            disabled={isLoading}
-            className="h-[44px] px-4 rounded-[9px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold text-[13px] flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
-            title={isAr ? 'تحديث' : 'Refresh'}
-          >
-            <RefreshCw size={16} className={isLoading ? 'animate-spin text-[#F45A0A]' : 'text-[#64748B]'} />
-            <span className="hidden sm:inline">{isAr ? 'تحديث' : 'Refresh'}</span>
-          </button>
-
-          {/* Columns Visibility & Width Settings Button */}
-          <button
-            type="button"
-            onClick={() => setIsColumnsModalOpen(true)}
-            className="h-[44px] px-3.5 rounded-[9px] bg-white border border-[#E2E8F0] hover:bg-orange-50 hover:text-[#F45A0A] hover:border-orange-200 text-[#334155] font-semibold text-[13px] flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-            title={isAr ? 'إعدادات وعرض الأعمدة' : 'Customize Columns'}
-          >
-            <Settings2 size={16} />
-            <span className="hidden sm:inline">{isAr ? 'إعدادات الأعمدة' : 'Columns'}</span>
-          </button>
-
-          {/* Excel Export Button */}
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="h-[44px] px-4 rounded-[9px] bg-orange-50/80 border border-orange-200 hover:bg-orange-100 text-[#F45A0A] font-semibold text-[13px] flex items-center gap-2 cursor-pointer shadow-2xs transition-all"
-          >
-            <FileSpreadsheet size={16} />
-            <span>Excel</span>
-          </button>
         </div>
       </div>
 
@@ -541,8 +508,8 @@ export const HotelsPage: React.FC = () => {
         {/* Card 1: Total Bookings */}
         <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">
-              {isAr ? 'إجمالي حجوزات الفنادق' : 'Total Hotel Bookings'}
+            <span className="text-[13px] font-bold text-slate-800">
+              {isAr ? 'الحجوزات' : 'Bookings'}
             </span>
             <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0 shadow-2xs">
               <Building2 size={20} strokeWidth={1.85} />
@@ -550,7 +517,7 @@ export const HotelsPage: React.FC = () => {
           </div>
 
           <div className="flex items-baseline justify-between">
-            <span className="text-[11px] font-medium text-[#64748B]">{isAr ? 'عدد الحجوزات:' : 'Total Count:'}</span>
+            <span className="text-[11px] font-medium text-slate-500">{isAr ? 'العدد:' : 'Count:'}</span>
             <span
               className="text-[20px] font-bold font-mono text-[#111827] tabular-nums leading-tight"
               style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
@@ -563,32 +530,31 @@ export const HotelsPage: React.FC = () => {
         {/* Card 2: Total Sales */}
         <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">
-              {isAr ? 'إجمالي المبيعات الفندقية' : 'Total Hotel Sales'}
+            <span className="text-[13px] font-bold text-slate-800">
+              {isAr ? 'المبيعات' : 'Sales'}
             </span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 shadow-2xs">
-              <ReceiptText size={20} strokeWidth={1.85} />
+            <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+              <ReceiptText size={18} strokeWidth={1.85} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'بالدولار' : 'USD'}</span>
+          <div className="grid grid-cols-2 gap-2 items-baseline">
+            <div className="flex items-baseline gap-1" dir="ltr">
               <span
-                className="text-[17px] font-bold font-mono text-emerald-800 tabular-nums leading-tight block"
+                className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight"
                 style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
               >
                 ${kpis.totalSalesUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <div>
-              <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'بالدينار' : 'IQD'}</span>
+            <div className="flex items-baseline gap-1" dir="ltr">
               <span
-                className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight block"
+                className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight"
                 style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
               >
-                {kpis.totalSalesIQD.toLocaleString()} <span className="text-[10px] text-[#64748B] font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
+                {kpis.totalSalesIQD.toLocaleString()}
               </span>
+              <span className="text-[10px] text-slate-400 font-bold font-mono">{isAr ? 'د.ع' : 'IQD'}</span>
             </div>
           </div>
         </div>
@@ -596,32 +562,31 @@ export const HotelsPage: React.FC = () => {
         {/* Card 3: Total Cost */}
         <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">
-              {isAr ? 'إجمالي المشتريات والتكلفة' : 'Total Hotel Cost'}
+            <span className="text-[13px] font-bold text-slate-800">
+              {isAr ? 'المشتريات' : 'Cost'}
             </span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-rose-50 text-rose-700 flex items-center justify-center shrink-0 shadow-2xs">
-              <Banknote size={20} strokeWidth={1.85} />
+            <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+              <Banknote size={18} strokeWidth={1.85} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'بالدولار' : 'USD'}</span>
+          <div className="grid grid-cols-2 gap-2 items-baseline">
+            <div className="flex items-baseline gap-1" dir="ltr">
               <span
-                className="text-[17px] font-bold font-mono text-rose-800 tabular-nums leading-tight block"
+                className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight"
                 style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
               >
                 ${kpis.totalCostUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <div>
-              <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'بالدينار' : 'IQD'}</span>
+            <div className="flex items-baseline gap-1" dir="ltr">
               <span
-                className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight block"
+                className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight"
                 style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
               >
-                {kpis.totalCostIQD.toLocaleString()} <span className="text-[10px] text-[#64748B] font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
+                {kpis.totalCostIQD.toLocaleString()}
               </span>
+              <span className="text-[10px] text-slate-400 font-bold font-mono">{isAr ? 'د.ع' : 'IQD'}</span>
             </div>
           </div>
         </div>
@@ -629,32 +594,31 @@ export const HotelsPage: React.FC = () => {
         {/* Card 4: Net Profit */}
         <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">
-              {isAr ? 'صافي الربح الفندقي' : 'Net Hotel Profit'}
+            <span className="text-[13px] font-bold text-slate-800">
+              {isAr ? 'الربح الصافي' : 'Net Profit'}
             </span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 shadow-2xs">
-              <TrendingUp size={20} strokeWidth={1.85} />
+            <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+              <TrendingUp size={18} strokeWidth={1.85} />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'بالدولار' : 'USD'}</span>
+          <div className="grid grid-cols-2 gap-2 items-baseline">
+            <div className="flex items-baseline gap-1" dir="ltr">
               <span
-                className="text-[17px] font-bold font-mono text-blue-800 tabular-nums leading-tight block"
+                className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight"
                 style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
               >
                 ${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <div>
-              <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'بالدينار' : 'IQD'}</span>
+            <div className="flex items-baseline gap-1" dir="ltr">
               <span
-                className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight block"
+                className="text-[16px] font-bold font-mono text-[#111827] tabular-nums leading-tight"
                 style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
               >
-                {kpis.totalProfitIQD.toLocaleString()} <span className="text-[10px] text-[#64748B] font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
+                {kpis.totalProfitIQD.toLocaleString()}
               </span>
+              <span className="text-[10px] text-slate-400 font-bold font-mono">{isAr ? 'د.ع' : 'IQD'}</span>
             </div>
           </div>
         </div>

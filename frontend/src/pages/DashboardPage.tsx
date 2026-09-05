@@ -110,7 +110,14 @@ export const DashboardPage: React.FC = () => {
 
   // ─── Real Database Data States ───
   const [loading, setLoading] = useState<boolean>(true);
-  const [lastSyncTime, setLastSyncTime] = useState<string>('');
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => {
+    const d = new Date();
+    const h = d.getHours();
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const h12 = String(h % 12 || 12).padStart(2, '0');
+    const ampm = h >= 12 ? 'م' : 'ص';
+    return `${h12}:${m} ${ampm}`;
+  });
   const hasDashboardDataRef = useRef(false);
 
   // Main KPI Figures
@@ -132,15 +139,6 @@ export const DashboardPage: React.FC = () => {
     paymentsUSD: 0,
   });
 
-  // Services Performance Metrics
-  const [servicesData, setServicesData] = useState({
-    tickets: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-    refunds: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-    groups: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-    visas: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-    hotels: { count: 0, salesIQD: 0, salesUSD: 0, costIQD: 0, costUSD: 0, profitIQD: 0, profitUSD: 0 },
-  });
-
   // Trend Chart Data
   const [trendChartData, setTrendChartData] = useState<Array<{
     date: string;
@@ -153,9 +151,6 @@ export const DashboardPage: React.FC = () => {
   const [exchangeSnapshots, setExchangeSnapshots] = useState<any[]>([]);
   const [hasRealOHLC, setHasRealOHLC] = useState<boolean>(false);
   const [exchangeChartPeriod, setExchangeChartPeriod] = useState<ExchangeChartPeriod>('YEAR');
-
-  // Recent Operations
-  const [recentOperations, setRecentOperations] = useState<any[]>([]);
 
   // Exchange Rates Hook & Adopted Rate
   const { data: marketRatesData, loading: ratesLoading } = useExchangeRate();
@@ -187,8 +182,6 @@ export const DashboardPage: React.FC = () => {
   const fetchDashboardData = useCallback(async () => {
     setLoading(!hasDashboardDataRef.current);
 
-    const vouchersPromise = apiRequest('/api/vouchers?limit=10', { ttl: 15_000 }).catch(() => []);
-
     try {
       // 1. Fetch lightweight dashboard summary instead of loading full tickets.
       const currentActiveBranch = localStorage.getItem('active_branch_id') || localStorage.getItem('activeBranchId') || 'ALL';
@@ -203,34 +196,19 @@ export const DashboardPage: React.FC = () => {
       });
 
       setKpis(summary.kpis);
-      setServicesData(summary.servicesData as any);
       setTrendChartData(summary.trendChartData || []);
       hasDashboardDataRef.current = true;
-      setLastSyncTime(new Date().toLocaleTimeString(isAr ? 'ar-IQ' : 'en-US', { hour: '2-digit', minute: '2-digit' }));
+      const now = new Date();
+      const h = now.getHours();
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const h12 = String(h % 12 || 12).padStart(2, '0');
+      const ampm = h >= 12 ? (isAr ? 'م' : 'PM') : (isAr ? 'ص' : 'AM');
+      setLastSyncTime(`${h12}:${m} ${ampm}`);
     } catch (error) {
       console.warn('Dashboard summary failed', error);
     } finally {
       setLoading(false);
     }
-
-    // 3. Fetch secondary widgets without blocking the dashboard KPIs.
-    const vouchersData = await vouchersPromise;
-
-    const vouchersList = Array.isArray(vouchersData) ? vouchersData : (vouchersData as any)?.data || [];
-    const ops = vouchersList.map((v: any) => ({
-      id: v.number || v.voucherNumber || v.id,
-      type: isAr ? (v.type === 'RECEIPT' ? 'سند قبض' : 'سند صرف') : (v.type === 'RECEIPT' ? 'Receipt Voucher' : 'Payment Voucher'),
-      category: v.type,
-      date: v.date || v.createdAt,
-      party: v.partnerName || v.partner?.name || v.party || '—',
-      debit: Number(v.amount || v.total || 0),
-      credit: 0,
-      currency: v.currency || 'IQD',
-      employee: v.createdBy?.name || v.createdByName || '—',
-      status: isAr ? (v.isPosted ? 'مرحّل' : 'مسودة') : (v.isPosted ? 'Posted' : 'Draft'),
-      path: '/vouchers',
-    }));
-    setRecentOperations(ops);
   }, [filters, isAr]);
 
   const fetchExchangeChartData = useCallback(async () => {
@@ -509,7 +487,7 @@ export const DashboardPage: React.FC = () => {
   // ─── ECharts Option for Main Chart ───
   const chartOption = useMemo(() => {
     const dates = processedExchangeData.map((d) => d.timeLabel);
-    const currSymbol = filters.currency === 'USD' ? '$' : isAr ? 'د.ع' : 'IQD';
+    const currSymbol = filters.currency === 'USD' ? 'USD' : 'IQD';
 
     const adoptedName = isAr ? 'السعر المعتمد للنظام' : 'System Adopted Rate';
     const baghdadName = isAr ? 'سوق بغداد' : 'Baghdad Market';
@@ -943,45 +921,12 @@ export const DashboardPage: React.FC = () => {
             <h1 className="font-bold text-[20px] text-[#111827] leading-tight">
               {isAr ? 'لوحة التحكم والمؤشرات المالية' : 'Dashboard & Financial Indicators'}
             </h1>
-            <p className="text-[13px] font-normal text-[#64748B] mt-0.5">
-              {isAr ? 'ملخص الأداء المالي وأسعار الأسواق وأهم العمليات' : 'Financial performance, market rates, and operations summary'}
-            </p>
           </div>
         </div>
 
-        {/* Action Controls: Filter Data Button, Refresh Icon Button, New Operation Dropdown */}
+        {/* Action Controls: New Operation Dropdown */}
         <div className="flex items-center gap-3 flex-wrap">
-          {/* 1. Filter Data Button */}
-          <button
-            type="button"
-            onClick={handleOpenFilterModal}
-            className={`h-[44px] px-4 rounded-[9px] border text-[13px] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              activeFiltersCount > 0
-                ? 'bg-orange-50 border-[#FED7AA] text-[#F45A0A]'
-                : 'bg-white border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155]'
-            }`}
-          >
-            <Filter size={16} />
-            <span>{isAr ? 'تصفية البيانات' : 'Filter Data'}</span>
-            {activeFiltersCount > 0 && (
-              <span className="w-5 h-5 rounded-full bg-[#F45A0A] text-white text-[11px] font-bold flex items-center justify-center">
-                {activeFiltersCount}
-              </span>
-            )}
-          </button>
-
-          {/* 2. Compact Refresh Button */}
-          <button
-            type="button"
-            onClick={fetchDashboardData}
-            disabled={loading}
-            className="h-[44px] px-3.5 rounded-[9px] bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold text-[13px] flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50"
-            title={isAr ? 'تحديث البيانات' : 'Refresh Data'}
-          >
-            <RefreshCw size={16} className={loading ? 'animate-spin text-[#F45A0A]' : 'text-[#64748B]'} />
-          </button>
-
-          {/* 3. Single "New Operation" Dropdown Button */}
+          {/* "New Operation" Dropdown Button */}
           <Menu shadow="md" width={220} position="bottom-end" radius="10px">
             <Menu.Target>
               <button
@@ -1056,7 +1001,7 @@ export const DashboardPage: React.FC = () => {
       )}
 
       {/* ══════════════════════════════════════════════════════════════
-          2. FOUR FINANCIAL KPI CARDS (Height 120px, Unified Design System)
+          2. FOUR FINANCIAL KPI CARDS (Height 116px, Unified Design System)
          ══════════════════════════════════════════════════════════════ */}
       <div
         className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:gap-7"
@@ -1065,27 +1010,24 @@ export const DashboardPage: React.FC = () => {
           : 'Total sales minus total cost minus customer refunds equals net profit'}
       >
         {/* Card 1: Total Sales */}
-        <div className="relative bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+        <div className="relative bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'إجمالي المبيعات' : 'Total Sales'}</span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-              <Banknote size={20} strokeWidth={1.85} />
+            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'المبيعات' : 'Sales'}</span>
+            <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+              <Banknote size={19} strokeWidth={1.85} />
             </div>
           </div>
-          <div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دولار ($)' : 'USD ($)'}</span>
-                <span className="text-[18px] font-black text-[#111827] tabular-nums leading-tight block">
-                  ${kpis.salesUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دينار (IQD)' : 'IQD'}</span>
-                <span className="text-[18px] font-black text-[#111827] tabular-nums leading-tight block">
-                  {kpis.salesIQD.toLocaleString()}
-                </span>
-              </div>
+          <div className="grid grid-cols-2 gap-2 items-baseline">
+            <div className="flex items-baseline gap-1" dir="ltr">
+              <span className="text-[18px] font-black text-[#111827] font-mono tabular-nums leading-tight" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                ${formatMoney(kpis.salesUSD)}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1" dir="ltr">
+              <span className="text-[18px] font-black text-[#111827] font-mono tabular-nums leading-tight" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                {kpis.salesIQD.toLocaleString('en-US')}
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 font-mono">{isAr ? 'د.ع' : 'IQD'}</span>
             </div>
           </div>
           <span
@@ -1097,27 +1039,24 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* Card 2: Total Buy Cost */}
-        <div className="relative bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+        <div className="relative bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'إجمالي المشتريات والتكلفة' : 'Total Cost'}</span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-              <ReceiptText size={20} strokeWidth={1.85} />
+            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'المشتريات' : 'Cost'}</span>
+            <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+              <ReceiptText size={19} strokeWidth={1.85} />
             </div>
           </div>
-          <div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دولار ($)' : 'USD ($)'}</span>
-                <span className="text-[18px] font-black text-[#111827] tabular-nums leading-tight block">
-                  ${kpis.buyCostUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دينار (IQD)' : 'IQD'}</span>
-                <span className="text-[18px] font-black text-[#111827] tabular-nums leading-tight block">
-                  {kpis.buyCostIQD.toLocaleString()}
-                </span>
-              </div>
+          <div className="grid grid-cols-2 gap-2 items-baseline">
+            <div className="flex items-baseline gap-1" dir="ltr">
+              <span className="text-[18px] font-black text-[#111827] font-mono tabular-nums leading-tight" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                ${formatMoney(kpis.buyCostUSD)}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1" dir="ltr">
+              <span className="text-[18px] font-black text-[#111827] font-mono tabular-nums leading-tight" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                {kpis.buyCostIQD.toLocaleString('en-US')}
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 font-mono">{isAr ? 'د.ع' : 'IQD'}</span>
             </div>
           </div>
           <span
@@ -1129,27 +1068,24 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* Card 3: Total Customer Refunds */}
-        <div className="relative bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+        <div className="relative bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'إجمالي المسترد للعملاء' : 'Customer Refunds'}</span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-              <RotateCcw size={20} strokeWidth={1.85} />
+            <span className="text-[13px] font-bold text-slate-800">{isAr ? 'المسترد' : 'Refunds'}</span>
+            <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+              <RotateCcw size={19} strokeWidth={1.85} />
             </div>
           </div>
-          <div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دولار ($)' : 'USD ($)'}</span>
-                <span className="text-[18px] font-black text-rose-600 tabular-nums leading-tight block">
-                  ${kpis.refundsUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دينار (IQD)' : 'IQD'}</span>
-                <span className="text-[18px] font-black text-rose-600 tabular-nums leading-tight block">
-                  {kpis.refundsIQD.toLocaleString()}
-                </span>
-              </div>
+          <div className="grid grid-cols-2 gap-2 items-baseline">
+            <div className="flex items-baseline gap-1" dir="ltr">
+              <span className="text-[18px] font-black text-[#111827] font-mono tabular-nums leading-tight" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                ${formatMoney(kpis.refundsUSD)}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1" dir="ltr">
+              <span className="text-[18px] font-black text-[#111827] font-mono tabular-nums leading-tight" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                {kpis.refundsIQD.toLocaleString('en-US')}
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 font-mono">{isAr ? 'د.ع' : 'IQD'}</span>
             </div>
           </div>
           <span
@@ -1161,27 +1097,30 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {/* Card 4: Net Profit (Equation Result) */}
-        <div className="bg-white border border-emerald-200 rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-emerald-300 transition-all">
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-orange-300 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-[13px] font-bold text-slate-800">{isAr ? 'الربح الصافي' : 'Net Profit'}</span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-emerald-50 text-[#078B61] flex items-center justify-center shrink-0">
-              <TrendingUp size={20} strokeWidth={1.85} />
+            <div className="w-[36px] h-[36px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
+              <TrendingUp size={19} strokeWidth={1.85} />
             </div>
           </div>
-          <div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دولار ($)' : 'USD ($)'}</span>
-                <span className={`text-[18px] font-black tabular-nums leading-tight block ${kpis.netProfitUSD >= 0 ? 'text-[#078B61]' : 'text-[#DC2626]'}`}>
-                  {kpis.netProfitUSD >= 0 ? `+$${kpis.netProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `-$${Math.abs(kpis.netProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] font-semibold text-[#64748B] block">{isAr ? 'دينار (IQD)' : 'IQD'}</span>
-                <span className={`text-[18px] font-black tabular-nums leading-tight block ${kpis.netProfitIQD >= 0 ? 'text-[#078B61]' : 'text-[#DC2626]'}`}>
-                  {kpis.netProfitIQD >= 0 ? `+${kpis.netProfitIQD.toLocaleString()}` : `-${Math.abs(kpis.netProfitIQD).toLocaleString()}`}
-                </span>
-              </div>
+          <div className="grid grid-cols-2 gap-2 items-baseline">
+            <div className="flex items-baseline gap-1" dir="ltr">
+              <span
+                className="text-[18px] font-black font-mono tabular-nums leading-tight text-[#111827]"
+                style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
+              >
+                {kpis.netProfitUSD >= 0 ? `+$${formatMoney(kpis.netProfitUSD)}` : `-$${formatMoney(Math.abs(kpis.netProfitUSD))}`}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1" dir="ltr">
+              <span
+                className="text-[18px] font-black font-mono tabular-nums leading-tight text-[#111827]"
+                style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
+              >
+                {kpis.netProfitIQD >= 0 ? `+${kpis.netProfitIQD.toLocaleString('en-US')}` : `-${Math.abs(kpis.netProfitIQD).toLocaleString('en-US')}`}
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 font-mono">{isAr ? 'د.ع' : 'IQD'}</span>
             </div>
           </div>
         </div>
@@ -1192,7 +1131,7 @@ export const DashboardPage: React.FC = () => {
          ══════════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Baghdad Card */}
-        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-[34px] h-[34px] rounded-[9px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
@@ -1200,24 +1139,32 @@ export const DashboardPage: React.FC = () => {
               </div>
               <span className="text-[13px] font-bold text-slate-800">{isAr ? 'سوق بغداد' : 'Baghdad Market'}</span>
             </div>
-            <span className="text-[10.5px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-              {isAr ? 'هامش:' : 'Spread:'} {formatMoney(currentBaghdadSell - currentBaghdadBuy)} IQD
+            <span className="text-[11px] font-mono font-medium text-slate-400 select-none" dir="ltr">
+              Spr: {formatMoney(currentBaghdadSell - currentBaghdadBuy)} IQD
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
-            <div>
-              <span className="text-[10.5px] text-[#64748B] block">{isAr ? 'شراء' : 'Buy'}</span>
-              <span className="text-[15px] font-bold font-mono text-slate-900 tabular-nums">{formatMoney(currentBaghdadBuy)}</span>
+            <div className="flex items-center justify-between bg-slate-50/80 px-2 py-1 rounded-lg border border-slate-200/70">
+              <span className="text-[10px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                {isAr ? 'شراء' : 'Buy'}
+              </span>
+              <span className="text-[13.5px] font-bold font-mono text-slate-900 tabular-nums">
+                {formatMoney(currentBaghdadBuy)}
+              </span>
             </div>
-            <div className="text-left" dir="ltr">
-              <span className={`text-[10.5px] text-[#64748B] block ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'بيع' : 'Sell'}</span>
-              <span className="text-[15px] font-bold font-mono text-[#10B981] tabular-nums">{formatMoney(currentBaghdadSell)}</span>
+            <div className="flex items-center justify-between bg-orange-50/60 px-2 py-1 rounded-lg border border-orange-200/70">
+              <span className="text-[10px] font-bold text-[#EA580C] bg-white px-1.5 py-0.5 rounded border border-orange-200 shadow-2xs">
+                {isAr ? 'بيع' : 'Sell'}
+              </span>
+              <span className="text-[13.5px] font-black font-mono text-[#EA580C] tabular-nums">
+                {formatMoney(currentBaghdadSell)}
+              </span>
             </div>
           </div>
         </div>
 
         {/* Northern Card */}
-        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-[34px] h-[34px] rounded-[9px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
@@ -1225,24 +1172,32 @@ export const DashboardPage: React.FC = () => {
               </div>
               <span className="text-[13px] font-bold text-slate-800">{isAr ? 'سوق الشمال (أربيل)' : 'Northern (Erbil)'}</span>
             </div>
-            <span className="text-[10.5px] font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">
-              {isAr ? 'هامش:' : 'Spread:'} {formatMoney(currentNorthSell - currentNorthBuy)} IQD
+            <span className="text-[11px] font-mono font-medium text-slate-400 select-none" dir="ltr">
+              Spr: {formatMoney(currentNorthSell - currentNorthBuy)} IQD
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
-            <div>
-              <span className="text-[10.5px] text-[#64748B] block">{isAr ? 'شراء' : 'Buy'}</span>
-              <span className="text-[15px] font-bold font-mono text-slate-900 tabular-nums">{formatMoney(currentNorthBuy)}</span>
+            <div className="flex items-center justify-between bg-slate-50/80 px-2 py-1 rounded-lg border border-slate-200/70">
+              <span className="text-[10px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                {isAr ? 'شراء' : 'Buy'}
+              </span>
+              <span className="text-[13.5px] font-bold font-mono text-slate-900 tabular-nums">
+                {formatMoney(currentNorthBuy)}
+              </span>
             </div>
-            <div className="text-left" dir="ltr">
-              <span className={`text-[10.5px] text-[#64748B] block ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'بيع' : 'Sell'}</span>
-              <span className="text-[15px] font-bold font-mono text-[#3B82F6] tabular-nums">{formatMoney(currentNorthSell)}</span>
+            <div className="flex items-center justify-between bg-orange-50/60 px-2 py-1 rounded-lg border border-orange-200/70">
+              <span className="text-[10px] font-bold text-[#EA580C] bg-white px-1.5 py-0.5 rounded border border-orange-200 shadow-2xs">
+                {isAr ? 'بيع' : 'Sell'}
+              </span>
+              <span className="text-[13.5px] font-black font-mono text-[#EA580C] tabular-nums">
+                {formatMoney(currentNorthSell)}
+              </span>
             </div>
           </div>
         </div>
 
         {/* Southern Card */}
-        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-[34px] h-[34px] rounded-[9px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
@@ -1250,43 +1205,59 @@ export const DashboardPage: React.FC = () => {
               </div>
               <span className="text-[13px] font-bold text-slate-800">{isAr ? 'سوق الجنوب (البصرة)' : 'Southern (Basra)'}</span>
             </div>
-            <span className="text-[10.5px] font-mono font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200/60">
-              {isAr ? 'هامش:' : 'Spread:'} {formatMoney(currentSouthSell - currentSouthBuy)} IQD
+            <span className="text-[11px] font-mono font-medium text-slate-400 select-none" dir="ltr">
+              Spr: {formatMoney(currentSouthSell - currentSouthBuy)} IQD
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
-            <div>
-              <span className="text-[10.5px] text-[#64748B] block">{isAr ? 'شراء' : 'Buy'}</span>
-              <span className="text-[15px] font-bold font-mono text-slate-900 tabular-nums">{formatMoney(currentSouthBuy)}</span>
+            <div className="flex items-center justify-between bg-slate-50/80 px-2 py-1 rounded-lg border border-slate-200/70">
+              <span className="text-[10px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                {isAr ? 'شراء' : 'Buy'}
+              </span>
+              <span className="text-[13.5px] font-bold font-mono text-slate-900 tabular-nums">
+                {formatMoney(currentSouthBuy)}
+              </span>
             </div>
-            <div className="text-left" dir="ltr">
-              <span className={`text-[10.5px] text-[#64748B] block ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'بيع' : 'Sell'}</span>
-              <span className="text-[15px] font-bold font-mono text-[#8B5CF6] tabular-nums">{formatMoney(currentSouthSell)}</span>
+            <div className="flex items-center justify-between bg-orange-50/60 px-2 py-1 rounded-lg border border-orange-200/70">
+              <span className="text-[10px] font-bold text-[#EA580C] bg-white px-1.5 py-0.5 rounded border border-orange-200 shadow-2xs">
+                {isAr ? 'بيع' : 'Sell'}
+              </span>
+              <span className="text-[13.5px] font-black font-mono text-[#EA580C] tabular-nums">
+                {formatMoney(currentSouthSell)}
+              </span>
             </div>
           </div>
         </div>
 
         {/* System Adopted Rate Card */}
-        <div className="bg-white border border-[#FED7AA] bg-orange-50/15 rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[120px] hover:border-orange-300 transition-all">
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-3.5 shadow-2xs flex flex-col justify-between h-[120px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-[34px] h-[34px] rounded-[9px] bg-[#FFF3E8] text-[#F45A0A] border border-orange-200/60 flex items-center justify-center font-bold shrink-0">
+              <div className="w-[34px] h-[34px] rounded-[9px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shrink-0">
                 <Scale size={17} strokeWidth={2} />
               </div>
-              <span className="text-[13px] font-bold text-[#C2410C]">{isAr ? 'السعر المعتمد للنظام' : 'System Adopted Rate'}</span>
+              <span className="text-[13px] font-bold text-slate-800">{isAr ? 'السعر المعتمد للنظام' : 'System Adopted Rate'}</span>
             </div>
-            <span className="text-[10.5px] font-mono font-bold text-[#C2410C] bg-orange-100/80 px-2 py-0.5 rounded-md border border-orange-200/60">
-              {isAr ? 'مرجع:' : 'Ref:'} {formatMoney(baseAdoptedRate)}
+            <span className="text-[11px] font-mono font-medium text-slate-400 select-none" dir="ltr">
+              Ref: {formatMoney(baseAdoptedRate)} IQD
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-orange-100">
-            <div>
-              <span className="text-[10.5px] text-[#64748B] block">{isAr ? 'المرجع المالي' : 'Base Rate'}</span>
-              <span className="text-[15px] font-bold font-mono text-slate-900 tabular-nums">{formatMoney(baseAdoptedRate)}</span>
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+            <div className="flex items-center justify-between bg-slate-50/80 px-2 py-1 rounded-lg border border-slate-200/70">
+              <span className="text-[10px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                {isAr ? 'المرجع' : 'Base'}
+              </span>
+              <span className="text-[13.5px] font-bold font-mono text-slate-900 tabular-nums">
+                {formatMoney(baseAdoptedRate)}
+              </span>
             </div>
-            <div className="text-left" dir="ltr">
-              <span className={`text-[10.5px] text-[#64748B] block ${isAr ? 'text-right' : 'text-left'}`}>{isAr ? 'المعتمد الفعلي' : 'Actual Adopted'}</span>
-              <span className="text-[17px] font-black font-mono text-[#F97316] tabular-nums">{formatMoney(adoptedRate)} <span className="text-[10px] font-mono font-normal text-slate-500">IQD</span></span>
+            <div className="flex items-center justify-between bg-orange-50/70 px-2 py-1 rounded-lg border border-orange-200/70">
+              <span className="text-[10px] font-bold text-[#EA580C] bg-white px-1.5 py-0.5 rounded border border-orange-200 shadow-2xs">
+                {isAr ? 'المعتمد' : 'Adopted'}
+              </span>
+              <span className="text-[13.5px] font-black font-mono text-[#EA580C] tabular-nums">
+                {formatMoney(adoptedRate)} <span className="text-[9.5px] font-bold text-slate-400">IQD</span>
+              </span>
             </div>
           </div>
         </div>
@@ -1305,9 +1276,6 @@ export const DashboardPage: React.FC = () => {
                 <h2 className="text-[14px] font-bold text-slate-900 leading-tight">
                   {isAr ? 'المخطط المالي ومقارنة أسعار الصرف' : 'Financial Trend & Exchange Rates Chart'}
                 </h2>
-                <span className="text-[11.5px] text-[#64748B]">
-                  {isAr ? 'عرض وتتبع تحركات الأسعار الفعلية والانحراف المالي' : 'Real-time exchange tracking and financial deviations'}
-                </span>
               </div>
             </div>
 
@@ -1334,8 +1302,8 @@ export const DashboardPage: React.FC = () => {
                 ))}
               </div>
 
-              <div className="text-xs text-slate-500 font-mono whitespace-nowrap">
-                {isAr ? `آخر مزامنة: ${lastSyncTime || '—'}` : `Last sync: ${lastSyncTime || '—'}`}
+              <div className="text-xs text-slate-500 font-mono tabular-nums whitespace-nowrap" style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}>
+                {isAr ? `آخر تحديث: ${lastSyncTime || '—'}` : `Last sync: ${lastSyncTime || '—'}`}
               </div>
             </div>
           </div>
@@ -1359,9 +1327,6 @@ export const DashboardPage: React.FC = () => {
                 <h3 className="text-[14px] font-bold text-slate-900 leading-tight">
                   {isAr ? 'أرباح فرق السعر وهامش الأمان' : 'Spread Profit & Safety Margin'}
                 </h3>
-                <span className="text-[11.5px] text-[#64748B]">
-                  {isAr ? 'أرباح فرق السعر المعتمد وسعر السوق المستهدف' : 'Gain between adopted rate & target market'}
-                </span>
               </div>
             </div>
           </div>
@@ -1396,210 +1361,7 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════
-          5. TOURISM SERVICES PERFORMANCE (4 Clean Cards)
-         ══════════════════════════════════════════════════════════════ */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <Layers size={17} className="text-[#F45A0A]" />
-            <h2 className="text-[14px] font-bold text-slate-900">
-              {isAr ? 'أداء الخدمات السياحية والتذاكر' : 'Services & Tickets Performance'}
-            </h2>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Flight Tickets */}
-          <div
-            onClick={() => handleExecuteAction('/tickets', 'tickets', isAr ? 'تذاكر الطيران' : 'Flight Tickets')}
-            className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 flex flex-col justify-between hover:border-orange-300 transition-all cursor-pointer shadow-2xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-[36px] h-[36px] rounded-[10px] bg-orange-50 text-[#F45A0A] flex items-center justify-center shrink-0 font-bold">
-                  <PlaneTakeoff size={18} />
-                </div>
-                <div>
-                  <div className="text-[13px] font-bold text-slate-900">{isAr ? 'تذاكر الطيران' : 'Flight Tickets'}</div>
-                  <div className="text-[11px] text-slate-400 font-mono">{servicesData.tickets.count} {isAr ? 'عملية' : 'ops'}</div>
-                </div>
-              </div>
-              <ChevronLeft size={16} className={`text-slate-300 ${direction === 'ltr' ? 'rotate-180' : ''}`} />
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 space-y-1 text-xs font-mono">
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="font-sans text-[11px]">{isAr ? 'المبيعات:' : 'Sales:'}</span>
-                <span className="font-bold text-slate-900">${formatMoney(servicesData.tickets.salesUSD)}</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="font-sans text-[11px]">{isAr ? 'صافي الربح:' : 'Profit:'}</span>
-                <span className="font-bold text-emerald-700">+${formatMoney(servicesData.tickets.profitUSD)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Group Tickets */}
-          <div
-            onClick={() => handleExecuteAction('/groups', 'groups', isAr ? 'تذاكر الكروبات' : 'Group Tickets')}
-            className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 flex flex-col justify-between hover:border-orange-300 transition-all cursor-pointer shadow-2xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-[36px] h-[36px] rounded-[10px] bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 font-bold">
-                  <UsersRound size={18} />
-                </div>
-                <div>
-                  <div className="text-[13px] font-bold text-slate-900">{isAr ? 'تذاكر الكروبات' : 'Group Tickets'}</div>
-                  <div className="text-[11px] text-slate-400 font-mono">0 {isAr ? 'عملية' : 'ops'}</div>
-                </div>
-              </div>
-              <ChevronLeft size={16} className={`text-slate-300 ${direction === 'ltr' ? 'rotate-180' : ''}`} />
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 space-y-1 text-xs font-mono">
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="font-sans text-[11px]">{isAr ? 'المبيعات:' : 'Sales:'}</span>
-                <span className="font-bold text-slate-900">$0.00</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="font-sans text-[11px]">{isAr ? 'صافي الربح:' : 'Profit:'}</span>
-                <span className="font-bold text-slate-900">$0.00</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: Visas */}
-          <div
-            onClick={() => handleExecuteAction('/visas', 'visas', isAr ? 'الفيزا والتأشيرات' : 'Visas')}
-            className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 flex flex-col justify-between hover:border-orange-300 transition-all cursor-pointer shadow-2xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-[36px] h-[36px] rounded-[10px] bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 font-bold">
-                  <LucideBadgeCheck size={18} />
-                </div>
-                <div>
-                  <div className="text-[13px] font-bold text-slate-900">{isAr ? 'الفيزا والتأشيرات' : 'Visas'}</div>
-                  <div className="text-[11px] text-slate-400 font-mono">0 {isAr ? 'عملية' : 'ops'}</div>
-                </div>
-              </div>
-              <ChevronLeft size={16} className={`text-slate-300 ${direction === 'ltr' ? 'rotate-180' : ''}`} />
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 space-y-1 text-xs font-mono">
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="font-sans text-[11px]">{isAr ? 'المبيعات:' : 'Sales:'}</span>
-                <span className="font-bold text-slate-900">$0.00</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="font-sans text-[11px]">{isAr ? 'صافي الربح:' : 'Profit:'}</span>
-                <span className="font-bold text-slate-900">$0.00</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: Hotels */}
-          <div
-            onClick={() => handleExecuteAction('/hotels', 'hotels', isAr ? 'حجوزات الفنادق' : 'Hotels')}
-            className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 flex flex-col justify-between hover:border-orange-300 transition-all cursor-pointer shadow-2xs"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-[36px] h-[36px] rounded-[10px] bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 font-bold">
-                  <Building2 size={18} />
-                </div>
-                <div>
-                  <div className="text-[13px] font-bold text-slate-900">{isAr ? 'حجوزات الفنادق' : 'Hotel Bookings'}</div>
-                  <div className="text-[11px] text-slate-400 font-mono">0 {isAr ? 'عملية' : 'ops'}</div>
-                </div>
-              </div>
-              <ChevronLeft size={16} className={`text-slate-300 ${direction === 'ltr' ? 'rotate-180' : ''}`} />
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 space-y-1 text-xs font-mono">
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="font-sans text-[11px]">{isAr ? 'المبيعات:' : 'Sales:'}</span>
-                <span className="font-bold text-slate-900">$0.00</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span className="font-sans text-[11px]">{isAr ? 'صافي الربح:' : 'Profit:'}</span>
-                <span className="font-bold text-slate-900">$0.00</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ══════════════════════════════════════════════════════════════
-          6. RECENT FINANCIAL OPERATIONS & VOUCHERS TABLE
-         ══════════════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-[14px] border border-[#E5E7EB] p-4 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-          <div className="flex items-center gap-2">
-            <FileText size={17} className="text-[#F45A0A]" />
-            <h2 className="text-[14px] font-bold text-slate-900">
-              {isAr ? 'أحدث السندات والعمليات المالية' : 'Recent Financial Operations & Vouchers'}
-            </h2>
-          </div>
-        </div>
-
-        {recentOperations.length === 0 ? (
-          <div className="h-[140px] flex flex-col items-center justify-center text-center text-xs text-slate-400 gap-1.5">
-            <FileText size={22} className="text-slate-300" />
-            <span>{isAr ? 'لا توجد سندات مسجلة خلال هذه الفترة' : 'No vouchers recorded for this period'}</span>
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-[10px] border border-[#E5E7EB]">
-            <table className={`w-full text-${direction === 'rtl' ? 'right' : 'left'} border-collapse text-[13px]`}>
-              <thead>
-                <tr className="h-[44px] bg-[#F8FAFC] border-b border-[#E5E7EB] text-[#475569] font-semibold text-[12.5px]">
-                  <th className="px-3.5 py-2 whitespace-nowrap">{isAr ? 'رقم السند' : 'Voucher #'}</th>
-                  <th className="px-3.5 py-2 whitespace-nowrap">{isAr ? 'النوع' : 'Type'}</th>
-                  <th className="px-3.5 py-2 whitespace-nowrap">{isAr ? 'التاريخ' : 'Date'}</th>
-                  <th className="px-3.5 py-2 whitespace-nowrap">{isAr ? 'الطرف / الحساب' : 'Party / Account'}</th>
-                  <th className="px-3.5 py-2 whitespace-nowrap">{isAr ? 'المبلغ' : 'Amount'}</th>
-                  <th className="px-3.5 py-2 whitespace-nowrap">{isAr ? 'الموظف' : 'User'}</th>
-                  <th className="px-3.5 py-2 whitespace-nowrap">{isAr ? 'الحالة' : 'Status'}</th>
-                  <th className="px-3.5 py-2 whitespace-nowrap text-center w-14">{isAr ? 'عرض' : 'View'}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#F1F5F9]">
-                {recentOperations.map((op, idx) => (
-                  <tr key={`${op.id}-${idx}`} className="h-[56px] hover:bg-[#FFFDFC] transition-colors">
-                    <td className="px-3.5 py-2.5 font-mono font-bold text-slate-900 text-[13px]">{op.id}</td>
-                    <td className="px-3.5 py-2.5 font-semibold text-slate-700 text-xs">{op.type}</td>
-                    <td className="px-3.5 py-2.5 font-mono text-slate-500 text-xs">
-                      {op.date ? new Date(op.date).toLocaleDateString('en-GB') : '—'}
-                    </td>
-                    <td className="px-3.5 py-2.5 font-medium text-slate-800 text-xs truncate max-w-[180px]">{op.party}</td>
-                    <td className="px-3.5 py-2.5 font-mono font-bold text-slate-900 text-xs" dir="ltr">
-                      {formatMoney(op.debit)} {op.currency}
-                    </td>
-                    <td className="px-3.5 py-2.5 text-slate-600 text-xs">{op.employee}</td>
-                    <td className="px-3.5 py-2.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {op.status}
-                      </span>
-                    </td>
-                    <td className="px-3.5 py-2.5 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleExecuteAction(op.path, op.category?.toLowerCase() || 'vouchers', op.type)}
-                        className="p-1 rounded-md hover:bg-slate-100 text-slate-500 hover:text-[#F45A0A] transition-colors cursor-pointer"
-                        title={isAr ? 'عرض السند' : 'View Voucher'}
-                      >
-                        <Eye size={15} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
 
       {/* ══════════════════════════════════════════════════════════════
           7. UNIFIED FILTER MODAL / SHEET (Centralized Filtering)

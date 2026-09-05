@@ -772,11 +772,11 @@ export const VouchersPage: React.FC = () => {
                 <ArrowDownLeft size={18} />
               </div>
               <div>
-                <span className="text-[11.5px] font-bold text-slate-500 block leading-tight">
-                  {isAr ? 'إجمالي المقبوضات' : 'Total Receipts'}
+                <span className="text-[12.5px] font-bold text-slate-800 block leading-tight">
+                  {isAr ? 'المقبوضات' : 'Receipts'}
                 </span>
                 <span className="text-[10px] text-emerald-600 font-bold">
-                  {kpis.receiptsCount} {isAr ? 'سند قبض نشط' : 'Active Receipts'}
+                  {kpis.receiptsCount} {isAr ? 'سند قبض' : 'Receipts'}
                 </span>
               </div>
             </div>
@@ -785,20 +785,14 @@ export const VouchersPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="mt-3 pt-2 border-t border-slate-100 space-y-1">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[11px] font-bold text-slate-400">{isAr ? 'بالدينار:' : 'IQD:'}</span>
-              <span className="font-mono font-black text-base text-slate-950 tabular-nums">
-                {kpis.totalReceiptsIQD.toLocaleString()} <span className="text-[10px] text-slate-400 font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
-              </span>
-            </div>
+          <div className="mt-3 pt-2 border-t border-slate-100 flex items-baseline justify-between gap-2 flex-wrap" dir="ltr">
+            <span className="font-mono font-black text-base text-slate-950 tabular-nums">
+              {kpis.totalReceiptsIQD.toLocaleString()} <span className="text-[10px] text-slate-400 font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
+            </span>
             {kpis.totalReceiptsUSD > 0 && (
-              <div className="flex items-baseline justify-between text-blue-700">
-                <span className="text-[11px] font-bold text-slate-400">{isAr ? 'بالدولار:' : 'USD:'}</span>
-                <span className="font-mono font-black text-xs tabular-nums">
-                  ${kpis.totalReceiptsUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
+              <span className="font-mono font-black text-xs text-blue-700 tabular-nums">
+                ${kpis.totalReceiptsUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
             )}
           </div>
         </div>
@@ -811,11 +805,11 @@ export const VouchersPage: React.FC = () => {
                 <ArrowUpRight size={18} />
               </div>
               <div>
-                <span className="text-[11.5px] font-bold text-slate-500 block leading-tight">
-                  {isAr ? 'إجمالي المدفوعات' : 'Total Payments'}
+                <span className="text-[12.5px] font-bold text-slate-800 block leading-tight">
+                  {isAr ? 'المدفوعات' : 'Payments'}
                 </span>
                 <span className="text-[10px] text-rose-600 font-bold">
-                  {kpis.paymentsCount} {isAr ? 'سند صرف نشط' : 'Active Payments'}
+                  {kpis.paymentsCount} {isAr ? 'سند صرف' : 'Payments'}
                 </span>
               </div>
             </div>
@@ -824,20 +818,14 @@ export const VouchersPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="mt-3 pt-2 border-t border-slate-100 space-y-1">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[11px] font-bold text-slate-400">{isAr ? 'بالدينار:' : 'IQD:'}</span>
-              <span className="font-mono font-black text-base text-slate-950 tabular-nums">
-                {kpis.totalPaymentsIQD.toLocaleString()} <span className="text-[10px] text-slate-400 font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
-              </span>
-            </div>
+          <div className="mt-3 pt-2 border-t border-slate-100 flex items-baseline justify-between gap-2 flex-wrap" dir="ltr">
+            <span className="font-mono font-black text-base text-slate-950 tabular-nums">
+              {kpis.totalPaymentsIQD.toLocaleString()} <span className="text-[10px] text-slate-400 font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
+            </span>
             {kpis.totalPaymentsUSD > 0 && (
-              <div className="flex items-baseline justify-between text-blue-700">
-                <span className="text-[11px] font-bold text-slate-400">{isAr ? 'بالدولار:' : 'USD:'}</span>
-                <span className="font-mono font-black text-xs tabular-nums">
-                  ${kpis.totalPaymentsUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
+              <span className="font-mono font-black text-xs text-blue-700 tabular-nums">
+                ${kpis.totalPaymentsUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
             )}
           </div>
         </div>
@@ -850,11 +838,11 @@ export const VouchersPage: React.FC = () => {
                 {kpis.netCashFlowIQD >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
               </div>
               <div>
-                <span className="text-[11.5px] font-bold text-slate-500 block leading-tight">
-                  {isAr ? 'صافي حركة النقد' : 'Net Cash Flow'}
+                <span className="text-[12.5px] font-bold text-slate-800 block leading-tight">
+                  {isAr ? 'صافي النقد' : 'Net Cash'}
                 </span>
                 <span className={`text-[10px] font-bold ${kpis.netCashFlowIQD >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {isAr ? 'الفارق النقدي' : 'Cash Variance'}
+                  {isAr ? 'الفارق' : 'Variance'}
                 </span>
               </div>
             </div>
@@ -863,20 +851,14 @@ export const VouchersPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="mt-3 pt-2 border-t border-slate-100 space-y-1">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[11px] font-bold text-slate-400">{isAr ? 'بالدينار:' : 'IQD:'}</span>
-              <span className={`font-mono font-black text-base tabular-nums ${kpis.netCashFlowIQD >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {kpis.netCashFlowIQD.toLocaleString()} <span className="text-[10px] text-slate-400 font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
-              </span>
-            </div>
+          <div className="mt-3 pt-2 border-t border-slate-100 flex items-baseline justify-between gap-2 flex-wrap" dir="ltr">
+            <span className={`font-mono font-black text-base tabular-nums ${kpis.netCashFlowIQD >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {kpis.netCashFlowIQD.toLocaleString()} <span className="text-[10px] text-slate-400 font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
+            </span>
             {kpis.netCashFlowUSD !== 0 && (
-              <div className="flex items-baseline justify-between text-blue-700">
-                <span className="text-[11px] font-bold text-slate-400">{isAr ? 'بالدولار:' : 'USD:'}</span>
-                <span className="font-mono font-black text-xs tabular-nums">
-                  ${kpis.netCashFlowUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
+              <span className="font-mono font-black text-xs text-blue-700 tabular-nums">
+                ${kpis.netCashFlowUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
             )}
           </div>
         </div>
@@ -889,11 +871,11 @@ export const VouchersPage: React.FC = () => {
                 <Layers size={18} />
               </div>
               <div>
-                <span className="text-[11.5px] font-bold text-slate-500 block leading-tight">
-                  {isAr ? 'إجمالي السندات المالية' : 'Total Financial Vouchers'}
+                <span className="text-[12.5px] font-bold text-slate-800 block leading-tight">
+                  {isAr ? 'السندات' : 'Vouchers'}
                 </span>
                 <span className="text-[10px] text-slate-600 font-bold">
-                  {kpis.totalVouchersCount} {isAr ? 'سند معتمد' : 'Posted Vouchers'}
+                  {kpis.totalVouchersCount} {isAr ? 'سند معتمد' : 'Posted'}
                 </span>
               </div>
             </div>
@@ -903,7 +885,7 @@ export const VouchersPage: React.FC = () => {
           </div>
 
           <div className="mt-3 pt-2 border-t border-slate-100 flex items-baseline justify-between">
-            <span className="text-[11px] font-bold text-slate-400">{isAr ? 'إجمالي السجلات:' : 'Total Records:'}</span>
+            <span className="text-[11px] font-medium text-slate-400">{isAr ? 'العدد:' : 'Count:'}</span>
             <span className="font-mono font-black text-base text-slate-950 tabular-nums">
               {kpis.totalVouchersCount} <span className="text-xs text-slate-400 font-semibold">{isAr ? 'سند' : 'vouchers'}</span>
             </span>

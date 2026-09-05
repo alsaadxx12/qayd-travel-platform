@@ -1832,7 +1832,6 @@ export class TenantsService {
             email: dto.ownerEmail.toLowerCase().trim(),
             name: dto.ownerName,
             password: hashedPassword,
-            plainPassword: rawPassword,
             phone: dto.ownerPhone || dto.phone,
             companyId: company.id,
             roleId: adminRole.id,
@@ -1845,7 +1844,6 @@ export class TenantsService {
           where: { id: user.id },
           data: {
             password: hashedPassword,
-            plainPassword: rawPassword,
             companyId: company.id,
             roleId: adminRole.id,
             isActive: true,

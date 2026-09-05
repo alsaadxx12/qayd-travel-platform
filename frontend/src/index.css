@@ -33,6 +33,10 @@ div[class*="mantine-Notification"] {
   --border-radius-base: 6px;
 }
 
+html {
+  font-size: 14.5px;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -369,7 +373,7 @@ aside ::-webkit-scrollbar-button {
 .mantine-Menu-item {
   border-radius: 5px !important;
   padding: 7px 10px !important;
-  font-size: 12px !important;
+  font-size: 0.78rem !important;
   font-weight: 600 !important;
   color: #334155 !important;
   font-family: var(--font-arabic) !important;
@@ -404,7 +408,7 @@ aside ::-webkit-scrollbar-button {
   color: #ea580c;
   font-weight: 900;
   margin-inline-end: 6px;
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 
 /* ─── Feedback & Support Dialog Content Scroll System ─── */

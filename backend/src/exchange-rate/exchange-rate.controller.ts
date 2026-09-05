@@ -1,5 +1,6 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ExchangeRateService } from './exchange-rate.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('exchange-rate')
 export class ExchangeRateController {
@@ -26,7 +27,9 @@ export class ExchangeRateController {
   }
 
   /** Run AI Market Intelligence Advisor powered by OpenAI */
+  // خلف الحارس: كل نداءٍ هنا يستهلك من رصيد OpenAI، فلا يُترك لمجهول.
   @Get('ai-advisor')
+  @UseGuards(JwtAuthGuard)
   async getAIAdvisor(
     @Query('period') period?: string,
     @Query('adoptedRate') adoptedRate?: string,

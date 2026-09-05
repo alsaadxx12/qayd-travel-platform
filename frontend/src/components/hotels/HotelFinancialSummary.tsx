@@ -1,10 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Building2,
-  Users,
   Coins,
-  ChevronDown,
-  TrendingUp,
   MapPin,
   Calendar,
 } from 'lucide-react';
@@ -55,7 +52,6 @@ export const HotelFinancialSummary: React.FC<HotelFinancialSummaryProps> = ({
   salesCashboxName,
   purchaseCashboxName: _purchaseCashboxName,
 }) => {
-  const [showAccountingDetails, setShowAccountingDetails] = useState(false);
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
 
@@ -192,77 +188,6 @@ export const HotelFinancialSummary: React.FC<HotelFinancialSummaryProps> = ({
             </span>
           </div>
         </div>
-      </div>
-
-      {/* ── 3. CONTAINER 3: أطراف الحسابات ── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-3 space-y-1.5">
-        <div className="flex items-center justify-between text-[11.5px] font-bold text-slate-900 pb-1.5 border-b border-slate-100">
-          <span className="flex items-center gap-1">
-            <Users size={13} className="text-[#F45A0A]" />
-            <span>{isAr ? 'أطراف الحسابات' : 'Parties'}</span>
-          </span>
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
-            {paymentType === 'CASH' ? (isAr ? 'نقدي' : 'Cash') : paymentType === 'CREDIT' ? (isAr ? 'آجل' : 'Credit') : (isAr ? 'إلكتروني' : 'Card')}
-          </span>
-        </div>
-
-        <div className="space-y-1 text-[11px] text-slate-700">
-          <div className="flex items-center justify-between px-2 py-1 rounded bg-slate-50 border border-slate-100">
-            <span className="text-slate-500 font-medium">{isAr ? 'العميل:' : 'Customer:'}</span>
-            <span className="font-bold text-slate-900 truncate max-w-[150px]">{customerName || 'عميل عام'}</span>
-          </div>
-
-          <div className="flex items-center justify-between px-2 py-1 rounded bg-slate-50 border border-slate-100">
-            <span className="text-slate-500 font-medium">{isAr ? 'المورد:' : 'Supplier:'}</span>
-            <span className="font-bold text-slate-900 truncate max-w-[150px]">{supplierName || 'شركة الفنادق'}</span>
-          </div>
-
-          {salesCashboxName && (
-            <div className="flex items-center justify-between px-2 py-1 rounded bg-slate-50 border border-slate-100">
-              <span className="text-slate-500 font-medium">{isAr ? 'الصندوق:' : 'Cashbox:'}</span>
-              <span className="font-bold text-slate-800 truncate max-w-[150px]">{salesCashboxName}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── 4. CONTAINER 4: معاينة القيد المحاسبي المزدوج (قابل للطي) ── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-2.5">
-        <button
-          type="button"
-          onClick={() => setShowAccountingDetails(!showAccountingDetails)}
-          className="w-full flex items-center justify-between text-[11px] font-bold text-slate-700 hover:text-slate-950 cursor-pointer"
-        >
-          <span className="flex items-center gap-1.5">
-            <TrendingUp size={12} className="text-[#F45A0A]" />
-            <span>{isAr ? 'معاينة القيد' : 'Journal Preview'}</span>
-          </span>
-          <ChevronDown
-            size={12}
-            className={`transition-transform ${showAccountingDetails ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {showAccountingDetails && (
-          <div
-            className="mt-2 space-y-1 p-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-900 text-[10.5px]"
-            style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
-            dir="ltr"
-          >
-            <div className="flex items-center justify-between font-bold text-slate-800">
-              <span>Dr. {paymentType === 'CASH' ? 'Cashbox' : 'Customer'}</span>
-              <span className="font-black">{formatEngNumber(totalSale)}</span>
-            </div>
-            <div className="flex items-center justify-between font-bold text-slate-800">
-              <span>Cr. Supplier</span>
-              <span className="font-black">{formatEngNumber(totalCost)}</span>
-            </div>
-            <div className="flex items-center justify-between text-[#F45A0A] border-t border-slate-200 pt-1 font-black">
-              <span>Cr. Profit</span>
-              <span className="font-black">{formatEngNumber(netProfit)}</span>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

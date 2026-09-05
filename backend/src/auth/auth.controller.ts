@@ -1,4 +1,5 @@
 import { Controller, Post, Body, Get, Patch, Param, UseGuards, Req } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -10,6 +11,8 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  // عشر محاولات في الدقيقة لكل عنوان: تكفي أخطاء الكتابة، وتخنق التخمين الآلي.
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @ApiOperation({ summary: 'تسجيل الدخول إلى النظام المحاسبي' })
   @ApiResponse({ status: 200, description: 'تم تسجيل الدخول بنجاح وتوليد Token JWT' })
   async login(@Body() loginDto: LoginDto) {

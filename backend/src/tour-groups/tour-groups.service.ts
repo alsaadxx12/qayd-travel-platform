@@ -256,7 +256,7 @@ export class TourGroupsService {
     if (!ps) throw new BadRequestException('اختر نظام أسعارٍ للمسافر — لا نظام فعّالاً في الكروب.');
 
     const summary = this.computeSummary(group);
-    if (summary.remaining <= 0) {
+    if (summary.seats > 0 && summary.remaining <= 0) {
       throw new BadRequestException(`المقاعد نفدت: ${summary.sold} من ${summary.seats} مبيعة.`);
     }
 

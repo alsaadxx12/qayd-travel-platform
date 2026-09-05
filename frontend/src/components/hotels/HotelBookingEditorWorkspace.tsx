@@ -24,7 +24,9 @@ import {
   Paperclip,
   FileSpreadsheet,
   UserCheck,
+  Calendar,
 } from 'lucide-react';
+import dayjs from 'dayjs';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
@@ -64,6 +66,16 @@ const DEFAULTS_STORAGE_KEY = 'hotel_booking_user_defaults';
 // Convert any Eastern Arabic digits to English digits
 const toEnglishDigits = (val: string | number) => {
   return String(val ?? '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+};
+
+// Auto format with commas (thousands separators) for numerical amounts
+const formatWithCommas = (val: string | number) => {
+  if (val === undefined || val === null || val === '') return '';
+  const clean = toEnglishDigits(String(val)).replace(/[^\d.]/g, '');
+  if (!clean) return '';
+  const parts = clean.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : parts[0];
 };
 
 // Safe Local Date Parser avoiding timezone/UTC midnight shifts
@@ -451,8 +463,8 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
   const handleAddRoom = () => {
     const selectedObj = ROOM_TYPES.find((r) => r.value === newRoomType) || ROOM_TYPES[1];
     const parsedCount = Math.max(1, Number(toEnglishDigits(newRoomsCount)) || 1);
-    const parsedCost = Number(toEnglishDigits(newCostPrice)) || 0;
-    const parsedSale = Number(toEnglishDigits(newSalePrice)) || 0;
+    const parsedCost = Number(toEnglishDigits(newCostPrice).replace(/,/g, '')) || 0;
+    const parsedSale = Number(toEnglishDigits(newSalePrice).replace(/,/g, '')) || 0;
 
     const newRoom: HotelRoomLine = {
       id: `room-${Date.now()}`,
@@ -632,248 +644,325 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
         {/* ════════════════════════════════════════════════════════════════════
             2. MAIN TWO-COLUMN WORKSPACE BODY (Form on Right + Sticky Summary on Left)
            ════════════════════════════════════════════════════════════════════ */}
-        <main className="flex-1 p-3 sm:p-5 w-full">
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_310px] gap-4 items-start">
+        <main className="flex-1 px-3 sm:px-6 py-4 w-full max-w-[1780px] mx-auto">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-4 sm:gap-5 items-start">
             
             {/* ─────────────────────────────────────────────────────────────
                 RIGHT AREA: SEPARATED CARDS
                ───────────────────────────────────────────────────────────── */}
-            <div className="space-y-4">
+            <div className="space-y-4 sm:space-y-5">
               
               {/* ════════════════════════════════════════════════════════════
                   ROW 1: SIDE-BY-SIDE CARDS (CUSTOMER & HOTEL/SUPPLIER)
                  ════════════════════════════════════════════════════════════ */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 items-stretch">
                 
-                {/* ── CARD 1: العميل والجهة الحاجزة ── */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4 flex flex-col justify-between">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-                      <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
-                        {isAr ? 'العميل والجهة الحاجزة' : 'Customer & Client'}
-                      </h2>
+                {/* ── CARD 1: العميل والجهة الحاجزة وموظف الإصدار ── */}
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3.5 flex flex-col justify-between h-full min-h-[420px]">
+                  <div className="space-y-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 mb-2.5">
+                        <h2 className="font-bold text-xs sm:text-[13px] text-slate-900 leading-tight">
+                          {isAr ? 'العميل والجهة الحاجزة' : 'Customer & Client'}
+                        </h2>
 
-                      {/* Currency & Rate */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <div className="h-[38px] flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => setCurrency('USD')}
-                            className={`px-3 h-full rounded-lg text-xs font-black transition-all cursor-pointer ${
-                              currency === 'USD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-200'
-                            }`}
-                          >
-                            USD
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCurrency('IQD')}
-                            className={`px-3 h-full rounded-lg text-xs font-black transition-all cursor-pointer ${
-                              currency === 'IQD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-200'
-                            }`}
-                          >
-                            IQD
-                          </button>
-                        </div>
-
-                        {currency === 'USD' && (
-                          <div className="flex items-center gap-1 bg-amber-50/70 border border-amber-200 px-2.5 py-0.5 rounded-xl text-xs h-[38px]">
-                            <span className="text-[10.5px] font-bold text-amber-900">{isAr ? 'سعر الصرف:' : 'Rate:'}</span>
-                            <input
-                              type="text"
-                              value={exchangeRate}
-                              onChange={(e) => setExchangeRate(Number(toEnglishDigits(e.target.value)))}
-                              className="w-16 h-[26px] text-center font-bold text-xs text-slate-900 border border-amber-300 rounded-lg bg-white focus:outline-none focus:border-[#F45A0A] font-mono tabular-nums"
-                              style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
-                              dir="ltr"
-                            />
+                        {/* Currency & Rate */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="h-[32px] flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setCurrency('USD')}
+                              className={`px-2.5 h-full rounded text-[11px] font-black transition-all cursor-pointer ${
+                                currency === 'USD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-200'
+                              }`}
+                            >
+                              USD
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCurrency('IQD')}
+                              className={`px-2.5 h-full rounded text-[11px] font-black transition-all cursor-pointer ${
+                                currency === 'IQD' ? 'bg-[#F45A0A] text-white shadow-2xs' : 'text-slate-700 hover:bg-slate-200'
+                              }`}
+                            >
+                              IQD
+                            </button>
                           </div>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* 1. Customer Select (Account) */}
-                      <div>
-                        <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'العميل *' : 'Customer *'}
-                        </label>
-                        <SearchableCombobox
-                          options={customersList.map((c) => ({
-                            value: c.id,
-                            label: c.nameAr,
-                            accountCode: c.code,
-                          }))}
-                          value={customerId}
-                          displayValue={customerName}
-                          onChange={(val: string) => {
-                            setCustomerId(val);
-                            const found = customersList.find((c) => c.id === val);
-                            if (found) {
-                              setCustomerName(found.nameAr);
-                              if (found.phone) setCustomerPhone(found.phone);
-                            }
-                          }}
-                          className="h-[48px]"
-                        />
+                          {currency === 'USD' && (
+                            <div className="flex items-center gap-1 bg-amber-50/70 border border-amber-200 px-2 py-0.5 rounded-lg text-xs h-[32px]">
+                              <span className="text-[10px] font-bold text-amber-900">{isAr ? 'الصرف:' : 'Rate:'}</span>
+                              <input
+                                type="text"
+                                value={exchangeRate}
+                                onChange={(e) => setExchangeRate(Number(toEnglishDigits(e.target.value)))}
+                                className="w-14 h-[22px] text-center font-bold text-xs text-slate-900 border border-amber-300 rounded bg-white focus:outline-none focus:border-[#F45A0A] font-mono tabular-nums"
+                                style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
+                                dir="ltr"
+                              />
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      {/* 2. Customer Phone */}
-                      <div>
-                        <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
-                          <Phone size={12} className="text-[#F45A0A]" />
-                          <span>{isAr ? 'الهاتف' : 'Phone'}</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={customerPhone}
-                          onChange={(e) => setCustomerPhone(toEnglishDigits(e.target.value))}
-                          dir="ltr"
-                          style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
-                          className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-200 bg-slate-50 focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-[#F45A0A] font-mono tabular-nums"
-                        />
-                      </div>
-
-                      {/* 3. Customer Agent / Representative */}
-                      <div>
-                        <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
-                          <User size={12} className="text-slate-400" />
-                          <span>{isAr ? 'الضامن (إن وجد)' : 'Representative'}</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={customerAgent}
-                          onChange={(e) => setCustomerAgent(e.target.value)}
-                          className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-200 bg-slate-50 focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-[#F45A0A]"
-                        />
-                      </div>
-
-                      {/* 4. Issue Date */}
-                      <div>
-                        <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'تاريخ الإصدار' : 'Issue Date'}
-                        </label>
-                        <div className="h-[48px]">
-                          <SegmentedDatePicker
-                            value={issueDate}
-                            onChange={(d) => d && setIssueDate(d)}
-                            clearable={false}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {/* Row 1: Customer + Phone */}
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1">
+                            {isAr ? 'العميل *' : 'Customer *'}
+                          </label>
+                          <SearchableCombobox
+                            options={customersList.map((c) => ({
+                              value: c.id,
+                              label: c.nameAr,
+                              accountCode: c.code,
+                            }))}
+                            value={customerId}
+                            displayValue={customerName}
+                            onChange={(val: string) => {
+                              setCustomerId(val);
+                              const found = customersList.find((c) => c.id === val);
+                              if (found) {
+                                setCustomerName(found.nameAr);
+                                if (found.phone) setCustomerPhone(found.phone);
+                              }
+                            }}
+                            className="h-[46px]"
                           />
                         </div>
+
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
+                            <Phone size={11} className="text-[#F45A0A]" />
+                            <span>{isAr ? 'الهاتف' : 'Phone'}</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={customerPhone}
+                            onChange={(e) => setCustomerPhone(toEnglishDigits(e.target.value))}
+                            dir="ltr"
+                            style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
+                            className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white hover:border-[#D1D5DB] focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-2 focus:border-[#F45A0A] transition-colors duration-150 font-mono tabular-nums"
+                          />
+                        </div>
+
+                        {/* Row 2: Payment Term + Payment Method */}
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1">
+                            {isAr ? 'نوع السداد' : 'Payment Term'}
+                          </label>
+                          <SearchableCombobox
+                            options={[
+                              { value: 'نقدي', label: isAr ? 'نقدي' : 'Cash' },
+                              { value: 'آجل', label: isAr ? 'آجل' : 'Credit' },
+                            ]}
+                            value={paymentTerm}
+                            onChange={(val: string) => setPaymentTerm((val as any) || 'نقدي')}
+                            className="h-[46px]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1">
+                            {isAr ? 'طريقة الدفع' : 'Payment Method'}
+                          </label>
+                          <SearchableCombobox
+                            options={realPaymentOptions}
+                            value={paymentType}
+                            onChange={(val: string) => setPaymentType(val)}
+                            className="h-[46px]"
+                          />
+                        </div>
+
+                        {/* Row 3: Issue Date + Issuer Employee */}
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1">
+                            {isAr ? 'تاريخ الإصدار' : 'Issue Date'}
+                          </label>
+                          <div className="h-[46px]">
+                            <SegmentedDatePicker
+                              value={issueDate}
+                              onChange={(d) => d && setIssueDate(d)}
+                              clearable={false}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
+                            <UserCheck size={11} className="text-[#F45A0A]" />
+                            <span>{isAr ? 'موظف الإصدار' : 'Issuing Staff'}</span>
+                          </label>
+                          <SearchableCombobox
+                            options={employeeOptions}
+                            value={issuerEmployee}
+                            onChange={(val: string) => setIssuerEmployee(val)}
+                            className="h-[46px]"
+                          />
+                        </div>
+
                       </div>
                     </div>
+
+                    {/* Bottom Area: Attachments for MasterCard / Notice for Cash - Keeps Card 1 height 100% fixed */}
+                    {(paymentType?.includes('ماستر') || paymentType?.toLowerCase().includes('master') || attachments.length > 0) ? (
+                      <div className="pt-2 border-t border-slate-100 space-y-1.5 mt-auto">
+                        <div className="flex items-center justify-between">
+                          <span className="block font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                            <Paperclip size={13} className="text-[#F45A0A]" />
+                            <span>{isAr ? 'إرفاق وصل الدفع (ماستر كارد)' : 'Payment Receipt (MasterCard)'}</span>
+                          </span>
+                          <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                            {isAr ? 'مطلوب للمدفوعات الإلكترونية' : 'Required for Cards'}
+                          </span>
+                        </div>
+                        <TicketAttachmentsSection
+                          attachments={attachments}
+                          onChange={(updated) => setAttachments(updated)}
+                        />
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t border-slate-100/70 mt-auto">
+                        <div className="min-h-[84px] flex flex-col justify-center items-center rounded-xl bg-slate-50/60 border border-dashed border-slate-200 p-3 text-center">
+                          <CreditCard size={18} className="text-slate-400 mb-1" />
+                          <span className="text-xs font-bold text-slate-500">
+                            {isAr ? 'الدفع نقدي (كاش باليد)' : 'Cash Payment'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 mt-0.5">
+                            {isAr ? 'لا يتطلب إرفاق وصل دفع إلكتروني' : 'No receipt attachment required'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* ── CARD 2: الفندق وتواريخ الإقامة ── */}
-                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4 flex flex-col justify-between">
-                  <div className="space-y-3">
-                    <div className="pb-3 border-b border-slate-100">
-                      <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
-                        {isAr ? 'الفندق وتواريخ الإقامة' : 'Hotel & Dates'}
-                      </h2>
+                {/* ── CARD 2: الفندق وتواريخ الإقامة والمورد ── */}
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3.5 flex flex-col justify-between h-full min-h-[420px]">
+                  <div className="space-y-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2 mb-2.5">
+                        <h2 className="font-bold text-xs sm:text-[13px] text-slate-900 leading-tight">
+                          {isAr ? 'الفندق وتواريخ الإقامة' : 'Hotel & Dates'}
+                        </h2>
+
+                        {/* Nights Badge in Header */}
+                        <div className="h-[28px] px-2.5 rounded-lg border border-orange-200 bg-orange-50/70 flex items-center gap-1.5">
+                          <span className="text-[11px] font-bold text-slate-600">{isAr ? 'الإقامة:' : 'Stay:'}</span>
+                          <span
+                            className="font-black text-xs text-[#F45A0A] font-mono tabular-nums"
+                            style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
+                            dir="ltr"
+                          >
+                            {nights} {isAr ? 'ليالٍ' : 'Nights'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {/* Row 1: Supplier + Hotel Name */}
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1">
+                            {isAr ? 'المورد *' : 'Supplier *'}
+                          </label>
+                          <SearchableCombobox
+                            options={suppliersList.map((s) => ({
+                              value: s.id,
+                              label: s.nameAr,
+                              accountCode: s.code,
+                            }))}
+                            value={supplierId}
+                            displayValue={supplierName}
+                            onChange={(val: string) => {
+                              setSupplierId(val);
+                              const found = suppliersList.find((s) => s.id === val);
+                              if (found) setSupplierName(found.nameAr);
+                            }}
+                            className="h-[46px]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
+                            <Building2 size={11} className="text-[#F45A0A]" />
+                            <span>{isAr ? 'اسم الفندق *' : 'Hotel Name *'}</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={hotelName}
+                            onChange={(e) => setHotelName(e.target.value)}
+                            className="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white hover:border-[#D1D5DB] focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-2 focus:border-[#F45A0A] transition-colors duration-150"
+                          />
+                        </div>
+
+                        {/* Row 2: Destination / City (Full Width) */}
+                        <div className="sm:col-span-2">
+                          <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
+                            <MapPin size={11} className="text-[#F45A0A]" />
+                            <span>{isAr ? 'المدينة / الوجهة' : 'City / Destination'}</span>
+                          </label>
+                          <SearchableCombobox
+                            options={WORLD_CITIES.map((c) => ({
+                              value: isAr ? c.cityAr : c.cityEn,
+                              label: isAr ? `${c.cityAr} (${c.countryAr})` : `${c.cityEn} (${c.countryEn})`,
+                              subLabel: isAr ? c.countryAr : c.countryEn,
+                            }))}
+                            value={city}
+                            onChange={(val: string) => {
+                              setCity(val);
+                              const found = WORLD_CITIES.find(
+                                (c) =>
+                                  c.cityAr === val ||
+                                  c.cityEn.toLowerCase() === val.toLowerCase() ||
+                                  `${c.cityAr} (${c.countryAr})` === val ||
+                                  `${c.cityEn} (${c.countryEn})` === val
+                              );
+                              if (found) {
+                                setCountry(isAr ? found.countryAr : found.countryEn);
+                              }
+                            }}
+                            allowCustomValue={true}
+                            className="h-[46px]"
+                          />
+                        </div>
+
+                        {/* Row 3: Check-In Date + Check-Out Date */}
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1">
+                            {isAr ? 'تاريخ الدخول' : 'Check-in'}
+                          </label>
+                          <div className="h-[46px]">
+                            <SegmentedDatePicker
+                              value={checkInDate}
+                              onChange={(d) => d && setCheckInDate(d)}
+                              clearable={false}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block font-bold text-slate-700 text-xs mb-1">
+                            {isAr ? 'تاريخ الخروج' : 'Check-out'}
+                          </label>
+                          <div className="h-[46px]">
+                            <SegmentedDatePicker
+                              value={checkOutDate}
+                              onChange={(d) => d && setCheckOutDate(d)}
+                              clearable={false}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* 1. Supplier Select */}
-                      <div className="sm:col-span-2">
-                        <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'المورد *' : 'Supplier *'}
-                        </label>
-                        <SearchableCombobox
-                          options={suppliersList.map((s) => ({
-                            value: s.id,
-                            label: s.nameAr,
-                            accountCode: s.code,
-                          }))}
-                          value={supplierId}
-                          displayValue={supplierName}
-                          onChange={(val: string) => {
-                            setSupplierId(val);
-                            const found = suppliersList.find((s) => s.id === val);
-                            if (found) setSupplierName(found.nameAr);
-                          }}
-                          className="h-[48px]"
-                        />
-                      </div>
-
-                      {/* 2. Hotel Name */}
-                      <div>
-                        <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
-                          <Building2 size={12} className="text-[#F45A0A]" />
-                          <span>{isAr ? 'اسم الفندق *' : 'Hotel Name *'}</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={hotelName}
-                          onChange={(e) => setHotelName(e.target.value)}
-                          className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-200 bg-slate-50 focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-[#F45A0A]"
-                        />
-                      </div>
-
-                      {/* 3. Destination / City */}
-                      <div>
-                        <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
-                          <MapPin size={12} className="text-[#F45A0A]" />
-                          <span>{isAr ? 'المدينة / الوجهة' : 'City / Destination'}</span>
-                        </label>
-                        <SearchableCombobox
-                          options={WORLD_CITIES.map((c) => ({
-                            value: isAr ? c.cityAr : c.cityEn,
-                            label: isAr ? `${c.cityAr} (${c.countryAr})` : `${c.cityEn} (${c.countryEn})`,
-                            subLabel: isAr ? c.countryAr : c.countryEn,
-                          }))}
-                          value={city}
-                          onChange={(val: string) => {
-                            setCity(val);
-                            const found = WORLD_CITIES.find(
-                              (c) =>
-                                c.cityAr === val ||
-                                c.cityEn.toLowerCase() === val.toLowerCase() ||
-                                `${c.cityAr} (${c.countryAr})` === val ||
-                                `${c.cityEn} (${c.countryEn})` === val
-                            );
-                            if (found) {
-                              setCountry(isAr ? found.countryAr : found.countryEn);
-                            }
-                          }}
-                          allowCustomValue={true}
-                          className="h-[48px]"
-                        />
-                      </div>
-
-                      {/* Check-In Date */}
-                      <div>
-                        <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'تاريخ الدخول' : 'Check-in'}
-                        </label>
-                        <div className="h-[48px]">
-                          <SegmentedDatePicker
-                            value={checkInDate}
-                            onChange={(d) => d && setCheckInDate(d)}
-                            clearable={false}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Check-Out Date */}
-                      <div>
-                        <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'تاريخ الخروج' : 'Check-out'}
-                        </label>
-                        <div className="h-[48px]">
-                          <SegmentedDatePicker
-                            value={checkOutDate}
-                            onChange={(d) => d && setCheckOutDate(d)}
-                            clearable={false}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Nights Counter Badge */}
-                      <div className="sm:col-span-2">
-                        <div className="h-[40px] px-3.5 rounded-[12px] border border-orange-200 bg-orange-50/50 flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-700">{isAr ? 'عدد الليالي:' : 'Nights:'}</span>
+                    {/* Stay Calculation Summary Bar - Matches height with Card 1 */}
+                    <div className="pt-2 border-t border-slate-100 mt-auto">
+                      <div className="min-h-[84px] flex flex-col justify-center rounded-xl bg-orange-50/40 border border-orange-200/70 p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <Calendar size={14} className="text-[#F45A0A]" />
+                            <span>{isAr ? 'مدة الإقامة المحسوبة:' : 'Calculated Stay:'}</span>
+                          </span>
                           <span
                             className="font-black text-sm text-[#F45A0A] font-mono tabular-nums"
                             style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
@@ -882,6 +971,9 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                             {nights} {isAr ? 'ليالٍ' : 'Nights'}
                           </span>
                         </div>
+                        <div className="text-[10px] text-slate-500 font-mono mt-1 text-left" dir="ltr">
+                          {dayjs(checkInDate).format('YYYY-MM-DD')} ⟶ {dayjs(checkOutDate).format('YYYY-MM-DD')}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -889,20 +981,20 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
               </div>
 
               {/* ── CARD 3: الغرف والنزلاء والأسعار ── */}
-              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
-                  <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3.5">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+                  <h2 className="font-bold text-xs sm:text-[13px] text-slate-900 leading-tight">
                     {isAr ? 'الغرف والنزلاء والأسعار' : 'Rooms, Guests & Rates'}
                   </h2>
 
                   {/* Reliable Switch Toggle for Adopt Nights Multiplier */}
-                  <div className="bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 flex items-center gap-3 select-none">
-                    <span className="text-xs font-bold text-slate-800">
+                  <div className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-2 select-none">
+                    <span className="text-[11px] font-bold text-slate-700">
                       {isAr ? 'اعتماد سعر عدد الليالي' : 'Multiply by Nights'}
                     </span>
                     <Switch
                       color="orange"
-                      size="md"
+                      size="sm"
                       checked={adoptNightsMultiplier}
                       onChange={(e) => {
                         const checked = e.currentTarget.checked;
@@ -919,10 +1011,10 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                   </div>
                 </div>
 
-                {/* Quick Add Room Form Bar (Strict English Numbers) */}
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                    <div>
+                {/* Quick Add Room Form Bar (Single Cohesive Row: Room Type -> Qty -> Guest Name -> Buy -> Sell -> Add) */}
+                <div className="p-3 sm:p-3.5 rounded-2xl bg-slate-50/90 border border-slate-200/90">
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3 items-end">
+                    <div className="sm:col-span-3">
                       <span className="text-[11px] font-bold text-slate-700 block mb-1">
                         {isAr ? 'نوع الغرفة' : 'Room Type'}
                       </span>
@@ -931,13 +1023,13 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                         value={newRoomType}
                         onChange={(val: string) => setNewRoomType(val)}
                         placeholder={isAr ? 'نوع الغرفة' : 'Room Type'}
-                        className="h-[48px]"
+                        className="h-[38px]"
                       />
                     </div>
 
-                    <div>
-                      <span className="text-[11px] font-bold text-slate-700 block mb-1">
-                        {isAr ? 'عدد الغرف' : 'Rooms Count'}
+                    <div className="sm:col-span-1">
+                      <span className="text-[11px] font-bold text-slate-700 block mb-1 text-center">
+                        {isAr ? 'العدد' : 'Qty'}
                       </span>
                       <input
                         type="text"
@@ -946,11 +1038,24 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                         onChange={(e) => setNewRoomsCount(toEnglishDigits(e.target.value))}
                         dir="ltr"
                         style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
-                        className="w-full h-[48px] px-3 rounded-[14px] border border-slate-200 bg-white font-mono font-black text-xs text-center tabular-nums"
+                        className="w-full h-[38px] px-1 rounded-xl border border-slate-200 bg-white font-mono font-black text-xs text-center tabular-nums"
                       />
                     </div>
 
-                    <div>
+                    <div className="sm:col-span-3">
+                      <span className="text-[11px] font-bold text-slate-700 block mb-1">
+                        {isAr ? 'اسم النزيل' : 'Guest Name'}
+                      </span>
+                      <input
+                        type="text"
+                        value={newGuestName}
+                        onChange={(e) => setNewGuestName(e.target.value)}
+                        placeholder={isAr ? 'اسم النزيل...' : 'Guest name...'}
+                        className="w-full h-[38px] px-3 rounded-xl border border-slate-200 bg-white font-bold text-xs"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
                       <span className="text-[11px] font-bold text-rose-700 block mb-1">
                         {isAr ? 'الشراء' : 'Buy Price'}
                       </span>
@@ -958,14 +1063,14 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                         type="text"
                         inputMode="decimal"
                         value={newCostPrice}
-                        onChange={(e) => setNewCostPrice(toEnglishDigits(e.target.value))}
+                        onChange={(e) => setNewCostPrice(formatWithCommas(e.target.value))}
                         dir="ltr"
                         style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
-                        className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-300 bg-white font-mono font-black text-xs text-rose-800 text-left tabular-nums"
+                        className="w-full h-[38px] px-2.5 rounded-xl border border-slate-300 bg-white font-mono font-black text-xs text-rose-800 text-left tabular-nums"
                       />
                     </div>
 
-                    <div>
+                    <div className="sm:col-span-2">
                       <span className="text-[11px] font-bold text-emerald-700 block mb-1">
                         {isAr ? 'البيع *' : 'Sell Price *'}
                       </span>
@@ -973,29 +1078,24 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                         type="text"
                         inputMode="decimal"
                         value={newSalePrice}
-                        onChange={(e) => setNewSalePrice(toEnglishDigits(e.target.value))}
+                        onChange={(e) => setNewSalePrice(formatWithCommas(e.target.value))}
                         dir="ltr"
                         style={{ fontFamily: "'JetBrains Mono', 'Consolas', monospace" }}
-                        className="w-full h-[48px] px-3.5 rounded-[14px] border border-slate-300 bg-white font-mono font-black text-xs text-emerald-800 text-left tabular-nums"
+                        className="w-full h-[38px] px-2.5 rounded-xl border border-slate-300 bg-white font-mono font-black text-xs text-emerald-800 text-left tabular-nums"
                       />
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2.5 pt-1">
-                    <input
-                      type="text"
-                      value={newGuestName}
-                      onChange={(e) => setNewGuestName(e.target.value)}
-                      className="flex-1 h-[48px] px-3.5 rounded-[14px] border border-slate-200 bg-white font-bold text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddRoom}
-                      className="h-[48px] px-6 rounded-[14px] bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs flex items-center gap-2 shrink-0 cursor-pointer shadow-2xs"
-                    >
-                      <Plus size={16} />
-                      <span>{isAr ? 'إضافة غرفة' : 'Add Room'}</span>
-                    </button>
+                    <div className="sm:col-span-1">
+                      <button
+                        type="button"
+                        onClick={handleAddRoom}
+                        className="w-full h-[38px] px-2 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white font-bold text-xs flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                        title={isAr ? 'إضافة غرفة' : 'Add Room'}
+                      >
+                        <Plus size={15} />
+                        <span>{isAr ? 'إضافة' : 'Add'}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1004,17 +1104,17 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                   <table className="w-full text-right text-xs border-collapse" dir={direction}>
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                        <th className="p-3 text-center w-10">#</th>
-                        <th className="p-3">{isAr ? 'نوع الغرفة' : 'Room Type'}</th>
-                        <th className="p-3 text-center">{isAr ? 'العدد' : 'Qty'}</th>
-                        <th className="p-3 text-center">{isAr ? 'الليالي' : 'Nights'}</th>
-                        <th className="p-3">{isAr ? 'النزيل' : 'Guest'}</th>
-                        <th className="p-3 text-center text-rose-700">{isAr ? 'الشراء' : 'Buy'}</th>
-                        <th className="p-3 text-center text-rose-800 font-black">{isAr ? 'إجمالي الشراء' : 'Total Buy'}</th>
-                        <th className="p-3 text-center text-emerald-700">{isAr ? 'البيع *' : 'Sell *'}</th>
-                        <th className="p-3 text-center text-emerald-800 font-black">{isAr ? 'إجمالي البيع' : 'Total Sell'}</th>
-                        <th className="p-3 text-center text-[#F45A0A] font-black">{isAr ? 'الربح' : 'Profit'}</th>
-                        <th className="p-3 text-center w-12">{isAr ? '' : ''}</th>
+                        <th className="p-2.5 text-center w-10">#</th>
+                        <th className="p-2.5">{isAr ? 'نوع الغرفة' : 'Room Type'}</th>
+                        <th className="p-2.5 text-center">{isAr ? 'العدد' : 'Qty'}</th>
+                        <th className="p-2.5 text-center">{isAr ? 'الليالي' : 'Nights'}</th>
+                        <th className="p-2.5">{isAr ? 'النزيل' : 'Guest'}</th>
+                        <th className="p-2.5 text-center text-rose-700">{isAr ? 'الشراء' : 'Buy'}</th>
+                        <th className="p-2.5 text-center text-rose-800 font-black">{isAr ? 'إجمالي الشراء' : 'Total Buy'}</th>
+                        <th className="p-2.5 text-center text-emerald-700">{isAr ? 'البيع *' : 'Sell *'}</th>
+                        <th className="p-2.5 text-center text-emerald-800 font-black">{isAr ? 'إجمالي البيع' : 'Total Sell'}</th>
+                        <th className="p-2.5 text-center text-[#F45A0A] font-black">{isAr ? 'الربح' : 'Profit'}</th>
+                        <th className="p-2.5 text-center w-10">{isAr ? '' : ''}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1033,49 +1133,49 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
 
                           return (
                             <tr key={room.id} className="hover:bg-orange-50/30 transition-colors">
-                              <td className="p-3 text-center font-mono font-black text-slate-400" dir="ltr">
+                              <td className="p-2.5 text-center font-mono font-black text-slate-400" dir="ltr">
                                 {idx + 1}
                               </td>
-                              <td className="p-3 font-bold text-slate-900">
+                              <td className="p-2.5 font-bold text-slate-900">
                                 {room.roomTypeName}
                               </td>
-                              <td className="p-3 text-center font-mono font-black text-slate-800" dir="ltr">
+                              <td className="p-2.5 text-center font-mono font-black text-slate-800" dir="ltr">
                                 {room.roomsCount}
                               </td>
-                              <td className="p-3 text-center font-mono font-bold text-slate-600" dir="ltr">
+                              <td className="p-2.5 text-center font-mono font-bold text-slate-600" dir="ltr">
                                 {roomNights}
                               </td>
-                              <td className="p-3">
+                              <td className="p-2.5">
                                 <input
                                   type="text"
                                   value={room.guestNames?.[0] || ''}
                                   onChange={(e) => handleUpdateRoom(room.id, 'guestNames', [e.target.value])}
-                                  className="w-full h-8 px-2.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-bold text-slate-800"
+                                  className="w-full h-[30px] px-2.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white text-xs font-bold text-slate-800"
                                 />
                               </td>
-                              <td className="p-3 text-center font-mono font-bold text-rose-700" dir="ltr">
+                              <td className="p-2.5 text-center font-mono font-bold text-rose-700" dir="ltr">
                                 {Number(room.costPrice || 0).toLocaleString('en-US')}
                               </td>
-                              <td className="p-3 text-center font-mono font-black text-rose-800" dir="ltr">
+                              <td className="p-2.5 text-center font-mono font-black text-rose-800" dir="ltr">
                                 {subCost.toLocaleString('en-US')}
                               </td>
-                              <td className="p-3 text-center font-mono font-bold text-emerald-700" dir="ltr">
+                              <td className="p-2.5 text-center font-mono font-bold text-emerald-700" dir="ltr">
                                 {Number(room.salePrice || 0).toLocaleString('en-US')}
                               </td>
-                              <td className="p-3 text-center font-mono font-black text-emerald-800" dir="ltr">
+                              <td className="p-2.5 text-center font-mono font-black text-emerald-800" dir="ltr">
                                 {subSale.toLocaleString('en-US')}
                               </td>
-                              <td className="p-3 text-center font-mono font-black text-[#F45A0A]" dir="ltr">
+                              <td className="p-2.5 text-center font-mono font-black text-[#F45A0A]" dir="ltr">
                                 {subProfit.toLocaleString('en-US')}
                               </td>
-                              <td className="p-3 text-center">
+                              <td className="p-2.5 text-center">
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveRoom(room.id)}
-                                  className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg transition-colors cursor-pointer"
+                                  className="text-slate-400 hover:text-rose-600 p-1 rounded-lg transition-colors cursor-pointer"
                                   title={isAr ? 'حذف' : 'Delete'}
                                 >
-                                  <Trash2 size={15} />
+                                  <Trash2 size={14} />
                                 </button>
                               </td>
                             </tr>
@@ -1087,111 +1187,10 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                 </div>
               </div>
 
-              {/* ── CARD 4: طريقة الدفع والتسوية ── */}
-              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
-                <div className="pb-3 border-b border-slate-100">
-                  <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
-                    {isAr ? 'طريقة الدفع والتسوية' : 'Payment & Settlement'}
-                  </h2>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
-                  {/* Payment Term */}
-                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-1 md:col-span-2'}>
-                    <label className="block font-bold text-slate-700 text-xs mb-1">
-                      {isAr ? 'نوع السداد' : 'Payment Term'}
-                    </label>
-                    <SearchableCombobox
-                      options={[
-                        { value: 'نقدي', label: isAr ? 'نقدي' : 'Cash' },
-                        { value: 'آجل', label: isAr ? 'آجل' : 'Credit' },
-                      ]}
-                      value={paymentTerm}
-                      onChange={(val: string) => {
-                        const next = (val as any) || 'نقدي';
-                        setPaymentTerm(next);
-                        if (next === 'آجل') {
-                          setSalesCashboxId('');
-                          setSalesCashboxName('');
-                        }
-                      }}
-                      placeholder={isAr ? 'نوع السداد' : 'Payment Term'}
-                      className="h-[48px]"
-                    />
-                  </div>
-
-                  {paymentTerm === 'نقدي' && (
-                    <>
-                      {/* Real Payment Method */}
-                      <div className="sm:col-span-1">
-                        <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'طريقة الاستلام' : 'Receiving Method'}
-                        </label>
-                        <SearchableCombobox
-                          options={realPaymentOptions}
-                          value={paymentType}
-                          onChange={(val: string) => setPaymentType(val)}
-                          className="h-[48px]"
-                        />
-                      </div>
-
-                      {/* Sales Cashbox */}
-                      <div className="sm:col-span-1">
-                        <label className="block font-bold text-slate-700 text-xs mb-1">
-                          {isAr ? 'صندوق المبيعات' : 'Sales Cashbox'}
-                        </label>
-                        <SearchableCombobox
-                          options={cashboxAccounts.map((c) => ({
-                            value: c.id,
-                            label: c.nameAr,
-                            accountCode: c.code,
-                          }))}
-                          value={salesCashboxId}
-                          onChange={(val: string) => {
-                            setSalesCashboxId(val);
-                            const found = cashboxAccounts.find((c) => c.id === val);
-                            if (found) setSalesCashboxName(found.nameAr);
-                          }}
-                          className="h-[48px]"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Issuing Staff */}
-                  <div className={paymentTerm === 'نقدي' ? 'sm:col-span-1' : 'sm:col-span-1 md:col-span-2'}>
-                    <label className="block font-bold text-slate-700 text-xs mb-1 flex items-center gap-1">
-                      <UserCheck size={13} className="text-[#F45A0A]" />
-                      <span>{isAr ? 'موظف الإصدار' : 'Issuing Staff'}</span>
-                    </label>
-                    <SearchableCombobox
-                      options={employeeOptions}
-                      value={issuerEmployee}
-                      onChange={(val: string) => setIssuerEmployee(val)}
-                      className="h-[48px]"
-                    />
-                  </div>
-                </div>
-
-                {/* File Attachments (Shown when NOT cash-in-hand or when files exist) */}
-                {(!paymentType?.includes('كاش باليد') || attachments.length > 0) && (
-                  <div className="pt-2 border-t border-slate-100">
-                    <span className="block font-bold text-slate-800 text-xs mb-2 flex items-center gap-1.5">
-                      <Paperclip size={14} className="text-[#F45A0A]" />
-                      <span>{isAr ? 'إرفاق وصل الدفع' : 'Attach Receipt'}</span>
-                    </span>
-                    <TicketAttachmentsSection
-                      attachments={attachments}
-                      onChange={(updated) => setAttachments(updated)}
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* ── CARD 5: الملاحظات ── */}
-              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
+              {/* ── CARD 4: الملاحظات ── */}
+              <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3.5">
                 <div className="pb-2 border-b border-slate-100">
-                  <h2 className="font-bold text-sm sm:text-[15px] text-slate-900 leading-tight">
+                  <h2 className="font-bold text-xs sm:text-[13px] text-slate-900 leading-tight">
                     {isAr ? 'الملاحظات' : 'Remarks'}
                   </h2>
                 </div>
@@ -1199,14 +1198,14 @@ export const HotelBookingEditorWorkspace: React.FC<HotelBookingEditorWorkspacePr
                 <Textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  rows={3}
+                  rows={2}
                   size="xs"
                   styles={{
                     input: {
-                      borderRadius: '12px',
-                      fontSize: '12.5px',
+                      borderRadius: '10px',
+                      fontSize: '12px',
                       fontWeight: 600,
-                      padding: '12px',
+                      padding: '10px',
                     },
                   }}
                 />

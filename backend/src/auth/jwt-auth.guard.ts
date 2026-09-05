@@ -26,11 +26,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const req = context.switchToHttp().getRequest();
     const authHeader = req.headers['authorization'];
     if (!authHeader) {
-      if (process.env.NODE_ENV === 'production') {
+      // مغلق افتراضياً: كان الشرط «امنع إذا كانت البيئة إنتاجاً»، فلما نُشر الخادم
+      // بلا NODE_ENV صار كل مجهولٍ مديراً كامل الصلاحيات. الآن لا يُفتح تجاوز
+      // التطوير إلا بإعلانٍ صريح في ملف البيئة المحلي، وغيابُ الإعداد يعني المنع.
+      if (process.env.ALLOW_DEV_BYPASS !== 'true') {
         throw new UnauthorizedException('يلزم تسجيل الدخول للوصول إلى هذا المورد');
       }
 
-      // Preserve the zero-config local demo only outside production.
       req.user = this.getDevUser();
       return true;
     }

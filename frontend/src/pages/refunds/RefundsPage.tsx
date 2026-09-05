@@ -353,10 +353,10 @@ export const RefundsPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* Card 1: Total Customer Sell Refunds */}
-        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px]">
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">
-              {isAr ? 'الصافي المردود للعملاء' : 'Customer Net Refunds'}
+            <span className="text-[13px] font-bold text-slate-800">
+              {isAr ? 'المردود للعملاء' : 'Customer Refunds'}
             </span>
             <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
               <Banknote size={20} strokeWidth={1.85} />
@@ -369,18 +369,17 @@ export const RefundsPage: React.FC = () => {
                 <div className="h-4 bg-slate-200/70 rounded" />
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'دولار USD' : 'USD'}</span>
-                  <span className="text-[18px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
+              <div className="grid grid-cols-2 gap-2 items-baseline">
+                <div className="flex items-baseline gap-1" dir="ltr">
+                  <span className="text-[17px] font-black font-mono text-[#111827] tabular-nums leading-tight">
                     ${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'دينار عراقي' : 'IQD'}</span>
-                  <span className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
-                    {kpis.totalSellIQD.toLocaleString()} <span className="text-[10px] font-sans font-semibold text-[#64748B]">{isAr ? 'د.ع' : 'IQD'}</span>
+                <div className="flex items-baseline gap-1" dir="ltr">
+                  <span className="text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight">
+                    {kpis.totalSellIQD.toLocaleString()}
                   </span>
+                  <span className="text-[9.5px] font-mono font-bold text-slate-400">{isAr ? 'د.ع' : 'IQD'}</span>
                 </div>
               </div>
             )}
@@ -388,10 +387,10 @@ export const RefundsPage: React.FC = () => {
         </div>
 
         {/* Card 2: Total Supplier Buy Recoveries */}
-        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px]">
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">
-              {isAr ? 'المسترجع من الموردين' : 'Supplier Recoveries'}
+            <span className="text-[13px] font-bold text-slate-800">
+              {isAr ? 'المسترجع' : 'Recoveries'}
             </span>
             <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
               <ReceiptText size={20} strokeWidth={1.85} />
@@ -404,18 +403,17 @@ export const RefundsPage: React.FC = () => {
                 <div className="h-4 bg-slate-200/70 rounded" />
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'دولار USD' : 'USD'}</span>
-                  <span className="text-[18px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
+              <div className="grid grid-cols-2 gap-2 items-baseline">
+                <div className="flex items-baseline gap-1" dir="ltr">
+                  <span className="text-[17px] font-black font-mono text-[#111827] tabular-nums leading-tight">
                     ${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'دينار عراقي' : 'IQD'}</span>
-                  <span className="text-[17px] font-bold font-mono text-[#111827] tabular-nums leading-tight block">
-                    {kpis.totalBuyIQD.toLocaleString()} <span className="text-[10px] font-sans font-semibold text-[#64748B]">{isAr ? 'د.ع' : 'IQD'}</span>
+                <div className="flex items-baseline gap-1" dir="ltr">
+                  <span className="text-[16px] font-black font-mono text-[#111827] tabular-nums leading-tight">
+                    {kpis.totalBuyIQD.toLocaleString()}
                   </span>
+                  <span className="text-[9.5px] font-mono font-bold text-slate-400">{isAr ? 'د.ع' : 'IQD'}</span>
                 </div>
               </div>
             )}
@@ -423,12 +421,12 @@ export const RefundsPage: React.FC = () => {
         </div>
 
         {/* Card 3: Net Realized Agency Refund Profit */}
-        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px]">
+        <div className="bg-white border border-[#E5E7EB] rounded-[14px] p-4 shadow-2xs flex flex-col justify-between h-[116px] hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">
-              {isAr ? 'صافي أرباح الاسترجاع' : 'Net Refund Profit'}
+            <span className="text-[13px] font-bold text-slate-800">
+              {isAr ? 'الربح الصافي' : 'Net Profit'}
             </span>
-            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#ECFDF5] text-[#078B61] flex items-center justify-center shrink-0">
+            <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
               <TrendingUp size={20} strokeWidth={1.85} />
             </div>
           </div>
@@ -439,18 +437,17 @@ export const RefundsPage: React.FC = () => {
                 <div className="h-4 bg-slate-200/70 rounded" />
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'دولار USD' : 'USD'}</span>
-                  <span className="text-[18px] font-bold font-mono text-[#078B61] tabular-nums leading-tight block">
+              <div className="grid grid-cols-2 gap-2 items-baseline">
+                <div className="flex items-baseline gap-1" dir="ltr">
+                  <span className="text-[17px] font-black font-mono text-[#078B61] tabular-nums leading-tight">
                     +${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
-                <div>
-                  <span className="text-[11px] font-medium text-[#64748B] block">{isAr ? 'دينار عراقي' : 'IQD'}</span>
-                  <span className="text-[17px] font-bold font-mono text-[#078B61] tabular-nums leading-tight block">
-                    +{kpis.totalProfitIQD.toLocaleString()} <span className="text-[10px] font-sans font-semibold">{isAr ? 'د.ع' : 'IQD'}</span>
+                <div className="flex items-baseline gap-1" dir="ltr">
+                  <span className="text-[16px] font-black font-mono text-[#078B61] tabular-nums leading-tight">
+                    +{kpis.totalProfitIQD.toLocaleString()}
                   </span>
+                  <span className="text-[9.5px] font-mono font-bold text-slate-400">{isAr ? 'د.ع' : 'IQD'}</span>
                 </div>
               </div>
             )}
@@ -469,8 +466,8 @@ export const RefundsPage: React.FC = () => {
           title={isAr ? 'تصفية حسب حالة التدقيق' : 'Filter by Audit Status'}
         >
           <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-[#64748B]">
-              {isAr ? 'حالة التدقيق المالي' : 'Financial Audit'}
+            <span className="text-[13px] font-bold text-slate-800">
+              {isAr ? 'التدقيق المالي' : 'Audit'}
             </span>
             <div className="w-[38px] h-[38px] rounded-[10px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
               <ShieldCheck size={20} strokeWidth={1.85} />

@@ -1,3 +1,7 @@
+// يُحمَّل ملف البيئة قبل أي شيء آخر: لم يكن شيءٌ يقرأ backend/.env إلى بيئة
+// التشغيل، فكان JWT_SECRET المحلي حبراً على ورق والسرُّ الاحتياطي هو المستعمل.
+// على الخوادم المُدارة تسبق متغيراتُ المنصة هذا الملفَ ولا يلمسها dotenv.
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -7,6 +11,10 @@ import compression from 'compression';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // خلف موازن التحميل يصل الطلب كله من عنوان الموازن نفسه؛ الوثوق بالوسيط الأول
+  // يجعل حدَّ المعدل يحاسب عنوانَ العميل الحقيقي من X-Forwarded-For لا الموازن.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
   // ضغط الاستجابات: قوائم القيود والسندات تصل مئات الكيلوبايتات نصاً قابلاً
   // للانضغاط إلى أعشاره — وعلى وصلة المستخدم البطيئة هذا فرق يُقاس بالثواني.

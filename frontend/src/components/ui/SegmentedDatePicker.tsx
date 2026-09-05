@@ -386,14 +386,14 @@ export const SegmentedDatePicker: React.FC<SegmentedDatePickerProps> = ({
       {/* ── 1. MAIN DATE PICKER INPUT CONTAINER (YEAR / MONTH / DAY | × | 📅) ── */}
       <div
         dir="ltr"
-        className={`custom-seg-picker w-full h-[48px] px-3 rounded-[14px] flex items-center justify-between transition-all bg-white border cursor-pointer select-none box-border overflow-hidden ${
+        className={`custom-seg-picker w-full h-[46px] px-3.5 rounded-[11px] flex items-center justify-between transition-colors duration-150 border cursor-pointer select-none box-border overflow-hidden ${
           disabled
             ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
             : isOpen
-            ? 'border border-[#F45A0A]'
+            ? 'bg-white border-2 border-[#F45A0A]'
             : error
-            ? 'border border-red-500'
-            : 'border border-slate-200 hover:border-slate-300'
+            ? 'bg-[#FAFAFA] border-red-500'
+            : 'bg-[#FAFAFA] border-[#E5E7EB] hover:bg-white hover:border-[#D1D5DB]'
         }`}
       >
         {/* LTR Segments Area: [ YEAR / YYYY ]  /  [ MONTH / MM ]  /  [ DAY / DD ] */}
