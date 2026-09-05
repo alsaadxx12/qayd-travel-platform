@@ -1192,35 +1192,51 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
             </div>
 
             {/* شريط علوي: مدخل البيانات وموظف الإصدار */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-slate-50/90 border border-slate-200 p-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-slate-50/90 border border-slate-200 p-3 text-xs items-end">
               {/* مدخل البيانات */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                  <User size={12} className="text-slate-400" />
-                  <span>{isAr ? 'مدخل البيانات (تلقائي)' : 'Data Entry (Auto)'}</span>
-                </label>
-                <div className="h-[38px] px-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between shadow-2xs font-sans">
-                  <span className="font-bold text-slate-800 text-xs truncate">
-                    {g.createdByName || currentUserName}
+              <div className="w-full">
+                <div className="flex items-center justify-between gap-2 min-h-[20px] mb-[7px]">
+                  <span className="block text-[12.5px] font-medium text-[#6B7280] leading-[20px] truncate">
+                    <span className="flex items-center gap-1 text-slate-600">
+                      <User size={12} className="text-slate-400" />
+                      <span>{isAr ? 'مدخل البيانات' : 'Data Entry'}</span>
+                    </span>
                   </span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                  <span className="shrink-0 flex items-center">
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                      {isAr ? 'تلقائي' : 'Auto'}
+                    </span>
+                  </span>
+                </div>
+                <div className="w-full h-[46px] px-3.5 rounded-[11px] bg-[#FAFAFA] border border-[#E5E7EB] flex items-center justify-between shadow-2xs font-sans">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="shrink-0 text-slate-400">
+                      <User size={15} />
+                    </div>
+                    <span className="text-[14px] font-semibold text-slate-800 truncate">
+                      {g.createdByName || currentUserName}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 shrink-0">
                     {isAr ? 'المستخدم الحالي' : 'Current User'}
                   </span>
                 </div>
               </div>
 
               {/* موظف الإصدار / المصدر - قابل للتعديل */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
-                  <span className="flex items-center gap-1 text-[#F45A0A]">
-                    <UserCheck size={12} className="text-[#F45A0A]" />
-                    <span>{isAr ? 'موظف الإصدار / المصدر' : 'Issuing Employee / Issuer'}</span>
-                  </span>
-                  <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
-                    {isAr ? 'تلقائي وقابل للتعديل' : 'Auto / Editable'}
-                  </span>
-                </label>
+              <div className="w-full">
                 <SearchableCombobox
+                  label={
+                    <span className="flex items-center gap-1 text-[#F45A0A]">
+                      <UserCheck size={12} className="text-[#F45A0A]" />
+                      <span>{isAr ? 'موظف الإصدار' : 'Issuing Employee'}</span>
+                    </span>
+                  }
+                  labelAction={
+                    <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
+                      {isAr ? 'قابل للتعديل' : 'Editable'}
+                    </span>
+                  }
                   value={editGroupData.agent}
                   onChange={(val) => setEditGroupData({ ...editGroupData, agent: val || '' })}
                   options={employeeOptions || []}
@@ -3690,35 +3706,51 @@ export const NewGroupModal: React.FC<{
         </div>
 
         {/* شريط علوي: مدخل البيانات وموظف الإصدار */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-slate-50/90 border border-slate-200 p-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-slate-50/90 border border-slate-200 p-3 text-xs items-end">
           {/* مدخل البيانات */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-              <User size={12} className="text-slate-400" />
-              <span>{isAr ? 'مدخل البيانات (تلقائي)' : 'Data Entry (Auto)'}</span>
-            </label>
-            <div className="h-[38px] px-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between shadow-2xs font-sans">
-              <span className="font-bold text-slate-800 text-xs truncate">
-                {currentUserName || (isAr ? 'مدير النظام' : 'System Admin')}
+          <div className="w-full">
+            <div className="flex items-center justify-between gap-2 min-h-[20px] mb-[7px]">
+              <span className="block text-[12.5px] font-medium text-[#6B7280] leading-[20px] truncate">
+                <span className="flex items-center gap-1 text-slate-600">
+                  <User size={12} className="text-slate-400" />
+                  <span>{isAr ? 'مدخل البيانات' : 'Data Entry'}</span>
+                </span>
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+              <span className="shrink-0 flex items-center">
+                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                  {isAr ? 'تلقائي' : 'Auto'}
+                </span>
+              </span>
+            </div>
+            <div className="w-full h-[46px] px-3.5 rounded-[11px] bg-[#FAFAFA] border border-[#E5E7EB] flex items-center justify-between shadow-2xs font-sans">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="shrink-0 text-slate-400">
+                  <User size={15} />
+                </div>
+                <span className="text-[14px] font-semibold text-slate-800 truncate">
+                  {currentUserName || (isAr ? 'مدير النظام' : 'System Admin')}
+                </span>
+              </div>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 shrink-0">
                 {isAr ? 'المستخدم الحالي' : 'Current User'}
               </span>
             </div>
           </div>
 
           {/* موظف الإصدار / المصدر - افتراضياً نفس المستخدم وقابل للتعديل */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
-              <span className="flex items-center gap-1 text-[#F45A0A]">
-                <UserCheck size={12} className="text-[#F45A0A]" />
-                <span>{isAr ? 'موظف الإصدار / المصدر' : 'Issuing Employee / Issuer'}</span>
-              </span>
-              <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
-                {isAr ? 'تلقائي وقابل للتعديل' : 'Auto / Editable'}
-              </span>
-            </label>
+          <div className="w-full">
             <SearchableCombobox
+              label={
+                <span className="flex items-center gap-1 text-[#F45A0A]">
+                  <UserCheck size={12} className="text-[#F45A0A]" />
+                  <span>{isAr ? 'موظف الإصدار' : 'Issuing Employee'}</span>
+                </span>
+              }
+              labelAction={
+                <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
+                  {isAr ? 'قابل للتعديل' : 'Editable'}
+                </span>
+              }
               value={d.agent}
               onChange={(val) => setD({ ...d, agent: val || '' })}
               options={employeeOptions || []}
