@@ -113,6 +113,7 @@ export interface CoreAccountsConfig {
   commissionsParentAccountId: string;
   otherRevenuesParentAccountId: string;
   externalPartiesParentAccountId: string;
+  groupRevenueAccountId: string;
 }
 
 export interface ServicesAccountsConfig {
@@ -207,6 +208,7 @@ export const SystemSettingsPage: React.FC = () => {
     commissionsParentAccountId: '',
     otherRevenuesParentAccountId: '',
     externalPartiesParentAccountId: '',
+    groupRevenueAccountId: '',
   });
   const [isSavingCoreAccounts, setIsSavingCoreAccounts] = useState(false);
 
@@ -678,6 +680,7 @@ export const SystemSettingsPage: React.FC = () => {
       commissionsParentAccountId: pComm?.id || '',
       otherRevenuesParentAccountId: pOthRev?.id || '',
       externalPartiesParentAccountId: allAccs.find((a: any) => a.code === '9')?.id || '',
+      groupRevenueAccountId: allAccs.find((a: any) => a.code === '4105')?.id || allAccs.find((a: any) => String(a.nameAr||'').includes('كروبات') && String(a.type||'')==='REVENUE')?.id || '',
     };
   };
 
@@ -2077,6 +2080,28 @@ export const SystemSettingsPage: React.FC = () => {
                     />
                     <p className="text-[10px] text-slate-500 font-medium mt-1">
                       حساباتهم (البورصة، المكاتب الوسيطة، العملاء) تُدرج تحته ولا تُحتسب ضمن الموجودات أو المطلوبات — رقابية بحتة.
+                    </p>
+                  </div>
+
+                  {/* 12. الحساب الختامي للكروبات (إيراد الكروبات) */}
+                  <div className="space-y-1 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-[#F45A0A] transition-colors shadow-2xs md:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <IconUsers size={15} className="text-[#F45A0A]" />
+                        الحساب الختامي للكروبات (إيراد تذاكر الكروبات)
+                      </label>
+                      <span className="text-[10.5px] text-slate-500 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+                        المقترح: 4105 / كروبات
+                      </span>
+                    </div>
+                    <SearchableCombobox
+                      options={accountOptionsWithParent}
+                      value={coreAccounts.groupRevenueAccountId}
+                      onChange={(val) => setCoreAccounts(p => ({ ...p, groupRevenueAccountId: val || '' }))}
+                      placeholder="اختر حساب إيراد الكروبات..."
+                    />
+                    <p className="text-[10px] text-slate-500 font-medium mt-1">
+                      إليه يُقيَّد ربح مبيعات الكروبات في القيود اليومية — كي لا يختلط بإيراد تذاكر الطيران.
                     </p>
                   </div>
                 </div>

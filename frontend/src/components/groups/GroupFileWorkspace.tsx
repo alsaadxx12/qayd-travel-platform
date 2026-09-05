@@ -263,6 +263,9 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   const [deleteGroupConfirmOpen, setDeleteGroupConfirmOpen] = useState(false);
   const [auditLogOpen, setAuditLogOpen] = useState(false);
   const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const user = useAuthStore((s) => s.user);
+  const currentUserName = user?.name || (user as any)?.username || (isAr ? 'مدير النظام' : 'System Admin');
+
   const [editGroupData, setEditGroupData] = useState({
     groupName: '',
     country: '',
@@ -275,17 +278,23 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
 
   useEffect(() => {
     if (g) {
+      const extractedAgent =
+        (g as any).agent ||
+        (g.notes?.startsWith('AGENT:') ? g.notes.replace('AGENT:', '').trim() : '') ||
+        g.passengers?.find((p) => p.agent)?.agent ||
+        currentUserName ||
+        '';
       setEditGroupData({
         groupName: g.groupName || '',
         country: g.country || '',
         travelDate: g.travelDate ? String(g.travelDate).split('T')[0] : '',
         groupType: g.groupType || 'FULL',
         currency: g.currency || 'IQD',
-        notes: g.notes || '',
-        agent: g.passengers?.find((p) => p.agent)?.agent || '',
+        notes: g.notes?.startsWith('AGENT:') ? '' : (g.notes || ''),
+        agent: extractedAgent,
       });
     }
-  }, [g]);
+  }, [g, currentUserName]);
 
   // قفل إعادة الدخول: حالة busy تصل الشاشة متأخرةً عن النقرة الثانية، أما
   // المرجع فيقفل فوراً — نقرتان أثناء بطء الشبكة كانتا تحفظان النظام مرتين.
@@ -314,8 +323,6 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
     [isAr, onChanged],
   );
 
-  const user = useAuthStore((s) => s.user);
-  const currentUserName = user?.name || (user as any)?.username || (isAr ? 'مدير النظام' : 'System Admin');
   const [employeesList, setEmployeesList] = useState<any[]>([]);
 
   useEffect(() => {
@@ -528,16 +535,22 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                   <span>{g?.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : (isAr ? 'بلا تاريخ سفر' : 'no date')}</span>
                 </span>
                 <span>•</span>
-                <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
-                  <span className="text-slate-400 font-sans">{isAr ? 'مدخل البيانات:' : 'Entry:'}</span>
+                <span className="inline-flex items-center gap-1.5 bg-slate-50 px-2.5 py-0.5 rounded-md border border-slate-200 text-[11px]">
+                  <User size={11} className="text-slate-400" />
+                  <span className="text-slate-500 font-sans">{isAr ? 'مدخل البيانات:' : 'Entry:'}</span>
                   <span className="text-slate-800 font-bold">{g?.createdByName || currentUserName}</span>
                 </span>
-                {g?.passengers?.find((p) => p.agent)?.agent && (
-                  <span className="inline-flex items-center gap-1 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200 text-[#F45A0A] text-[11px]">
-                    <span className="text-orange-500 font-sans">{isAr ? 'المصدر:' : 'Issuer:'}</span>
-                    <span className="font-bold">{g.passengers.find((p) => p.agent)?.agent}</span>
+                <span className="inline-flex items-center gap-1.5 bg-orange-50/80 px-2.5 py-0.5 rounded-md border border-orange-200 text-[#F45A0A] text-[11px]">
+                  <UserCheck size={11} className="text-[#F45A0A]" />
+                  <span className="text-orange-600 font-sans">{isAr ? 'موظف الإصدار:' : 'Issuer:'}</span>
+                  <span className="font-bold">
+                    {(g as any)?.agent ||
+                      (g?.notes?.startsWith('AGENT:') ? g.notes.replace('AGENT:', '').trim() : '') ||
+                      g?.passengers?.find((p) => p.agent)?.agent ||
+                      g?.createdByName ||
+                      currentUserName}
                   </span>
-                )}
+                </span>
               </p>
             </div>
           </div>
@@ -1178,18 +1191,42 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 font-bold">{isAr ? 'مدخل البيانات:' : 'Data Entry:'}</span>
-                <span className="font-black text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 font-sans">
-                  {g.createdByName || currentUserName}
-                </span>
+            {/* شريط علوي: مدخل البيانات وموظف الإصدار */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-slate-50/90 border border-slate-200 p-3 text-xs">
+              {/* مدخل البيانات */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                  <User size={12} className="text-slate-400" />
+                  <span>{isAr ? 'مدخل البيانات (تلقائي)' : 'Data Entry (Auto)'}</span>
+                </label>
+                <div className="h-[38px] px-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between shadow-2xs font-sans">
+                  <span className="font-bold text-slate-800 text-xs truncate">
+                    {g.createdByName || currentUserName}
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                    {isAr ? 'المستخدم الحالي' : 'Current User'}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[#F45A0A] font-bold shrink-0">{isAr ? 'موظف الإصدار / المصدر:' : 'Issuer:'}</span>
-                <span className="font-black text-slate-800 truncate">
-                  {editGroupData.agent || (isAr ? 'لم يُحدد' : 'Not set')}
-                </span>
+
+              {/* موظف الإصدار / المصدر - قابل للتعديل */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
+                  <span className="flex items-center gap-1 text-[#F45A0A]">
+                    <UserCheck size={12} className="text-[#F45A0A]" />
+                    <span>{isAr ? 'موظف الإصدار / المصدر' : 'Issuing Employee / Issuer'}</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
+                    {isAr ? 'تلقائي وقابل للتعديل' : 'Auto / Editable'}
+                  </span>
+                </label>
+                <SearchableCombobox
+                  value={editGroupData.agent}
+                  onChange={(val) => setEditGroupData({ ...editGroupData, agent: val || '' })}
+                  options={employeeOptions || []}
+                  placeholder={isAr ? 'اختر أو اكتب موظف الإصدار...' : 'Select or type issuer...'}
+                  allowCustomValue
+                />
               </div>
             </div>
 
@@ -1204,20 +1241,6 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                   onChange={(e) => setEditGroupData({ ...editGroupData, groupName: e.target.value })}
                   className={inputClass}
                   placeholder={isAr ? 'اسم الكروب' : 'Group Name'}
-                />
-              </div>
-
-              {/* موظف الإصدار */}
-              <div className="sm:col-span-2">
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  {isAr ? 'موظف الإصدار / المصدر' : 'Issuing Employee / Issuer'}
-                </label>
-                <SearchableCombobox
-                  value={editGroupData.agent}
-                  onChange={(val) => setEditGroupData({ ...editGroupData, agent: val || '' })}
-                  options={employeeOptions || []}
-                  placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
-                  allowCustomValue
                 />
               </div>
 
@@ -1330,7 +1353,8 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                         country: editGroupData.country,
                         groupType: editGroupData.groupType,
                         currency: editGroupData.currency,
-                        notes: editGroupData.notes,
+                        agent: editGroupData.agent?.trim() || undefined,
+                        notes: editGroupData.notes || (editGroupData.agent?.trim() ? `AGENT:${editGroupData.agent.trim()}` : undefined),
                         travelDate: editGroupData.travelDate ? new Date(editGroupData.travelDate).toISOString() : undefined,
                       }),
                     isAr ? 'تم تعديل بيانات الكروب بنجاح' : 'Group updated',
@@ -3614,6 +3638,7 @@ export const NewGroupModal: React.FC<{
   onClose: () => void;
   onCreated: (g: TourGroup) => void;
 }> = ({ opened, direction, isAr, currentUserName, employeeOptions, onClose, onCreated }) => {
+  const defaultAgent = currentUserName || (isAr ? 'مدير النظام' : 'System Admin');
   const [d, setD] = useState<any>({
     groupName: '',
     groupType: 'FULL',
@@ -3621,9 +3646,15 @@ export const NewGroupModal: React.FC<{
     travelDate: new Date(),
     buyDate: new Date(),
     currency: 'IQD',
-    agent: '',
+    agent: defaultAgent,
   });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (currentUserName && (!d.agent || d.agent === 'مدير النظام' || d.agent === 'System Admin')) {
+      setD((prev: any) => ({ ...prev, agent: currentUserName }));
+    }
+  }, [currentUserName]);
 
   return (
     <Modal
@@ -3658,19 +3689,42 @@ export const NewGroupModal: React.FC<{
           </button>
         </div>
 
-        {/* تنويه مدخل البيانات وموظف الإصدار */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-bold">{isAr ? 'مدخل البيانات:' : 'Data Entry:'}</span>
-            <span className="font-black text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 font-sans">
-              {currentUserName || (isAr ? 'مدير النظام' : 'System Admin')}
-            </span>
+        {/* شريط علوي: مدخل البيانات وموظف الإصدار */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-xl bg-slate-50/90 border border-slate-200 p-3 text-xs">
+          {/* مدخل البيانات */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+              <User size={12} className="text-slate-400" />
+              <span>{isAr ? 'مدخل البيانات (تلقائي)' : 'Data Entry (Auto)'}</span>
+            </label>
+            <div className="h-[38px] px-3 rounded-xl bg-white border border-slate-200 flex items-center justify-between shadow-2xs font-sans">
+              <span className="font-bold text-slate-800 text-xs truncate">
+                {currentUserName || (isAr ? 'مدير النظام' : 'System Admin')}
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                {isAr ? 'المستخدم الحالي' : 'Current User'}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[#F45A0A] font-bold shrink-0">{isAr ? 'موظف الإصدار / المصدر:' : 'Issuer:'}</span>
-            <span className="font-black text-slate-800 truncate">
-              {d.agent || (isAr ? 'لم يُحدد' : 'Not set')}
-            </span>
+
+          {/* موظف الإصدار / المصدر - افتراضياً نفس المستخدم وقابل للتعديل */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-bold text-slate-700 flex items-center justify-between">
+              <span className="flex items-center gap-1 text-[#F45A0A]">
+                <UserCheck size={12} className="text-[#F45A0A]" />
+                <span>{isAr ? 'موظف الإصدار / المصدر' : 'Issuing Employee / Issuer'}</span>
+              </span>
+              <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100">
+                {isAr ? 'تلقائي وقابل للتعديل' : 'Auto / Editable'}
+              </span>
+            </label>
+            <SearchableCombobox
+              value={d.agent}
+              onChange={(val) => setD({ ...d, agent: val || '' })}
+              options={employeeOptions || []}
+              placeholder={isAr ? 'اختر أو اكتب موظف الإصدار...' : 'Select or type issuer...'}
+              allowCustomValue
+            />
           </div>
         </div>
 
@@ -3686,20 +3740,6 @@ export const NewGroupModal: React.FC<{
               onChange={(e) => setD({ ...d, groupName: e.target.value })}
               className={inputClass}
               placeholder={isAr ? 'اسم الكروب' : 'Group Name'}
-            />
-          </div>
-
-          {/* موظف الإصدار */}
-          <div className="sm:col-span-2">
-            <label className="text-xs font-bold text-slate-700 block mb-1">
-              {isAr ? 'موظف الإصدار / المصدر' : 'Issuing Employee / Issuer'}
-            </label>
-            <SearchableCombobox
-              value={d.agent}
-              onChange={(val) => setD({ ...d, agent: val || '' })}
-              options={employeeOptions || []}
-              placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
-              allowCustomValue
             />
           </div>
 
@@ -3819,7 +3859,9 @@ export const NewGroupModal: React.FC<{
                   travelDate: d.travelDate ? new Date(d.travelDate).toISOString() : undefined,
                   buyDate: d.buyDate ? new Date(d.buyDate).toISOString() : undefined,
                   currency: d.currency,
-                });
+                  agent: d.agent?.trim() || undefined,
+                  notes: d.agent?.trim() ? `AGENT:${d.agent.trim()}` : undefined,
+                } as any);
                 showSuccessNotification(isAr ? 'أُنشئ الكروب' : 'Created', created.groupName);
                 onCreated(created);
               } catch (e: any) {

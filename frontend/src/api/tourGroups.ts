@@ -41,6 +41,7 @@ export interface TourGroup {
   id: string; groupName: string; groupType: string; country?: string | null;
   buyDate?: string | null; travelDate?: string | null; active: boolean; status: string;
   openSale: boolean; currency: string; exchangeRate: number; notes?: string | null;
+  agent?: string | null;
   priceSystems: GroupPriceSystem[]; charges: GroupCharge[]; passengers: GroupPassenger[];
   summary: TourGroupSummary; createdAt?: string; createdById?: string | null; createdByName?: string;
 }

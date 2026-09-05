@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { SequencesService } from '../sequences/sequences.service';
 
 /**
  * الكروب ملفٌّ مالي وتشغيلي كامل، لا قائمة مسافرين.
@@ -18,7 +19,40 @@ const KINDS = new Set(['TICKET', 'HOTEL', 'VISA', 'INSURANCE', 'TRANSPORT', 'GUI
 
 @Injectable()
 export class TourGroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sequences: SequencesService,
+  ) {}
+
+  /**
+   * الحساب الختامي (الإيراد) للكروبات من إعدادات الربط المحاسبي:
+   * أولاً core_accounts_mapping.groupRevenueAccountId، ثم
+   * services_accounts_mapping.groupRevenueAccountId، ثم بالرمز 4105/كروبات،
+   * وأخيراً أي حساب إيرادٍ عام. فيُقيَّد ربح الكروب في حسابه الخاص لا في التذاكر.
+   */
+  private async resolveGroupRevenueAccount(companyId: string): Promise<string | null> {
+    const readCfg = async (docType: string, key: string): Promise<string | null> => {
+      const row = await this.prisma.printTemplate.findFirst({ where: { companyId, docType }, select: { config: true } });
+      if (!row) return null;
+      try {
+        const id = JSON.parse(row.config || '{}')?.[key];
+        return id ? String(id) : null;
+      } catch {
+        return null;
+      }
+    };
+    const configured = (await readCfg('core_accounts_mapping', 'groupRevenueAccountId')) || (await readCfg('services_accounts_mapping', 'groupRevenueAccountId'));
+    if (configured) {
+      const exists = await this.prisma.account.findFirst({ where: { id: configured, companyId }, select: { id: true } });
+      if (exists) return exists.id;
+    }
+    const byCode = await this.prisma.account.findFirst({ where: { companyId, code: { in: ['4105', '345'] } }, orderBy: { code: 'asc' }, select: { id: true } });
+    if (byCode) return byCode.id;
+    const generic =
+      (await this.prisma.account.findFirst({ where: { companyId, code: { in: ['4111', '411'] } }, orderBy: { code: 'desc' }, select: { id: true } })) ||
+      (await this.prisma.account.findFirst({ where: { companyId, type: 'REVENUE' as any }, select: { id: true } }));
+    return generic?.id || null;
+  }
 
   private async audit(companyId: string, userId: string | undefined, action: string, entityId: string, details: any) {
     await this.prisma.auditLog
@@ -131,6 +165,7 @@ export class TourGroupsService {
 
     return groups.map((g) => ({ 
       ...g, 
+      agent: (g.notes?.startsWith('AGENT:') ? g.notes.replace('AGENT:', '').trim() : '') || g.passengers?.find((p: any) => p.agent)?.agent || null,
       createdByName: (g.createdById && userMap.get(g.createdById)) || 'مدير النظام',
       summary: this.computeSummary(g) 
     }));
@@ -159,6 +194,7 @@ export class TourGroupsService {
 
     return {
       ...g,
+      agent: (g.notes?.startsWith('AGENT:') ? g.notes.replace('AGENT:', '').trim() : '') || passengers.find((p: any) => p.agent)?.agent || null,
       createdByName: user?.name || 'مدير النظام',
       priceSystems,
       charges,
@@ -200,7 +236,7 @@ export class TourGroupsService {
         openSale: Boolean(dto.openSale),
         currency: dto.currency || 'IQD',
         exchangeRate: new Prisma.Decimal(dec(dto.exchangeRate) || 1),
-        notes: dto.notes || null,
+        notes: dto.notes || (dto.agent ? `AGENT:${dto.agent}` : null),
         createdById: userId || null,
       },
     });
@@ -223,6 +259,7 @@ export class TourGroupsService {
         ...(dto.currency !== undefined && { currency: dto.currency }),
         ...(dto.exchangeRate !== undefined && { exchangeRate: new Prisma.Decimal(dec(dto.exchangeRate) || 1) }),
         ...(dto.notes !== undefined && { notes: dto.notes }),
+        ...(dto.agent !== undefined && { notes: `AGENT:${dto.agent}` }),
       },
     });
     return this.getOne(companyId, id);
@@ -388,10 +425,7 @@ export class TourGroupsService {
       pax.customerAccountId ||
       (await this.prisma.account.findFirst({ where: { companyId, OR: [{ code: '141' }, { code: '14' }, { category: 'CUSTOMER' as any }] }, select: { id: true } }))?.id ||
       null;
-    const revenue =
-      (await this.prisma.account.findFirst({ where: { companyId, code: { in: ['4111', '411'] } }, orderBy: { code: 'desc' }, select: { id: true } })) ||
-      (await this.prisma.account.findFirst({ where: { companyId, type: 'REVENUE' as any }, select: { id: true } }));
-    const revenueAccountId = revenue?.id || null;
+    const revenueAccountId = await this.resolveGroupRevenueAccount(companyId);
 
     const isCash = pax.payType === 'CASH' || pax.payType === 'MASTER';
     const cashboxAccountId = isCash
@@ -453,7 +487,7 @@ export class TourGroupsService {
 
     await this.prisma.journalEntry.create({
       data: {
-        entryNumber: `JV-GRP-${paxId.slice(0, 8)}`,
+        entryNumber: (pax as any).docNumber ? `JV-${(pax as any).docNumber}` : `JV-GRP-${paxId.slice(0, 8)}`,
         reference,
         date: new Date(),
         description: `قيد مسافر كروب ${group.groupName}: ${pax.passengerName} (${custName})`,
@@ -501,11 +535,22 @@ export class TourGroupsService {
       agentName = u?.name || '';
     }
 
+    // رقم المستند التسلسلي للكروب (بادئة GRP) يُخصَّص عند البيع فيربط القيد
+    // بالتسلسل الصحيح؛ وإن تعذّر التخصيص لا يُوقَف البيع.
+    let docNumber: string | null = null;
+    try {
+      const allocated = await this.sequences.allocate(companyId, 'groups', dto.branchCode || undefined);
+      docNumber = allocated?.number || null;
+    } catch {
+      docNumber = null;
+    }
+
     const passengerId = await this.prisma.$transaction(async (tx) => {
       const pax = await tx.groupPassenger.create({
         data: {
           groupId,
           priceSystemId: ps.id,
+          docNumber: docNumber || undefined,
           customerName: String(dto.customerName || '').trim() || String(dto.passengerName || '').trim(),
           customerId: dto.customerId || null,
           customerAccountId: dto.customerAccountId || null,

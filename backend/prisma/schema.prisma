@@ -1377,6 +1377,8 @@ model GroupPassenger {
   collectedAmount   Decimal  @default(0)
   voucherNumber     String?
   fCode             String?
+  /// رقم المستند التسلسلي للكروب (بادئة GRP) — يُخصَّص عند البيع ويربط القيد.
+  docNumber         String?
   /// RESERVED | CONFIRMED | CANCELLED — والاكتمال يُشتق من خدماته لا يُكتب.
   state             String   @default("RESERVED")
   notes             String?
