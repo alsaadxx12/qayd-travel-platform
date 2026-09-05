@@ -71,6 +71,12 @@ export class TourGroupsController {
     return this.svc.updatePassenger(req.user.companyId, id, paxId, dto, req.user.id);
   }
 
+  @Delete(':id/passengers/:paxId')
+  @ApiOperation({ summary: 'حذف مسافر نهائياً مع خدماته وقيده المحاسبي' })
+  removePassenger(@Req() req: any, @Param('id') id: string, @Param('paxId') paxId: string) {
+    return this.svc.removePassenger(req.user.companyId, id, paxId, req.user.id);
+  }
+
   @Put(':id/services/:serviceId')
   @ApiOperation({ summary: 'تحديث خدمة مسافر — Final Buy يقلبها Complete ويُدوَّن التغيير' })
   updateService(@Req() req: any, @Param('id') id: string, @Param('serviceId') serviceId: string, @Body() dto: any) {

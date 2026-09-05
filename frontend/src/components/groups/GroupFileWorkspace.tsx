@@ -39,6 +39,7 @@ import {
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
 import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
+import { AccountSearchField, type AccountPick } from './AccountSearchField';
 import { partnersApi } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
 import { employeesApi } from '../../api/employees';
@@ -225,7 +226,15 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   const [customers, setCustomers] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [openPax, setOpenPax] = useState<string | null>(null);
-  const [paxModal, setPaxModal] = useState(false);
+  const [paxModal, setPaxModal] = useState<{
+    open: boolean;
+    initialCustomer?: { name: string; id?: string | null; accountId?: string | null } | null;
+  }>({ open: false, initialCustomer: null });
+  const [beneficiaryModalOpen, setBeneficiaryModalOpen] = useState(false);
+  const [activeBeneficiaries, setActiveBeneficiaries] = useState<
+    Array<{ name: string; accountId?: string | null; id?: string | null }>
+  >([]);
+  const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string, boolean>>({});
   const [psModal, setPsModal] = useState<Partial<GroupPriceSystem> | null>(null);
   const [chargeModal, setChargeModal] = useState<'GLOBAL_PURCHASE' | 'EXPENSE' | null>(null);
   // الإشعارات المنبثقة معطَّلة في النظام كلّه، فأخطاء الحفظ كانت تختفي بصمت
@@ -301,6 +310,74 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
       })),
     [suppliers],
   );
+
+  const beneficiaryGroups = useMemo(() => {
+    if (!g) return [];
+    const map = new Map<
+      string,
+      {
+        key: string;
+        name: string;
+        accountId: string | null;
+        customerId: string | null;
+        passengers: GroupPassenger[];
+        totalSale: number;
+        totalPaid: number;
+        totalDue: number;
+      }
+    >();
+
+    // 1. أضف المستفيدين النشطين المفتوحين يدوياً حتى تظهر ملفاتهم حتى لو لم يُضف إليها مسافر بعد
+    for (const b of activeBeneficiaries) {
+      const key = b.accountId ? `acc_${b.accountId}` : `name_${b.name.trim().toLowerCase()}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          name: b.name,
+          accountId: b.accountId || null,
+          customerId: b.id || null,
+          passengers: [],
+          totalSale: 0,
+          totalPaid: 0,
+          totalDue: 0,
+        });
+      }
+    }
+
+    // 2. جمّع المسافرين الحاليين في ملفات المستفيدين
+    for (const p of g.passengers || []) {
+      const trimmedName = (p.customerName || '').trim();
+      const accountId = p.customerAccountId || null;
+      const key = accountId ? `acc_${accountId}` : trimmedName ? `name_${trimmedName.toLowerCase()}` : '__general__';
+      const displayName = trimmedName || (isAr ? 'بدون مستفيد (عام)' : 'General');
+
+      let entry = map.get(key);
+      if (!entry) {
+        entry = {
+          key,
+          name: displayName,
+          accountId,
+          customerId: p.customerId || null,
+          passengers: [],
+          totalSale: 0,
+          totalPaid: 0,
+          totalDue: 0,
+        };
+        map.set(key, entry);
+      } else if (trimmedName && entry.name === (isAr ? 'بدون مستفيد (عام)' : 'General')) {
+        entry.name = trimmedName;
+      }
+
+      entry.passengers.push(p);
+      const sale = Number(p.salePrice) || 0;
+      const paid = p.payType === 'CASH' ? sale : 0;
+      entry.totalSale += sale;
+      entry.totalPaid += paid;
+      entry.totalDue += sale - paid;
+    }
+
+    return Array.from(map.values());
+  }, [g, activeBeneficiaries, isAr]);
 
   if (!opened) return null;
 
@@ -598,39 +675,193 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                     <button
                       type="button"
                       disabled={!g.openSale}
-                      onClick={() => setPaxModal(true)}
+                      onClick={() => setBeneficiaryModalOpen(true)}
+                      title={!g.openSale ? (isAr ? 'البيع مقفل — افتح البيع أولاً' : 'Sale is closed — open it first') : ''}
+                      className="h-8 px-3 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-[#F45A0A] text-xs font-black cursor-pointer flex items-center gap-1.5 transition-colors shadow-2xs"
+                    >
+                      <FolderPlus size={14} />
+                      <span>{isAr ? 'إضافة مستفيد جديد' : 'New Beneficiary'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!g.openSale}
+                      onClick={() => setPaxModal({ open: true, initialCustomer: null })}
                       title={!g.openSale ? (isAr ? 'البيع مقفل — افتح البيع أولاً' : 'Sale is closed — open it first') : ''}
                       className="h-8 px-3.5 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-2xs"
                     >
-                      <Plus size={14} />
+                      <UserPlus size={14} />
                       <span>{isAr ? 'إضافة مسافر' : 'Add Passenger'}</span>
                     </button>
                   </div>
                 </div>
 
-                {g.passengers.length === 0 ? (
-                  <div className="py-10 text-center space-y-1">
-                    <p className="text-xs font-black text-slate-600">
-                      {isAr ? 'لا يوجد مسافرون مسجلون بعد' : 'No passengers yet'}
-                    </p>
-                    <p className="text-[11px] font-bold text-slate-400">
-                      {isAr ? 'اضغط على «إضافة مسافر» لتسجيل المسافرين وتوليد بنود خدماتهم.' : 'Click "Add Passenger" to register passengers.'}
-                    </p>
+                {beneficiaryGroups.length === 0 ? (
+                  <div className="py-12 text-center space-y-2.5">
+                    <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#F45A0A] mx-auto flex items-center justify-center">
+                      <Users size={22} />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-black text-slate-700">
+                        {isAr ? 'لا يوجد مسافرون أو ملفات مستفيدين مسجلة بعد' : 'No passengers or beneficiary files yet'}
+                      </p>
+                      <p className="text-xs font-bold text-slate-400 max-w-md mx-auto">
+                        {isAr
+                          ? 'يمكنك إضافة ملف مستفيد مستقل لكل جهة أو شركة والبدء بإضافة مسافريها، أو إضافة مسافرين مباشرة.'
+                          : 'Create a beneficiary file for each customer/company, or add passengers directly.'}
+                      </p>
+                    </div>
+                    {g.openSale && (
+                      <div className="flex items-center justify-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setBeneficiaryModalOpen(true)}
+                          className="h-8 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-[#F45A0A] text-xs font-black hover:bg-orange-100 flex items-center gap-1.5 cursor-pointer transition-colors"
+                        >
+                          <FolderPlus size={14} />
+                          <span>{isAr ? 'إضافة مستفيد جديد' : 'New Beneficiary'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaxModal({ open: true, initialCustomer: null })}
+                          className="h-8 px-3.5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <UserPlus size={14} />
+                          <span>{isAr ? 'إضافة مسافر' : 'Add Passenger'}</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
-                    {g.passengers.map((p) => (
-                      <PassengerRow
-                        key={p.id}
-                        g={g}
-                        p={p}
-                        isAr={isAr}
-                        supplierOptions={supplierOptions}
-                        open={openPax === p.id}
-                        toggle={() => setOpenPax(openPax === p.id ? null : p.id)}
-                        run={run}
-                      />
-                    ))}
+                  <div className="space-y-3">
+                    {beneficiaryGroups.map((bg) => {
+                      const isExpanded = expandedBeneficiaries[bg.key] !== false;
+                      return (
+                        <div
+                          key={bg.key}
+                          className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs transition-all hover:border-orange-200"
+                        >
+                          {/* شريط ترويسة ملف المستفيد */}
+                          <div className="p-3 sm:p-3.5 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200/60 text-[#F45A0A] flex items-center justify-center shrink-0">
+                                <Folder size={16} />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-black text-xs sm:text-sm text-slate-900 truncate">
+                                    {bg.name}
+                                  </span>
+                                  <span className="text-[11px] font-black font-mono px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700 shrink-0">
+                                    {bg.passengers.length} {isAr ? 'مسافر' : 'pax'}
+                                  </span>
+                                </div>
+                                {bg.accountId && (
+                                  <span className="text-[10px] font-bold text-slate-400 block truncate">
+                                    {isAr ? 'حساب مالي مسجل' : 'Linked Account'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* مؤشرات مالية وأزرار ملف المستفيد */}
+                            <div className="flex items-center flex-wrap gap-2">
+                              <div className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums">
+                                <span className="text-slate-400 font-sans text-[11px] font-bold">
+                                  {isAr ? 'المبيعات:' : 'Sales:'}
+                                </span>
+                                <span className="text-slate-900 font-black">
+                                  {money(bg.totalSale, g.currency)}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums">
+                                <span className="text-slate-400 font-sans text-[11px] font-bold">
+                                  {isAr ? 'المحصل:' : 'Paid:'}
+                                </span>
+                                <span className="text-emerald-700 font-black">
+                                  {money(bg.totalPaid, g.currency)}
+                                </span>
+                              </div>
+
+                              {bg.totalDue > 0 && (
+                                <div className="flex items-center gap-1.5 text-xs font-bold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 font-mono tabular-nums">
+                                  <span className="text-rose-500 font-sans text-[11px] font-bold">
+                                    {isAr ? 'المتبقي:' : 'Due:'}
+                                  </span>
+                                  <span className="text-rose-700 font-black">
+                                    {money(bg.totalDue, g.currency)}
+                                  </span>
+                                </div>
+                              )}
+
+                              {g.openSale && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPaxModal({
+                                      open: true,
+                                      initialCustomer: {
+                                        name: bg.name,
+                                        accountId: bg.accountId,
+                                        id: bg.customerId,
+                                      },
+                                    })
+                                  }
+                                  className="h-7 px-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 text-[#F45A0A] text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors"
+                                  title={isAr ? 'إضافة مسافرين تحت هذا الملف' : 'Add travelers under this file'}
+                                >
+                                  <UserPlus size={12} />
+                                  <span>{isAr ? 'إضافة مسافر لهذا المستفيد' : 'Add Traveler'}</span>
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedBeneficiaries((prev) => ({
+                                    ...prev,
+                                    [bg.key]: isExpanded ? false : true,
+                                  }))
+                                }
+                                className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 flex items-center justify-center cursor-pointer"
+                                title={isExpanded ? (isAr ? 'طي' : 'Collapse') : (isAr ? 'توسيع' : 'Expand')}
+                              >
+                                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* قائمة المسافرين التابعين لهذا المستفيد */}
+                          {isExpanded && (
+                            <div className="p-3 bg-white space-y-2">
+                              {bg.passengers.length === 0 ? (
+                                <div className="py-5 text-center space-y-1 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                                  <p className="text-xs font-black text-slate-600">
+                                    {isAr ? 'لا يوجد مسافرون مسجلون لهذا المستفيد بعد' : 'No passengers under this file yet'}
+                                  </p>
+                                  <p className="text-[11px] font-bold text-slate-400">
+                                    {isAr ? 'اضغط على «إضافة مسافر لهذا المستفيد» لتسجيل المسافرين' : 'Click "Add Traveler" above to start'}
+                                  </p>
+                                </div>
+                              ) : (
+                                bg.passengers.map((p) => (
+                                  <PassengerRow
+                                    key={p.id}
+                                    g={g}
+                                    p={p}
+                                    isAr={isAr}
+                                    supplierOptions={supplierOptions}
+                                    open={openPax === p.id}
+                                    toggle={() => setOpenPax(openPax === p.id ? null : p.id)}
+                                    run={run}
+                                  />
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -672,7 +903,30 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
         />
       )}
 
-      {g && paxModal && (
+      {g && beneficiaryModalOpen && (
+        <NewBeneficiaryModal
+          isAr={isAr}
+          direction={direction}
+          onClose={() => setBeneficiaryModalOpen(false)}
+          onSelect={(b) => {
+            setActiveBeneficiaries((prev) => {
+              const key = b.accountId ? `acc_${b.accountId}` : `name_${b.name.trim().toLowerCase()}`;
+              const exists = prev.some(
+                (item) => (item.accountId ? `acc_${item.accountId}` : `name_${item.name.trim().toLowerCase()}`) === key,
+              );
+              return exists ? prev : [...prev, b];
+            });
+            setBeneficiaryModalOpen(false);
+            // افتح مباشرة نافذة إضافة مسافر لهذا المستفيد الجديد
+            setPaxModal({
+              open: true,
+              initialCustomer: b,
+            });
+          }}
+        />
+      )}
+
+      {g && paxModal.open && (
         <PassengerModal
           isAr={isAr}
           direction={direction}
@@ -680,13 +934,17 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           busy={busy}
           errorMsg={errorMsg}
           customerOptions={customerOptions}
+          initialCustomer={paxModal.initialCustomer}
           onClose={() => {
             setErrorMsg('');
-            setPaxModal(false);
+            setPaxModal({ open: false, initialCustomer: null });
           }}
           onSave={async (dto) => {
-            const ok = await run(() => tourGroupsApi.addPassenger(g.id, dto), isAr ? 'أُضيف المسافر وأُنشئت خدماته' : 'Passenger added');
-            if (ok) setPaxModal(false);
+            const ok = await run(
+              () => tourGroupsApi.addPassenger(g.id, dto),
+              isAr ? 'أُضيف المسافر بنجاح' : 'Passenger added',
+            );
+            return !!ok;
           }}
         />
       )}
@@ -707,6 +965,7 @@ const PassengerRow: React.FC<{
   const done = p.services.length > 0 && p.services.every((s) => s.status === 'COMPLETE');
   const cancelled = p.state === 'CANCELLED';
   const outstanding = Number(p.salePrice) - Number(p.collectedAmount);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <div
@@ -778,26 +1037,124 @@ const PassengerRow: React.FC<{
 
           {!cancelled && (
             <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/80 flex-wrap">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-bold text-slate-600">{isAr ? 'تحصيل:' : 'Collect:'}</span>
                 <CollectBox g={g} p={p} isAr={isAr} run={run} />
+                <PassengerPriceEdit g={g} p={p} isAr={isAr} run={run} />
               </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    run(
+                      () => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'CANCELLED' }),
+                      isAr ? 'أُلغي المسافر' : 'Cancelled',
+                    )
+                  }
+                  className="h-8 px-3 rounded-lg border border-amber-200 bg-white text-amber-700 text-xs font-bold hover:bg-amber-50 cursor-pointer shadow-2xs"
+                >
+                  {isAr ? 'إلغاء الحجز' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  title={isAr ? 'حذف المسافر نهائياً' : 'Delete permanently'}
+                  className="h-8 w-8 rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 flex items-center justify-center cursor-pointer shadow-2xs"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+          {cancelled && (
+            <div className="flex items-center justify-end pt-2 border-t border-slate-200/80">
               <button
                 type="button"
-                onClick={() =>
-                  run(
-                    () => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'CANCELLED' }),
-                    isAr ? 'أُلغي المسافر' : 'Cancelled',
-                  )
-                }
-                className="h-8 px-3 rounded-lg border border-rose-200 bg-white text-rose-700 text-xs font-bold hover:bg-rose-50 cursor-pointer shadow-2xs"
+                onClick={() => setConfirmDelete(true)}
+                className="h-8 px-3 rounded-lg border border-rose-200 bg-white text-rose-600 text-xs font-bold hover:bg-rose-50 cursor-pointer flex items-center gap-1.5"
               >
-                {isAr ? 'إلغاء الحجز' : 'Cancel'}
+                <Trash2 size={13} /> {isAr ? 'حذف نهائي' : 'Delete'}
               </button>
             </div>
           )}
         </div>
       )}
+
+      {confirmDelete && (
+        <Modal opened onClose={() => setConfirmDelete(false)} centered radius="lg" withCloseButton={false} zIndex={11200}>
+          <div className="space-y-3 font-sans" dir={isAr ? 'rtl' : 'ltr'}>
+            <p className="font-black text-sm text-slate-900">{isAr ? 'حذف المسافر؟' : 'Delete passenger?'}</p>
+            <p className="text-xs font-bold text-slate-600 leading-relaxed">
+              {isAr
+                ? `سيُحذف «${p.passengerName}» بكل خدماته وقيده المحاسبي نهائياً. للاحتفاظ بالسجل استخدم «إلغاء الحجز» بدلاً من الحذف.`
+                : `"${p.passengerName}" and its services and ledger entry will be permanently removed.`}
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setConfirmDelete(false)} className="h-9 px-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await run(() => tourGroupsApi.removePassenger(g.id, p.id), isAr ? 'حُذف المسافر' : 'Deleted');
+                  if (ok) setConfirmDelete(false);
+                }}
+                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black cursor-pointer"
+              >
+                {isAr ? 'حذف نهائي' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+/* ── تعديل سعر بيع المسافر بسرعة ── */
+const PassengerPriceEdit: React.FC<{
+  g: TourGroup;
+  p: GroupPassenger;
+  isAr: boolean;
+  run: (op: () => Promise<TourGroup>, ok?: string) => Promise<TourGroup | null>;
+}> = ({ g, p, isAr, run }) => {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(String(p.salePrice ?? ''));
+  useEffect(() => setVal(String(p.salePrice ?? '')), [p.salePrice]);
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-slate-600 text-[11px] font-bold hover:bg-slate-50 cursor-pointer"
+        title={isAr ? 'تعديل سعر البيع' : 'Edit sale price'}
+      >
+        {isAr ? 'تعديل السعر' : 'Edit price'}
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        dir="ltr"
+        className="h-8 w-24 px-2 rounded-lg border border-slate-300 text-[11px] font-mono font-black text-end outline-none focus:border-[#F45A0A]"
+      />
+      <button
+        type="button"
+        onClick={async () => {
+          const num = Number(String(val).replace(/,/g, '')) || 0;
+          const ok = await run(() => tourGroupsApi.updatePassenger(g.id, p.id, { salePrice: num }), isAr ? 'حُدّث السعر' : 'Updated');
+          if (ok) setEditing(false);
+        }}
+        className="h-8 px-2.5 rounded-lg bg-[#F45A0A] text-white text-[11px] font-black cursor-pointer"
+      >
+        {isAr ? 'حفظ' : 'Save'}
+      </button>
+      <button type="button" onClick={() => setEditing(false)} className="h-8 px-2 rounded-lg border border-slate-200 text-slate-500 text-[11px] font-bold cursor-pointer">
+        {isAr ? 'إلغاء' : 'Cancel'}
+      </button>
     </div>
   );
 };
@@ -1449,26 +1806,160 @@ const ChargeModal: React.FC<{
   );
 };
 
+/* ── نافذة إضافة ملف مستفيد جديد ── */
+const NewBeneficiaryModal: React.FC<{
+  isAr: boolean;
+  direction: string;
+  onClose: () => void;
+  onSelect: (beneficiary: { name: string; accountId: string | null; id?: string | null }) => void;
+}> = ({ isAr, direction, onClose, onSelect }) => {
+  const [selectedAccount, setSelectedAccount] = useState<{ id: string | null; name: string }>({
+    id: null,
+    name: '',
+  });
+  const [accountFinder, setAccountFinder] = useState<{ open: boolean; query: string }>({
+    open: false,
+    query: '',
+  });
+
+  const handleConfirm = () => {
+    if (!selectedAccount.name.trim()) return;
+    onSelect({
+      name: selectedAccount.name.trim(),
+      accountId: selectedAccount.id,
+    });
+  };
+
+  return (
+    <Modal
+      opened
+      onClose={onClose}
+      centered
+      size={500}
+      withCloseButton={false}
+      zIndex={10060}
+      classNames={{
+        content: '!rounded-2xl border border-slate-200 shadow-2xl !overflow-visible',
+        body: '!p-5',
+      }}
+    >
+      <div className="space-y-4 font-sans" dir={direction}>
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center">
+              <FolderPlus size={16} />
+            </div>
+            <div>
+              <h3 className="font-black text-sm text-slate-900">
+                {isAr ? 'إضافة ملف مستفيد جديد' : 'New Beneficiary File'}
+              </h3>
+              <p className="text-[11px] font-bold text-slate-400">
+                {isAr ? 'اختر العميل أو الحساب لتخصيص ملف حجز خاص به وإضافة مسافريه' : 'Select client for booking file'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center cursor-pointer"
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        <Field
+          label={isAr ? 'اسم المستفيد / العميل / الحساب *' : 'Beneficiary / Client Account *'}
+          action={
+            <button
+              type="button"
+              onClick={() => setAccountFinder({ open: true, query: selectedAccount.name || '' })}
+              className="h-[20px] px-1.5 text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
+              title={isAr ? 'البحث المتقدم في كل الحسابات' : 'Advanced Account Search'}
+            >
+              <Search size={11} />
+              <span>{isAr ? 'بحث متقدم' : 'Search'}</span>
+            </button>
+          }
+        >
+          <AccountSearchField
+            value={selectedAccount.name}
+            direction={direction}
+            inputClass={inputClass}
+            placeholder={isAr ? 'اكتب اسم العميل أو المستفيد…' : 'Type client name…'}
+            onPick={(pick: AccountPick) => {
+              setSelectedAccount({
+                id: pick.id,
+                name: pick.name,
+              });
+            }}
+          />
+        </Field>
+
+        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+          >
+            {isAr ? 'إلغاء' : 'Cancel'}
+          </button>
+          <button
+            type="button"
+            disabled={!selectedAccount.name.trim()}
+            onClick={handleConfirm}
+            className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs flex items-center gap-1.5"
+          >
+            <FolderPlus size={14} />
+            <span>{isAr ? 'إنشاء الملف والبدء بإضافة المسافرين' : 'Create & Add Passengers'}</span>
+          </button>
+        </div>
+      </div>
+
+      {accountFinder.open && (
+        <AccountFinderModal
+          opened={accountFinder.open}
+          initialQuery={accountFinder.query}
+          initialScope="CUSTOMER"
+          title={isAr ? 'البحث المتقدم عن العميل / المستفيد' : 'Advanced Search: Customer'}
+          zIndex={11000}
+          onClose={() => setAccountFinder({ open: false, query: '' })}
+          onSelect={(account: AccountFinderResult) => {
+            setSelectedAccount({
+              id: account.id,
+              name: account.name,
+            });
+            setAccountFinder({ open: false, query: '' });
+          }}
+        />
+      )}
+    </Modal>
+  );
+};
+
 /* ── نافذة إضافة مسافر جديد ── */
 const PassengerModal: React.FC<{
   isAr: boolean;
   direction: string;
   g: TourGroup;
   customerOptions: any[];
+  initialCustomer?: { name: string; id?: string | null; accountId?: string | null } | null;
   onClose: () => void;
-  onSave: (dto: any) => void;
+  onSave: (dto: any) => Promise<boolean>;
   busy?: boolean;
   errorMsg?: string;
-}> = ({ isAr, direction, g, customerOptions, onClose, onSave, busy, errorMsg }) => {
+}> = ({ isAr, direction, g, customerOptions, initialCustomer, onClose, onSave, busy, errorMsg }) => {
   const activeSystems = g.priceSystems.filter((s) => s.active);
   const user = useAuthStore((s) => s.user);
+  const passengerInputRef = useRef<HTMLInputElement>(null);
+  const [addedCount, setAddedCount] = useState(0);
+  const [lastAddedName, setLastAddedName] = useState('');
 
   const [d, setD] = useState<any>({
     priceSystemId: activeSystems[0]?.id || '',
     passengerName: '',
-    customerName: '',
-    customerId: null,
-    customerAccountId: null,
+    customerName: initialCustomer?.name || '',
+    customerId: initialCustomer?.id || null,
+    customerAccountId: initialCustomer?.accountId || null,
     passport: '',
     agent: '',
     payType: 'CASH',
@@ -1478,6 +1969,17 @@ const PassengerModal: React.FC<{
     currency: activeSystems[0]?.currency || g.currency || 'USD',
     salePrice: activeSystems[0] ? Number(activeSystems[0].salePrice) : 0,
   });
+
+  useEffect(() => {
+    if (initialCustomer) {
+      setD((prev: any) => ({
+        ...prev,
+        customerName: initialCustomer.name || '',
+        customerAccountId: initialCustomer.accountId || null,
+        customerId: initialCustomer.id || null,
+      }));
+    }
+  }, [initialCustomer]);
 
   const [paymentAccounts, setPaymentAccounts] = useState<any[]>([]);
   const [employeesList, setEmployeesList] = useState<any[]>([]);
@@ -1671,6 +2173,31 @@ const PassengerModal: React.FC<{
     reader.readAsDataURL(file);
   };
 
+  const handleSave = async () => {
+    if (busy || !d.passengerName.trim() || !d.priceSystemId) return;
+    const nameToAdd = d.passengerName.trim();
+    const ok = await onSave({
+      ...d,
+      passengerName: nameToAdd,
+      salePrice: Number(String(d.salePrice || 0).replace(/,/g, '')) || 0,
+      currency: d.currency || g.currency || 'USD',
+      transferImage: transferImage || null,
+    });
+    if (ok) {
+      setAddedCount((c) => c + 1);
+      setLastAddedName(nameToAdd);
+      setD((prev: any) => ({
+        ...prev,
+        passengerName: '',
+        passport: '',
+      }));
+      setTransferImage(null);
+      setTimeout(() => {
+        passengerInputRef.current?.focus();
+      }, 60);
+    }
+  };
+
   return (
     <Modal
       opened
@@ -1690,18 +2217,59 @@ const PassengerModal: React.FC<{
             <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center">
               <User size={16} />
             </div>
-            <h3 className="font-black text-sm text-slate-900">
-              {isAr ? 'إضافة مسافر' : 'Add Passenger'}
-            </h3>
+            <div>
+              <h3 className="font-black text-sm text-slate-900">
+                {isAr ? 'إضافة مسافر' : 'Add Passenger'}
+              </h3>
+              {addedCount > 0 && (
+                <p className="text-[10.5px] font-bold text-emerald-600">
+                  {isAr ? `أُضيف ${addedCount} مسافرين في هذه الجلسة` : `${addedCount} passengers added`}
+                </p>
+              )}
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="w-8 h-8 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center cursor-pointer"
+            title={isAr ? 'إغلاق النافذة' : 'Close'}
           >
             <X size={15} />
           </button>
         </div>
+
+        {initialCustomer?.name && (
+          <div className="rounded-xl border border-orange-200 bg-orange-50/60 px-3.5 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Folder size={15} className="text-[#F45A0A]" />
+              <span className="text-xs font-bold text-slate-700">
+                {isAr ? 'ملف المستفيد المحجوز له:' : 'Beneficiary Booking File:'}
+              </span>
+              <span className="text-xs font-black text-[#F45A0A]">
+                {initialCustomer.name}
+              </span>
+            </div>
+            <span className="text-[10.5px] font-bold text-slate-500 font-mono">
+              {isAr ? 'ملف مستفيد محدد' : 'Locked File'}
+            </span>
+          </div>
+        )}
+
+        {lastAddedName && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+              <span className="text-xs font-black text-emerald-800 truncate">
+                {isAr
+                  ? `تم حفظ المسافر «${lastAddedName}» بنجاح! يمكنك إدخال المسافر التالي مباشرةً.`
+                  : `Passenger "${lastAddedName}" saved! You can add next traveler directly.`}
+              </span>
+            </div>
+            <span className="text-[11px] font-black text-emerald-700 font-mono bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">
+              {isAr ? `المضافين: ${addedCount}` : `Added: ${addedCount}`}
+            </span>
+          </div>
+        )}
 
         {errorMsg && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-bold text-rose-700">
@@ -1732,6 +2300,7 @@ const PassengerModal: React.FC<{
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <Field label={isAr ? 'اسم المسافر *' : 'Passenger *'}>
             <input
+              ref={passengerInputRef}
               value={d.passengerName}
               onChange={(e) => setD({ ...d, passengerName: e.target.value })}
               className={inputClass}
@@ -1757,7 +2326,7 @@ const PassengerModal: React.FC<{
               value={d.customerName}
               direction={direction}
               inputClass={inputClass}
-              onPick={(pick) =>
+              onPick={(pick: AccountPick) =>
                 setD({
                   ...d,
                   customerName: pick.name,
@@ -1979,30 +2548,41 @@ const PassengerModal: React.FC<{
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
-          >
-            {isAr ? 'إلغاء' : 'Cancel'}
-          </button>
-          <button
-            type="button"
-            disabled={busy || !d.passengerName.trim() || !d.priceSystemId}
-            onClick={() =>
-              onSave({
-                ...d,
-                salePrice: Number(String(d.salePrice || 0).replace(/,/g, '')) || 0,
-                currency: d.currency || g.currency || 'USD',
-                transferImage: transferImage || null,
-              })
-            }
-            className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs"
-          >
-            {busy && <Loader size={13} color="white" />}
-            {busy ? (isAr ? 'جارٍ الإضافة…' : 'Adding…') : isAr ? 'إضافة المسافر' : 'Add'}
-          </button>
+        <div className="flex items-center justify-between gap-2.5 pt-3 border-t border-slate-100 flex-wrap">
+          <div className="flex items-center gap-2">
+            {addedCount > 0 && (
+              <span className="text-xs font-black text-emerald-700 font-mono bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                {isAr ? `أُضيف ${addedCount} مسافر` : `${addedCount} passengers added`}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+            >
+              {addedCount > 0 ? (isAr ? 'إنهاء وإغلاق' : 'Done & Close') : (isAr ? 'إلغاء' : 'Cancel')}
+            </button>
+            <button
+              type="button"
+              disabled={busy || !d.passengerName.trim() || !d.priceSystemId}
+              onClick={handleSave}
+              className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs flex items-center gap-1.5"
+            >
+              {busy ? (
+                <>
+                  <Loader size={13} color="white" />
+                  <span>{isAr ? 'جارٍ الحفظ…' : 'Saving…'}</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus size={14} />
+                  <span>{isAr ? 'حفظ وإضافة مسافر آخر' : 'Save & Add Next'}</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* معاينة صورة الوصل المرفق */}

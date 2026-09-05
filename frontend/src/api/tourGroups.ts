@@ -28,8 +28,10 @@ export interface GroupPassengerService {
 }
 export interface GroupPassenger {
   id: string; priceSystemId?: string | null; customerName: string; passengerName: string;
+  customerId?: string | null; customerAccountId?: string | null;
   passport?: string | null; agent?: string | null; salePrice: number; currency: string;
-  payType: 'CASH' | 'CREDIT'; paymentAccountId?: string | null; collectedAmount: number;
+  payType: 'CASH' | 'CREDIT'; paymentMethod?: string | null; paymentAccountId?: string | null; collectedAmount: number;
+  transferImage?: string | null;
   voucherNumber?: string | null; fCode?: string | null; state: string; notes?: string | null;
   services: GroupPassengerService[];
 }
@@ -64,6 +66,8 @@ export const tourGroupsApi = {
     apiRequest(`/tour-groups/${groupId}/passengers`, { method: 'POST', ...J(dto) }),
   updatePassenger: (groupId: string, paxId: string, dto: Partial<GroupPassenger>): Promise<TourGroup> =>
     apiRequest(`/tour-groups/${groupId}/passengers/${paxId}`, { method: 'PUT', ...J(dto) }),
+  removePassenger: (groupId: string, paxId: string): Promise<TourGroup> =>
+    apiRequest(`/tour-groups/${groupId}/passengers/${paxId}`, { method: 'DELETE' }),
   updateService: (groupId: string, serviceId: string, dto: Partial<GroupPassengerService> & { status?: string }): Promise<TourGroup> =>
     apiRequest(`/tour-groups/${groupId}/services/${serviceId}`, { method: 'PUT', ...J(dto) }),
 };

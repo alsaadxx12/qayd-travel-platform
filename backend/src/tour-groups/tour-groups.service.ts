@@ -290,6 +290,132 @@ export class TourGroupsService {
     return this.auditAndFetch(companyId, userId, 'GROUP_CHARGE_DELETE', groupId, { chargeId });
   }
 
+  /**
+   * قيدُ المسافر في دفتر الأستاذ — به يظهر الكروب في كشوف الحسابات.
+   *
+   * لكل مسافرٍ قيدٌ واحد مفتاحه المرجعي `GRP-{paxId}`، يُحذف ويُعاد بناؤه عند كل
+   * تغيير (كالتذاكر تماماً) فلا يتكرّر. توزيعُه:
+   *   مدين: حساب العميل بسعر البيع  → يظهر ديناً عليه في كشفه.
+   *   دائن: كلُّ مورّدٍ بـ Final Buy لخدمته → يظهر لنا عليه في كشف المورّد.
+   *   دائن: الإيراد بالباقي (سعر البيع − مجموع المشتريات المعروفة).
+   * والنقدي يُسوّى فوراً: مدين الصندوق ودائن العميل بسعر البيع، فيصفو كشفه.
+   * المسافر الملغى لا قيد له.
+   */
+  private async syncPassengerLedger(companyId: string, groupId: string, paxId: string, userId?: string) {
+    const reference = `GRP-${paxId}`;
+    // يُحذف القيد القديم دائماً؛ ثم يُعاد بناؤه إن كان المسافر فعّالاً.
+    await this.prisma.journalEntry.deleteMany({ where: { companyId, reference } });
+
+    const [group, pax] = await Promise.all([
+      this.prisma.tourGroup.findFirst({ where: { id: groupId, companyId }, select: { groupName: true, currency: true } }),
+      this.prisma.groupPassenger.findFirst({ where: { id: paxId, groupId }, include: { services: true } }),
+    ]);
+    if (!group || !pax || pax.state === 'CANCELLED') return;
+
+    const salePrice = dec(pax.salePrice);
+    if (salePrice <= 0 && (pax.services || []).every((s) => dec(s.finalBuy) <= 0)) return;
+
+    // createdById مفتاحٌ أجنبي إلزامي: userId قد يكون مستخدم التطوير الوهمي الذي
+    // لا صفَّ له، فيُتحقَّق منه ويُستبدل بأول مستخدمٍ حقيقي في الشركة عند اللزوم.
+    let createdById: string | null = null;
+    if (userId) {
+      const u = await this.prisma.user.findFirst({ where: { id: userId }, select: { id: true } });
+      createdById = u?.id || null;
+    }
+    if (!createdById) {
+      const anyUser = await this.prisma.user.findFirst({ where: { companyId }, select: { id: true } });
+      createdById = anyUser?.id || null;
+    }
+    if (!createdById) return; // بلا مستخدمٍ حقيقي لا يمكن كتابة القيد
+    const custName = pax.customerName || pax.passengerName || '';
+
+    // الحسابات: عميل المسافر، ومورّدو خدماته، والإيراد، والصندوق للنقدي.
+    const customerAccountId =
+      pax.customerAccountId ||
+      (await this.prisma.account.findFirst({ where: { companyId, OR: [{ code: '141' }, { code: '14' }, { category: 'CUSTOMER' as any }] }, select: { id: true } }))?.id ||
+      null;
+    const revenue =
+      (await this.prisma.account.findFirst({ where: { companyId, code: { in: ['4111', '411'] } }, orderBy: { code: 'desc' }, select: { id: true } })) ||
+      (await this.prisma.account.findFirst({ where: { companyId, type: 'REVENUE' as any }, select: { id: true } }));
+    const revenueAccountId = revenue?.id || null;
+
+    const isCash = pax.payType === 'CASH' || pax.payType === 'MASTER';
+    const cashboxAccountId = isCash
+      ? pax.paymentAccountId ||
+        (await this.prisma.account.findFirst({ where: { companyId, OR: [{ code: '1811' }, { code: '181' }, { category: 'CASH' as any }] }, select: { id: true } }))?.id ||
+        null
+      : null;
+
+    if (!customerAccountId) return; // بلا حساب عميل لا معنى للقيد
+
+    const lines: any[] = [];
+    // مدين العميل بسعر البيع كاملاً.
+    lines.push({
+      accountId: customerAccountId,
+      debit: new Prisma.Decimal(salePrice),
+      credit: new Prisma.Decimal(0),
+      description: `مبيعات كروب ${group.groupName} — ${pax.passengerName} (${custName})`,
+    });
+
+    // دائن كل مورّدٍ بحصّته (Final Buy) — يجمع المتكرر لتفادي أسطر متناثرة.
+    const bySupplier = new Map<string, number>();
+    let knownBuy = 0;
+    for (const sv of pax.services || []) {
+      const fb = dec(sv.finalBuy);
+      if (fb > 0 && sv.supplierAccountId) {
+        bySupplier.set(sv.supplierAccountId, (bySupplier.get(sv.supplierAccountId) || 0) + fb);
+        knownBuy += fb;
+      }
+    }
+    for (const [accId, amt] of bySupplier) {
+      lines.push({
+        accountId: accId,
+        debit: new Prisma.Decimal(0),
+        credit: new Prisma.Decimal(amt),
+        description: `استحقاق مورّد كروب ${group.groupName} — ${pax.passengerName}`,
+      });
+    }
+
+    // دائن الإيراد بالباقي (سعر البيع − المشتريات المعروفة). قد يكون سالباً فيُقيَّد مديناً.
+    const revenueShare = salePrice - knownBuy;
+    if (revenueAccountId && Math.abs(revenueShare) > 0.0001) {
+      lines.push(
+        revenueShare > 0
+          ? { accountId: revenueAccountId, debit: new Prisma.Decimal(0), credit: new Prisma.Decimal(revenueShare), description: `إيراد كروب ${group.groupName} — ${pax.passengerName}` }
+          : { accountId: revenueAccountId, debit: new Prisma.Decimal(Math.abs(revenueShare)), credit: new Prisma.Decimal(0), description: `فرق تكلفة كروب ${group.groupName} — ${pax.passengerName}` },
+      );
+    }
+
+    // النقدي: تسويةٌ فورية تُصفّي كشف العميل (مدين صندوق / دائن عميل).
+    const collected = Math.min(dec(pax.collectedAmount), salePrice);
+    if (isCash && cashboxAccountId && collected > 0) {
+      lines.push({ accountId: cashboxAccountId, debit: new Prisma.Decimal(collected), credit: new Prisma.Decimal(0), description: `تحصيل نقدي كروب ${group.groupName} — ${pax.passengerName}` });
+      lines.push({ accountId: customerAccountId, debit: new Prisma.Decimal(0), credit: new Prisma.Decimal(collected), description: `سداد نقدي كروب ${group.groupName} — ${pax.passengerName}` });
+    }
+
+    const totalDeb = lines.reduce((s, l) => s + Number(l.debit), 0);
+    const totalCred = lines.reduce((s, l) => s + Number(l.credit), 0);
+    if (lines.length < 2 || Math.abs(totalDeb - totalCred) > 0.01) return; // لا نكتب قيداً غير متوازن
+
+    await this.prisma.journalEntry.create({
+      data: {
+        entryNumber: `JV-GRP-${paxId.slice(0, 8)}`,
+        reference,
+        date: new Date(),
+        description: `قيد مسافر كروب ${group.groupName}: ${pax.passengerName} (${custName})`,
+        status: 'POSTED',
+        totalDebit: new Prisma.Decimal(totalDeb),
+        totalCredit: new Prisma.Decimal(totalCred),
+        companyId,
+        createdById,
+        postedById: createdById,
+        sourceType: 'GROUP',
+        sourceId: paxId,
+        lines: { create: lines },
+      },
+    }).catch(() => undefined);
+  }
+
   // ── المسافرون: البيع الكامل + استنساخ الخدمات في معاملة واحدة ──
   async addPassenger(companyId: string, groupId: string, dto: any, userId?: string) {
     // بوابات البيع تحتاج ثلاث حقائق لا الملف كله — تُجلب معاً في جولة واحدة.
@@ -366,6 +492,7 @@ export class TourGroupsService {
       priceSystem: ps.name,
       salePrice,
     });
+    await this.syncPassengerLedger(companyId, groupId, passengerId, userId);
     return this.getOne(companyId, groupId);
   }
 
@@ -403,10 +530,21 @@ export class TourGroupsService {
       },
     });
 
+    await this.syncPassengerLedger(companyId, groupId, paxId, userId);
     if (changes.length) {
       return this.auditAndFetch(companyId, userId, 'GROUP_PASSENGER_UPDATE', groupId, { passengerId: paxId, changes });
     }
     return this.getOne(companyId, groupId);
+  }
+
+  /** حذفٌ نهائي للمسافر: يزيل خدماته وقيده معاً. */
+  async removePassenger(companyId: string, groupId: string, paxId: string, userId?: string) {
+    await this.assertGroup(companyId, groupId);
+    const pax = await this.prisma.groupPassenger.findFirst({ where: { id: paxId, groupId }, select: { passengerName: true } });
+    if (!pax) throw new NotFoundException('المسافر غير موجود');
+    await this.prisma.journalEntry.deleteMany({ where: { companyId, reference: `GRP-${paxId}` } });
+    await this.prisma.groupPassenger.delete({ where: { id: paxId } });
+    return this.auditAndFetch(companyId, userId, 'GROUP_PASSENGER_DELETE', groupId, { passengerId: paxId, passengerName: pax.passengerName });
   }
 
   // ── خدمة المسافر: المورد + Final Buy تقلبها Complete، وكل تغييرٍ مؤثّر يُدوَّن ──
@@ -446,6 +584,7 @@ export class TourGroupsService {
       },
     });
 
+    await this.syncPassengerLedger(companyId, groupId, svc.passengerId, userId);
     if (changes.length) {
       return this.auditAndFetch(companyId, userId, 'GROUP_SERVICE_UPDATE', groupId, { serviceId, kind: svc.kind, changes });
     }
