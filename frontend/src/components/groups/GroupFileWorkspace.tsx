@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader, Menu, Modal } from '@mantine/core';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader, Menu, Modal, Select, Autocomplete } from '@mantine/core';
 import {
   X,
   Users,
@@ -27,11 +27,17 @@ import {
   DollarSign,
   User,
   Search,
+  UploadCloud,
+  Eye,
+  FileText,
 } from 'lucide-react';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
 import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
 import { partnersApi } from '../../api/partners';
+import { accountsApi } from '../../api/accounts';
+import { employeesApi } from '../../api/employees';
+import { useAuthStore } from '../../store/useAuthStore';
 import { WORLD_CITIES } from '../../data/worldCities';
 import {
   tourGroupsApi,
@@ -59,6 +65,7 @@ const KIND_META: Record<string, { ar: string; icon: any; color: string }> = {
   TRANSPORT: { ar: 'نقل', icon: Bus, color: 'text-amber-600 bg-amber-50 border-amber-200' },
   GUIDE: { ar: 'مرشد', icon: UserCheck, color: 'text-teal-600 bg-teal-50 border-teal-200' },
   PACKAGE: { ar: 'باكج', icon: Package, color: 'text-orange-600 bg-orange-50 border-orange-200' },
+  FULL_PACKAGE: { ar: 'بكج كامل', icon: Package, color: 'text-orange-700 bg-orange-100 border-orange-300' },
 };
 
 const fmt = (n: number) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -203,8 +210,13 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   const [psModal, setPsModal] = useState<Partial<GroupPriceSystem> | null>(null);
   const [chargeModal, setChargeModal] = useState<'GLOBAL_PURCHASE' | 'EXPENSE' | null>(null);
 
+  // قفل إعادة الدخول: حالة busy تصل الشاشة متأخرةً عن النقرة الثانية، أما
+  // المرجع فيقفل فوراً — نقرتان أثناء بطء الشبكة كانتا تحفظان النظام مرتين.
+  const busyRef = useRef(false);
   const run = useCallback(
     async (op: () => Promise<TourGroup>, okMsg?: string) => {
+      if (busyRef.current) return null;
+      busyRef.current = true;
       setBusy(true);
       try {
         const next = await op();
@@ -216,6 +228,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
         showErrorNotification(isAr ? 'تعذّر التنفيذ' : 'Failed', err?.message || '');
         return null;
       } finally {
+        busyRef.current = false;
         setBusy(false);
       }
     },
@@ -589,6 +602,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           isAr={isAr}
           direction={direction}
           draft={psModal}
+          busy={busy}
           groupCurrency={g.currency}
           supplierOptions={supplierOptions}
           onClose={() => setPsModal(null)}
@@ -604,6 +618,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           isAr={isAr}
           direction={direction}
           chargeType={chargeModal}
+          busy={busy}
           currency={g.currency}
           supplierOptions={supplierOptions}
           onClose={() => setChargeModal(null)}
@@ -619,6 +634,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           isAr={isAr}
           direction={direction}
           g={g}
+          busy={busy}
           customerOptions={customerOptions}
           onClose={() => setPaxModal(false)}
           onSave={async (dto) => {
@@ -876,13 +892,46 @@ const PriceSystemModal: React.FC<{
   supplierOptions: Array<{ value: string; label: string; code?: string }>;
   onClose: () => void;
   onSave: (dto: any) => void;
-}> = ({ isAr, direction, draft, groupCurrency, supplierOptions, onClose, onSave }) => {
-  const [d, setD] = useState<any>({ currency: groupCurrency, items: [], seats: 9999, ...draft });
+  busy?: boolean;
+}> = ({ isAr, direction, draft, groupCurrency, supplierOptions, onClose, onSave, busy }) => {
+  const [supplierFinderIndex, setSupplierFinderIndex] = useState<number | null>(null);
+
+  const [d, setD] = useState<any>(() => {
+    const defaultItems =
+      draft?.items && draft.items.length > 0
+        ? draft.items.map((it: any) => ({
+            ...it,
+            kind: it.kind === 'PACKAGE' ? 'FULL_PACKAGE' : it.kind,
+          }))
+        : [{ kind: 'TICKET', supplierName: '', expectedBuy: '', currency: groupCurrency }];
+    return {
+      currency: groupCurrency,
+      seats: 9999,
+      ...draft,
+      items: defaultItems,
+    };
+  });
+
+  const cleanSupplierNames = useMemo(() => {
+    const names = (supplierOptions || [])
+      .map((s) => (s.label || s.value || '').trim())
+      .filter(Boolean);
+    return Array.from(new Set(names));
+  }, [supplierOptions]);
+
   const patchItem = (i: number, ch: any) =>
     setD((prev: any) => ({
       ...prev,
       items: prev.items.map((it: any, j: number) => (j === i ? { ...it, ...ch } : it)),
     }));
+
+  const formatWithCommas = (val: any) => {
+    if (val === '' || val === null || val === undefined) return '';
+    const str = String(val).replace(/,/g, '');
+    const parts = str.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  };
 
   const KIND_SELECT_OPTIONS = [
     { value: 'TICKET', label: isAr ? 'طيران' : 'Ticket' },
@@ -891,7 +940,7 @@ const PriceSystemModal: React.FC<{
     { value: 'TRANSPORT', label: isAr ? 'نقل' : 'Transport' },
     { value: 'INSURANCE', label: isAr ? 'تأمين' : 'Insurance' },
     { value: 'GUIDE', label: isAr ? 'مرشد' : 'Guide' },
-    { value: 'PACKAGE', label: isAr ? 'باكج' : 'Package' },
+    { value: 'FULL_PACKAGE', label: isAr ? 'بكج كامل' : 'Full Package' },
   ];
 
   const addItem = (kind = 'TICKET') => {
@@ -909,22 +958,34 @@ const PriceSystemModal: React.FC<{
     }));
   };
 
+  const totals = useMemo(() => {
+    let usd = 0;
+    let iqd = 0;
+    (d.items || []).forEach((it: any) => {
+      const curr = it.currency || d.currency || 'USD';
+      const val = Number(String(it.expectedBuy || 0).replace(/,/g, '')) || 0;
+      if (curr === 'IQD') iqd += val;
+      else usd += val;
+    });
+    return { usd, iqd };
+  }, [d.items, d.currency]);
+
   return (
     <Modal
       opened
       onClose={onClose}
       centered
-      size={840}
+      size={880}
       withCloseButton={false}
       zIndex={10050}
       classNames={{
         content: '!rounded-2xl border border-slate-200 shadow-2xl !overflow-visible',
-        body: '!p-5',
+        body: '!p-5 !overflow-visible',
       }}
     >
-      <div className="space-y-4 font-sans" dir={direction}>
+      <div className="flex flex-col h-[520px] font-sans select-none" dir={direction}>
         {/* الترويسة المقتضبة */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center">
               <Coins size={16} />
@@ -943,18 +1004,20 @@ const PriceSystemModal: React.FC<{
         </div>
 
         {/* اسم النظام فقط بدون بيانات توضيحية */}
-        <Field label={isAr ? 'اسم النظام *' : 'System Name *'}>
-          <input
-            value={d.name || ''}
-            onChange={(e) => setD({ ...d, name: e.target.value })}
-            className={inputClass}
-            placeholder=""
-            autoFocus
-          />
-        </Field>
+        <div className="shrink-0 pt-3">
+          <Field label={isAr ? 'اسم النظام *' : 'System Name *'}>
+            <input
+              value={d.name || ''}
+              onChange={(e) => setD({ ...d, name: e.target.value })}
+              className={inputClass}
+              placeholder=""
+              autoFocus
+            />
+          </Field>
+        </div>
 
         {/* بنود الخدمات المضمنة */}
-        <div className="space-y-2 pt-1">
+        <div className="shrink-0 pt-3 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-slate-800">
               {isAr ? 'بنود الخدمات المضمنة:' : 'Included Services:'}
@@ -970,108 +1033,200 @@ const PriceSystemModal: React.FC<{
           </div>
 
           {d.items && d.items.length > 0 && (
-            <div className="grid grid-cols-[140px_1fr_140px_36px] gap-2.5 px-2 text-[11px] font-bold text-slate-500">
+            <div className="grid grid-cols-[130px_1fr_210px_36px] gap-2.5 px-2 text-[11px] font-bold text-slate-500">
               <span>{isAr ? 'اختيار البند' : 'Select Item'}</span>
               <span>{isAr ? 'المورد' : 'Supplier'}</span>
-              <span className="text-end">{isAr ? 'سعر الشراء' : 'Buy Price'}</span>
+              <span className="text-end">{isAr ? 'سعر الشراء والعملة' : 'Buy Price & Currency'}</span>
               <span></span>
             </div>
           )}
+        </div>
 
-          <div className="space-y-2.5 overflow-visible">
-            {(d.items || []).map((it: any, i: number) => (
-              <div
-                key={i}
-                style={{ zIndex: (d.items?.length || 10) - i, position: 'relative' }}
-                className="grid grid-cols-[140px_1fr_140px_auto] items-center gap-2.5 bg-slate-50/70 border border-slate-200 rounded-xl p-2 hover:bg-slate-50 transition-colors"
-              >
-                {/* اختيار البند */}
-                <div className="min-w-0">
-                  <SearchableCombobox
-                    value={it.kind || 'TICKET'}
-                    onChange={(val) => patchItem(i, { kind: val || 'TICKET' })}
-                    options={KIND_SELECT_OPTIONS}
-                    placeholder=""
-                    clearable={false}
-                  />
-                </div>
+        {/* منطقة البنود: ارتفاع مرن وتمرير داخلي يحافظ على ثبات حجم النافذة كلياً */}
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 py-2 pr-1 [scrollbar-width:thin]">
+          {(d.items || []).map((it: any, i: number) => (
+            <div
+              key={i}
+              style={{ zIndex: (d.items?.length || 10) - i, position: 'relative' }}
+              className="grid grid-cols-[130px_1fr_210px_auto] items-center gap-2.5 bg-slate-50/70 border border-slate-200 rounded-xl p-2 hover:bg-slate-50 transition-colors"
+            >
+              {/* اختيار البند عبر Portal */}
+              <div className="min-w-0">
+                <Select
+                  value={it.kind || 'TICKET'}
+                  onChange={(val) => patchItem(i, { kind: val || 'TICKET' })}
+                  data={KIND_SELECT_OPTIONS}
+                  comboboxProps={{
+                    withinPortal: true,
+                    zIndex: 10070,
+                    shadow: 'xl',
+                  }}
+                  allowDeselect={false}
+                  classNames={{
+                    input:
+                      '!h-[44px] !rounded-[10px] !border-[#E5E7EB] !bg-white !text-xs !font-bold !text-slate-900 focus:!border-2 focus:!border-[#F45A0A] !shadow-none',
+                    dropdown: '!rounded-[12px] !border-[#E5E7EB] !shadow-2xl !p-1.5',
+                    option:
+                      '!text-xs !font-bold !rounded-[8px] !py-2.5 hover:!bg-orange-50 hover:!text-[#F45A0A] data-[checked=true]:!bg-orange-50 data-[checked=true]:!text-[#F45A0A]',
+                  }}
+                />
+              </div>
 
-                {/* بحث عن المورد */}
-                <div className="min-w-0">
-                  <SearchableCombobox
+              {/* المورد مع إمكانية الكتابة والبحث + زر البحث المتقدم بأيقونة فقط */}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex-1 min-w-0">
+                  <Autocomplete
                     value={it.supplierName || ''}
-                    onChange={(val) => patchItem(i, { supplierName: val || '' })}
-                    options={supplierOptions}
-                    placeholder=""
-                    allowCustomValue
+                    onChange={(val) => patchItem(i, { supplierName: val })}
+                    data={cleanSupplierNames}
+                    comboboxProps={{
+                      withinPortal: true,
+                      zIndex: 10070,
+                      shadow: 'xl',
+                    }}
+                    placeholder={isAr ? 'اختر أو اكتب اسم المورد' : 'Supplier'}
+                    classNames={{
+                      input:
+                        '!h-[44px] !rounded-[10px] !border-[#E5E7EB] !bg-white !text-xs !font-bold !text-slate-900 focus:!border-2 focus:!border-[#F45A0A] !shadow-none',
+                      dropdown: '!rounded-[12px] !border-[#E5E7EB] !shadow-2xl !p-1.5',
+                      option:
+                        '!text-xs !font-bold !rounded-[8px] !py-2 hover:!bg-orange-50 hover:!text-[#F45A0A]',
+                    }}
                   />
                 </div>
-
-                {/* سعر الشراء */}
-                <div className="flex items-center h-[46px] w-full rounded-[11px] border border-[#E5E7EB] bg-white px-3 focus-within:border-2 focus-within:border-[#F45A0A] transition-colors">
-                  <input
-                    value={it.expectedBuy ?? ''}
-                    onChange={(e) => patchItem(i, { expectedBuy: num(e.target.value) })}
-                    dir="ltr"
-                    placeholder=""
-                    className="w-full bg-transparent font-mono font-black text-xs text-slate-900 outline-none text-end"
-                  />
-                  <span className="text-[11px] font-bold text-slate-400 font-mono shrink-0 select-none mr-1.5">
-                    {d.currency === 'USD' ? '$' : 'IQD'}
-                  </span>
-                </div>
-
-                {/* زر الحذف */}
                 <button
                   type="button"
-                  onClick={() => setD({ ...d, items: d.items.filter((_: any, j: number) => j !== i) })}
-                  className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center cursor-pointer transition-colors shadow-2xs shrink-0"
-                  title={isAr ? 'حذف البند' : 'Remove item'}
+                  onClick={() => setSupplierFinderIndex(i)}
+                  className="h-[44px] w-[44px] rounded-[10px] border border-orange-200 bg-orange-50 hover:bg-orange-100 text-[#F45A0A] flex items-center justify-center shrink-0 cursor-pointer transition-colors shadow-2xs"
+                  title={isAr ? 'البحث المتقدم عن المورد' : 'Advanced Supplier Search'}
                 >
-                  <Trash2 size={15} />
+                  <Search size={16} />
                 </button>
               </div>
-            ))}
 
-            {d.items.length === 0 && (
-              <div className="py-6 text-center border-2 border-dashed border-slate-200 rounded-xl">
-                <p className="text-xs font-bold text-slate-400">
-                  {isAr ? 'لا توجد خدمات مضافة بعد' : 'No service items added yet'}
-                </p>
+              {/* سعر الشراء مع الفواصل وإمكانية تغيير العملة باللون البرتقالي وبدون تسمية عربية */}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex-1 flex items-center h-[44px] min-w-0 rounded-[10px] border border-[#E5E7EB] bg-white px-2.5 focus-within:border-2 focus-within:border-[#F45A0A] transition-colors">
+                  <input
+                    value={formatWithCommas(it.expectedBuy ?? '')}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+                      const parts = raw.split('.');
+                      const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : raw;
+                      patchItem(i, { expectedBuy: clean });
+                    }}
+                    dir="ltr"
+                    placeholder="0"
+                    className="w-full bg-transparent font-mono font-black text-xs text-slate-900 outline-none text-end tabular-nums"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cur = (it.currency || d.currency || 'USD') === 'USD' ? 'IQD' : 'USD';
+                    patchItem(i, { currency: cur });
+                  }}
+                  className="h-[44px] px-3.5 rounded-[10px] text-xs font-black font-mono flex items-center justify-center border border-orange-200 bg-orange-50 hover:bg-orange-100 text-[#F45A0A] transition-all cursor-pointer select-none shrink-0 shadow-2xs"
+                  title={isAr ? 'انقر للتبديل بين USD و IQD' : 'Toggle USD / IQD'}
+                >
+                  {(it.currency || d.currency || 'USD') === 'USD' ? 'USD' : 'IQD'}
+                </button>
               </div>
-            )}
-          </div>
 
-          {d.items && d.items.length > 0 && (
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-              <span className="font-bold text-slate-600">
-                {isAr ? 'إجمالي سعر الشراء:' : 'Total Cost:'}
-              </span>
-              <span className="font-mono font-black text-xs text-slate-900" dir="ltr">
-                {money(d.items.reduce((acc: number, it: any) => acc + num(it.expectedBuy), 0), d.currency)}
-              </span>
+              {/* زر الحذف */}
+              <button
+                type="button"
+                onClick={() => setD({ ...d, items: d.items.filter((_: any, j: number) => j !== i) })}
+                className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center cursor-pointer transition-colors shadow-2xs shrink-0"
+                title={isAr ? 'حذف البند' : 'Remove item'}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+
+          {d.items.length === 0 && (
+            <div className="h-full min-h-[140px] flex items-center justify-center border-2 border-dashed border-slate-200 rounded-xl">
+              <p className="text-xs font-bold text-slate-400">
+                {isAr ? 'لا توجد خدمات مضافة بعد' : 'No service items added yet'}
+              </p>
             </div>
           )}
         </div>
 
-        {/* الأزرار */}
-        <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
-          >
-            {isAr ? 'إلغاء' : 'Cancel'}
-          </button>
-          <button
-            type="button"
-            disabled={!d.name?.trim()}
-            onClick={() => onSave({ ...d, salePrice: d.salePrice || 0, seats: 9999 })}
-            className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs"
-          >
-            {isAr ? 'حفظ نظام الأسعار' : 'Save System'}
-          </button>
+        {/* الشريط السفلي الثابت - محاذاة ثابتة لا تتغير إطلاقاً */}
+        <div className="shrink-0 pt-3 border-t border-slate-100 space-y-2.5">
+          <div className="flex items-center justify-between px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+            <span className="font-bold text-slate-600">
+              {isAr ? 'إجمالي سعر الشراء:' : 'Total Cost:'}
+            </span>
+            <div className="flex items-center gap-2 font-mono font-black text-xs" dir="ltr">
+              {totals.usd > 0 && (
+                <span className="text-[#F45A0A] bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">
+                  {totals.usd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} USD
+                </span>
+              )}
+              {totals.iqd > 0 && (
+                <span className="text-[#F45A0A] bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">
+                  {totals.iqd.toLocaleString('en-US')} IQD
+                </span>
+              )}
+              {totals.usd === 0 && totals.iqd === 0 && (
+                <span className="text-slate-500">0 {d.currency || groupCurrency}</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+            >
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button
+              type="button"
+              disabled={busy || !d.name?.trim()}
+              onClick={() =>
+                onSave({
+                  ...d,
+                  salePrice: d.salePrice || 0,
+                  seats: 9999,
+                  items: (d.items || []).map((it: any) => ({
+                    ...it,
+                    expectedBuy: Number(String(it.expectedBuy || 0).replace(/,/g, '')) || 0,
+                    currency: it.currency || d.currency || groupCurrency,
+                  })),
+                })
+              }
+              className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs flex items-center gap-2"
+            >
+              {busy && <Loader size={13} color="white" />}
+              {busy ? (isAr ? 'جارٍ الحفظ…' : 'Saving…') : isAr ? 'حفظ نظام الأسعار' : 'Save System'}
+            </button>
+          </div>
         </div>
+
+        {/* نافذة البحث المتقدم عن المورد */}
+        <AccountFinderModal
+          opened={supplierFinderIndex !== null}
+          initialQuery={supplierFinderIndex !== null ? d.items[supplierFinderIndex]?.supplierName || '' : ''}
+          initialScope="SUPPLIER"
+          title={isAr ? 'البحث المتقدم عن المورد' : 'Advanced Search: Supplier'}
+          zIndex={11000}
+          onClose={() => setSupplierFinderIndex(null)}
+          onSelect={(account: AccountFinderResult) => {
+            if (supplierFinderIndex !== null) {
+              patchItem(supplierFinderIndex, {
+                supplierName: account.name,
+                supplierAccountId: account.id,
+              });
+            }
+            setSupplierFinderIndex(null);
+          }}
+        />
       </div>
     </Modal>
   );
@@ -1086,7 +1241,8 @@ const ChargeModal: React.FC<{
   supplierOptions: Array<{ value: string; label: string; code?: string }>;
   onClose: () => void;
   onSave: (dto: any) => void;
-}> = ({ isAr, direction, chargeType, currency, supplierOptions, onClose, onSave }) => {
+  busy?: boolean;
+}> = ({ isAr, direction, chargeType, currency, supplierOptions, onClose, onSave, busy }) => {
   const [d, setD] = useState<any>({ chargeType, currency, category: '', amount: 0, supplierName: '' });
   const [accountFinder, setAccountFinder] = useState<{ open: boolean; query: string }>({
     open: false,
@@ -1192,17 +1348,18 @@ const ChargeModal: React.FC<{
           <button
             type="button"
             onClick={onClose}
-            className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+            className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
           >
             {isAr ? 'إلغاء' : 'Cancel'}
           </button>
           <button
             type="button"
-            disabled={!d.category.trim() || !d.amount}
+            disabled={busy || !d.amount || d.amount <= 0}
             onClick={() => onSave(d)}
-            className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs"
+            className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs flex items-center gap-2"
           >
-            {isAr ? 'إضافة' : 'Add'}
+            {busy && <Loader size={13} color="white" />}
+            {busy ? (isAr ? 'جارٍ الإضافة…' : 'Adding…') : isAr ? 'إضافة' : 'Add'}
           </button>
         </div>
 
@@ -1214,7 +1371,11 @@ const ChargeModal: React.FC<{
           zIndex={11000}
           onClose={() => setAccountFinder({ open: false, query: '' })}
           onSelect={(account: AccountFinderResult) => {
-            setD((prev: any) => ({ ...prev, supplierName: account.name }));
+            setD((prev: any) => ({
+              ...prev,
+              supplierName: account.name,
+              supplierAccountId: account.id,
+            }));
             setAccountFinder({ open: false, query: '' });
           }}
         />
@@ -1231,8 +1392,11 @@ const PassengerModal: React.FC<{
   customerOptions: any[];
   onClose: () => void;
   onSave: (dto: any) => void;
-}> = ({ isAr, direction, g, customerOptions, onClose, onSave }) => {
+  busy?: boolean;
+}> = ({ isAr, direction, g, customerOptions, onClose, onSave, busy }) => {
   const activeSystems = g.priceSystems.filter((s) => s.active);
+  const user = useAuthStore((s) => s.user);
+
   const [d, setD] = useState<any>({
     priceSystemId: activeSystems[0]?.id || '',
     passengerName: '',
@@ -1242,19 +1406,211 @@ const PassengerModal: React.FC<{
     passport: '',
     agent: '',
     payType: 'CASH',
+    paymentMethod: 'CASH_HAND',
+    paymentAccountId: null,
+    voucherNumber: '',
+    currency: activeSystems[0]?.currency || g.currency || 'USD',
     salePrice: activeSystems[0] ? Number(activeSystems[0].salePrice) : 0,
   });
+
+  const [paymentAccounts, setPaymentAccounts] = useState<any[]>([]);
+  const [employeesList, setEmployeesList] = useState<any[]>([]);
+  const [transferImage, setTransferImage] = useState<string | null>(null);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [accountFinder, setAccountFinder] = useState<{ open: boolean; query: string }>({
     open: false,
     query: '',
   });
+
+  useEffect(() => {
+    accountsApi
+      .getFlat(undefined, undefined, true)
+      .then((res: any) => {
+        const list = Array.isArray(res) ? res : res?.data || [];
+        setPaymentAccounts(list);
+      })
+      .catch(() => setPaymentAccounts([]));
+
+    employeesApi
+      .getAll()
+      .then((res: any) => {
+        const list = Array.isArray(res) ? res : res?.data || [];
+        setEmployeesList(list);
+      })
+      .catch(() => setEmployeesList([]));
+  }, []);
+
+  const formatWithCommas = (val: any) => {
+    if (val === '' || val === null || val === undefined) return '';
+    const str = String(val).replace(/,/g, '');
+    const parts = str.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  };
+
+  const cashAccounts = useMemo(() => {
+    const list = paymentAccounts.filter((a) => {
+      if (a.isGroup || a.isParent) return false;
+      const cat = (a.category || '').toUpperCase();
+      const type = (a.type || a.accountType || '').toUpperCase();
+      const code = String(a.code || '');
+      const name = `${a.nameAr || ''} ${a.nameEn || ''} ${a.name || ''}`.toLowerCase();
+      // استثناء حسابات الماستر والبطاقات الإلكترونية من الصناديق النقدية
+      if (
+        name.includes('ماستر') ||
+        name.includes('master') ||
+        name.includes('بطاقة') ||
+        name.includes('visa') ||
+        name.includes('فيزا')
+      ) {
+        return false;
+      }
+      return (
+        cat === 'CASH' ||
+        type === 'CASH' ||
+        type === 'TREASURY' ||
+        code.startsWith('181') ||
+        code.startsWith('101') ||
+        name.includes('صندوق') ||
+        name.includes('خزينة') ||
+        name.includes('cash')
+      );
+    });
+    return list.map((a) => ({
+      value: a.id,
+      label: isAr ? (a.nameAr || a.name || a.nameEn || a.id) : (a.nameEn || a.nameAr || a.name || a.id),
+      code: a.code,
+    }));
+  }, [paymentAccounts, isAr]);
+
+  const masterAccounts = useMemo(() => {
+    const list = paymentAccounts.filter((a) => {
+      if (a.isGroup || a.isParent) return false;
+      const cat = (a.category || '').toUpperCase();
+      const type = (a.type || a.accountType || '').toUpperCase();
+      const code = String(a.code || '');
+      const name = `${a.nameAr || ''} ${a.nameEn || ''} ${a.name || ''}`.toLowerCase();
+      return (
+        name.includes('ماستر') ||
+        name.includes('master') ||
+        name.includes('بطاقة') ||
+        name.includes('فيزا') ||
+        name.includes('visa') ||
+        name.includes('كي كارد') ||
+        name.includes('qi') ||
+        name.includes('زين كاش') ||
+        name.includes('zain') ||
+        cat === 'BANK' ||
+        type === 'BANK' ||
+        code.startsWith('102') ||
+        code.startsWith('111')
+      );
+    });
+    return list.map((a) => ({
+      value: a.id,
+      label: isAr ? (a.nameAr || a.name || a.nameEn || a.id) : (a.nameEn || a.nameAr || a.name || a.id),
+      code: a.code,
+    }));
+  }, [paymentAccounts, isAr]);
+
+  const currentEmployee = useMemo(() => {
+    if (!user) return null;
+    const uName = String(user.name || '').trim().toLowerCase();
+    const uEmail = String(user.email || '').trim().toLowerCase();
+    const uUsername = String((user as any)?.username || '').trim().toLowerCase();
+    return (
+      employeesList.find((e: any) => {
+        if (e.id === user.id || e.userId === user.id) return true;
+        const names = [e.fullName, e.name, e.username, e.email, e.user?.name, e.user?.username];
+        return names.some((n) => {
+          if (!n) return false;
+          const s = String(n).trim().toLowerCase();
+          return (uName && s === uName) || (uUsername && s === uUsername) || (uEmail && s === uEmail);
+        });
+      }) || null
+    );
+  }, [employeesList, user]);
+
+  const matchedEmployeeCashbox = useMemo(() => {
+    if (cashAccounts.length === 0) return null;
+    const assigned = String(
+      currentEmployee?.assignedCashbox ||
+        (currentEmployee as any)?.assignedCashboxId ||
+        (currentEmployee as any)?.cashboxId ||
+        (currentEmployee as any)?.cashboxAccountId ||
+        '',
+    ).trim();
+
+    if (assigned) {
+      const hint = assigned.toLowerCase();
+      const found = cashAccounts.find((c) => {
+        const val = String(c.value || '').toLowerCase();
+        const code = String((c as any).code || '').toLowerCase();
+        const label = String(c.label || '').toLowerCase();
+        return val === hint || code === hint || label === hint || label.includes(hint);
+      });
+      if (found) return found;
+    }
+
+    const empName = currentEmployee?.fullName || currentEmployee?.name || user?.name || '';
+    if (empName) {
+      const firstName = empName.split(' ')[0].toLowerCase();
+      const foundByName = cashAccounts.find((c) => {
+        const label = (c.label || '').toLowerCase();
+        return label.includes(empName.toLowerCase()) || (firstName.length >= 3 && label.includes(firstName));
+      });
+      if (foundByName) return foundByName;
+    }
+
+    return cashAccounts[0] || null;
+  }, [cashAccounts, currentEmployee, user]);
+
+  const defaultMasterAccount = useMemo(() => {
+    const foundMaster = masterAccounts.find(
+      (m) => m.label.toLowerCase().includes('ماستر') || m.label.toLowerCase().includes('master'),
+    );
+    return foundMaster || masterAccounts[0] || null;
+  }, [masterAccounts]);
+
+  useEffect(() => {
+    if (d.payType === 'CASH') {
+      if (d.paymentMethod === 'MASTER') {
+        if (defaultMasterAccount && (!d.paymentAccountId || cashAccounts.some((c) => c.value === d.paymentAccountId))) {
+          setD((prev: any) => ({ ...prev, paymentAccountId: defaultMasterAccount.value }));
+        }
+      } else {
+        if (matchedEmployeeCashbox && (!d.paymentAccountId || masterAccounts.some((m) => m.value === d.paymentAccountId))) {
+          setD((prev: any) => ({ ...prev, paymentAccountId: matchedEmployeeCashbox.value }));
+        }
+      }
+    }
+  }, [d.payType, d.paymentMethod, matchedEmployeeCashbox, defaultMasterAccount, cashAccounts, masterAccounts]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showErrorNotification(
+        isAr ? 'حجم الملف كبير' : 'File too large',
+        isAr ? 'أقصى حجم مسموح 5 ميجابايت' : 'Max size is 5MB',
+      );
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setTransferImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   return (
     <Modal
       opened
       onClose={onClose}
       centered
-      size={580}
+      size={620}
       withCloseButton={false}
       zIndex={10050}
       classNames={{
@@ -1286,7 +1642,12 @@ const PassengerModal: React.FC<{
             value={d.priceSystemId}
             onChange={(val) => {
               const sel = g.priceSystems.find((s) => s.id === val);
-              setD({ ...d, priceSystemId: val, salePrice: sel ? Number(sel.salePrice) : d.salePrice });
+              setD({
+                ...d,
+                priceSystemId: val,
+                salePrice: sel ? Number(sel.salePrice) : d.salePrice,
+                currency: sel?.currency || d.currency || g.currency || 'USD',
+              });
             }}
             options={activeSystems.map((s) => ({
               value: s.id,
@@ -1303,6 +1664,7 @@ const PassengerModal: React.FC<{
               onChange={(e) => setD({ ...d, passengerName: e.target.value })}
               className={inputClass}
               placeholder=""
+              autoFocus
             />
           </Field>
           <Field
@@ -1352,19 +1714,55 @@ const PassengerModal: React.FC<{
               placeholder=""
             />
           </Field>
+
           <Field label={isAr ? 'سعر البيع *' : 'Sale Price *'}>
-            <input
-              value={d.salePrice || ''}
-              onChange={(e) => setD({ ...d, salePrice: num(e.target.value) })}
-              dir="ltr"
-              placeholder=""
-              className={`${inputClass} font-mono text-end`}
-            />
+            <div className="flex items-center gap-1.5">
+              <div className="flex-1 flex items-center h-[46px] rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white hover:border-[#D1D5DB] focus-within:bg-white focus-within:border-2 focus-within:border-[#F45A0A] px-3.5 transition-colors">
+                <input
+                  value={formatWithCommas(d.salePrice ?? '')}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+                    const parts = raw.split('.');
+                    const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : raw;
+                    setD({ ...d, salePrice: clean });
+                  }}
+                  dir="ltr"
+                  placeholder="0"
+                  className="w-full bg-transparent font-mono font-black text-xs text-slate-900 outline-none text-end tabular-nums"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setD({
+                    ...d,
+                    currency: (d.currency || g.currency || 'USD') === 'USD' ? 'IQD' : 'USD',
+                  })
+                }
+                className="h-[46px] px-3.5 rounded-[11px] text-xs font-black font-mono flex items-center justify-center border border-orange-200 bg-orange-50 hover:bg-orange-100 text-[#F45A0A] transition-all cursor-pointer select-none shrink-0 shadow-2xs"
+                title={isAr ? 'انقر للتبديل بين USD و IQD' : 'Toggle USD / IQD'}
+              >
+                {(d.currency || g.currency || 'USD') === 'USD' ? 'USD' : 'IQD'}
+              </button>
+            </div>
           </Field>
-          <Field label={isAr ? 'السداد' : 'Payment'}>
+
+          <Field label={isAr ? 'نوع السداد *' : 'Payment Term *'}>
             <SearchableCombobox
               value={d.payType}
-              onChange={(v) => setD({ ...d, payType: v })}
+              onChange={(v) => {
+                const nextPayType = v || 'CASH';
+                setD((prev: any) => ({
+                  ...prev,
+                  payType: nextPayType,
+                  paymentAccountId:
+                    nextPayType === 'CASH'
+                      ? prev.paymentMethod === 'MASTER'
+                        ? defaultMasterAccount?.value
+                        : matchedEmployeeCashbox?.value
+                      : null,
+                }));
+              }}
               options={[
                 { value: 'CASH', label: isAr ? 'نقدي' : 'Cash' },
                 { value: 'CREDIT', label: isAr ? 'آجل' : 'Credit' },
@@ -1373,6 +1771,143 @@ const PassengerModal: React.FC<{
             />
           </Field>
         </div>
+
+        {d.payType === 'CASH' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <Field label={isAr ? 'طريقة السداد' : 'Receiving Method'}>
+              <SearchableCombobox
+                value={d.paymentMethod || 'CASH_HAND'}
+                onChange={(val) => {
+                  const nextMethod = val || 'CASH_HAND';
+                  const nextAccountId =
+                    nextMethod === 'MASTER' ? defaultMasterAccount?.value : matchedEmployeeCashbox?.value;
+                  setD((prev: any) => ({
+                    ...prev,
+                    paymentMethod: nextMethod,
+                    paymentAccountId: nextAccountId || null,
+                  }));
+                }}
+                options={[
+                  { value: 'CASH_HAND', label: isAr ? 'كاش (نقداً)' : 'Cash' },
+                  { value: 'MASTER', label: isAr ? 'ماستر (دفع إلكتروني)' : 'Master / Card' },
+                ]}
+                clearable={false}
+              />
+            </Field>
+
+            <Field
+              label={
+                d.paymentMethod === 'MASTER'
+                  ? (isAr ? 'حساب الماستر / البنك المستلم' : 'Master Account')
+                  : (isAr ? 'صندوق الاستلام (المرتبط بالموظف)' : 'Receiving Cashbox')
+              }
+            >
+              <SearchableCombobox
+                value={d.paymentAccountId || ''}
+                onChange={(v) => setD((prev: any) => ({ ...prev, paymentAccountId: v }))}
+                options={d.paymentMethod === 'MASTER' ? masterAccounts : cashAccounts}
+                placeholder={
+                  d.paymentMethod === 'MASTER'
+                    ? (isAr ? 'اختر حساب الماستر' : 'Select Master')
+                    : (isAr ? 'اختر الصندوق المستلم' : 'Select Cashbox')
+                }
+                allowCustomValue
+              />
+            </Field>
+          </div>
+        )}
+
+        {d.payType === 'CASH' && d.paymentMethod === 'MASTER' && (
+          <div className="rounded-xl border border-orange-200/80 bg-orange-50/25 p-3 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                <FileCheck2 size={15} className="text-[#F45A0A]" />
+                <span>{isAr ? 'إرفاق وصل تسديد الماستر' : 'Master Payment Receipt'}</span>
+              </label>
+              {transferImage && (
+                <button
+                  type="button"
+                  onClick={() => setTransferImage(null)}
+                  className="text-[11px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 size={12} />
+                  <span>{isAr ? 'حذف الوصل' : 'Remove'}</span>
+                </button>
+              )}
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+
+            {!transferImage ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-orange-200 hover:border-[#F45A0A] bg-white hover:bg-orange-50/40 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all text-center group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <UploadCloud size={16} />
+                </div>
+                <p className="text-xs font-bold text-slate-700">
+                  {isAr ? 'اضغط لرفع صورة إشعار أو وصل تسديد الماستر' : 'Upload payment receipt'}
+                </p>
+                <p className="text-[10px] text-slate-400 font-mono">
+                  PNG, JPG, WEBP, PDF (max 5MB)
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-2.5 bg-white border border-orange-200 rounded-xl">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {transferImage.startsWith('data:application/pdf') ? (
+                    <div className="w-9 h-9 rounded-lg bg-orange-100 text-[#F45A0A] flex items-center justify-center shrink-0">
+                      <FileText size={18} />
+                    </div>
+                  ) : (
+                    <img
+                      src={transferImage}
+                      alt="receipt"
+                      className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0 cursor-pointer hover:opacity-90"
+                      onClick={() => setPreviewModalOpen(true)}
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-slate-900 truncate">
+                      {isAr ? 'تم إرفاق وصل السداد' : 'Receipt attached'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewModalOpen(true)}
+                      className="text-[11px] font-bold text-[#F45A0A] hover:underline cursor-pointer flex items-center gap-1 mt-0.5"
+                    >
+                      <Eye size={12} />
+                      <span>{isAr ? 'معاينة الوصل' : 'View receipt'}</span>
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-7 px-2.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer shrink-0"
+                >
+                  {isAr ? 'تغيير' : 'Change'}
+                </button>
+              </div>
+            )}
+
+            <Field label={isAr ? 'رقم الوصل / الإشعار' : 'Voucher / Receipt #'}>
+              <input
+                value={d.voucherNumber || ''}
+                onChange={(e) => setD({ ...d, voucherNumber: e.target.value })}
+                className={inputClass}
+                placeholder={isAr ? 'رقم الإشعار أو المعاملة (اختياري)' : 'Reference / Voucher #'}
+              />
+            </Field>
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
           <button
@@ -1384,13 +1919,42 @@ const PassengerModal: React.FC<{
           </button>
           <button
             type="button"
-            disabled={!d.passengerName.trim() || !d.priceSystemId}
-            onClick={() => onSave(d)}
+            disabled={busy || !d.passengerName.trim() || !d.priceSystemId}
+            onClick={() =>
+              onSave({
+                ...d,
+                salePrice: Number(String(d.salePrice || 0).replace(/,/g, '')) || 0,
+                currency: d.currency || g.currency || 'USD',
+                transferImage: transferImage || null,
+              })
+            }
             className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs"
           >
-            {isAr ? 'إضافة المسافر' : 'Add'}
+            {busy && <Loader size={13} color="white" />}
+            {busy ? (isAr ? 'جارٍ الإضافة…' : 'Adding…') : isAr ? 'إضافة المسافر' : 'Add'}
           </button>
         </div>
+
+        {/* معاينة صورة الوصل المرفق */}
+        {previewModalOpen && transferImage && (
+          <Modal
+            opened={previewModalOpen}
+            onClose={() => setPreviewModalOpen(false)}
+            centered
+            size={560}
+            title={<span className="font-black text-sm">{isAr ? 'معاينة وصل السداد' : 'Receipt Preview'}</span>}
+            zIndex={11500}
+            classNames={{ content: '!rounded-2xl' }}
+          >
+            <div className="p-2 flex justify-center bg-slate-50 rounded-xl">
+              {transferImage.startsWith('data:application/pdf') ? (
+                <iframe src={transferImage} className="w-full h-[450px] rounded-lg border" title="receipt" />
+              ) : (
+                <img src={transferImage} alt="Receipt Preview" className="max-h-[500px] rounded-lg object-contain" />
+              )}
+            </div>
+          </Modal>
+        )}
 
         <AccountFinderModal
           opened={accountFinder.open}

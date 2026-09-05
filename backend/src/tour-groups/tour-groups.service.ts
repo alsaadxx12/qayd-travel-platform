@@ -14,7 +14,7 @@ import { Prisma } from '@prisma/client';
 
 const dec = (v: unknown) => Number(v ?? 0) || 0;
 
-const KINDS = new Set(['TICKET', 'HOTEL', 'VISA', 'INSURANCE', 'TRANSPORT', 'GUIDE', 'PACKAGE']);
+const KINDS = new Set(['TICKET', 'HOTEL', 'VISA', 'INSURANCE', 'TRANSPORT', 'GUIDE', 'PACKAGE', 'FULL_PACKAGE']);
 
 @Injectable()
 export class TourGroupsService {
@@ -99,10 +99,43 @@ export class TourGroupsService {
     return groups.map((g) => ({ ...g, summary: this.computeSummary(g) }));
   }
 
+  /**
+   * القاعدة بعيدة، فكل جولة إليها تُحسب. الجلب المتشعب كان يسير سطراً سطراً
+   * (~6 جولات)؛ هنا تنطلق الفروع الأربعة معاً فيهبط زمن الجدار إلى جولتين.
+   */
   async getOne(companyId: string, id: string) {
-    const g = await this.prisma.tourGroup.findFirst({ where: { id, companyId }, include: this.fullInclude });
+    const [g, priceSystems, charges, passengers] = await Promise.all([
+      this.prisma.tourGroup.findFirst({ where: { id, companyId } }),
+      this.prisma.groupPriceSystem.findMany({ where: { groupId: id }, include: { items: true } }),
+      this.prisma.groupCharge.findMany({ where: { groupId: id } }),
+      this.prisma.groupPassenger.findMany({
+        where: { groupId: id },
+        include: { services: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
     if (!g) throw new NotFoundException('الكروب غير موجود');
-    return { ...g, summary: this.computeSummary(g) };
+    const full = { ...g, priceSystems, charges, passengers };
+    return { ...full, summary: this.computeSummary(full) };
+  }
+
+  /** تحقق ملكيةٍ خفيف قبل التعديل: استعلام واحد بدل جلب الملف كاملاً. */
+  private async assertGroup(companyId: string, id: string) {
+    const g = await this.prisma.tourGroup.findFirst({
+      where: { id, companyId },
+      select: { id: true, openSale: true, currency: true, groupName: true },
+    });
+    if (!g) throw new NotFoundException('الكروب غير موجود');
+    return g;
+  }
+
+  /** ختام كل تعديل: سطر التدقيق وجلب الملف المحدَّث ينطلقان معاً لا تعاقباً. */
+  private async auditAndFetch(companyId: string, userId: string | undefined, action: string, groupId: string, details: any) {
+    const [, full] = await Promise.all([
+      this.audit(companyId, userId, action, groupId, details),
+      this.getOne(companyId, groupId),
+    ]);
+    return full;
   }
 
   async create(companyId: string, dto: any, userId?: string) {
@@ -123,12 +156,11 @@ export class TourGroupsService {
         createdById: userId || null,
       },
     });
-    await this.audit(companyId, userId, 'GROUP_CREATE', group.id, { groupName: group.groupName });
-    return this.getOne(companyId, group.id);
+    return this.auditAndFetch(companyId, userId, 'GROUP_CREATE', group.id, { groupName: group.groupName });
   }
 
   async update(companyId: string, id: string, dto: any, userId?: string) {
-    await this.getOne(companyId, id);
+    await this.assertGroup(companyId, id);
     await this.prisma.tourGroup.update({
       where: { id },
       data: {
@@ -149,7 +181,7 @@ export class TourGroupsService {
   }
 
   async remove(companyId: string, id: string, userId?: string) {
-    const g = await this.getOne(companyId, id);
+    const g = await this.assertGroup(companyId, id);
     await this.prisma.tourGroup.delete({ where: { id } });
     await this.audit(companyId, userId, 'GROUP_DELETE', id, { groupName: g.groupName });
     return { deleted: true };
@@ -157,7 +189,7 @@ export class TourGroupsService {
 
   // ── أنظمة الأسعار ──
   async savePriceSystem(companyId: string, groupId: string, dto: any, userId?: string) {
-    await this.getOne(companyId, groupId);
+    await this.assertGroup(companyId, groupId);
     const items: any[] = Array.isArray(dto.items) ? dto.items : [];
     for (const it of items) {
       if (!KINDS.has(String(it.kind || '').toUpperCase())) {
@@ -200,24 +232,22 @@ export class TourGroupsService {
       return id!;
     });
 
-    await this.audit(companyId, userId, 'GROUP_PRICE_SYSTEM_SAVE', groupId, { priceSystemId: psId, name: data.name });
-    return this.getOne(companyId, groupId);
+    return this.auditAndFetch(companyId, userId, 'GROUP_PRICE_SYSTEM_SAVE', groupId, { priceSystemId: psId, name: data.name });
   }
 
   async removePriceSystem(companyId: string, groupId: string, psId: string, userId?: string) {
-    await this.getOne(companyId, groupId);
+    await this.assertGroup(companyId, groupId);
     const used = await this.prisma.groupPassenger.count({ where: { priceSystemId: psId, state: { not: 'CANCELLED' } } });
     if (used > 0) {
       throw new BadRequestException(`لا يُحذف نظامٌ بيع عليه ${used} مسافراً — عطّله بدل حذفه.`);
     }
     await this.prisma.groupPriceSystem.deleteMany({ where: { id: psId, groupId } });
-    await this.audit(companyId, userId, 'GROUP_PRICE_SYSTEM_DELETE', groupId, { priceSystemId: psId });
-    return this.getOne(companyId, groupId);
+    return this.auditAndFetch(companyId, userId, 'GROUP_PRICE_SYSTEM_DELETE', groupId, { priceSystemId: psId });
   }
 
   // ── المشتريات والمصاريف العامة ──
   async addCharge(companyId: string, groupId: string, dto: any, userId?: string) {
-    await this.getOne(companyId, groupId);
+    await this.assertGroup(companyId, groupId);
     const chargeType = dto.chargeType === 'EXPENSE' ? 'EXPENSE' : 'GLOBAL_PURCHASE';
     const charge = await this.prisma.groupCharge.create({
       data: {
@@ -232,36 +262,39 @@ export class TourGroupsService {
         notes: dto.notes || null,
       },
     });
-    await this.audit(companyId, userId, 'GROUP_CHARGE_ADD', groupId, { chargeId: charge.id, chargeType, amount: dec(dto.amount) });
-    return this.getOne(companyId, groupId);
+    return this.auditAndFetch(companyId, userId, 'GROUP_CHARGE_ADD', groupId, { chargeId: charge.id, chargeType, amount: dec(dto.amount) });
   }
 
   async removeCharge(companyId: string, groupId: string, chargeId: string, userId?: string) {
-    await this.getOne(companyId, groupId);
+    await this.assertGroup(companyId, groupId);
     await this.prisma.groupCharge.deleteMany({ where: { id: chargeId, groupId } });
-    await this.audit(companyId, userId, 'GROUP_CHARGE_DELETE', groupId, { chargeId });
-    return this.getOne(companyId, groupId);
+    return this.auditAndFetch(companyId, userId, 'GROUP_CHARGE_DELETE', groupId, { chargeId });
   }
 
   // ── المسافرون: البيع الكامل + استنساخ الخدمات في معاملة واحدة ──
   async addPassenger(companyId: string, groupId: string, dto: any, userId?: string) {
-    const group = await this.getOne(companyId, groupId);
+    // بوابات البيع تحتاج ثلاث حقائق لا الملف كله — تُجلب معاً في جولة واحدة.
+    const [group, systems, sold] = await Promise.all([
+      this.assertGroup(companyId, groupId),
+      this.prisma.groupPriceSystem.findMany({ where: { groupId }, include: { items: true } }),
+      this.prisma.groupPassenger.count({ where: { groupId, state: { not: 'CANCELLED' } } }),
+    ]);
     if (!group.openSale) {
       throw new BadRequestException('البيع غير مفتوح لهذا الكروب — فعّل Open Sale أولاً.');
     }
 
     const ps = dto.priceSystemId
-      ? (group.priceSystems || []).find((s: any) => s.id === dto.priceSystemId)
-      : (group.priceSystems || []).find((s: any) => s.active !== false);
+      ? systems.find((s: any) => s.id === dto.priceSystemId)
+      : systems.find((s: any) => s.active !== false);
     if (!ps) throw new BadRequestException('اختر نظام أسعارٍ للمسافر — لا نظام فعّالاً في الكروب.');
 
-    const summary = this.computeSummary(group);
-    if (summary.seats > 0 && summary.remaining <= 0) {
-      throw new BadRequestException(`المقاعد نفدت: ${summary.sold} من ${summary.seats} مبيعة.`);
+    const seats = systems.filter((s: any) => s.active !== false).reduce((a: number, s: any) => a + (Number(s.seats) || 0), 0);
+    if (seats > 0 && seats - sold <= 0) {
+      throw new BadRequestException(`المقاعد نفدت: ${sold} من ${seats} مبيعة.`);
     }
 
     const salePrice = dto.salePrice !== undefined ? dec(dto.salePrice) : dec(ps.salePrice);
-    const payType = dto.payType === 'CREDIT' ? 'CREDIT' : 'CASH';
+    const payType = dto.payType === 'CREDIT' ? 'CREDIT' : (dto.payType === 'MASTER' ? 'MASTER' : 'CASH');
 
     const passengerId = await this.prisma.$transaction(async (tx) => {
       const pax = await tx.groupPassenger.create({
@@ -278,12 +311,14 @@ export class TourGroupsService {
           currency: dto.currency || ps.currency,
           payType,
           paymentAccountId: dto.paymentAccountId || null,
-          // النقدي يُعدّ محصَّلاً فور البيع؛ والآجل ذمّةٌ حتى يُحصَّل.
-          collectedAmount: new Prisma.Decimal(payType === 'CASH' ? salePrice : dec(dto.collectedAmount)),
+          // النقدي والماستر يُعدّان محصَّلين فور البيع؛ والآجل ذمّةٌ حتى يُحصَّل.
+          collectedAmount: new Prisma.Decimal(payType === 'CASH' || payType === 'MASTER' ? salePrice : dec(dto.collectedAmount)),
           voucherNumber: dto.voucherNumber || null,
           fCode: dto.fCode || null,
           state: dto.state === 'CONFIRMED' ? 'CONFIRMED' : 'RESERVED',
-          notes: dto.notes || null,
+          notes: dto.transferImage
+            ? (dto.notes ? `${dto.notes}\n[وصل سداد]: ${dto.transferImage}` : `[وصل سداد]: ${dto.transferImage}`)
+            : (dto.notes || null),
         },
       });
 
@@ -315,8 +350,10 @@ export class TourGroupsService {
   }
 
   async updatePassenger(companyId: string, groupId: string, paxId: string, dto: any, userId?: string) {
-    await this.getOne(companyId, groupId);
-    const pax = await this.prisma.groupPassenger.findFirst({ where: { id: paxId, groupId } });
+    const [, pax] = await Promise.all([
+      this.assertGroup(companyId, groupId),
+      this.prisma.groupPassenger.findFirst({ where: { id: paxId, groupId } }),
+    ]);
     if (!pax) throw new NotFoundException('المسافر غير موجود');
 
     const changes: string[] = [];
@@ -334,7 +371,9 @@ export class TourGroupsService {
         ...(dto.agent !== undefined && { agent: dto.agent }),
         ...(dto.salePrice !== undefined && { salePrice: new Prisma.Decimal(dec(dto.salePrice)) }),
         ...(dto.currency !== undefined && { currency: dto.currency }),
-        ...(dto.payType !== undefined && { payType: dto.payType === 'CREDIT' ? 'CREDIT' : 'CASH' }),
+        ...(dto.payType !== undefined && {
+          payType: dto.payType === 'CREDIT' ? 'CREDIT' : (dto.payType === 'MASTER' ? 'MASTER' : 'CASH'),
+        }),
         ...(dto.paymentAccountId !== undefined && { paymentAccountId: dto.paymentAccountId }),
         ...(dto.collectedAmount !== undefined && { collectedAmount: new Prisma.Decimal(dec(dto.collectedAmount)) }),
         ...(dto.voucherNumber !== undefined && { voucherNumber: dto.voucherNumber }),
@@ -345,17 +384,17 @@ export class TourGroupsService {
     });
 
     if (changes.length) {
-      await this.audit(companyId, userId, 'GROUP_PASSENGER_UPDATE', groupId, { passengerId: paxId, changes });
+      return this.auditAndFetch(companyId, userId, 'GROUP_PASSENGER_UPDATE', groupId, { passengerId: paxId, changes });
     }
     return this.getOne(companyId, groupId);
   }
 
   // ── خدمة المسافر: المورد + Final Buy تقلبها Complete، وكل تغييرٍ مؤثّر يُدوَّن ──
   async updateService(companyId: string, groupId: string, serviceId: string, dto: any, userId?: string) {
-    await this.getOne(companyId, groupId);
-    const svc = await this.prisma.groupPassengerService.findFirst({
-      where: { id: serviceId, passenger: { groupId } },
-    });
+    const [, svc] = await Promise.all([
+      this.assertGroup(companyId, groupId),
+      this.prisma.groupPassengerService.findFirst({ where: { id: serviceId, passenger: { groupId } } }),
+    ]);
     if (!svc) throw new NotFoundException('الخدمة غير موجودة');
 
     const changes: string[] = [];
@@ -388,7 +427,7 @@ export class TourGroupsService {
     });
 
     if (changes.length) {
-      await this.audit(companyId, userId, 'GROUP_SERVICE_UPDATE', groupId, { serviceId, kind: svc.kind, changes });
+      return this.auditAndFetch(companyId, userId, 'GROUP_SERVICE_UPDATE', groupId, { serviceId, kind: svc.kind, changes });
     }
     return this.getOne(companyId, groupId);
   }
