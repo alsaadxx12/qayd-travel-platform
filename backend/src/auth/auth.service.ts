@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
@@ -51,6 +51,18 @@ export class AuthService {
       throw new UnauthorizedException('البريد الإلكتروني أو كلمة المرور غير صحيحة');
     }
 
+    // قفل الحساب: كابحُ الذاكرة يتوزّع على نسخ الخادم فيتضاعف سقفه، أما هذا
+    // العدّاد فيسكن صفَّ المستخدم في القاعدة التي يشترك فيها الجميع. عشر
+    // محاولات فاشلة خلال ربع ساعة تقفل الحساب ربع ساعة — والدخول الصحيح يصفّره.
+    const now = new Date();
+    if (user.lockedUntil && user.lockedUntil > now) {
+      const minutes = Math.max(1, Math.ceil((user.lockedUntil.getTime() - now.getTime()) / 60_000));
+      throw new HttpException(
+        `جُمّد الدخول لهذا الحساب مؤقتاً بعد محاولات فاشلة متكررة — حاول بعد ${minutes} دقيقة.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     let isPasswordValid = false;
     if (user.password.startsWith('$2b$') || user.password.startsWith('$2a$')) {
       isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
@@ -67,7 +79,32 @@ export class AuthService {
     }
 
     if (!isPasswordValid) {
+      const WINDOW_MS = 15 * 60_000;
+      const inWindow = user.lastFailedLoginAt && now.getTime() - user.lastFailedLoginAt.getTime() < WINDOW_MS;
+      const count = (inWindow ? user.failedLoginCount : 0) + 1;
+      const locking = count >= 10;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginCount: locking ? 0 : count,
+          lastFailedLoginAt: now,
+          ...(locking && { lockedUntil: new Date(now.getTime() + WINDOW_MS) }),
+        },
+      });
+      if (locking) {
+        throw new HttpException(
+          'جُمّد الدخول لهذا الحساب مؤقتاً بعد محاولات فاشلة متكررة — حاول بعد 15 دقيقة.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
       throw new UnauthorizedException('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+    }
+
+    if (user.failedLoginCount > 0 || user.lockedUntil) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: 0, lockedUntil: null },
+      });
     }
 
     if (!user.isActive) {

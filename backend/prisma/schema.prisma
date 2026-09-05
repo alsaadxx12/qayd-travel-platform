@@ -359,6 +359,11 @@ model User {
   companyId          String
   activeFiscalYearId String?  @map("active_fiscal_year_id")
   isActive           Boolean  @default(true)
+  // قفل الحساب من القاعدة: عدّاد المحاولات الفاشلة يتقاسمه كل نسخ الخادم،
+  // فلا يفلت التخمين بتوزّع الطلبات على النسخ كما يفلت من كابح الذاكرة.
+  failedLoginCount   Int       @default(0) @map("failed_login_count")
+  lastFailedLoginAt  DateTime? @map("last_failed_login_at")
+  lockedUntil        DateTime? @map("locked_until")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

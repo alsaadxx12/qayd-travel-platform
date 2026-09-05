@@ -26,9 +26,11 @@ import {
   Banknote,
   DollarSign,
   User,
+  Search,
 } from 'lucide-react';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
+import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
 import { partnersApi } from '../../api/partners';
 import { WORLD_CITIES } from '../../data/worldCities';
 import {
@@ -66,13 +68,17 @@ const num = (raw: any) => Number(String(raw ?? '').replace(/,/g, '')) || 0;
 const inputClass =
   'w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white hover:border-[#D1D5DB] focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-2 focus:border-[#F45A0A] transition-colors duration-150';
 
-const Field: React.FC<{ label: string; children: React.ReactNode; className?: string }> = ({
-  label,
-  children,
-  className = '',
-}) => (
+const Field: React.FC<{
+  label: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}> = ({ label, action, children, className = '' }) => (
   <div className={className}>
-    <label className="text-xs font-bold text-slate-700 block mb-1">{label}</label>
+    <div className="flex items-center justify-between gap-2 mb-1 min-h-[20px]">
+      <label className="text-xs font-bold text-slate-700 block leading-[20px]">{label}</label>
+      {action}
+    </div>
     {children}
   </div>
 );
@@ -878,6 +884,31 @@ const PriceSystemModal: React.FC<{
       items: prev.items.map((it: any, j: number) => (j === i ? { ...it, ...ch } : it)),
     }));
 
+  const KIND_SELECT_OPTIONS = [
+    { value: 'TICKET', label: isAr ? 'طيران' : 'Ticket' },
+    { value: 'HOTEL', label: isAr ? 'فندق' : 'Hotel' },
+    { value: 'VISA', label: isAr ? 'فيزا' : 'Visa' },
+    { value: 'TRANSPORT', label: isAr ? 'نقل' : 'Transport' },
+    { value: 'INSURANCE', label: isAr ? 'تأمين' : 'Insurance' },
+    { value: 'GUIDE', label: isAr ? 'مرشد' : 'Guide' },
+    { value: 'PACKAGE', label: isAr ? 'باكج' : 'Package' },
+  ];
+
+  const addItem = (kind = 'TICKET') => {
+    setD((prev: any) => ({
+      ...prev,
+      items: [
+        ...(prev.items || []),
+        {
+          kind,
+          supplierName: '',
+          expectedBuy: '',
+          currency: prev.currency || groupCurrency,
+        },
+      ],
+    }));
+  };
+
   return (
     <Modal
       opened
@@ -911,124 +942,116 @@ const PriceSystemModal: React.FC<{
           </button>
         </div>
 
-        {/* الحقول الأساسية بدون نصوص توضيحية أو مقاعد */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label={isAr ? 'اسم النظام *' : 'Name *'}>
-            <input
-              value={d.name || ''}
-              onChange={(e) => setD({ ...d, name: e.target.value })}
-              className={inputClass}
-              placeholder={isAr ? 'اسم النظام' : 'System Name'}
-            />
-          </Field>
-          <Field label={isAr ? 'سعر البيع *' : 'Sale Price *'}>
-            <input
-              value={d.salePrice ?? ''}
-              onChange={(e) => setD({ ...d, salePrice: num(e.target.value) })}
-              dir="ltr"
-              className={`${inputClass} font-mono text-end`}
-              placeholder="0.00"
-            />
-          </Field>
-        </div>
+        {/* اسم النظام فقط بدون بيانات توضيحية */}
+        <Field label={isAr ? 'اسم النظام *' : 'System Name *'}>
+          <input
+            value={d.name || ''}
+            onChange={(e) => setD({ ...d, name: e.target.value })}
+            className={inputClass}
+            placeholder=""
+            autoFocus
+          />
+        </Field>
 
-        {/* بنود الخدمات */}
+        {/* بنود الخدمات المضمنة */}
         <div className="space-y-2 pt-1">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black text-slate-800">
               {isAr ? 'بنود الخدمات المضمنة:' : 'Included Services:'}
             </span>
-            <Menu position="bottom-end" shadow="lg" radius="lg" withinPortal zIndex={10060}>
-              <Menu.Target>
-                <button
-                  type="button"
-                  className="h-8 px-3 rounded-xl border border-orange-200 bg-orange-50 text-[#F45A0A] text-xs font-black cursor-pointer flex items-center gap-1.5 hover:bg-orange-100 transition-colors"
-                >
-                  <Plus size={14} />
-                  <span>{isAr ? 'إضافة بند خدمة' : 'Add Item'}</span>
-                </button>
-              </Menu.Target>
-              <Menu.Dropdown className="p-1" style={{ direction } as any}>
-                {Object.entries(KIND_META).map(([kind, meta]) => {
-                  const Icon = meta.icon;
-                  return (
-                    <Menu.Item
-                      key={kind}
-                      onClick={() =>
-                        setD({
-                          ...d,
-                          items: [...d.items, { kind, expectedBuy: 0, currency: d.currency }],
-                        })
-                      }
-                    >
-                      <div className="flex items-center gap-2 text-xs font-bold py-1">
-                        <Icon size={14} className="text-[#F45A0A]" />
-                        <span>{isAr ? meta.ar : kind}</span>
-                      </div>
-                    </Menu.Item>
-                  );
-                })}
-              </Menu.Dropdown>
-            </Menu>
+            <button
+              type="button"
+              onClick={() => addItem('TICKET')}
+              className="h-8 px-3 rounded-xl border border-orange-200 bg-orange-50 text-[#F45A0A] text-xs font-black cursor-pointer flex items-center gap-1.5 hover:bg-orange-100 transition-colors shadow-2xs"
+            >
+              <Plus size={14} />
+              <span>{isAr ? 'إضافة بند خدمة' : 'Add Item'}</span>
+            </button>
           </div>
 
-          <div className="space-y-2.5 max-h-[38vh] overflow-y-auto pr-1">
-            {(d.items || []).map((it: any, i: number) => {
-              const meta = KIND_META[it.kind] || KIND_META.PACKAGE;
-              const Icon = meta.icon;
-              return (
-                <div
-                  key={i}
-                  className="grid grid-cols-[120px_1fr_130px_auto] items-center gap-2.5 bg-slate-50/70 border border-slate-200 rounded-xl p-2"
-                >
-                  {/* نوع الخدمة */}
-                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 shrink-0 px-1">
-                    <Icon size={14} className="text-[#F45A0A]" />
-                    <span>{isAr ? meta.ar : it.kind}</span>
-                  </span>
+          {d.items && d.items.length > 0 && (
+            <div className="grid grid-cols-[140px_1fr_140px_36px] gap-2.5 px-2 text-[11px] font-bold text-slate-500">
+              <span>{isAr ? 'اختيار البند' : 'Select Item'}</span>
+              <span>{isAr ? 'المورد' : 'Supplier'}</span>
+              <span className="text-end">{isAr ? 'سعر الشراء' : 'Buy Price'}</span>
+              <span></span>
+            </div>
+          )}
 
-                  {/* بحث متقدم عن المورد من قاعدة البيانات */}
-                  <div className="min-w-0">
-                    <SearchableCombobox
-                      value={it.supplierName || ''}
-                      onChange={(val) => patchItem(i, { supplierName: val || '' })}
-                      options={supplierOptions}
-                      placeholder={isAr ? 'ابحث عن المورد أو اختره...' : 'Search supplier...'}
-                      allowCustomValue
-                    />
-                  </div>
-
-                  {/* سعر الشراء (بدون كلمة متوقع) */}
-                  <div>
-                    <input
-                      value={it.expectedBuy ?? ''}
-                      onChange={(e) => patchItem(i, { expectedBuy: num(e.target.value) })}
-                      placeholder={isAr ? 'سعر الشراء' : 'Buy Price'}
-                      dir="ltr"
-                      className="h-[46px] w-full px-3 rounded-[11px] border border-[#E5E7EB] bg-white font-mono font-black text-end text-xs outline-none focus:border-2 focus:border-[#F45A0A]"
-                    />
-                  </div>
-
-                  {/* زر الحذف */}
-                  <button
-                    type="button"
-                    onClick={() => setD({ ...d, items: d.items.filter((_: any, j: number) => j !== i) })}
-                    className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center cursor-pointer transition-colors shadow-2xs shrink-0"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+          <div className="space-y-2.5 overflow-visible">
+            {(d.items || []).map((it: any, i: number) => (
+              <div
+                key={i}
+                style={{ zIndex: (d.items?.length || 10) - i, position: 'relative' }}
+                className="grid grid-cols-[140px_1fr_140px_auto] items-center gap-2.5 bg-slate-50/70 border border-slate-200 rounded-xl p-2 hover:bg-slate-50 transition-colors"
+              >
+                {/* اختيار البند */}
+                <div className="min-w-0">
+                  <SearchableCombobox
+                    value={it.kind || 'TICKET'}
+                    onChange={(val) => patchItem(i, { kind: val || 'TICKET' })}
+                    options={KIND_SELECT_OPTIONS}
+                    placeholder=""
+                    clearable={false}
+                  />
                 </div>
-              );
-            })}
+
+                {/* بحث عن المورد */}
+                <div className="min-w-0">
+                  <SearchableCombobox
+                    value={it.supplierName || ''}
+                    onChange={(val) => patchItem(i, { supplierName: val || '' })}
+                    options={supplierOptions}
+                    placeholder=""
+                    allowCustomValue
+                  />
+                </div>
+
+                {/* سعر الشراء */}
+                <div className="flex items-center h-[46px] w-full rounded-[11px] border border-[#E5E7EB] bg-white px-3 focus-within:border-2 focus-within:border-[#F45A0A] transition-colors">
+                  <input
+                    value={it.expectedBuy ?? ''}
+                    onChange={(e) => patchItem(i, { expectedBuy: num(e.target.value) })}
+                    dir="ltr"
+                    placeholder=""
+                    className="w-full bg-transparent font-mono font-black text-xs text-slate-900 outline-none text-end"
+                  />
+                  <span className="text-[11px] font-bold text-slate-400 font-mono shrink-0 select-none mr-1.5">
+                    {d.currency === 'USD' ? '$' : 'IQD'}
+                  </span>
+                </div>
+
+                {/* زر الحذف */}
+                <button
+                  type="button"
+                  onClick={() => setD({ ...d, items: d.items.filter((_: any, j: number) => j !== i) })}
+                  className="w-9 h-9 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center cursor-pointer transition-colors shadow-2xs shrink-0"
+                  title={isAr ? 'حذف البند' : 'Remove item'}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
 
             {d.items.length === 0 && (
               <div className="py-6 text-center border-2 border-dashed border-slate-200 rounded-xl">
                 <p className="text-xs font-bold text-slate-400">
-                  {isAr ? 'لا توجد خدمات مضافة بعد. اضغط على «إضافة بند خدمة» بالأعلى.' : 'No service items added yet.'}
+                  {isAr ? 'لا توجد خدمات مضافة بعد' : 'No service items added yet'}
                 </p>
               </div>
             )}
           </div>
+
+          {d.items && d.items.length > 0 && (
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+              <span className="font-bold text-slate-600">
+                {isAr ? 'إجمالي سعر الشراء:' : 'Total Cost:'}
+              </span>
+              <span className="font-mono font-black text-xs text-slate-900" dir="ltr">
+                {money(d.items.reduce((acc: number, it: any) => acc + num(it.expectedBuy), 0), d.currency)}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* الأزرار */}
@@ -1043,7 +1066,7 @@ const PriceSystemModal: React.FC<{
           <button
             type="button"
             disabled={!d.name?.trim()}
-            onClick={() => onSave({ ...d, seats: 9999 })}
+            onClick={() => onSave({ ...d, salePrice: d.salePrice || 0, seats: 9999 })}
             className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs"
           >
             {isAr ? 'حفظ نظام الأسعار' : 'Save System'}
@@ -1065,6 +1088,10 @@ const ChargeModal: React.FC<{
   onSave: (dto: any) => void;
 }> = ({ isAr, direction, chargeType, currency, supplierOptions, onClose, onSave }) => {
   const [d, setD] = useState<any>({ chargeType, currency, category: '', amount: 0, supplierName: '' });
+  const [accountFinder, setAccountFinder] = useState<{ open: boolean; query: string }>({
+    open: false,
+    query: '',
+  });
   const isExp = chargeType === 'EXPENSE';
   const presets = isExp
     ? ['دعاية وإعلان', 'عمولات سياحية', 'ضيافة وإدارة', 'أخرى']
@@ -1137,7 +1164,20 @@ const ChargeModal: React.FC<{
               placeholder="0.00"
             />
           </Field>
-          <Field label={isAr ? 'المورد / الجهة المستلمة' : 'Supplier'}>
+          <Field
+            label={isAr ? 'المورد / الجهة المستلمة' : 'Supplier'}
+            action={
+              <button
+                type="button"
+                onClick={() => setAccountFinder({ open: true, query: d.supplierName || '' })}
+                className="h-[20px] px-1.5 text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
+                title={isAr ? 'البحث المتقدم في كل الحسابات' : 'Advanced Account Search'}
+              >
+                <Search size={11} />
+                <span>{isAr ? 'بحث متقدم' : 'Search'}</span>
+              </button>
+            }
+          >
             <SearchableCombobox
               value={d.supplierName || ''}
               onChange={(val) => setD({ ...d, supplierName: val || '' })}
@@ -1165,6 +1205,19 @@ const ChargeModal: React.FC<{
             {isAr ? 'إضافة' : 'Add'}
           </button>
         </div>
+
+        <AccountFinderModal
+          opened={accountFinder.open}
+          initialQuery={accountFinder.query}
+          initialScope="SUPPLIER"
+          title={isAr ? 'البحث المتقدم عن المورد' : 'Advanced Search: Supplier'}
+          zIndex={11000}
+          onClose={() => setAccountFinder({ open: false, query: '' })}
+          onSelect={(account: AccountFinderResult) => {
+            setD((prev: any) => ({ ...prev, supplierName: account.name }));
+            setAccountFinder({ open: false, query: '' });
+          }}
+        />
       </div>
     </Modal>
   );
@@ -1184,10 +1237,16 @@ const PassengerModal: React.FC<{
     priceSystemId: activeSystems[0]?.id || '',
     passengerName: '',
     customerName: '',
+    customerId: null,
+    customerAccountId: null,
     passport: '',
     agent: '',
     payType: 'CASH',
     salePrice: activeSystems[0] ? Number(activeSystems[0].salePrice) : 0,
+  });
+  const [accountFinder, setAccountFinder] = useState<{ open: boolean; query: string }>({
+    open: false,
+    query: '',
   });
 
   return (
@@ -1231,9 +1290,9 @@ const PassengerModal: React.FC<{
             }}
             options={activeSystems.map((s) => ({
               value: s.id,
-              label: `${s.name} — ${money(s.salePrice, s.currency)}`,
+              label: Number(s.salePrice) > 0 ? `${s.name} — ${money(s.salePrice, s.currency)}` : s.name,
             }))}
-            placeholder={isAr ? 'اختر النظام' : 'Select'}
+            placeholder=""
           />
         </Field>
 
@@ -1243,15 +1302,36 @@ const PassengerModal: React.FC<{
               value={d.passengerName}
               onChange={(e) => setD({ ...d, passengerName: e.target.value })}
               className={inputClass}
-              placeholder={isAr ? 'الاسم' : 'Name'}
+              placeholder=""
             />
           </Field>
-          <Field label={isAr ? 'العميل / الحساب' : 'Customer'}>
+          <Field
+            label={isAr ? 'العميل / الحساب' : 'Customer'}
+            action={
+              <button
+                type="button"
+                onClick={() => setAccountFinder({ open: true, query: d.customerName || '' })}
+                className="h-[20px] px-1.5 text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
+                title={isAr ? 'البحث المتقدم في كل الحسابات' : 'Advanced Account Search'}
+              >
+                <Search size={11} />
+                <span>{isAr ? 'بحث متقدم' : 'Search'}</span>
+              </button>
+            }
+          >
             <SearchableCombobox
               value={d.customerName}
-              onChange={(v) => setD({ ...d, customerName: v || '' })}
+              onChange={(v) => {
+                const match = customerOptions.find((c: any) => c.value === v || c.label === v || c.name === v);
+                setD({
+                  ...d,
+                  customerName: v || '',
+                  customerId: match?.id || null,
+                  customerAccountId: match?.accountId || null,
+                });
+              }}
               options={customerOptions}
-              placeholder={isAr ? 'العميل' : 'Customer'}
+              placeholder=""
               allowCustomValue
             />
           </Field>
@@ -1261,7 +1341,7 @@ const PassengerModal: React.FC<{
               onChange={(e) => setD({ ...d, passport: e.target.value })}
               dir="ltr"
               className={`${inputClass} font-mono`}
-              placeholder="A12345678"
+              placeholder=""
             />
           </Field>
           <Field label={isAr ? 'الوكيل' : 'Agent'}>
@@ -1269,7 +1349,7 @@ const PassengerModal: React.FC<{
               value={d.agent}
               onChange={(e) => setD({ ...d, agent: e.target.value })}
               className={inputClass}
-              placeholder={isAr ? 'الوكيل' : 'Agent'}
+              placeholder=""
             />
           </Field>
           <Field label={isAr ? 'سعر البيع *' : 'Sale Price *'}>
@@ -1277,6 +1357,7 @@ const PassengerModal: React.FC<{
               value={d.salePrice || ''}
               onChange={(e) => setD({ ...d, salePrice: num(e.target.value) })}
               dir="ltr"
+              placeholder=""
               className={`${inputClass} font-mono text-end`}
             />
           </Field>
@@ -1310,6 +1391,24 @@ const PassengerModal: React.FC<{
             {isAr ? 'إضافة المسافر' : 'Add'}
           </button>
         </div>
+
+        <AccountFinderModal
+          opened={accountFinder.open}
+          initialQuery={accountFinder.query}
+          initialScope="CUSTOMER"
+          title={isAr ? 'البحث المتقدم عن العميل / الحساب' : 'Advanced Search: Customer Account'}
+          zIndex={11000}
+          onClose={() => setAccountFinder({ open: false, query: '' })}
+          onSelect={(account: AccountFinderResult) => {
+            setD((prev: any) => ({
+              ...prev,
+              customerName: account.name,
+              customerId: account.id,
+              customerAccountId: account.id,
+            }));
+            setAccountFinder({ open: false, query: '' });
+          }}
+        />
       </div>
     </Modal>
   );

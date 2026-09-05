@@ -24,6 +24,7 @@ interface AccountFinderModalProps {
   /** التبويب المفتوح أولاً — حقل المورد يفتح على الموردين وحقل العميل على العملاء. */
   initialScope?: 'SUPPLIER' | 'CUSTOMER';
   title?: string;
+  zIndex?: number;
 }
 
 const roleOf = (account: any): AccountFinderResult['role'] => {
@@ -54,6 +55,7 @@ export const AccountFinderModal: React.FC<AccountFinderModalProps> = ({
   initialQuery = '',
   initialScope = 'SUPPLIER',
   title,
+  zIndex = 11000,
 }) => {
   const { language, direction } = useLanguageStore();
   const isAr = language === 'ar';
@@ -135,7 +137,7 @@ export const AccountFinderModal: React.FC<AccountFinderModalProps> = ({
       size="lg"
       withCloseButton={false}
       overlayProps={{ backgroundOpacity: 0.4, blur: 2 }}
-      zIndex={10050}
+      zIndex={zIndex}
       padding={0}
     >
       <div className="font-sans" dir={direction}>
