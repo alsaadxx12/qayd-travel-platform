@@ -31,9 +31,12 @@ import {
   Eye,
   FileText,
   Receipt,
+  Folder,
+  FolderPlus,
+  UserPlus,
+  ArrowRight,
 } from 'lucide-react';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
-import { AccountSearchField } from './AccountSearchField';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
 import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
 import { partnersApi } from '../../api/partners';
@@ -225,6 +228,9 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   const [paxModal, setPaxModal] = useState(false);
   const [psModal, setPsModal] = useState<Partial<GroupPriceSystem> | null>(null);
   const [chargeModal, setChargeModal] = useState<'GLOBAL_PURCHASE' | 'EXPENSE' | null>(null);
+  // الإشعارات المنبثقة معطَّلة في النظام كلّه، فأخطاء الحفظ كانت تختفي بصمت
+  // («لا يتم الحفظ» بلا سبب). نُبقيها هنا لتُعرض شريطاً داخل النافذة.
+  const [errorMsg, setErrorMsg] = useState('');
 
   // قفل إعادة الدخول: حالة busy تصل الشاشة متأخرةً عن النقرة الثانية، أما
   // المرجع فيقفل فوراً — نقرتان أثناء بطء الشبكة كانتا تحفظان النظام مرتين.
@@ -234,6 +240,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
       if (busyRef.current) return null;
       busyRef.current = true;
       setBusy(true);
+      setErrorMsg('');
       try {
         const next = await op();
         setG(next);
@@ -241,6 +248,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
         if (okMsg) showSuccessNotification(isAr ? 'تم' : 'Done', okMsg);
         return next;
       } catch (err: any) {
+        setErrorMsg(err?.message || (isAr ? 'تعذّر حفظ العملية' : 'Operation failed'));
         showErrorNotification(isAr ? 'تعذّر التنفيذ' : 'Failed', err?.message || '');
         return null;
       } finally {
@@ -570,14 +578,34 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                       {g.passengers.length} {isAr ? 'مسافراً' : 'pax'}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPaxModal(true)}
-                    className="h-8 px-3.5 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-2xs"
-                  >
-                    <Plus size={14} />
-                    <span>{isAr ? 'إضافة مسافر' : 'Add Passenger'}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {!g.openSale && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          run(
+                            () => tourGroupsApi.update(g.id, { openSale: true }),
+                            isAr ? 'فُتح البيع — يمكنك الآن إضافة المسافرين' : 'Sale opened',
+                          )
+                        }
+                        className="h-8 px-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-[11.5px] font-black cursor-pointer flex items-center gap-1.5 hover:bg-emerald-100"
+                        title={isAr ? 'البيع مقفل — افتحه لإضافة المسافرين' : 'Open the sale first'}
+                      >
+                        <Unlock size={13} />
+                        <span>{isAr ? 'افتح البيع' : 'Open sale'}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={!g.openSale}
+                      onClick={() => setPaxModal(true)}
+                      title={!g.openSale ? (isAr ? 'البيع مقفل — افتح البيع أولاً' : 'Sale is closed — open it first') : ''}
+                      className="h-8 px-3.5 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <Plus size={14} />
+                      <span>{isAr ? 'إضافة مسافر' : 'Add Passenger'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {g.passengers.length === 0 ? (
@@ -650,8 +678,12 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           direction={direction}
           g={g}
           busy={busy}
+          errorMsg={errorMsg}
           customerOptions={customerOptions}
-          onClose={() => setPaxModal(false)}
+          onClose={() => {
+            setErrorMsg('');
+            setPaxModal(false);
+          }}
           onSave={async (dto) => {
             const ok = await run(() => tourGroupsApi.addPassenger(g.id, dto), isAr ? 'أُضيف المسافر وأُنشئت خدماته' : 'Passenger added');
             if (ok) setPaxModal(false);
@@ -1426,7 +1458,8 @@ const PassengerModal: React.FC<{
   onClose: () => void;
   onSave: (dto: any) => void;
   busy?: boolean;
-}> = ({ isAr, direction, g, customerOptions, onClose, onSave, busy }) => {
+  errorMsg?: string;
+}> = ({ isAr, direction, g, customerOptions, onClose, onSave, busy, errorMsg }) => {
   const activeSystems = g.priceSystems.filter((s) => s.active);
   const user = useAuthStore((s) => s.user);
 
@@ -1669,6 +1702,12 @@ const PassengerModal: React.FC<{
             <X size={15} />
           </button>
         </div>
+
+        {errorMsg && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-bold text-rose-700">
+            {errorMsg}
+          </div>
+        )}
 
         <Field label={isAr ? 'نظام الأسعار *' : 'Price System *'}>
           <SearchableCombobox
