@@ -1170,34 +1170,18 @@ const ServiceLine: React.FC<{
 }> = ({ g, sv, isAr, supplierOptions, disabled, run }) => {
   const meta = KIND_META[sv.kind] || KIND_META.PACKAGE;
   const Icon = meta.icon;
-  const initialBuy =
-    sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0
-      ? String(sv.finalBuy)
-      : sv.expectedBuy !== null && sv.expectedBuy !== undefined && Number(sv.expectedBuy) > 0
-      ? String(sv.expectedBuy)
-      : '';
+  // حقل الشراء النهائي يبدأ فارغاً ما لم يُدخَل شراءٌ فعلي — لا يُملأ بالمتوقَّع
+  // تلقائياً، فلا تظهر تكلفةٌ وهمية عند فتح المسافر قبل أن يُشترى شيء.
+  const savedBuy = sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0 ? String(sv.finalBuy) : '';
   const [supplier, setSupplier] = useState(sv.supplierName || '');
-  const [finalBuy, setFinalBuy] = useState(initialBuy);
+  const [finalBuy, setFinalBuy] = useState(savedBuy);
 
   useEffect(() => {
     setSupplier(sv.supplierName || '');
-    const buyVal =
-      sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0
-        ? String(sv.finalBuy)
-        : sv.expectedBuy !== null && sv.expectedBuy !== undefined && Number(sv.expectedBuy) > 0
-        ? String(sv.expectedBuy)
-        : '';
-    setFinalBuy(buyVal);
-  }, [sv.supplierName, sv.finalBuy, sv.expectedBuy]);
+    setFinalBuy(sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0 ? String(sv.finalBuy) : '');
+  }, [sv.supplierName, sv.finalBuy]);
 
-  const dirty =
-    supplier !== (sv.supplierName || '') ||
-    finalBuy !==
-      (sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0
-        ? String(sv.finalBuy)
-        : sv.expectedBuy !== null && sv.expectedBuy !== undefined && Number(sv.expectedBuy) > 0
-        ? String(sv.expectedBuy)
-        : '');
+  const dirty = supplier !== (sv.supplierName || '') || finalBuy !== savedBuy;
   const complete = sv.status === 'COMPLETE';
 
   return (
@@ -1222,15 +1206,15 @@ const ServiceLine: React.FC<{
         />
       </div>
 
-      <span className="text-[11px] font-mono font-bold text-slate-500 whitespace-nowrap px-1" dir="ltr">
-        {money(sv.expectedBuy, sv.currency)}
+      <span className="text-[10px] font-mono font-bold text-slate-400 whitespace-nowrap px-1 hidden sm:block" dir="ltr" title={isAr ? 'التكلفة المتوقّعة (تخطيط فقط)' : 'Expected (planning only)'}>
+        {isAr ? 'متوقّع' : 'exp'} {money(sv.expectedBuy, sv.currency)}
       </span>
 
       <input
         value={finalBuy}
         onChange={(e) => setFinalBuy(e.target.value)}
         disabled={disabled}
-        placeholder={sv.expectedBuy ? String(sv.expectedBuy) : (isAr ? 'النهائي' : 'Final')}
+        placeholder={isAr ? 'الشراء الفعلي' : 'Final buy'}
         dir="ltr"
         className="h-[46px] w-24 px-2.5 rounded-[11px] border border-[#E5E7EB] bg-white text-xs font-mono font-black text-end outline-none focus:border-2 focus:border-[#F45A0A] disabled:opacity-50"
       />
@@ -1243,8 +1227,9 @@ const ServiceLine: React.FC<{
               () =>
                 tourGroupsApi.updateService(g.id, sv.id, {
                   supplierName: supplier,
-                  finalBuy: finalBuy.trim() === '' ? (sv.expectedBuy ? num(sv.expectedBuy) : null) : num(finalBuy),
-                  status: 'COMPLETE',
+                  // فارغٌ يعني «لم يُشترَ بعد» فيبقى معلّقاً؛ ولا يُستبدل بالمتوقَّع.
+                  finalBuy: finalBuy.trim() === '' ? null : num(finalBuy),
+                  status: finalBuy.trim() === '' ? 'NOT_COMPLETE' : 'COMPLETE',
                 }),
               undefined,
             )

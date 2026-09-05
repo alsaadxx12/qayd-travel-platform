@@ -52,25 +52,13 @@ export class TourGroupsService {
     const sales = passengers.reduce((a: number, p: any) => a + dec(p.salePrice), 0);
     const collected = passengers.reduce((a: number, p: any) => a + dec(p.collectedAmount), 0);
 
-    // Buy = التكلفة الفعلية لشراء خدمات المسافرين بالكامل
-    const buy = passengers.reduce((total: number, p: any) => {
-      const svs = (p.services || []) as any[];
-      if (svs.length > 0) {
-        const pCost = svs.reduce((sum: number, sv: any) => {
-          const finalVal = sv.finalBuy !== null && sv.finalBuy !== undefined ? dec(sv.finalBuy) : 0;
-          const expectedVal = sv.expectedBuy !== null && sv.expectedBuy !== undefined ? dec(sv.expectedBuy) : 0;
-          const effectiveBuy = finalVal > 0 ? finalVal : expectedVal;
-          return sum + effectiveBuy;
-        }, 0);
-        return total + pCost;
-      }
-      const ps = systems.find((s: any) => s.id === p.priceSystemId);
-      if (ps && ps.items && ps.items.length > 0) {
-        const psCost = ps.items.reduce((sum: number, it: any) => sum + dec(it.expectedBuy), 0);
-        return total + psCost;
-      }
-      return total;
-    }, 0);
+    // التكلفة الفعلية = مجموع Final Buy وحده — ما اشتُري فعلاً لا ما خُطِّط له.
+    // كان يُحتسب المتوقَّع (Expected) تكلفةً فعلية فيظهر ربحٌ سالبٌ وهمي قبل أي
+    // شراء؛ والمالك يريد الفصل: المتوقَّع للتخطيط، والنهائي وحده للحقيقة.
+    const buy = services.reduce(
+      (a: number, sv: any) => a + (sv.finalBuy !== null && sv.finalBuy !== undefined ? dec(sv.finalBuy) : 0),
+      0,
+    );
     const plannedBuy = services.reduce((a: number, sv: any) => a + dec(sv.expectedBuy), 0);
 
     const globalBuy = (group.charges || [])
