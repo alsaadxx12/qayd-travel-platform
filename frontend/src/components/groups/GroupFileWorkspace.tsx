@@ -33,6 +33,7 @@ import {
   Receipt,
 } from 'lucide-react';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
+import { AccountSearchField } from './AccountSearchField';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
 import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
 import { partnersApi } from '../../api/partners';
@@ -253,10 +254,9 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   useEffect(() => {
     if (!opened) return;
     setOpenPax(null);
-    partnersApi
-      .getCustomers()
-      .then((d: any) => setCustomers(Array.isArray(d) ? d : d?.data || []))
-      .catch(() => undefined);
+    // العملاء لم نعد نُحمّلهم مسبقاً (كانوا ٣ث ونصف ميغابايت): حقل العميل يبحث
+    // في الخادم عند الكتابة، فيُفتح «إضافة مسافر» فوراً. الموردون أخفّ ويغذّون
+    // عدّة حقول، فيُجلبون في الخلفية دون أن يحبسوا فتح النافذة.
     partnersApi
       .getSuppliers()
       .then((d: any) => setSuppliers(Array.isArray(d) ? d : d?.data || []))
@@ -781,16 +781,34 @@ const ServiceLine: React.FC<{
 }> = ({ g, sv, isAr, supplierOptions, disabled, run }) => {
   const meta = KIND_META[sv.kind] || KIND_META.PACKAGE;
   const Icon = meta.icon;
+  const initialBuy =
+    sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0
+      ? String(sv.finalBuy)
+      : sv.expectedBuy !== null && sv.expectedBuy !== undefined && Number(sv.expectedBuy) > 0
+      ? String(sv.expectedBuy)
+      : '';
   const [supplier, setSupplier] = useState(sv.supplierName || '');
-  const [finalBuy, setFinalBuy] = useState(sv.finalBuy === null ? '' : String(sv.finalBuy));
+  const [finalBuy, setFinalBuy] = useState(initialBuy);
 
   useEffect(() => {
     setSupplier(sv.supplierName || '');
-    setFinalBuy(sv.finalBuy === null ? '' : String(sv.finalBuy));
-  }, [sv.supplierName, sv.finalBuy]);
+    const buyVal =
+      sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0
+        ? String(sv.finalBuy)
+        : sv.expectedBuy !== null && sv.expectedBuy !== undefined && Number(sv.expectedBuy) > 0
+        ? String(sv.expectedBuy)
+        : '';
+    setFinalBuy(buyVal);
+  }, [sv.supplierName, sv.finalBuy, sv.expectedBuy]);
 
   const dirty =
-    supplier !== (sv.supplierName || '') || finalBuy !== (sv.finalBuy === null ? '' : String(sv.finalBuy));
+    supplier !== (sv.supplierName || '') ||
+    finalBuy !==
+      (sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0
+        ? String(sv.finalBuy)
+        : sv.expectedBuy !== null && sv.expectedBuy !== undefined && Number(sv.expectedBuy) > 0
+        ? String(sv.expectedBuy)
+        : '');
   const complete = sv.status === 'COMPLETE';
 
   return (
@@ -823,7 +841,7 @@ const ServiceLine: React.FC<{
         value={finalBuy}
         onChange={(e) => setFinalBuy(e.target.value)}
         disabled={disabled}
-        placeholder={isAr ? 'النهائي' : 'Final'}
+        placeholder={sv.expectedBuy ? String(sv.expectedBuy) : (isAr ? 'النهائي' : 'Final')}
         dir="ltr"
         className="h-[46px] w-24 px-2.5 rounded-[11px] border border-[#E5E7EB] bg-white text-xs font-mono font-black text-end outline-none focus:border-2 focus:border-[#F45A0A] disabled:opacity-50"
       />
@@ -836,8 +854,8 @@ const ServiceLine: React.FC<{
               () =>
                 tourGroupsApi.updateService(g.id, sv.id, {
                   supplierName: supplier,
-                  finalBuy: finalBuy.trim() === '' ? null : num(finalBuy),
-                  ...(finalBuy.trim() === '' ? { status: 'NOT_COMPLETE' } : {}),
+                  finalBuy: finalBuy.trim() === '' ? (sv.expectedBuy ? num(sv.expectedBuy) : null) : num(finalBuy),
+                  status: 'COMPLETE',
                 }),
               undefined,
             )
@@ -1696,20 +1714,18 @@ const PassengerModal: React.FC<{
               </button>
             }
           >
-            <SearchableCombobox
+            <AccountSearchField
               value={d.customerName}
-              onChange={(v) => {
-                const match = customerOptions.find((c: any) => c.value === v || c.label === v || c.name === v);
+              direction={direction}
+              inputClass={inputClass}
+              onPick={(pick) =>
                 setD({
                   ...d,
-                  customerName: v || '',
-                  customerId: match?.id || null,
-                  customerAccountId: match?.accountId || null,
-                });
-              }}
-              options={customerOptions}
-              placeholder=""
-              allowCustomValue
+                  customerName: pick.name,
+                  customerId: null,
+                  customerAccountId: pick.id,
+                })
+              }
             />
           </Field>
           <Field label={isAr ? 'الجواز' : 'Passport'}>
