@@ -27,18 +27,16 @@ export const AppLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Redirect to login if user is not authenticated
-  if (!token || !user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
   // Keep user permissions synchronized with server on mount
   useEffect(() => {
-    refreshPermissions();
-  }, [refreshPermissions]);
+    if (token && user) {
+      refreshPermissions();
+    }
+  }, [token, user, refreshPermissions]);
 
   // Keyboard Event Listeners for Shortcuts (Ctrl+K, Ctrl+N)
   useEffect(() => {
+    if (!token || !user) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -51,7 +49,12 @@ export const AppLayout: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [token, user]);
+
+  // Redirect to login if user is not authenticated
+  if (!token || !user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
 
   const navigateTo = (id: string, title: string, path: string) => {
     const tab: WorkspaceTab = { id, title, path, closable: true };
