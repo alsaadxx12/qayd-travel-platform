@@ -41,6 +41,10 @@ import {
   Save,
   CheckCheck,
   ArrowRightLeft,
+  Filter,
+  SlidersHorizontal,
+  Check,
+  Sparkles,
 } from 'lucide-react';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
@@ -3835,7 +3839,7 @@ export const NewGroupModal: React.FC<{
   );
 };
 
-/* ── نافذة تدقيق المسافرين والأسعار: نافذة كبيرة، تعديل السعر، اعتماد السعر، نقل المستفيد، وانتقال تلقائي للسطر التالي ── */
+/* ── نافذة تدقيق المسافرين والأسعار: نافذة ثابتة الحجم، كروت بيضاء، أيقونة مسافر، بحث وفلترة، وجدول قابل للتخصيص والتعديل ── */
 interface AuditRowState {
   id: string;
   passengerName: string;
@@ -3868,7 +3872,23 @@ const AuditPassengersModal: React.FC<{
   onUpdated: () => Promise<void>;
 }> = ({ opened, onClose, g, isAr, direction, beneficiaryGroups, onEditPax, onUpdated }) => {
   const [rows, setRows] = useState<AuditRowState[]>([]);
-  const priceInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const priceInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // حقول البحث والفلترة
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedBeneficiaryFilter, setSelectedBeneficiaryFilter] = useState<string>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'PENDING' | 'CONFIRMED' | 'CANCELLED'>('ALL');
+  const [batchConfirming, setBatchConfirming] = useState(false);
+
+  // تخصيص الأعمدة الظاهرة في الجدول
+  const [visibleColumns, setVisibleColumns] = useState({
+    passport: true,
+    beneficiary: true,
+    salePrice: true,
+    status: true,
+    agent: false,
+    actions: true,
+  });
 
   const beneficiaryOptions = useMemo(() => {
     return beneficiaryGroups
@@ -3902,14 +3922,55 @@ const AuditPassengersModal: React.FC<{
     }
   }, [g]);
 
-  const updateRowField = (idx: number, patch: Partial<AuditRowState>) => {
-    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  // إحصائيات المستفيدين وتوزيع المسافرين عليهم
+  const beneficiaryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of rows) {
+      const name = r.customerName?.trim() || (isAr ? 'بدون مستفيد (عام)' : 'General');
+      counts[name] = (counts[name] || 0) + 1;
+    }
+    return counts;
+  }, [rows, isAr]);
+
+  const uniqueBeneficiaries = useMemo(() => {
+    return Object.keys(beneficiaryCounts);
+  }, [beneficiaryCounts]);
+
+  const updateRowById = (id: string, patch: Partial<AuditRowState>) => {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   };
 
-  const advanceToNextRow = (currentIdx: number) => {
-    if (currentIdx + 1 < rows.length) {
+  // ترشيح وتصفية الأسطر حسب البحث والمستفيد والحالة
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      // 1. البحث بالاسم أو رقم الجواز
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchName = (r.passengerName || '').toLowerCase().includes(q);
+        const matchPassport = (r.passport || '').toLowerCase().includes(q);
+        if (!matchName && !matchPassport) return false;
+      }
+      // 2. الفلترة حسب المستفيد المحدد
+      if (selectedBeneficiaryFilter !== 'ALL') {
+        const rowBen = r.customerName?.trim() || (isAr ? 'بدون مستفيد (عام)' : 'General');
+        if (rowBen !== selectedBeneficiaryFilter) return false;
+      }
+      // 3. الفلترة حسب الحالة
+      if (selectedStatusFilter !== 'ALL') {
+        if (selectedStatusFilter === 'CONFIRMED' && r.state !== 'CONFIRMED') return false;
+        if (selectedStatusFilter === 'PENDING' && (r.state === 'CONFIRMED' || r.state === 'CANCELLED')) return false;
+        if (selectedStatusFilter === 'CANCELLED' && r.state !== 'CANCELLED') return false;
+      }
+      return true;
+    });
+  }, [rows, searchQuery, selectedBeneficiaryFilter, selectedStatusFilter, isAr]);
+
+  const advanceToNextRow = (currentId: string) => {
+    const currentIdx = filteredRows.findIndex((r) => r.id === currentId);
+    if (currentIdx >= 0 && currentIdx + 1 < filteredRows.length) {
+      const nextId = filteredRows[currentIdx + 1].id;
       setTimeout(() => {
-        const nextInput = priceInputRefs.current[currentIdx + 1];
+        const nextInput = priceInputRefs.current[nextId];
         if (nextInput) {
           nextInput.focus();
           nextInput.select();
@@ -3918,13 +3979,14 @@ const AuditPassengersModal: React.FC<{
     }
   };
 
-  const handleSaveRow = async (idx: number) => {
-    const row = rows[idx];
+  const handleSaveRow = async (row: AuditRowState) => {
     if (!row || row.isSaving) return;
-    updateRowField(idx, { isSaving: true });
+    updateRowById(row.id, { isSaving: true });
     try {
       const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
       await tourGroupsApi.updatePassenger(g.id, row.id, {
+        passengerName: row.passengerName.trim(),
+        passport: row.passport.trim(),
         salePrice: cleanPrice,
         customerName: row.customerName,
         customerId: row.customerId,
@@ -3934,22 +3996,23 @@ const AuditPassengersModal: React.FC<{
         isAr ? 'تم الحفظ' : 'Saved',
         isAr ? `تم حفظ بيانات «${row.passengerName}» بنجاح.` : `Passenger "${row.passengerName}" updated.`,
       );
-      updateRowField(idx, { isSaving: false, salePrice: cleanPrice });
+      updateRowById(row.id, { isSaving: false, salePrice: cleanPrice });
       await onUpdated();
-      advanceToNextRow(idx);
+      advanceToNextRow(row.id);
     } catch (e: any) {
-      updateRowField(idx, { isSaving: false });
+      updateRowById(row.id, { isSaving: false });
       showErrorNotification(isAr ? 'تعذّر الحفظ' : 'Save failed', e?.message || '');
     }
   };
 
-  const handleConfirmRow = async (idx: number) => {
-    const row = rows[idx];
+  const handleConfirmRow = async (row: AuditRowState) => {
     if (!row || row.isSaving) return;
-    updateRowField(idx, { isSaving: true });
+    updateRowById(row.id, { isSaving: true });
     try {
       const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
       await tourGroupsApi.updatePassenger(g.id, row.id, {
+        passengerName: row.passengerName.trim(),
+        passport: row.passport.trim(),
         salePrice: cleanPrice,
         state: 'CONFIRMED',
         customerName: row.customerName,
@@ -3960,25 +4023,25 @@ const AuditPassengersModal: React.FC<{
         isAr ? 'تم اعتماد السعر' : 'Price Confirmed',
         isAr ? `تم تأكيد واعتماد سعر المسافر «${row.passengerName}» بنجاح.` : `Confirmed price for "${row.passengerName}".`,
       );
-      updateRowField(idx, { isSaving: false, state: 'CONFIRMED', salePrice: cleanPrice });
+      updateRowById(row.id, { isSaving: false, state: 'CONFIRMED', salePrice: cleanPrice });
       await onUpdated();
-      advanceToNextRow(idx);
+      advanceToNextRow(row.id);
     } catch (e: any) {
-      updateRowField(idx, { isSaving: false });
+      updateRowById(row.id, { isSaving: false });
       showErrorNotification(isAr ? 'تعذّر الاعتماد' : 'Confirmation failed', e?.message || '');
     }
   };
 
-  const handleBeneficiaryChange = async (idx: number, newName: string) => {
+  const handleBeneficiaryChange = async (rowId: string, newName: string) => {
     const matched = beneficiaryOptions.find((b) => b.value === newName);
     const newAccountId = matched?.accountId || null;
     const newCustomerId = matched?.customerId || null;
-    updateRowField(idx, {
+    updateRowById(rowId, {
       customerName: newName,
       customerAccountId: newAccountId,
       customerId: newCustomerId,
     });
-    const row = rows[idx];
+    const row = rows.find((r) => r.id === rowId);
     if (row) {
       try {
         await tourGroupsApi.updatePassenger(g.id, row.id, {
@@ -3997,6 +4060,38 @@ const AuditPassengersModal: React.FC<{
     }
   };
 
+  const handleBatchConfirm = async () => {
+    const pending = filteredRows.filter((r) => r.state !== 'CONFIRMED');
+    if (pending.length === 0) return;
+    setBatchConfirming(true);
+    try {
+      for (const row of pending) {
+        const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+        await tourGroupsApi.updatePassenger(g.id, row.id, {
+          passengerName: row.passengerName.trim(),
+          passport: row.passport.trim(),
+          salePrice: cleanPrice,
+          state: 'CONFIRMED',
+          customerName: row.customerName,
+          customerId: row.customerId,
+          customerAccountId: row.customerAccountId,
+        });
+      }
+      setRows((prev) =>
+        prev.map((r) => (pending.some((p) => p.id === r.id) ? { ...r, state: 'CONFIRMED' } : r)),
+      );
+      showSuccessNotification(
+        isAr ? 'تم الاعتماد الجماعي' : 'Batch Confirmed',
+        isAr ? `تم اعتماد أسعار ${pending.length} مسافر بنجاح.` : `Confirmed prices for ${pending.length} passengers.`,
+      );
+      await onUpdated();
+    } catch (e: any) {
+      showErrorNotification(isAr ? 'تعذّر الاعتماد الجماعي' : 'Batch failed', e?.message || '');
+    } finally {
+      setBatchConfirming(false);
+    }
+  };
+
   const totalPassengers = rows.length;
   const confirmedCount = rows.filter((r) => r.state === 'CONFIRMED').length;
   const pendingCount = totalPassengers - confirmedCount;
@@ -4009,13 +4104,38 @@ const AuditPassengersModal: React.FC<{
     <Modal
       opened={opened}
       onClose={onClose}
-      size="1240px"
+      size="1420px"
       centered
       radius="xl"
       padding="lg"
       withCloseButton
       dir={direction}
       zIndex={10040}
+      styles={{
+        content: {
+          height: '92vh',
+          maxHeight: '920px',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        },
+        header: {
+          padding: '14px 20px',
+          borderBottom: '1px solid #E2E8F0',
+          backgroundColor: '#FFFFFF',
+          flexShrink: 0,
+        },
+        body: {
+          flex: 1,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          padding: '16px 20px',
+          backgroundColor: '#FAFAFA',
+        },
+      }}
       title={
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center shrink-0 shadow-2xs">
@@ -4024,232 +4144,515 @@ const AuditPassengersModal: React.FC<{
           <div>
             <h3 className="font-black text-sm sm:text-base text-slate-900 flex items-center gap-2">
               <span>{isAr ? 'تدقيق أسعار ومستفيدي المسافرين' : 'Audit Passengers & Pricing'}</span>
-              <span className="text-xs font-mono font-black px-2 py-0.5 rounded-full bg-orange-50 text-[#F45A0A] border border-orange-200">
+              <span className="text-xs font-mono font-black px-2.5 py-0.5 rounded-full bg-orange-50 text-[#F45A0A] border border-orange-200 tabular-nums">
                 {totalPassengers} {isAr ? 'مسافر' : 'passengers'}
               </span>
             </h3>
             <p className="text-[11px] font-bold text-slate-500 mt-0.5">
               {isAr
-                ? 'مراجعة وتعديل أسعار البيع، اعتماد السعر، ونقل المسافرين بين المستفيدين مع الانتقال التلقائي للسطر التالي عند الحفظ'
-                : 'Review & edit sale prices, confirm rates, move travelers between beneficiaries, and auto-advance row-by-row on save.'}
+                ? 'مراجعة وتعديل أسعار البيع، بيانات المسافر والجواز، نقل المسافرين بين المستفيدين، واعتماد الأسعار'
+                : 'Review & edit sale prices, passenger details, move travelers between beneficiaries, and confirm pricing.'}
             </p>
           </div>
         </div>
       }
     >
-      <div className="space-y-4 font-sans pt-1" dir={direction}>
-        {/* شريط الإحصائيات السريعة للتدقيق */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-            <span className="text-[11px] font-bold text-slate-500 block">{isAr ? 'إجمالي المسافرين' : 'Total Passengers'}</span>
-            <span className="text-lg font-black font-mono text-slate-900 tabular-nums">{totalPassengers}</span>
+      <div className="flex flex-col h-full space-y-3 font-sans overflow-hidden" dir={direction}>
+        {/* ── 1. بطاقات الإحصائيات الموحدة باللون الأبيض الصافي (Pure White Cards) ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
+          {/* كارت 1: إجمالي المسافرين */}
+          <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold text-slate-500 block mb-1">
+                {isAr ? 'إجمالي المسافرين' : 'Total Passengers'}
+              </span>
+              <span className="text-2xl font-black font-mono text-slate-900 tabular-nums">
+                {totalPassengers}
+              </span>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-center shrink-0">
+              <Users size={17} strokeWidth={2.2} />
+            </div>
           </div>
-          <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200 shadow-2xs">
-            <span className="text-[11px] font-bold text-emerald-700 block">{isAr ? 'الأسعار المعتمدة' : 'Confirmed Prices'}</span>
-            <span className="text-lg font-black font-mono text-emerald-800 tabular-nums">{confirmedCount}</span>
+
+          {/* كارت 2: الأسعار المعتمدة */}
+          <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold text-slate-500 block mb-1">
+                {isAr ? 'الأسعار المعتمدة' : 'Confirmed Prices'}
+              </span>
+              <span className="text-2xl font-black font-mono text-emerald-700 tabular-nums">
+                {confirmedCount}
+              </span>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 text-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={17} strokeWidth={2.2} />
+            </div>
           </div>
-          <div className="p-3 bg-amber-50/50 rounded-xl border border-amber-200 shadow-2xs">
-            <span className="text-[11px] font-bold text-amber-700 block">{isAr ? 'قيد التدقيق / معلّق' : 'Pending Review'}</span>
-            <span className="text-lg font-black font-mono text-amber-800 tabular-nums">{pendingCount}</span>
+
+          {/* كارت 3: قيد التدقيق / معلق */}
+          <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold text-slate-500 block mb-1">
+                {isAr ? 'قيد التدقيق / معلّق' : 'Pending Review'}
+              </span>
+              <span className="text-2xl font-black font-mono text-amber-600 tabular-nums">
+                {pendingCount}
+              </span>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 text-amber-600 flex items-center justify-center shrink-0">
+              <Clock size={17} strokeWidth={2.2} />
+            </div>
           </div>
-          <div className="p-3 bg-orange-50/50 rounded-xl border border-orange-200 shadow-2xs">
-            <span className="text-[11px] font-bold text-[#F45A0A] block">{isAr ? 'إجمالي مبيعات الكروب' : 'Total Group Sales'}</span>
-            <span className="text-lg font-black font-mono text-[#F45A0A] tabular-nums" dir="ltr">
-              {totalSales.toLocaleString('en-US')} {g.currency || 'USD'}
+
+          {/* كارت 4: إجمالي مبيعات الكروب */}
+          <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold text-slate-500 block mb-1">
+                {isAr ? 'إجمالي مبيعات الكروب' : 'Total Group Sales'}
+              </span>
+              <span className="text-2xl font-black font-mono text-[#F45A0A] tabular-nums" dir="ltr">
+                {totalSales.toLocaleString('en-US')} {g.currency || 'USD'}
+              </span>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200 text-[#F45A0A] flex items-center justify-center shrink-0">
+              <Coins size={17} strokeWidth={2.2} />
+            </div>
+          </div>
+        </div>
+
+        {/* ── 2. شريط البحث والفلترة حسب المستفيد وتخصيص الأعمدة ── */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs space-y-2.5 shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            {/* حقل البحث بالاسم أو الجواز */}
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search
+                size={15}
+                className="text-slate-400 absolute start-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={isAr ? 'بحث باسم المسافر أو رقم الجواز...' : 'Search traveler name or passport...'}
+                className="w-full h-9 ps-9 pe-8 text-xs font-bold text-slate-800 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-[#F45A0A] rounded-xl outline-none transition-all placeholder:text-slate-400"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute end-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* فلترة المستفيدين وقائمة الحالات وأزرار التخصيص */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* اختيار المستفيد للفلترة */}
+              <div className="w-48 sm:w-56">
+                <Select
+                  size="xs"
+                  radius="md"
+                  placeholder={isAr ? 'تصفية حسب المستفيد...' : 'Filter beneficiary...'}
+                  value={selectedBeneficiaryFilter}
+                  onChange={(val) => setSelectedBeneficiaryFilter(val || 'ALL')}
+                  data={[
+                    { value: 'ALL', label: isAr ? `كل المستفيدين (${totalPassengers})` : `All Beneficiaries (${totalPassengers})` },
+                    ...uniqueBeneficiaries.map((b) => ({
+                      value: b,
+                      label: `${b} (${beneficiaryCounts[b] || 0})`,
+                    })),
+                  ]}
+                  leftSection={<Building2 size={13} className="text-slate-400" />}
+                />
+              </div>
+
+              {/* تبويبات الحالة السريعة */}
+              <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusFilter('ALL')}
+                  className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                    selectedStatusFilter === 'ALL'
+                      ? 'bg-white text-slate-900 shadow-2xs font-black'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  {isAr ? 'الكل' : 'All'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusFilter('PENDING')}
+                  className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                    selectedStatusFilter === 'PENDING'
+                      ? 'bg-white text-amber-700 shadow-2xs font-black'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  {isAr ? 'معلّق' : 'Pending'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatusFilter('CONFIRMED')}
+                  className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                    selectedStatusFilter === 'CONFIRMED'
+                      ? 'bg-white text-emerald-700 shadow-2xs font-black'
+                      : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  {isAr ? 'معتمد' : 'Confirmed'}
+                </button>
+              </div>
+
+              {/* تخصيص الأعمدة الظاهرة */}
+              <Menu shadow="md" width={200} position="bottom-end">
+                <Menu.Target>
+                  <button
+                    type="button"
+                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
+                  >
+                    <SlidersHorizontal size={13} className="text-slate-500" />
+                    <span>{isAr ? 'تخصيص الأعمدة' : 'Columns'}</span>
+                  </button>
+                </Menu.Target>
+                <Menu.Dropdown dir={direction}>
+                  <Menu.Label className="text-[11px] font-black">{isAr ? 'إظهار / إخفاء الأعمدة' : 'Toggle Columns'}</Menu.Label>
+                  <Menu.Item
+                    onClick={() => setVisibleColumns((c) => ({ ...c, passport: !c.passport }))}
+                    leftSection={visibleColumns.passport ? <Check size={14} className="text-emerald-600" /> : <span className="w-3.5" />}
+                  >
+                    {isAr ? 'رقم الجواز' : 'Passport'}
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => setVisibleColumns((c) => ({ ...c, beneficiary: !c.beneficiary }))}
+                    leftSection={visibleColumns.beneficiary ? <Check size={14} className="text-emerald-600" /> : <span className="w-3.5" />}
+                  >
+                    {isAr ? 'المستفيد التابع له' : 'Beneficiary'}
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => setVisibleColumns((c) => ({ ...c, salePrice: !c.salePrice }))}
+                    leftSection={visibleColumns.salePrice ? <Check size={14} className="text-emerald-600" /> : <span className="w-3.5" />}
+                  >
+                    {isAr ? 'سعر البيع' : 'Sale Price'}
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => setVisibleColumns((c) => ({ ...c, status: !c.status }))}
+                    leftSection={visibleColumns.status ? <Check size={14} className="text-emerald-600" /> : <span className="w-3.5" />}
+                  >
+                    {isAr ? 'حالة السعر' : 'Price Status'}
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => setVisibleColumns((c) => ({ ...c, agent: !c.agent }))}
+                    leftSection={visibleColumns.agent ? <Check size={14} className="text-emerald-600" /> : <span className="w-3.5" />}
+                  >
+                    {isAr ? 'موظف الإصدار' : 'Issuer / Agent'}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+
+              {/* زر اعتماد جميع المعروضين بنقرة واحدة */}
+              <button
+                type="button"
+                disabled={batchConfirming || filteredRows.filter((r) => r.state !== 'CONFIRMED').length === 0}
+                onClick={handleBatchConfirm}
+                className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
+                title={isAr ? 'اعتماد جميع الأسعار المعلقة المعروضة حالياً' : 'Batch confirm all visible pending'}
+              >
+                {batchConfirming ? <Loader size={12} color="white" /> : <CheckCheck size={14} />}
+                <span>{isAr ? 'اعتماد الكل' : 'Confirm All'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ── شريط وسوم المستفيدين السريعة: تبيّن كل مسافرين إلى أي مستفيدين يتبعون ── */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pt-1 border-t border-slate-100 pb-0.5 text-[11px]">
+            <span className="font-bold text-slate-400 shrink-0 flex items-center gap-1">
+              <Building2 size={12} />
+              <span>{isAr ? 'المستفيدون:' : 'Beneficiaries:'}</span>
             </span>
+            <button
+              type="button"
+              onClick={() => setSelectedBeneficiaryFilter('ALL')}
+              className={`px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer shrink-0 border ${
+                selectedBeneficiaryFilter === 'ALL'
+                  ? 'bg-orange-50 border-orange-200 text-[#F45A0A] font-black'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {isAr ? 'الكل' : 'All'} ({totalPassengers})
+            </button>
+            {uniqueBeneficiaries.map((bName) => {
+              const count = beneficiaryCounts[bName] || 0;
+              const isSelected = selectedBeneficiaryFilter === bName;
+              return (
+                <button
+                  key={bName}
+                  type="button"
+                  onClick={() => setSelectedBeneficiaryFilter(isSelected ? 'ALL' : bName)}
+                  className={`px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer shrink-0 border flex items-center gap-1 ${
+                    isSelected
+                      ? 'bg-orange-50 border-orange-300 text-[#F45A0A] font-black shadow-2xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{bName}</span>
+                  <span className="font-mono text-[10px] px-1 py-0.2 rounded bg-slate-100 text-slate-600 tabular-nums">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* تنبيه تعليمات الانتقال السريع */}
-        <div className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between text-slate-600">
-          <span className="font-bold">
-            {isAr
-              ? '💡 نصيحة: يمكنك تعديل السعر والضغط على Enter أو زر الحفظ/الاعتماد للانتقال المباشر للسطر التالي.'
-              : '💡 Tip: Edit sale price and press Enter or click Save/Confirm to immediately move to the next row.'}
-          </span>
-          <span className="font-mono text-[11px] font-bold text-slate-400">
-            {isAr ? 'اختصار: زر Enter للحفظ والتالي' : 'Enter: Save & Next'}
-          </span>
-        </div>
-
-        {/* جدول تدقيق المسافرين */}
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs max-h-[500px]">
+        {/* ── 3. جدول تدقيق المسافرين القابل للتخصيص والتعديل ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
           <table className="w-full border-collapse text-start">
             <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-200">
               <tr className="text-start">
                 <th className={`${th} w-10 text-center`}>#</th>
                 <th className={`${th} text-start`}>{isAr ? 'اسم المسافر' : 'Passenger Name'}</th>
-                <th className={`${th} text-start`}>{isAr ? 'رقم الجواز' : 'Passport'}</th>
-                <th className={`${th} text-start`}>{isAr ? 'المستفيد التابع له (ملف الحساب)' : 'Assigned Beneficiary'}</th>
-                <th className={`${th} text-center`}>{isAr ? 'سعر البيع (قابل للتعديل)' : 'Sale Price (Editable)'}</th>
-                <th className={`${th} text-center`}>{isAr ? 'حالة السعر' : 'Price Status'}</th>
-                <th className={`${th} text-center w-56`}>{isAr ? 'إجراءات التدقيق' : 'Audit Actions'}</th>
+                {visibleColumns.passport && (
+                  <th className={`${th} text-start w-36`}>{isAr ? 'رقم الجواز' : 'Passport'}</th>
+                )}
+                {visibleColumns.beneficiary && (
+                  <th className={`${th} text-start w-64`}>{isAr ? 'المستفيد التابع له (ملف الحساب)' : 'Assigned Beneficiary'}</th>
+                )}
+                {visibleColumns.salePrice && (
+                  <th className={`${th} text-center w-40`}>{isAr ? 'سعر البيع' : 'Sale Price'}</th>
+                )}
+                {visibleColumns.status && (
+                  <th className={`${th} text-center w-28`}>{isAr ? 'حالة السعر' : 'Price Status'}</th>
+                )}
+                {visibleColumns.agent && (
+                  <th className={`${th} text-start w-32`}>{isAr ? 'موظف الإصدار' : 'Issuer'}</th>
+                )}
+                {visibleColumns.actions && (
+                  <th className={`${th} text-center w-48`}>{isAr ? 'إجراءات التدقيق' : 'Audit Actions'}</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {rows.map((r, idx) => {
-                const isConfirmed = r.state === 'CONFIRMED';
-                const isCancelled = r.state === 'CANCELLED';
-                return (
-                  <tr
-                    key={r.id}
-                    className={`transition-colors hover:bg-orange-50/30 ${
-                      isCancelled ? 'opacity-50 bg-slate-50' : isConfirmed ? 'bg-emerald-50/15' : ''
-                    }`}
-                  >
-                    {/* # */}
-                    <td className={`${td} text-center font-mono text-[11px] font-bold text-slate-400`}>
-                      {idx + 1}
-                    </td>
+              {filteredRows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-slate-400 font-bold text-xs">
+                    {isAr ? 'لا توجد نتائج تطابق خيارات البحث والفلترة' : 'No passengers match the current search/filters'}
+                  </td>
+                </tr>
+              ) : (
+                filteredRows.map((r, idx) => {
+                  const isConfirmed = r.state === 'CONFIRMED';
+                  const isCancelled = r.state === 'CANCELLED';
+                  return (
+                    <tr
+                      key={r.id}
+                      className={`transition-colors hover:bg-orange-50/20 ${
+                        isCancelled ? 'opacity-50 bg-slate-50' : isConfirmed ? 'bg-emerald-50/15' : ''
+                      }`}
+                    >
+                      {/* # الترقيم */}
+                      <td className={`${td} text-center font-mono text-[11px] font-bold text-slate-400`}>
+                        {idx + 1}
+                      </td>
 
-                    {/* المسافر */}
-                    <td className={`${td} text-start`}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-orange-50 text-[#F45A0A] font-black text-xs flex items-center justify-center shrink-0 border border-orange-200/60">
-                          {r.passengerName.trim().charAt(0) || 'P'}
+                      {/* المسافر مع أيقونة مسافر أنيقة وحقل قابل للتعديل المباشر */}
+                      <td className={`${td} text-start`}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          {/* أيقونة المسافر المخصصة (Passenger Icon) */}
+                          <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center shrink-0 border border-orange-200/70 shadow-2xs">
+                            <User size={15} strokeWidth={2.4} />
+                          </div>
+                          {/* حقل اسم المسافر قابل للتعديل */}
+                          <div className="min-w-0 flex-1">
+                            <input
+                              value={r.passengerName}
+                              onChange={(e) => updateRowById(r.id, { passengerName: e.target.value })}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveRow(r);
+                                }
+                              }}
+                              className="w-full h-[32px] px-2 font-black text-xs text-slate-900 bg-transparent hover:bg-slate-50 focus:bg-white focus:border-[#F45A0A] border border-transparent focus:border rounded-lg outline-none transition-colors"
+                              placeholder={isAr ? 'اسم المسافر...' : 'Passenger name...'}
+                            />
+                          </div>
                         </div>
-                        <span className="font-black text-slate-900 text-xs">
-                          {r.passengerName}
-                        </span>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* رقم الجواز */}
-                    <td className={`${td} text-start`}>
-                      {r.passport ? (
-                        <span className="font-mono font-bold text-slate-700 text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200" dir="ltr">
-                          {r.passport}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-[11px]">—</span>
+                      {/* رقم الجواز - قابل للتعديل */}
+                      {visibleColumns.passport && (
+                        <td className={`${td} text-start`}>
+                          <input
+                            value={r.passport}
+                            onChange={(e) => updateRowById(r.id, { passport: e.target.value.toUpperCase() })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveRow(r);
+                              }
+                            }}
+                            dir="ltr"
+                            className="w-full max-w-[120px] h-[32px] px-2 font-mono font-bold text-xs text-slate-700 bg-transparent hover:bg-slate-50 focus:bg-white focus:border-[#F45A0A] border border-transparent focus:border rounded-lg outline-none transition-colors text-start"
+                            placeholder="A00000000"
+                          />
+                        </td>
                       )}
-                    </td>
 
-                    {/* المستفيد التابع له مع إمكانية التغيير والنقل */}
-                    <td className={`${td} text-start`}>
-                      <div className="w-48 sm:w-56">
-                        <SearchableCombobox
-                          value={r.customerName}
-                          onChange={(val) => handleBeneficiaryChange(idx, val || '')}
-                          options={beneficiaryOptions}
-                          placeholder={isAr ? 'اختر المستفيد...' : 'Select Beneficiary...'}
-                          allowCustomValue
-                        />
-                      </div>
-                    </td>
+                      {/* المستفيد التابع له - يبيّن المستفيد بوضوح مع إمكانية النقل */}
+                      {visibleColumns.beneficiary && (
+                        <td className={`${td} text-start`}>
+                          <div className="w-56 sm:w-64">
+                            <SearchableCombobox
+                              value={r.customerName}
+                              onChange={(val) => handleBeneficiaryChange(r.id, val || '')}
+                              options={beneficiaryOptions}
+                              placeholder={isAr ? 'اختر المستفيد...' : 'Select Beneficiary...'}
+                              allowCustomValue
+                            />
+                          </div>
+                        </td>
+                      )}
 
-                    {/* سعر البيع - حقل قابل للتعديل مع دعم Enter */}
-                    <td className={`${td} text-center`}>
-                      <div className="inline-flex items-center gap-1.5 justify-center">
-                        <input
-                          ref={(el) => {
-                            priceInputRefs.current[idx] = el;
-                          }}
-                          value={r.salePrice}
-                          onChange={(e) => {
-                            const raw = e.target.value.replace(/[^0-9.]/g, '');
-                            updateRowField(idx, { salePrice: raw });
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSaveRow(idx);
-                            }
-                          }}
-                          dir="ltr"
-                          className="w-28 h-[36px] px-2.5 text-center font-mono font-black text-xs rounded-lg border border-slate-200 bg-white focus:bg-orange-50/20 focus:border-2 focus:border-[#F45A0A] outline-none shadow-2xs tabular-nums text-slate-900 transition-colors"
-                          placeholder="0"
-                        />
-                        <span className="font-mono font-bold text-[11px] text-slate-400">
-                          {r.currency}
-                        </span>
-                      </div>
-                    </td>
+                      {/* سعر البيع - حقل قابل للتعديل مع دعم Enter السريع */}
+                      {visibleColumns.salePrice && (
+                        <td className={`${td} text-center`}>
+                          <div className="inline-flex items-center gap-1.5 justify-center">
+                            <input
+                              ref={(el) => {
+                                priceInputRefs.current[r.id] = el;
+                              }}
+                              value={r.salePrice}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                updateRowById(r.id, { salePrice: raw });
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveRow(r);
+                                }
+                              }}
+                              dir="ltr"
+                              className="w-28 h-[34px] px-2 text-center font-mono font-black text-xs rounded-lg border border-slate-200 bg-white focus:bg-orange-50/20 focus:border-2 focus:border-[#F45A0A] outline-none shadow-2xs tabular-nums text-slate-900 transition-colors"
+                              placeholder="0"
+                            />
+                            <span className="font-mono font-bold text-[11px] text-slate-400">
+                              {r.currency}
+                            </span>
+                          </div>
+                        </td>
+                      )}
 
-                    {/* حالة السعر */}
-                    <td className={`${td} text-center`}>
-                      <span
-                        className={`text-[10.5px] font-black px-2.5 py-1 rounded-md border inline-flex items-center gap-1 ${
-                          isCancelled
-                            ? 'bg-slate-100 text-slate-600 border-slate-200'
-                            : isConfirmed
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : 'bg-amber-50 text-amber-800 border-amber-200'
-                        }`}
-                      >
-                        {isConfirmed ? (
-                          <>
-                            <CheckCircle2 size={12} className="text-emerald-600" />
-                            <span>{isAr ? 'معتمد' : 'Confirmed'}</span>
-                          </>
-                        ) : isCancelled ? (
-                          <span>{isAr ? 'ملغى' : 'Cancelled'}</span>
-                        ) : (
-                          <>
-                            <Clock size={12} className="text-amber-600" />
-                            <span>{isAr ? 'معلّق' : 'Pending'}</span>
-                          </>
-                        )}
-                      </span>
-                    </td>
+                      {/* حالة السعر */}
+                      {visibleColumns.status && (
+                        <td className={`${td} text-center`}>
+                          <span
+                            className={`text-[10.5px] font-black px-2.5 py-1 rounded-md border inline-flex items-center gap-1 ${
+                              isCancelled
+                                ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                : isConfirmed
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}
+                          >
+                            {isConfirmed ? (
+                              <>
+                                <CheckCircle2 size={12} className="text-emerald-600" />
+                                <span>{isAr ? 'معتمد' : 'Confirmed'}</span>
+                              </>
+                            ) : isCancelled ? (
+                              <span>{isAr ? 'ملغى' : 'Cancelled'}</span>
+                            ) : (
+                              <>
+                                <Clock size={12} className="text-amber-600" />
+                                <span>{isAr ? 'معلّق' : 'Pending'}</span>
+                              </>
+                            )}
+                          </span>
+                        </td>
+                      )}
 
-                    {/* الإجراءات: اعتماد السعر، حفظ، تعديل، ونقل */}
-                    <td className={`${td} text-center`} onClick={(e) => e.stopPropagation()}>
-                      <div className="inline-flex items-center gap-1.5">
-                        {/* زر اعتماد وتأكيد السعر */}
-                        <button
-                          type="button"
-                          disabled={r.isSaving || isConfirmed}
-                          onClick={() => handleConfirmRow(idx)}
-                          title={isAr ? 'اعتماد وتأكيد السعر والانتقال للتالي' : 'Confirm price & advance'}
-                          className="h-7 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 text-emerald-800 text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
-                        >
-                          <CheckCheck size={12} className="text-emerald-700" />
-                          <span>{isAr ? 'اعتماد' : 'Confirm'}</span>
-                        </button>
+                      {/* موظف الإصدار */}
+                      {visibleColumns.agent && (
+                        <td className={`${td} text-start`}>
+                          <span className="text-[11px] font-bold text-slate-600 truncate block max-w-[120px]" title={r.agent}>
+                            {r.agent || '—'}
+                          </span>
+                        </td>
+                      )}
 
-                        {/* زر حفظ التعديلات والانتقال للتالي */}
-                        <button
-                          type="button"
-                          disabled={r.isSaving}
-                          onClick={() => handleSaveRow(idx)}
-                          title={isAr ? 'حفظ السعر والمستفيد والانتقال للتالي' : 'Save & advance'}
-                          className="h-7 px-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 disabled:opacity-50 text-[#F45A0A] text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
-                        >
-                          {r.isSaving ? <Loader size={11} color="orange" /> : <Save size={12} />}
-                          <span>{isAr ? 'حفظ' : 'Save'}</span>
-                        </button>
+                      {/* الإجراءات: اعتماد، حفظ، وتعديل كامل */}
+                      {visibleColumns.actions && (
+                        <td className={`${td} text-center`} onClick={(e) => e.stopPropagation()}>
+                          <div className="inline-flex items-center gap-1.5">
+                            {/* زر اعتماد وتأكيد السعر */}
+                            <button
+                              type="button"
+                              disabled={r.isSaving || isConfirmed}
+                              onClick={() => handleConfirmRow(r)}
+                              title={isAr ? 'اعتماد وتأكيد السعر والانتقال للتالي' : 'Confirm price & advance'}
+                              className="h-7 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 text-emerald-800 text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
+                            >
+                              <CheckCheck size={12} className="text-emerald-700" />
+                              <span>{isAr ? 'اعتماد' : 'Confirm'}</span>
+                            </button>
 
-                        {/* زر تعديل المسافر بالكامل */}
-                        <button
-                          type="button"
-                          onClick={() => onEditPax(r.originalPax)}
-                          title={isAr ? 'تعديل كافة بيانات المسافر التفصيلية' : 'Edit passenger full details'}
-                          className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
-                        >
-                          <Edit2 size={12} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                            {/* زر حفظ التعديلات */}
+                            <button
+                              type="button"
+                              disabled={r.isSaving}
+                              onClick={() => handleSaveRow(r)}
+                              title={isAr ? 'حفظ السعر والمستفيد وبيانات المسافر' : 'Save row changes'}
+                              className="h-7 px-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 disabled:opacity-50 text-[#F45A0A] text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
+                            >
+                              {r.isSaving ? <Loader size={11} color="orange" /> : <Save size={12} />}
+                              <span>{isAr ? 'حفظ' : 'Save'}</span>
+                            </button>
+
+                            {/* زر تعديل المسافر بالكامل في نافذة مخصصة */}
+                            <button
+                              type="button"
+                              onClick={() => onEditPax(r.originalPax)}
+                              title={isAr ? 'تعديل كافة بيانات وخدمات المسافر التفصيلية' : 'Edit passenger full details'}
+                              className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        {/* الشريط السفلي للنافذة */}
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-          <div className="text-xs text-slate-500 font-bold">
-            {isAr ? `إجمالي الأسطر: ${totalPassengers} مسافر` : `Total: ${totalPassengers} travelers`}
+        {/* ── 4. الشريط السفلي للنافذة ── */}
+        <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between shrink-0 bg-white px-2 py-1.5 rounded-xl">
+          <div className="flex items-center gap-3 text-xs text-slate-500 font-bold">
+            <span>
+              {isAr
+                ? `عرض ${filteredRows.length} من أصل ${totalPassengers} مسافر`
+                : `Showing ${filteredRows.length} of ${totalPassengers} passengers`}
+            </span>
+            <span className="text-slate-300">|</span>
+            <span className="text-slate-400 font-normal">
+              {isAr
+                ? '💡 اضغط Enter في حقل السعر للحفظ والانتقال المباشر للسطر التالي'
+                : '💡 Press Enter on price input to save and move to next row'}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="h-9 px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              className="h-9 px-6 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
             >
-              {isAr ? 'إغلاق' : 'Close'}
+              {isAr ? 'إغلاق النافذة' : 'Close'}
             </button>
           </div>
         </div>
