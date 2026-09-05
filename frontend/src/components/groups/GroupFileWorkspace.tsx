@@ -35,11 +35,16 @@ import {
   FolderPlus,
   UserPlus,
   ArrowRight,
+  MoreVertical,
+  Edit2,
+  History,
+  Save,
 } from 'lucide-react';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
 import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
 import { AccountSearchField, type AccountPick } from './AccountSearchField';
+import { InvoiceAuditLogModal } from '../tickets/InvoiceAuditLogModal';
 import { partnersApi } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
 import { employeesApi } from '../../api/employees';
@@ -246,8 +251,31 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   const [psModal, setPsModal] = useState<Partial<GroupPriceSystem> | null>(null);
   const [chargeModal, setChargeModal] = useState<'GLOBAL_PURCHASE' | 'EXPENSE' | null>(null);
   // الإشعارات المنبثقة معطَّلة في النظام كلّه، فأخطاء الحفظ كانت تختفي بصمت
-  // («لا يتم الحفظ» بلا سبب). نُبقيها هنا لتُعرض شريطاً داخل النافذة.
   const [errorMsg, setErrorMsg] = useState('');
+  const [editGroupModalOpen, setEditGroupModalOpen] = useState(false);
+  const [deleteGroupConfirmOpen, setDeleteGroupConfirmOpen] = useState(false);
+  const [auditLogOpen, setAuditLogOpen] = useState(false);
+  const [editGroupData, setEditGroupData] = useState({
+    groupName: '',
+    country: '',
+    travelDate: '',
+    groupType: 'FULL',
+    currency: 'IQD',
+    notes: '',
+  });
+
+  useEffect(() => {
+    if (g) {
+      setEditGroupData({
+        groupName: g.groupName || '',
+        country: g.country || '',
+        travelDate: g.travelDate ? String(g.travelDate).split('T')[0] : '',
+        groupType: g.groupType || 'FULL',
+        currency: g.currency || 'IQD',
+        notes: g.notes || '',
+      });
+    }
+  }, [g]);
 
   // قفل إعادة الدخول: حالة busy تصل الشاشة متأخرةً عن النقرة الثانية، أما
   // المرجع فيقفل فوراً — نقرتان أثناء بطء الشبكة كانتا تحفظان النظام مرتين.
@@ -276,16 +304,22 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
     [isAr, onChanged],
   );
 
+  const user = useAuthStore((s) => s.user);
+  const currentUserName = user?.name || (user as any)?.username || (isAr ? 'مدير النظام' : 'System Admin');
+  const [employeesList, setEmployeesList] = useState<any[]>([]);
+
   useEffect(() => {
     if (!opened) return;
     setOpenPax(null);
-    // العملاء لم نعد نُحمّلهم مسبقاً (كانوا ٣ث ونصف ميغابايت): حقل العميل يبحث
-    // في الخادم عند الكتابة، فيُفتح «إضافة مسافر» فوراً. الموردون أخفّ ويغذّون
-    // عدّة حقول، فيُجلبون في الخلفية دون أن يحبسوا فتح النافذة.
     partnersApi
       .getSuppliers()
       .then((d: any) => setSuppliers(Array.isArray(d) ? d : d?.data || []))
       .catch(() => undefined);
+
+    employeesApi
+      .getAll()
+      .then((res: any) => setEmployeesList(Array.isArray(res) ? res : res?.data || []))
+      .catch(() => setEmployeesList([]));
 
     if (groupId) {
       setLoading(true);
@@ -298,6 +332,15 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
       setG(null);
     }
   }, [opened, groupId, isAr]);
+
+  const employeeOptions = useMemo(
+    () =>
+      employeesList.map((e: any) => ({
+        value: e.fullName || e.name || e.id,
+        label: e.fullName || e.name || e.username || '',
+      })),
+    [employeesList],
+  );
 
   const customerOptions = useMemo(
     () =>
@@ -472,6 +515,17 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                   <Calendar size={12} className="text-slate-400" />
                   <span>{g?.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : (isAr ? 'بلا تاريخ سفر' : 'no date')}</span>
                 </span>
+                <span>•</span>
+                <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 text-[11px]">
+                  <span className="text-slate-400 font-sans">{isAr ? 'مدخل البيانات:' : 'Entry:'}</span>
+                  <span className="text-slate-800 font-bold">{g?.createdByName || currentUserName}</span>
+                </span>
+                {g?.passengers?.find((p) => p.agent)?.agent && (
+                  <span className="inline-flex items-center gap-1 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200 text-[#F45A0A] text-[11px]">
+                    <span className="text-orange-500 font-sans">{isAr ? 'المصدر:' : 'Issuer:'}</span>
+                    <span className="font-bold">{g.passengers.find((p) => p.agent)?.agent}</span>
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -496,6 +550,44 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                 {g.openSale ? <Unlock size={14} /> : <Lock size={14} />}
                 <span>{g.openSale ? (isAr ? 'البيع مفتوح' : 'Sale Open') : isAr ? 'البيع مقفل' : 'Sale Closed'}</span>
               </button>
+            )}
+            {g && (
+              <Menu shadow="md" width={190} position={direction === 'rtl' ? 'bottom-start' : 'bottom-end'}>
+                <Menu.Target>
+                  <button
+                    type="button"
+                    title={isAr ? 'إجراءات الكروب' : 'Group actions'}
+                    className="h-[38px] w-[38px] rounded-xl border border-slate-200 bg-white hover:bg-orange-50 hover:border-orange-200 hover:text-[#F45A0A] text-slate-600 flex items-center justify-center cursor-pointer transition-all shadow-2xs"
+                  >
+                    <MoreVertical size={18} />
+                  </button>
+                </Menu.Target>
+                <Menu.Dropdown className="!rounded-xl !p-1.5 !border !border-slate-200 shadow-xl font-sans" dir={direction}>
+                  <Menu.Item
+                    leftSection={<Edit2 size={15} className="text-[#F45A0A]" />}
+                    onClick={() => setEditGroupModalOpen(true)}
+                    className="!text-xs !font-bold !text-slate-800 !py-2 hover:!bg-orange-50/70"
+                  >
+                    {isAr ? 'تعديل الكروب' : 'Edit Group'}
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<History size={15} className="text-blue-600" />}
+                    onClick={() => setAuditLogOpen(true)}
+                    className="!text-xs !font-bold !text-slate-800 !py-2 hover:!bg-blue-50/70"
+                  >
+                    {isAr ? 'سجل التعديلات' : 'Audit Log'}
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Item
+                    color="red"
+                    leftSection={<Trash2 size={15} className="text-rose-600" />}
+                    onClick={() => setDeleteGroupConfirmOpen(true)}
+                    className="!text-xs !font-bold !text-rose-600 !py-2 hover:!bg-rose-50"
+                  >
+                    {isAr ? 'حذف الكروب' : 'Delete Group'}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
             )}
             <button
               type="button"
@@ -926,18 +1018,15 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                                   </p>
                                 </div>
                               ) : (
-                                bg.passengers.map((p) => (
-                                  <PassengerRow
-                                    key={p.id}
-                                    g={g}
-                                    p={p}
-                                    isAr={isAr}
-                                    supplierOptions={supplierOptions}
-                                    open={openPax === p.id}
-                                    toggle={() => setOpenPax(openPax === p.id ? null : p.id)}
-                                    run={run}
-                                  />
-                                ))
+                                <PassengerTable
+                                  g={g}
+                                  passengers={bg.passengers}
+                                  isAr={isAr}
+                                  supplierOptions={supplierOptions}
+                                  openPax={openPax}
+                                  setOpenPax={setOpenPax}
+                                  run={run}
+                                />
                               )}
                             </div>
                           )}
@@ -1030,11 +1119,418 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           }}
         />
       )}
+
+      {/* ── نافذة تعديل بيانات الكروب ── */}
+      {g && editGroupModalOpen && (
+        <Modal
+          opened={editGroupModalOpen}
+          onClose={() => setEditGroupModalOpen(false)}
+          centered
+          size={580}
+          withCloseButton={false}
+          zIndex={10050}
+          classNames={{
+            content: '!rounded-2xl border border-slate-200 shadow-2xl !overflow-visible',
+            body: '!p-5',
+          }}
+        >
+          <div className="space-y-3.5 font-sans" dir={direction}>
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200/80 text-[#F45A0A] flex items-center justify-center">
+                  <Edit2 size={16} strokeWidth={2.4} />
+                </div>
+                <h3 className="font-black text-sm sm:text-base text-slate-900">
+                  {isAr ? 'تعديل بيانات الكروب' : 'Edit Tour Group'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditGroupModalOpen(false)}
+                className="w-8 h-8 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="sm:col-span-2">
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  {isAr ? 'اسم الكروب *' : 'Group Name *'}
+                </label>
+                <input
+                  value={editGroupData.groupName}
+                  onChange={(e) => setEditGroupData({ ...editGroupData, groupName: e.target.value })}
+                  className={inputClass}
+                  placeholder={isAr ? 'اسم الكروب' : 'Group Name'}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  {isAr ? 'النوع' : 'Type'}
+                </label>
+                <SearchableCombobox
+                  value={editGroupData.groupType}
+                  onChange={(val) => setEditGroupData({ ...editGroupData, groupType: val || 'FULL' })}
+                  options={[
+                    { value: 'FULL', label: isAr ? 'شامل' : 'Full' },
+                    { value: 'AIR', label: isAr ? 'طيران' : 'Air' },
+                    { value: 'LAND', label: isAr ? 'بري' : 'Land' },
+                  ]}
+                  clearable={false}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1 flex items-center gap-1">
+                  <MapPin size={12} className="text-[#F45A0A]" />
+                  <span>{isAr ? 'الوجهة' : 'Destination'}</span>
+                </label>
+                <SearchableCombobox
+                  options={WORLD_CITIES.map((c) => ({
+                    value: isAr ? c.cityAr : c.cityEn,
+                    label: isAr ? `${c.cityAr} (${c.countryAr})` : `${c.cityEn} (${c.countryEn})`,
+                    subLabel: isAr ? c.countryAr : c.countryEn,
+                  }))}
+                  value={editGroupData.country}
+                  onChange={(val: string) => setEditGroupData({ ...editGroupData, country: val || '' })}
+                  placeholder={isAr ? 'الوجهة' : 'Destination'}
+                  allowCustomValue
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  {isAr ? 'تاريخ السفر' : 'Travel Date'}
+                </label>
+                <SegmentedDatePicker
+                  value={editGroupData.travelDate ? new Date(editGroupData.travelDate) : null}
+                  onChange={(dt) => setEditGroupData({ ...editGroupData, travelDate: dt ? dt.toISOString().split('T')[0] : '' })}
+                  clearable={false}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  {isAr ? 'العملة' : 'Currency'}
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditGroupData({ ...editGroupData, currency: 'IQD' })}
+                    className={`flex-1 h-[44px] rounded-xl font-black text-xs border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      editGroupData.currency === 'IQD'
+                        ? 'bg-[#F45A0A] text-white border-[#F45A0A] shadow-2xs'
+                        : 'bg-[#FAFAFA] border-[#E5E7EB] text-slate-700 hover:bg-white'
+                    }`}
+                  >
+                    <Coins size={15} />
+                    <span>IQD (د.ع)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditGroupData({ ...editGroupData, currency: 'USD' })}
+                    className={`flex-1 h-[44px] rounded-xl font-black text-xs border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      editGroupData.currency === 'USD'
+                        ? 'bg-[#F45A0A] text-white border-[#F45A0A] shadow-2xs'
+                        : 'bg-[#FAFAFA] border-[#E5E7EB] text-slate-700 hover:bg-white'
+                    }`}
+                  >
+                    <DollarSign size={15} />
+                    <span>USD ($)</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  {isAr ? 'ملاحظات' : 'Notes'}
+                </label>
+                <input
+                  value={editGroupData.notes}
+                  onChange={(e) => setEditGroupData({ ...editGroupData, notes: e.target.value })}
+                  className={inputClass}
+                  placeholder={isAr ? 'ملاحظات إضافية...' : 'Additional notes...'}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEditGroupModalOpen(false)}
+                className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                {isAr ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={busy || !editGroupData.groupName.trim()}
+                onClick={async () => {
+                  const ok = await run(
+                    () =>
+                      tourGroupsApi.update(g.id, {
+                        groupName: editGroupData.groupName.trim(),
+                        country: editGroupData.country,
+                        groupType: editGroupData.groupType,
+                        currency: editGroupData.currency,
+                        notes: editGroupData.notes,
+                        travelDate: editGroupData.travelDate ? new Date(editGroupData.travelDate).toISOString() : undefined,
+                      }),
+                    isAr ? 'تم تعديل بيانات الكروب بنجاح' : 'Group updated',
+                  );
+                  if (ok) setEditGroupModalOpen(false);
+                }}
+                className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer flex items-center gap-2 shadow-2xs"
+              >
+                {busy ? <Loader size={14} color="white" /> : <Save size={15} />}
+                <span>{isAr ? 'حفظ التعديلات' : 'Save Changes'}</span>
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── نافذة تأكيد حذف الكروب ── */}
+      {g && deleteGroupConfirmOpen && (
+        <Modal
+          opened={deleteGroupConfirmOpen}
+          onClose={() => setDeleteGroupConfirmOpen(false)}
+          centered
+          size={440}
+          withCloseButton={false}
+          zIndex={10050}
+          classNames={{
+            content: '!rounded-2xl border border-rose-200 shadow-2xl',
+            body: '!p-5',
+          }}
+        >
+          <div className="space-y-4 font-sans text-center" dir={direction}>
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 size={24} />
+            </div>
+            <div>
+              <h3 className="font-black text-base text-slate-900 mb-1">
+                {isAr ? 'حذف الكروب السياحي' : 'Delete Tour Group'}
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {isAr
+                  ? `هل أنت متأكد من رغبتك في حذف الكروب «${g.groupName}»؟ سيتم حذف كافة المسافرين والبيانات التابعة له نهائياً.`
+                  : `Are you sure you want to delete tour group "${g.groupName}"? All travelers and services will be permanently deleted.`}
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteGroupConfirmOpen(false)}
+                className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                {isAr ? 'تراجع' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  try {
+                    await tourGroupsApi.remove(g.id);
+                    showSuccessNotification(isAr ? 'تم الحذف' : 'Deleted', isAr ? 'تم حذف الكروب بنجاح' : 'Group deleted');
+                    setDeleteGroupConfirmOpen(false);
+                    onChanged?.();
+                    onClose();
+                  } catch (e: any) {
+                    showErrorNotification(isAr ? 'تعذّر الحذف' : 'Delete failed', e?.message || '');
+                  }
+                }}
+                className="h-[40px] px-6 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs"
+              >
+                {isAr ? 'تأكيد الحذف' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── نافذة سجل التعديلات ── */}
+      {g && auditLogOpen && (
+        <InvoiceAuditLogModal
+          opened={auditLogOpen}
+          onClose={() => setAuditLogOpen(false)}
+          ticketNumber={g.groupName}
+          customerName={g.createdByName || (isAr ? 'مدير النظام' : 'Admin')}
+          initialLogs={
+            g.createdAt
+              ? [
+                  {
+                    id: `created_${g.id}`,
+                    timestamp: g.createdAt,
+                    userName: g.createdByName || (isAr ? 'مدير النظام' : 'System Admin'),
+                    action: 'CREATE',
+                    actionTitle: isAr ? 'إنشاء ملف الكروب السياحي' : 'Create tour group file',
+                    details: `${isAr ? 'تم إنشاء ملف الكروب' : 'Created group file'}: ${g.groupName} (${g.country || ''})`,
+                  },
+                ]
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 };
 
 /* ── صف المسافر: كارد أنيق قابل للطي مع الخدمات والمبالغ ── */
+/* ── جدول المسافرين: كثيف وسريع، يحلّ محلّ البطاقات ──
+ * صفٌّ لكل مسافر، وصفٌّ منسدلٌ لخدماته يُركَّب فقط عند التوسيع (فلا تُحسب
+ * الحقول الثقيلة إلا لما هو مفتوح). أرقامٌ جدولية محاذاة، وإجراءات مدمجة. */
+const PassengerTable: React.FC<{
+  g: TourGroup;
+  passengers: GroupPassenger[];
+  isAr: boolean;
+  supplierOptions: Array<{ value: string; label: string; code?: string }>;
+  openPax: string | null;
+  setOpenPax: (id: string | null) => void;
+  run: (op: () => Promise<TourGroup>, ok?: string) => Promise<TourGroup | null>;
+}> = ({ g, passengers, isAr, supplierOptions, openPax, setOpenPax, run }) => {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const th = 'px-2.5 py-2 text-[10.5px] font-black text-slate-500 whitespace-nowrap';
+  const td = 'px-2.5 py-1.5 text-[11.5px] whitespace-nowrap';
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <table className="w-full border-collapse text-start">
+        <thead>
+          <tr className="bg-slate-50 border-b border-slate-200 text-start">
+            <th className={`${th} w-8`}></th>
+            <th className={`${th} text-start`}>{isAr ? 'المسافر' : 'Passenger'}</th>
+            <th className={`${th} text-start`}>{isAr ? 'الحالة' : 'Status'}</th>
+            <th className={`${th} text-end`}>{isAr ? 'سعر البيع' : 'Sale'}</th>
+            <th className={`${th} text-end`}>{isAr ? 'المحصّل' : 'Paid'}</th>
+            <th className={`${th} text-end`}>{isAr ? 'المتبقي' : 'Due'}</th>
+            <th className={`${th} text-end`}>{isAr ? 'التكلفة' : 'Cost'}</th>
+            <th className={`${th} text-end`}>{isAr ? 'الربح' : 'Profit'}</th>
+            <th className={`${th} text-center w-px`}>{isAr ? 'إجراءات' : ''}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {passengers.map((p) => {
+            const cancelled = p.state === 'CANCELLED';
+            const done = p.services.length > 0 && p.services.every((s) => s.status === 'COMPLETE');
+            const sale = Number(p.salePrice) || 0;
+            const paid = Number(p.collectedAmount) || 0;
+            const due = sale - paid;
+            const cost = p.services.reduce((a, s) => a + (s.finalBuy !== null && s.finalBuy !== undefined ? Number(s.finalBuy) : 0), 0);
+            const profit = sale - cost;
+            const isOpen = openPax === p.id;
+            return (
+              <React.Fragment key={p.id}>
+                <tr
+                  className={`border-b border-slate-100 hover:bg-orange-50/30 transition-colors ${cancelled ? 'opacity-50' : ''}`}
+                >
+                  <td className={`${td} text-center`}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenPax(isOpen ? null : p.id)}
+                      className="w-6 h-6 rounded-md hover:bg-slate-100 text-slate-400 inline-flex items-center justify-center cursor-pointer"
+                      title={isAr ? 'الخدمات' : 'Services'}
+                    >
+                      {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                  </td>
+                  <td className={`${td} text-start`}>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {cancelled ? <Ban size={13} className="text-slate-400 shrink-0" /> : done ? <CheckCircle2 size={13} className="text-emerald-600 shrink-0" /> : <Clock size={13} className="text-amber-500 shrink-0" />}
+                      <span className="font-black text-slate-900 truncate">{p.passengerName}</span>
+                    </div>
+                  </td>
+                  <td className={td}>
+                    <span className={`text-[9.5px] font-black rounded px-1.5 py-0.5 border ${cancelled ? 'bg-slate-100 text-slate-500 border-slate-200' : done ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                      {cancelled ? (isAr ? 'ملغى' : 'Cancelled') : done ? (isAr ? 'مكتمل' : 'Complete') : (isAr ? 'معلّق' : 'Pending')}
+                    </span>
+                  </td>
+                  <td className={`${td} text-end font-mono font-black text-slate-900 tabular-nums`} dir="ltr">{money(sale, p.currency)}</td>
+                  <td className={`${td} text-end font-mono font-bold text-emerald-700 tabular-nums`} dir="ltr">{money(paid, p.currency)}</td>
+                  <td className={`${td} text-end font-mono font-black tabular-nums ${due > 0 ? 'text-rose-600' : 'text-slate-400'}`} dir="ltr">{due > 0 ? money(due, p.currency) : '—'}</td>
+                  <td className={`${td} text-end font-mono font-bold text-slate-600 tabular-nums`} dir="ltr">{cost > 0 ? money(cost, p.currency) : '—'}</td>
+                  <td className={`${td} text-end font-mono font-black tabular-nums ${profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`} dir="ltr">{money(profit, p.currency)}</td>
+                  <td className={`${td} text-center`}>
+                    <div className="inline-flex items-center gap-1">
+                      {!cancelled && (
+                        <button
+                          type="button"
+                          onClick={() => run(() => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'CANCELLED' }), isAr ? 'أُلغي' : 'Cancelled')}
+                          title={isAr ? 'إلغاء الحجز' : 'Cancel'}
+                          className="w-6 h-6 rounded-md text-amber-500 hover:bg-amber-50 inline-flex items-center justify-center cursor-pointer"
+                        >
+                          <Ban size={13} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(p.id)}
+                        title={isAr ? 'حذف نهائي' : 'Delete'}
+                        className="w-6 h-6 rounded-md text-rose-500 hover:bg-rose-50 inline-flex items-center justify-center cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {isOpen && (
+                  <tr className="bg-slate-50/60">
+                    <td colSpan={9} className="px-3 py-2.5">
+                      <div className="space-y-1.5">
+                        {p.services.map((sv) => (
+                          <ServiceLine key={sv.id} g={g} sv={sv} isAr={isAr} supplierOptions={supplierOptions} run={run} disabled={cancelled} />
+                        ))}
+                        {p.services.length === 0 && (
+                          <p className="text-[11px] font-bold text-slate-400">{isAr ? 'لا خدمات لهذا المسافر' : 'No services'}</p>
+                        )}
+                        {!cancelled && (
+                          <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/70 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[11px] font-bold text-slate-600">{isAr ? 'تحصيل:' : 'Collect:'}</span>
+                              <CollectBox g={g} p={p} isAr={isAr} run={run} />
+                              <PassengerPriceEdit g={g} p={p} isAr={isAr} run={run} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {confirmDeleteId && (
+        <Modal opened onClose={() => setConfirmDeleteId(null)} centered radius="lg" withCloseButton={false} zIndex={11200}>
+          <div className="space-y-3 font-sans" dir={isAr ? 'rtl' : 'ltr'}>
+            <p className="font-black text-sm text-slate-900">{isAr ? 'حذف المسافر؟' : 'Delete passenger?'}</p>
+            <p className="text-xs font-bold text-slate-600 leading-relaxed">
+              {isAr ? 'سيُحذف المسافر بكل خدماته وقيده المحاسبي نهائياً. للاحتفاظ بالسجل استخدم «إلغاء الحجز».' : 'The passenger, its services and ledger entry will be permanently removed.'}
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setConfirmDeleteId(null)} className="h-9 px-4 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer">{isAr ? 'إلغاء' : 'Cancel'}</button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await run(() => tourGroupsApi.removePassenger(g.id, confirmDeleteId), isAr ? 'حُذف المسافر' : 'Deleted');
+                  if (ok) setConfirmDeleteId(null);
+                }}
+                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black cursor-pointer"
+              >
+                {isAr ? 'حذف نهائي' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
 const PassengerRow: React.FC<{
   g: TourGroup;
   p: GroupPassenger;
@@ -1283,7 +1779,7 @@ const PassengerPriceEdit: React.FC<{
   );
 };
 
-/* ── سطر الخدمة مع بحث متقدم عن المورد ── */
+/* ── سطر الخدمة مع بحث متقدم عن المورد وسعر الشراء ── */
 const ServiceLine: React.FC<{
   g: TourGroup;
   sv: GroupPassengerService;
@@ -1294,23 +1790,19 @@ const ServiceLine: React.FC<{
 }> = ({ g, sv, isAr, supplierOptions, disabled, run }) => {
   const meta = KIND_META[sv.kind] || KIND_META.PACKAGE;
   const Icon = meta.icon;
-  // حقل الشراء النهائي يبدأ فارغاً ما لم يُدخَل شراءٌ فعلي — لا يُملأ بالمتوقَّع
-  // تلقائياً، فلا تظهر تكلفةٌ وهمية عند فتح المسافر قبل أن يُشترى شيء.
-  const savedBuy = sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0 ? String(sv.finalBuy) : '';
   const [supplier, setSupplier] = useState(sv.supplierName || '');
-  const [finalBuy, setFinalBuy] = useState(savedBuy);
 
   useEffect(() => {
     setSupplier(sv.supplierName || '');
-    setFinalBuy(sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0 ? String(sv.finalBuy) : '');
-  }, [sv.supplierName, sv.finalBuy]);
+  }, [sv.supplierName]);
 
-  const dirty = supplier !== (sv.supplierName || '') || finalBuy !== savedBuy;
+  const dirty = supplier !== (sv.supplierName || '');
   const complete = sv.status === 'COMPLETE';
+  const buyCost = Number(sv.finalBuy ?? sv.expectedBuy ?? 0);
 
   return (
     <div
-      className={`grid grid-cols-[minmax(110px,auto)_1fr_auto_auto_auto] items-center gap-2 rounded-xl p-2 border ${
+      className={`grid grid-cols-[minmax(110px,auto)_1fr_auto_auto] items-center gap-2 rounded-xl p-2 border ${
         complete ? 'bg-emerald-50/40 border-emerald-200' : 'bg-white border-slate-200'
       }`}
     >
@@ -1330,18 +1822,16 @@ const ServiceLine: React.FC<{
         />
       </div>
 
-      <span className="text-[10px] font-mono font-bold text-slate-400 whitespace-nowrap px-1 hidden sm:block" dir="ltr" title={isAr ? 'التكلفة المتوقّعة (تخطيط فقط)' : 'Expected (planning only)'}>
-        {isAr ? 'متوقّع' : 'exp'} {money(sv.expectedBuy, sv.currency)}
-      </span>
-
-      <input
-        value={finalBuy}
-        onChange={(e) => setFinalBuy(e.target.value)}
-        disabled={disabled}
-        placeholder={isAr ? 'الشراء الفعلي' : 'Final buy'}
-        dir="ltr"
-        className="h-[46px] w-24 px-2.5 rounded-[11px] border border-[#E5E7EB] bg-white text-xs font-mono font-black text-end outline-none focus:border-2 focus:border-[#F45A0A] disabled:opacity-50"
-      />
+      <div className="flex items-center gap-2 shrink-0">
+        <span
+          className="text-xs font-mono font-black text-slate-800 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200 shrink-0 tabular-nums"
+          dir="ltr"
+          title={isAr ? 'سعر الشراء' : 'Buy Price'}
+        >
+          <span className="text-[10px] text-slate-400 font-sans me-1">{isAr ? 'شراء:' : 'Cost:'}</span>
+          {money(buyCost, sv.currency || g.currency)}
+        </span>
+      </div>
 
       {dirty ? (
         <button
@@ -1351,9 +1841,6 @@ const ServiceLine: React.FC<{
               () =>
                 tourGroupsApi.updateService(g.id, sv.id, {
                   supplierName: supplier,
-                  // فارغٌ يعني «لم يُشترَ بعد» فيبقى معلّقاً؛ ولا يُستبدل بالمتوقَّع.
-                  finalBuy: finalBuy.trim() === '' ? null : num(finalBuy),
-                  status: finalBuy.trim() === '' ? 'NOT_COMPLETE' : 'COMPLETE',
                 }),
               undefined,
             )
@@ -1363,13 +1850,27 @@ const ServiceLine: React.FC<{
           {isAr ? 'حفظ' : 'Save'}
         </button>
       ) : (
-        <span
-          className={`text-[10.5px] font-black rounded-md px-2 py-1 border ${
-            complete ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200'
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() =>
+            run(
+              () =>
+                tourGroupsApi.updateService(g.id, sv.id, {
+                  status: complete ? 'NOT_COMPLETE' : 'COMPLETE',
+                }),
+              undefined,
+            )
+          }
+          className={`text-[10.5px] font-black rounded-md px-2.5 py-1.5 border cursor-pointer transition-colors ${
+            complete
+              ? 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200'
+              : 'bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200'
           }`}
+          title={isAr ? 'انقر لتبديل حالة الخدمة' : 'Toggle status'}
         >
           {complete ? (isAr ? 'مكتمل' : 'Complete') : (isAr ? 'معلّق' : 'Pending')}
-        </span>
+        </button>
       )}
     </div>
   );
@@ -1414,18 +1915,21 @@ const CollectBox: React.FC<{
   );
 };
 
-/* ── نافذة نظام الأسعار: نافذة عريضة وبحث متقدم عن المورد وبدون كلمة متوقع ── */
+/* ── نافذة نظام الأسعار: إمكانية تعديل سعر المبيع وموظف الإصدار ومدخل البيانات ── */
 const PriceSystemModal: React.FC<{
   isAr: boolean;
   direction: string;
   draft: Partial<GroupPriceSystem>;
   groupCurrency: string;
   supplierOptions: Array<{ value: string; label: string; code?: string }>;
+  currentUserName?: string;
+  employeeOptions?: Array<{ value: string; label: string }>;
   onClose: () => void;
   onSave: (dto: any) => void;
   busy?: boolean;
-}> = ({ isAr, direction, draft, groupCurrency, supplierOptions, onClose, onSave, busy }) => {
+}> = ({ isAr, direction, draft, groupCurrency, supplierOptions, currentUserName, employeeOptions, onClose, onSave, busy }) => {
   const [supplierFinderIndex, setSupplierFinderIndex] = useState<number | null>(null);
+  const [issuerEmployee, setIssuerEmployee] = useState<string>((draft as any)?.agent || '');
 
   const [d, setD] = useState<any>(() => {
     const defaultItems =
@@ -1514,7 +2018,7 @@ const PriceSystemModal: React.FC<{
         body: '!p-5 !overflow-visible',
       }}
     >
-      <div className="flex flex-col h-[520px] font-sans select-none" dir={direction}>
+      <div className="flex flex-col h-[560px] font-sans select-none" dir={direction}>
         {/* الترويسة المقتضبة */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2">
@@ -1534,17 +2038,68 @@ const PriceSystemModal: React.FC<{
           </button>
         </div>
 
-        {/* اسم النظام فقط بدون بيانات توضيحية */}
-        <div className="shrink-0 pt-3">
-          <Field label={isAr ? 'اسم النظام *' : 'System Name *'}>
-            <input
-              value={d.name || ''}
-              onChange={(e) => setD({ ...d, name: e.target.value })}
-              className={inputClass}
-              placeholder=""
-              autoFocus
-            />
-          </Field>
+        {/* بيانات النظام وسعر البيع ومسؤول الإصدار */}
+        <div className="shrink-0 pt-3 space-y-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <Field label={isAr ? 'اسم النظام *' : 'System Name *'}>
+              <input
+                value={d.name || ''}
+                onChange={(e) => setD({ ...d, name: e.target.value })}
+                className={inputClass}
+                placeholder={isAr ? 'مثال: بكج شامل، أو VIP' : 'e.g. Full Package'}
+                autoFocus
+              />
+            </Field>
+
+            <Field label={isAr ? 'سعر البيع للمسافر *' : 'Sale Price *'}>
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={formatWithCommas(d.salePrice ?? '')}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+                    const parts = raw.split('.');
+                    const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : raw;
+                    setD({ ...d, salePrice: clean });
+                  }}
+                  dir="ltr"
+                  placeholder="0"
+                  className={`${inputClass} font-mono font-black text-end text-sm`}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextCur = (d.currency || groupCurrency) === 'USD' ? 'IQD' : 'USD';
+                    setD({ ...d, currency: nextCur });
+                  }}
+                  className="h-[46px] px-3.5 rounded-[11px] font-mono font-black text-xs bg-orange-50 hover:bg-orange-100 text-[#F45A0A] border border-orange-200 flex items-center shrink-0 cursor-pointer shadow-2xs"
+                  title={isAr ? 'انقر لتبديل العملة' : 'Toggle Currency'}
+                >
+                  {d.currency || groupCurrency}
+                </button>
+              </div>
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-bold">{isAr ? 'مدخل البيانات:' : 'Data Entry:'}</span>
+              <span className="font-black text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 font-sans">
+                {currentUserName || (isAr ? 'مدير النظام' : 'System Admin')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[#F45A0A] font-bold shrink-0">{isAr ? 'موظف الإصدار / المصدر:' : 'Issuer:'}</span>
+              <div className="flex-1 min-w-0">
+                <SearchableCombobox
+                  value={issuerEmployee}
+                  onChange={(val) => setIssuerEmployee(val || '')}
+                  options={employeeOptions || []}
+                  placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
+                  allowCustomValue
+                />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* بنود الخدمات المضمنة */}
@@ -1723,7 +2278,7 @@ const PriceSystemModal: React.FC<{
               onClick={() =>
                 onSave({
                   ...d,
-                  salePrice: d.salePrice || 0,
+                  salePrice: Number(String(d.salePrice || 0).replace(/,/g, '')) || 0,
                   seats: 9999,
                   items: (d.items || []).map((it: any) => ({
                     ...it,
@@ -2787,7 +3342,7 @@ export const NewGroupModal: React.FC<{
     country: '',
     travelDate: new Date(),
     buyDate: new Date(),
-    currency: 'USD',
+    currency: 'IQD',
   });
   const [saving, setSaving] = useState(false);
 
