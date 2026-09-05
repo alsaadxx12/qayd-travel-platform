@@ -146,20 +146,20 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
         </div>
       </div>
 
-      {/* 3. التكلفة الفعلية للكروب */}
+      {/* 3. التكلفة الفعلية والمقدرة للكروب */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500">{isAr ? 'التكلفة الفعلية' : 'Actual Cost'}</span>
+          <span className="text-xs font-bold text-slate-500">{isAr ? 'التكلفة الإجمالية' : 'Total Cost'}</span>
           <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
             <Receipt size={16} />
           </div>
         </div>
         <div className="mt-2">
           <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
-            {money(s.actualCost, C)}
+            {money(s.actualCost > 0 || (s.buy + s.globalBuy + s.expenses > 0) ? s.actualCost : s.plannedCost, C)}
           </div>
           <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mt-1 font-mono" dir="ltr">
-            <span>{isAr ? 'شراء:' : 'Buy:'} {money(s.buy + s.globalBuy, C)}</span>
+            <span>{isAr ? 'شراء:' : 'Buy:'} {money(s.buy + s.globalBuy > 0 ? s.buy + s.globalBuy : Math.max(0, s.plannedCost - s.expenses), C)}</span>
             <span>{isAr ? 'مصاريف:' : 'Exp:'} {money(s.expenses, C)}</span>
           </div>
         </div>
@@ -183,7 +183,7 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
         </div>
       </div>
 
-      {/* 5. صافي الأرباح الفعلية */}
+      {/* 5. صافي الأرباح */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-500">{isAr ? 'صافي الربح' : 'Net Profit'}</span>
@@ -192,17 +192,25 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
           </div>
         </div>
         <div className="mt-2">
-          <div
-            className={`text-2xl font-black font-mono tracking-tight ${
-              s.actualProfit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
-            }`}
-            dir="ltr"
-          >
-            {money(s.actualProfit, C)}
-          </div>
-          <div className="text-[11px] font-bold text-slate-500 mt-1">
-            {isAr ? 'الربح الفعلي' : 'Actual profit'}
-          </div>
+          {(() => {
+            const hasActual = s.actualCost > 0 || (s.buy + s.globalBuy + s.expenses > 0);
+            const profitVal = hasActual ? s.actualProfit : s.plannedProfit;
+            return (
+              <>
+                <div
+                  className={`text-2xl font-black font-mono tracking-tight ${
+                    profitVal >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
+                  }`}
+                  dir="ltr"
+                >
+                  {money(profitVal, C)}
+                </div>
+                <div className="text-[11px] font-bold text-slate-500 mt-1">
+                  {isAr ? (hasActual ? 'الربح الفعلي' : 'الربح المحسوب') : (hasActual ? 'Actual profit' : 'Calculated profit')}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -324,6 +332,10 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
         totalSale: number;
         totalPaid: number;
         totalDue: number;
+        totalCost: number;
+        totalProfit: number;
+        totalActualCost: number;
+        totalPlannedCost: number;
       }
     >();
 
@@ -340,6 +352,10 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           totalSale: 0,
           totalPaid: 0,
           totalDue: 0,
+          totalCost: 0,
+          totalProfit: 0,
+          totalActualCost: 0,
+          totalPlannedCost: 0,
         });
       }
     }
@@ -362,6 +378,10 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           totalSale: 0,
           totalPaid: 0,
           totalDue: 0,
+          totalCost: 0,
+          totalProfit: 0,
+          totalActualCost: 0,
+          totalPlannedCost: 0,
         };
         map.set(key, entry);
       } else if (trimmedName && entry.name === (isAr ? 'بدون مستفيد (عام)' : 'General')) {
@@ -370,10 +390,39 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
 
       entry.passengers.push(p);
       const sale = Number(p.salePrice) || 0;
-      const paid = p.payType === 'CASH' ? sale : 0;
+      const paid = p.payType === 'CASH' ? sale : (Number(p.collectedAmount) || 0);
+
+      // احتساب تكلفة هذا المسافر (شراء فعلي إن وجد، أو تكلفة البكج/الخدمة المتوقعة)
+      let paxActualBuy = 0;
+      let paxPlannedBuy = 0;
+      let paxCost = 0;
+
+      if (Array.isArray(p.services) && p.services.length > 0) {
+        for (const sv of p.services) {
+          const fb = (sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0) ? Number(sv.finalBuy) : 0;
+          const eb = Number(sv.expectedBuy) || 0;
+          paxActualBuy += fb;
+          paxPlannedBuy += eb;
+          paxCost += (fb > 0 ? fb : eb);
+        }
+      } else if (p.priceSystemId && Array.isArray(g.priceSystems)) {
+        const ps = g.priceSystems.find((s) => s.id === p.priceSystemId);
+        if (ps && Array.isArray(ps.items)) {
+          for (const it of ps.items) {
+            const eb = Number(it.expectedBuy) || 0;
+            paxPlannedBuy += eb;
+            paxCost += eb;
+          }
+        }
+      }
+
       entry.totalSale += sale;
       entry.totalPaid += paid;
       entry.totalDue += sale - paid;
+      entry.totalCost += paxCost;
+      entry.totalActualCost += paxActualBuy;
+      entry.totalPlannedCost += paxPlannedBuy;
+      entry.totalProfit += (sale - paxCost);
     }
 
     return Array.from(map.values());
@@ -763,18 +812,50 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                               </div>
                             </div>
 
-                            {/* مؤشرات مالية وأزرار ملف المستفيد */}
+                            {/* مؤشرات مالية وأزرار ملف المستفيد: التكلفة علينا، على المستفيد، الربح، والمحصل */}
                             <div className="flex items-center flex-wrap gap-2">
-                              <div className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums">
+                              {/* ١. التكلفة علينا */}
+                              <div
+                                className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums shadow-2xs"
+                                title={isAr ? `التكلفة علينا (فعلي: ${money(bg.totalActualCost, g.currency)} | متوقع: ${money(bg.totalPlannedCost, g.currency)})` : 'Cost to us'}
+                              >
                                 <span className="text-slate-400 font-sans text-[11px] font-bold">
-                                  {isAr ? 'المبيعات:' : 'Sales:'}
+                                  {isAr ? 'التكلفة علينا:' : 'Our Cost:'}
+                                </span>
+                                <span className="text-slate-800 font-black">
+                                  {money(bg.totalCost, g.currency)}
+                                </span>
+                              </div>
+
+                              {/* ٢. على المستفيد (إجمالي المبيعات) */}
+                              <div className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums shadow-2xs">
+                                <span className="text-slate-400 font-sans text-[11px] font-bold">
+                                  {isAr ? 'على المستفيد:' : 'Beneficiary:'}
                                 </span>
                                 <span className="text-slate-900 font-black">
                                   {money(bg.totalSale, g.currency)}
                                 </span>
                               </div>
 
-                              <div className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums">
+                              {/* ٣. صافي الربح */}
+                              <div
+                                className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border font-mono tabular-nums shadow-2xs ${
+                                  bg.totalProfit >= 0
+                                    ? 'bg-orange-50 text-[#F45A0A] border-orange-200/80'
+                                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                                }`}
+                              >
+                                <TrendingUp size={13} className={bg.totalProfit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'} />
+                                <span className="font-sans text-[11px] font-bold">
+                                  {isAr ? 'الربح:' : 'Profit:'}
+                                </span>
+                                <span className="font-black">
+                                  {money(bg.totalProfit, g.currency)}
+                                </span>
+                              </div>
+
+                              {/* ٤. المحصل */}
+                              <div className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums shadow-2xs">
                                 <span className="text-slate-400 font-sans text-[11px] font-bold">
                                   {isAr ? 'المحصل:' : 'Paid:'}
                                 </span>
@@ -783,8 +864,9 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                                 </span>
                               </div>
 
+                              {/* ٥. المتبقي إن وجد */}
                               {bg.totalDue > 0 && (
-                                <div className="flex items-center gap-1.5 text-xs font-bold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 font-mono tabular-nums">
+                                <div className="flex items-center gap-1.5 text-xs font-bold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 font-mono tabular-nums shadow-2xs">
                                   <span className="text-rose-500 font-sans text-[11px] font-bold">
                                     {isAr ? 'المتبقي:' : 'Due:'}
                                   </span>
@@ -967,6 +1049,24 @@ const PassengerRow: React.FC<{
   const outstanding = Number(p.salePrice) - Number(p.collectedAmount);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // احتساب تكلفة المسافر الفردي وربحه
+  let paxCost = 0;
+  if (Array.isArray(p.services) && p.services.length > 0) {
+    for (const sv of p.services) {
+      const fb = (sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0) ? Number(sv.finalBuy) : 0;
+      const eb = Number(sv.expectedBuy) || 0;
+      paxCost += (fb > 0 ? fb : eb);
+    }
+  } else if (p.priceSystemId && Array.isArray(g.priceSystems)) {
+    const ps = g.priceSystems.find((s) => s.id === p.priceSystemId);
+    if (ps && Array.isArray(ps.items)) {
+      for (const it of ps.items) {
+        paxCost += Number(it.expectedBuy) || 0;
+      }
+    }
+  }
+  const paxProfit = Number(p.salePrice || 0) - paxCost;
+
   return (
     <div
       className={`rounded-xl border transition-all ${
@@ -1006,14 +1106,38 @@ const PassengerRow: React.FC<{
           </span>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0 text-xs font-mono font-black" dir="ltr">
-          <span className="text-slate-900">{money(p.salePrice, p.currency)}</span>
+        <div className="flex items-center gap-2 shrink-0 text-xs font-mono font-black flex-wrap" dir="ltr">
+          {/* التكلفة علينا */}
+          <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[11px]" title={isAr ? 'التكلفة علينا' : 'Cost'}>
+            <span className="text-[10px] text-slate-400 font-sans me-1">{isAr ? 'ت:' : 'C:'}</span>
+            {money(paxCost, p.currency)}
+          </span>
+
+          {/* على المستفيد (البيع) */}
+          <span className="text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]" title={isAr ? 'على المستفيد (سعر البيع)' : 'Sale Price'}>
+            <span className="text-[10px] text-slate-400 font-sans me-1">{isAr ? 'ب:' : 'S:'}</span>
+            {money(p.salePrice, p.currency)}
+          </span>
+
+          {/* ربح المسافر */}
+          <span
+            className={`px-2 py-0.5 rounded border text-[11px] ${
+              paxProfit >= 0
+                ? 'text-[#F45A0A] bg-orange-50/80 border-orange-200/80'
+                : 'text-rose-600 bg-rose-50 border-rose-200'
+            }`}
+            title={isAr ? 'ربح المسافر' : 'Profit'}
+          >
+            <span className="text-[10px] opacity-70 font-sans me-1">{isAr ? 'ر:' : 'P:'}</span>
+            {money(paxProfit, p.currency)}
+          </span>
+
           {outstanding > 0 && !cancelled ? (
-            <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+            <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[11px]">
               -{money(outstanding, p.currency)}
             </span>
           ) : (
-            <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+            <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]">
               {isAr ? 'مدفوع' : 'Paid'}
             </span>
           )}
@@ -2281,6 +2405,42 @@ const PassengerModal: React.FC<{
             placeholder=""
           />
         </Field>
+
+        {/* تكلفة الخدمات المتوقّعة للنظام المختار — تُنشأ للمسافر تلقائياً (تخطيط، لا شراء فعلي بعد) */}
+        {(() => {
+          const sel = g.priceSystems.find((s) => s.id === d.priceSystemId);
+          const items = sel?.items || [];
+          if (!items.length) return null;
+          const total = items.reduce((a: number, it: any) => a + (Number(String(it.expectedBuy).replace(/,/g, '')) || 0), 0);
+          return (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100/70 border-b border-slate-200">
+                <span className="text-[11px] font-black text-slate-600">{isAr ? 'التكلفة المتوقّعة للخدمات' : 'Expected service cost'}</span>
+                <span className="text-[10px] font-bold text-slate-400">{isAr ? 'تُنشأ تلقائياً — تُدخَل تكلفتها الفعلية لاحقاً' : 'auto-created, actual cost set later'}</span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {items.map((it: any, i: number) => {
+                  const meta = KIND_META[it.kind] || KIND_META.PACKAGE;
+                  const Icon = meta.icon;
+                  return (
+                    <div key={i} className="flex items-center justify-between gap-2 px-3 py-1.5 text-[11.5px]">
+                      <span className="inline-flex items-center gap-1.5 font-bold text-slate-700">
+                        <Icon size={12} className="text-[#F45A0A]" />
+                        {isAr ? meta.ar : it.kind}
+                        {it.supplierName && <span className="text-slate-400 font-normal">· {it.supplierName}</span>}
+                      </span>
+                      <span className="font-mono font-black text-slate-600" dir="ltr">{money(it.expectedBuy, it.currency || sel?.currency)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between px-3 py-1.5 bg-orange-50/60 border-t border-orange-100">
+                <span className="text-[11px] font-black text-[#F45A0A]">{isAr ? 'إجمالي التكلفة المتوقّعة' : 'Total expected cost'}</span>
+                <span className="text-[12px] font-mono font-black text-[#F45A0A]" dir="ltr">{money(total, sel?.currency)}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <Field label={isAr ? 'اسم المسافر *' : 'Passenger *'}>

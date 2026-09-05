@@ -490,7 +490,9 @@ export class TourGroupsService {
             supplierName: it.supplierName || null,
             supplierAccountId: it.supplierAccountId || null,
             expectedBuy: new Prisma.Decimal(dec(it.expectedBuy)),
-            finalBuy: dec(it.expectedBuy) > 0 ? new Prisma.Decimal(dec(it.expectedBuy)) : null,
+            // الشراء الفعلي يبقى فارغاً حتى يُشترى فعلاً — لا يُنسَخ من المتوقَّع،
+            // وإلا وُلد كل مسافرٍ بتكلفةٍ وهمية تُظهر ربحاً سالباً قبل أي شراء.
+            finalBuy: null,
             currency: it.currency || ps.currency,
             status: 'NOT_COMPLETE',
           })),
