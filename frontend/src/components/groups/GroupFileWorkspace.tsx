@@ -635,6 +635,14 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
             </div>
           ) : (
             <>
+              {/* شريط خطأ على مستوى الملف: يُظهر إخفاقات الحفظ في الخلفية (المنبثقات معطّلة) */}
+              {errorMsg && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 flex items-center justify-between gap-3">
+                  <span className="text-[12.5px] font-bold text-rose-700">{errorMsg}</span>
+                  <button type="button" onClick={() => setErrorMsg('')} className="text-rose-500 hover:text-rose-700 cursor-pointer shrink-0"><X size={15} /></button>
+                </div>
+              )}
+
               {/* ١) الملخّص المالي والتشغيلي */}
               <SummaryBlock g={g} isAr={isAr} />
 
@@ -1077,9 +1085,11 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           currentUserName={currentUserName}
           employeeOptions={employeeOptions}
           onClose={() => setPsModal(null)}
-          onSave={async (dto) => {
-            const ok = await run(() => tourGroupsApi.savePriceSystem(g.id, dto), isAr ? 'حُفظ نظام الأسعار' : 'Saved');
-            if (ok) setPsModal(null);
+          onSave={(dto) => {
+            // إغلاقٌ فوري ثم حفظٌ في الخلفية — الشعور بالحفظ لحظيّ، والإخفاق
+            // النادر يظهر في شريط الخطأ أعلى الملف لا في نافذةٍ مغلقة.
+            setPsModal(null);
+            void run(() => tourGroupsApi.savePriceSystem(g.id, dto), isAr ? 'حُفظ نظام الأسعار' : 'Saved');
           }}
         />
       )}
@@ -1093,9 +1103,9 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
           currency={g.currency}
           supplierOptions={supplierOptions}
           onClose={() => setChargeModal(null)}
-          onSave={async (dto) => {
-            const ok = await run(() => tourGroupsApi.addCharge(g.id, dto));
-            if (ok) setChargeModal(null);
+          onSave={(dto) => {
+            setChargeModal(null);
+            void run(() => tourGroupsApi.addCharge(g.id, dto));
           }}
         />
       )}
@@ -3232,23 +3242,29 @@ const PassengerModal: React.FC<{
           </div>
         )}
 
-        {/* بيانات مدخل البيانات وموظف الإصدار: مدخل البيانات ثابت، موظف الإصدار يتغير بالكومبوبوكس */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-bold">{isAr ? 'مدخل البيانات:' : 'Data Entry:'}</span>
-            <span className="font-black text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 font-sans" title={isAr ? 'مدخل البيانات محدد تلقائياً ولا يمكن تغييره' : 'Fixed entry user'}>
-              {editingPassenger ? ((editingPassenger as any).createdByName || editingPassenger.agent || currentUserAgent) : currentUserAgent}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[#F45A0A] font-bold shrink-0">{isAr ? 'موظف الإصدار / المصدر:' : 'Issuer:'}</span>
-            <span className="font-black text-slate-800 truncate">
-              {d.agent || currentUserAgent || (isAr ? 'لم يُحدد' : 'Not set')}
-            </span>
-          </div>
+        {/* الشريط العلوي: مدخل البيانات وموظف الإصدار كحقول واضحة */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 relative z-20">
+          <Field label={isAr ? 'مدخل البيانات' : 'Data Entry'}>
+            <input
+              type="text"
+              readOnly
+              value={editingPassenger ? ((editingPassenger as any).createdByName || editingPassenger.agent || currentUserAgent) : currentUserAgent}
+              className={`${inputClass} !bg-slate-100/80 !text-slate-700 cursor-not-allowed select-none font-bold`}
+              title={isAr ? 'مدخل البيانات محدد تلقائياً ولا يمكن تغييره' : 'Fixed entry user'}
+            />
+          </Field>
+          <Field label={isAr ? 'موظف الإصدار / المصدر *' : 'Issuing Employee / Issuer *'}>
+            <SearchableCombobox
+              value={d.agent || currentUserAgent}
+              onChange={(val) => setD({ ...d, agent: val || currentUserAgent })}
+              options={issuerComboboxOptions}
+              placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
+              allowCustomValue
+            />
+          </Field>
         </div>
 
-        <Field label={isAr ? 'نظام الأسعار *' : 'Price System *'}>
+        <Field label={isAr ? 'نظام الأسعار *' : 'Price System *'} className="relative z-10">
           <SearchableCombobox
             value={d.priceSystemId}
             onChange={(val) => {
@@ -3352,15 +3368,6 @@ const PassengerModal: React.FC<{
               placeholder=""
             />
           </Field>
-          <Field label={isAr ? 'موظف الإصدار / المصدر *' : 'Issuing Employee / Issuer *'}>
-            <SearchableCombobox
-              value={d.agent || currentUserAgent}
-              onChange={(val) => setD({ ...d, agent: val || currentUserAgent })}
-              options={issuerComboboxOptions}
-              placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
-              allowCustomValue
-            />
-          </Field>
 
           <Field label={isAr ? 'سعر البيع *' : 'Sale Price *'}>
             <div className="flex items-center gap-1.5">
@@ -3394,7 +3401,10 @@ const PassengerModal: React.FC<{
             </div>
           </Field>
 
-          <Field label={isAr ? 'نوع السداد *' : 'Payment Term *'}>
+          <Field
+            label={isAr ? 'نوع السداد *' : 'Payment Term *'}
+            className={d.payType === 'CREDIT' ? 'sm:col-span-2' : ''}
+          >
             <SearchableCombobox
               value={d.payType}
               onChange={(v) => {
@@ -3417,10 +3427,8 @@ const PassengerModal: React.FC<{
               clearable={false}
             />
           </Field>
-        </div>
 
-        {d.payType === 'CASH' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {d.payType === 'CASH' && (
             <Field label={isAr ? 'طريقة السداد' : 'Receiving Method'}>
               <SearchableCombobox
                 value={d.paymentMethod || 'CASH_HAND'}
@@ -3441,13 +3449,16 @@ const PassengerModal: React.FC<{
                 clearable={false}
               />
             </Field>
+          )}
 
+          {d.payType === 'CASH' && (
             <Field
               label={
                 d.paymentMethod === 'MASTER'
                   ? (isAr ? 'حساب الماستر / البنك المستلم' : 'Master Account')
                   : (isAr ? 'صندوق الاستلام (المرتبط بالموظف)' : 'Receiving Cashbox')
               }
+              className="sm:col-span-2"
             >
               <SearchableCombobox
                 value={d.paymentAccountId || ''}
@@ -3461,8 +3472,8 @@ const PassengerModal: React.FC<{
                 allowCustomValue
               />
             </Field>
-          </div>
-        )}
+          )}
+        </div>
 
         {d.payType === 'CASH' && d.paymentMethod === 'MASTER' && (
           <div className="rounded-xl border border-orange-200/80 bg-orange-50/25 p-3 space-y-2.5">

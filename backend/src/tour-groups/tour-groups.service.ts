@@ -30,28 +30,46 @@ export class TourGroupsService {
    * services_accounts_mapping.groupRevenueAccountId، ثم بالرمز 4105/كروبات،
    * وأخيراً أي حساب إيرادٍ عام. فيُقيَّد ربح الكروب في حسابه الخاص لا في التذاكر.
    */
+  // ذاكرةٌ قصيرة لحساب إيراد الكروبات: يتكرّر لكل مسافرٍ في القيد، فلا يُعاد حلّه
+  // من القاعدة كل مرة. تُبطَل ضمنياً بانقضاء المدة، وهي مقبولةٌ لإعدادٍ نادر التغيّر.
+  private static grpRevCache = new Map<string, { id: string | null; at: number }>();
+  private static readonly GRP_REV_TTL = 60_000;
+
   private async resolveGroupRevenueAccount(companyId: string): Promise<string | null> {
-    const readCfg = async (docType: string, key: string): Promise<string | null> => {
-      const row = await this.prisma.printTemplate.findFirst({ where: { companyId, docType }, select: { config: true } });
-      if (!row) return null;
+    const hit = TourGroupsService.grpRevCache.get(companyId);
+    if (hit && Date.now() - hit.at < TourGroupsService.GRP_REV_TTL) return hit.id;
+
+    const parseCfg = (config: string | undefined): string | null => {
       try {
-        const id = JSON.parse(row.config || '{}')?.[key];
+        const id = JSON.parse(config || '{}')?.groupRevenueAccountId;
         return id ? String(id) : null;
       } catch {
         return null;
       }
     };
-    const configured = (await readCfg('core_accounts_mapping', 'groupRevenueAccountId')) || (await readCfg('services_accounts_mapping', 'groupRevenueAccountId'));
+    // القراءتان والبديل بالرمز تنطلق معاً؛ التسلسل السابق كان يكلّف ~٦ جولات.
+    const [coreRow, svcRow, byCode] = await Promise.all([
+      this.prisma.printTemplate.findFirst({ where: { companyId, docType: 'core_accounts_mapping' }, select: { config: true } }),
+      this.prisma.printTemplate.findFirst({ where: { companyId, docType: 'services_accounts_mapping' }, select: { config: true } }),
+      this.prisma.account.findFirst({ where: { companyId, code: { in: ['4105', '345'] } }, orderBy: { code: 'asc' }, select: { id: true } }),
+    ]);
+    let resolved: string | null = null;
+    const configured = parseCfg(coreRow?.config) || parseCfg(svcRow?.config);
     if (configured) {
       const exists = await this.prisma.account.findFirst({ where: { id: configured, companyId }, select: { id: true } });
-      if (exists) return exists.id;
+      resolved = exists?.id || null;
     }
-    const byCode = await this.prisma.account.findFirst({ where: { companyId, code: { in: ['4105', '345'] } }, orderBy: { code: 'asc' }, select: { id: true } });
-    if (byCode) return byCode.id;
-    const generic =
-      (await this.prisma.account.findFirst({ where: { companyId, code: { in: ['4111', '411'] } }, orderBy: { code: 'desc' }, select: { id: true } })) ||
-      (await this.prisma.account.findFirst({ where: { companyId, type: 'REVENUE' as any }, select: { id: true } }));
-    return generic?.id || null;
+    if (!resolved) resolved = byCode?.id || null;
+    if (!resolved) {
+      const generic = await this.prisma.account.findFirst({
+        where: { companyId, OR: [{ code: { in: ['4111', '411'] } }, { type: 'REVENUE' as any }] },
+        orderBy: { code: 'desc' },
+        select: { id: true },
+      });
+      resolved = generic?.id || null;
+    }
+    TourGroupsService.grpRevCache.set(companyId, { id: resolved, at: Date.now() });
+    return resolved;
   }
 
   private async audit(companyId: string, userId: string | undefined, action: string, entityId: string, details: any) {
@@ -529,21 +547,14 @@ export class TourGroupsService {
     const salePrice = dto.salePrice !== undefined ? dec(dto.salePrice) : dec(ps.salePrice);
     const payType = dto.payType === 'CREDIT' ? 'CREDIT' : (dto.payType === 'MASTER' ? 'MASTER' : 'CASH');
 
-    let agentName = dto.agent ? String(dto.agent).trim() : '';
-    if (!agentName && userId) {
-      const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
-      agentName = u?.name || '';
-    }
-
-    // رقم المستند التسلسلي للكروب (بادئة GRP) يُخصَّص عند البيع فيربط القيد
-    // بالتسلسل الصحيح؛ وإن تعذّر التخصيص لا يُوقَف البيع.
-    let docNumber: string | null = null;
-    try {
-      const allocated = await this.sequences.allocate(companyId, 'groups', dto.branchCode || undefined);
-      docNumber = allocated?.number || null;
-    } catch {
-      docNumber = null;
-    }
+    // بعد اجتياز البوابات (فلا يُحرَق رقمُ تسلسلٍ على بيعٍ مرفوض): يُخصَّص رقم
+    // المستند ويُجلب اسم الوكيل معاً في جولةٍ واحدة، فلا يتعاقبان.
+    const [allocated, agentUser] = await Promise.all([
+      this.sequences.allocate(companyId, 'groups', dto.branchCode || undefined).catch(() => null),
+      dto.agent || !userId ? Promise.resolve(null) : this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null),
+    ]);
+    const agentName = dto.agent ? String(dto.agent).trim() : agentUser?.name || '';
+    const docNumber: string | null = allocated?.number || null;
 
     const passengerId = await this.prisma.$transaction(async (tx) => {
       const pax = await tx.groupPassenger.create({
@@ -593,14 +604,14 @@ export class TourGroupsService {
       return pax.id;
     });
 
-    await this.audit(companyId, userId, 'GROUP_PASSENGER_ADD', groupId, {
-      passengerId,
-      passengerName: dto.passengerName,
-      priceSystem: ps.name,
-      salePrice,
-    });
-    await this.syncPassengerLedger(companyId, groupId, passengerId, userId);
-    return this.getOne(companyId, groupId);
+    // القيد المحاسبي يُنشأ في الخلفية فلا يؤخّر ظهور المسافر (كان يكلّف ثوانيَ من
+    // بحث الحسابات المتتابع)؛ يلحق بعد لحظة، والتدقيق وجلب الملف يجريان معاً.
+    void this.syncPassengerLedger(companyId, groupId, passengerId, userId).catch(() => undefined);
+    const [, full] = await Promise.all([
+      this.audit(companyId, userId, 'GROUP_PASSENGER_ADD', groupId, { passengerId, passengerName: dto.passengerName, priceSystem: ps.name, salePrice }),
+      this.getOne(companyId, groupId),
+    ]);
+    return full;
   }
 
   async updatePassenger(companyId: string, groupId: string, paxId: string, dto: any, userId?: string) {
@@ -646,7 +657,7 @@ export class TourGroupsService {
       },
     });
 
-    await this.syncPassengerLedger(companyId, groupId, paxId, userId);
+    void this.syncPassengerLedger(companyId, groupId, paxId, userId).catch(() => undefined);
     if (changes.length) {
       return this.auditAndFetch(companyId, userId, 'GROUP_PASSENGER_UPDATE', groupId, { passengerId: paxId, changes });
     }
@@ -700,7 +711,7 @@ export class TourGroupsService {
       },
     });
 
-    await this.syncPassengerLedger(companyId, groupId, svc.passengerId, userId);
+    void this.syncPassengerLedger(companyId, groupId, svc.passengerId, userId).catch(() => undefined);
     if (changes.length) {
       return this.auditAndFetch(companyId, userId, 'GROUP_SERVICE_UPDATE', groupId, { serviceId, kind: svc.kind, changes });
     }
