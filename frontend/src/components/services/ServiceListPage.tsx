@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader, Modal } from '@mantine/core';
 import {
   IconPlus,
@@ -6,45 +6,21 @@ import {
   IconSearch,
   IconEdit,
   IconTrash,
-  IconCoins,
-  IconTrendingUp,
-  IconTrendingDown,
   IconFileInvoice,
 } from '@tabler/icons-react';
 import { Luggage } from 'lucide-react';
-import { AccountingGrid, AccountingColumnDef, AccountingActionMenuItem } from '../common/AccountingGrid';
+import { AccountingGrid, AccountingColumnDef } from '../common/AccountingGrid';
 import { AccountingDateRangePicker } from '../common/date/AccountingDateRangePicker';
 import { matchesSearchTokens } from '../ui/SearchableCombobox';
 import { ServiceInvoiceWorkspace } from './ServiceInvoiceWorkspace';
 import { BaggageInvoiceModal } from '../baggage/BaggageInvoiceModal';
-import { SERVICE_KINDS, type ServiceKindId } from './serviceKinds';
+import { SERVICE_KINDS, decodeServiceExtras, type ServiceKindId } from './serviceKinds';
 import { ticketsApi, type TicketData } from '../../api/tickets';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 
 const formatNum = (v: number) =>
   Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
-
-const StatCard: React.FC<{
-  label: string;
-  value: string;
-  subValue?: string;
-}> = ({ label, value, subValue }) => (
-  /*
-   * بطاقة بهوية النظام وحدها: أبيض وبرتقالي، بلا أيقونات ولا ألوانٍ لكل بطاقة.
-   * الشريط العلوي البرتقالي هو التوقيع، والارتفاع الأكبر يمنح الرقم مقامه.
-   */
-  <div className="relative bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden px-5 py-6 min-h-[118px] flex flex-col justify-center">
-    <div className="absolute top-0 inset-x-0 h-1 bg-[#F45A0A]" />
-    <span className="text-[12px] font-bold text-slate-500 block truncate">{label}</span>
-    <span className="text-2xl font-black text-slate-900 block mt-1.5 font-mono tracking-tight truncate" dir="ltr">
-      {value}
-    </span>
-    {subValue && (
-      <span className="text-[11px] font-bold text-[#F45A0A]/70 block mt-1 truncate">{subValue}</span>
-    )}
-  </div>
-);
 
 /**
  * سجل خدمة: مبيعات الوزن الإضافي والخدمات الأخرى.
@@ -117,24 +93,6 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
     });
   }, [rows, search, startDate, endDate]);
 
-  // إحصائيات البطاقات: فواتير، تكلفة شراء، إجمالي مبيعات، صافي أرباح
-  const totals = useMemo(() => {
-    let buy = 0;
-    let sell = 0;
-    let profit = 0;
-    filtered.forEach((t: any) => {
-      buy += Number(t.netBuy ?? t.totalBuy ?? 0);
-      sell += Number(t.netSell ?? t.totalSell ?? 0);
-      profit += Number(t.profit ?? 0);
-    });
-    return {
-      count: filtered.length,
-      buy,
-      sell,
-      profit,
-    };
-  }, [filtered]);
-
   const openEditor = async (row?: TicketData) => {
     if (!row) {
       setEditing(null);
@@ -166,49 +124,117 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
   };
 
   // ════════════════════════════════════════════════════════════════
-  // أعمدة الجدول حسب طلب المستخدم الدقيق:
-  // رقم الفاتورة | المورد | العملة | مبلغ الشراء | العميل | مبلغ البيع | الفرق (الربح)
+  // أعمدة جدول بيع الوزن والخدمات بترتيب منطقي وأيقونة حقيبة سفر في كل سطر
+  // رقم الفاتورة | العميل | المسافر والوزن | المورد | العملة | مبلغ الشراء | مبلغ البيع | الربح | إجراءات
   // ════════════════════════════════════════════════════════════════
   const columnDefs: AccountingColumnDef[] = useMemo(
     () => [
-      // 1. رقم الفاتورة
+      // 1. رقم الفاتورة مع أيقونة حقيبة سفر مميزة وأنيقة
       {
         field: 'invoiceNumber',
         headerText: isAr ? 'رقم الفاتورة' : 'Invoice No',
-        width: 'w-44',
+        width: 'w-56',
         isPinned: true,
         render: (r) => (
-          <div className="leading-tight">
-            <span className="font-mono font-black text-[12px] text-slate-900 block" dir="ltr">
-              {r.invoiceNumber || '—'}
-            </span>
-            <span className="text-[10px] font-bold text-slate-400 font-mono block mt-0.5" dir="ltr">
-              {r.issueDate ? new Date(r.issueDate).toLocaleDateString('en-GB') : ''}
-              {r.pnr && (
-                <span className="ms-1.5 px-1 py-0.2 rounded bg-orange-50 text-[#F45A0A] border border-orange-200 text-[9.5px]">
-                  PNR: {r.pnr}
-                </span>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200/80 text-[#F45A0A] flex items-center justify-center shrink-0 shadow-2xs">
+              {kind === 'BAGGAGE' ? (
+                <Luggage size={16} strokeWidth={2.2} />
+              ) : (
+                <IconFileInvoice size={16} stroke={2.2} />
               )}
+            </div>
+            <div className="leading-tight min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-mono font-black text-[12.5px] text-slate-900" dir="ltr">
+                  {r.invoiceNumber || '—'}
+                </span>
+                {r.pnr && (
+                  <span className="px-1.5 py-0.2 rounded bg-orange-50 text-[#F45A0A] border border-orange-200/80 text-[9.5px] font-mono font-bold">
+                    PNR: {r.pnr}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 font-mono block mt-0.5" dir="ltr">
+                {r.issueDate ? new Date(r.issueDate).toLocaleDateString('en-GB') : ''}
+              </span>
+            </div>
+          </div>
+        ),
+      },
+
+      // 2. العميل
+      {
+        field: 'customerName',
+        headerText: isAr ? 'العميل' : 'Customer',
+        width: 'w-44',
+        render: (r) => (
+          <div className="leading-tight min-w-0">
+            <span className="font-black text-[12.5px] text-slate-900 block truncate">
+              {r.customerName || '—'}
             </span>
           </div>
         ),
       },
 
-      // 2. المورد
+      // 3. المسافر والوزن (الكيلوات أو القطع مع أيقونة حقيبة مميزة)
+      {
+        field: 'passengers',
+        headerText: isAr ? 'المسافر والوزن' : 'Passenger & Weight',
+        width: 'w-48',
+        render: (r) => {
+          const pList = Array.isArray(r.passengers) ? r.passengers : [];
+          const firstPax = pList[0];
+          const totalWeight = pList.reduce((sum: number, p: any) => sum + (Number(p.weight) || 0), 0);
+          const unit = firstPax?.unit === 'PIECE' ? (isAr ? 'قطعة' : 'Pcs') : (isAr ? 'كغم' : 'KG');
+
+          const { extras } = decodeServiceExtras(r.notes);
+          const extraWeight = Number(extras?.weight || extras?.pricePerKg || 0);
+          const displayWeight = totalWeight > 0 ? totalWeight : extraWeight > 0 ? extraWeight : null;
+          const paxName = firstPax?.name || extras?.passengerName || r.first_passenger || '';
+
+          return (
+            <div className="leading-tight min-w-0 space-y-1">
+              {paxName ? (
+                <span className="font-bold text-[12px] text-slate-800 block truncate">
+                  {paxName}
+                  {pList.length > 1 && (
+                    <span className="text-[10px] text-slate-400 ms-1 font-mono">
+                      (+{pList.length - 1})
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span className="text-slate-400 text-[11px] font-mono">—</span>
+              )}
+              {displayWeight ? (
+                <div className="flex items-center gap-1">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-amber-50 text-amber-800 border border-amber-200/80 text-[10px] font-mono font-bold">
+                    <Luggage size={11} className="text-amber-600 shrink-0" />
+                    <span dir="ltr">{displayWeight} {unit}</span>
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          );
+        },
+      },
+
+      // 4. المورد
       {
         field: 'supplierAccountName',
         headerText: isAr ? 'المورد' : 'Supplier',
-        isWide: true,
+        width: 'w-44',
         render: (r) => (
           <div className="leading-tight min-w-0">
-            <span className="font-bold text-[12px] text-slate-800 block truncate">
+            <span className="font-bold text-[12px] text-slate-700 block truncate">
               {r.supplierAccountName || '—'}
             </span>
           </div>
         ),
       },
 
-      // 3. العملة (قبل حقول المبالغ مباشرة كما طلب المستخدم)
+      // 5. العملة
       {
         field: 'currency',
         headerText: isAr ? 'العملة' : 'Currency',
@@ -228,60 +254,46 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
         },
       },
 
-      // 4. مبلغ الشراء
+      // 6. مبلغ الشراء
       {
         field: 'netBuy',
         headerText: isAr ? 'مبلغ الشراء' : 'Buy Amount',
         width: 'w-32',
-        align: 'left',
+        align: 'center',
         isMonetary: true,
         render: (r) => (
-          <span className="font-mono font-extrabold text-[12.5px] text-slate-800" dir="ltr">
+          <span className="font-mono font-extrabold text-[13px] text-slate-700" dir="ltr">
             {formatNum(Number(r.netBuy ?? r.totalBuy ?? 0))}
           </span>
         ),
       },
 
-      // 5. العميل
-      {
-        field: 'customerName',
-        headerText: isAr ? 'العميل' : 'Customer',
-        isWide: true,
-        render: (r) => (
-          <div className="leading-tight min-w-0">
-            <span className="font-black text-[12px] text-slate-900 block truncate">
-              {r.customerName || '—'}
-            </span>
-          </div>
-        ),
-      },
-
-      // 6. مبلغ البيع
+      // 7. مبلغ البيع
       {
         field: 'netSell',
         headerText: isAr ? 'مبلغ البيع' : 'Sell Amount',
         width: 'w-32',
-        align: 'left',
+        align: 'center',
         isMonetary: true,
         render: (r) => (
-          <span className="font-mono font-black text-[12.5px] text-slate-900" dir="ltr">
+          <span className="font-mono font-black text-[13px] text-slate-900" dir="ltr">
             {formatNum(Number(r.netSell ?? r.totalSell ?? 0))}
           </span>
         ),
       },
 
-      // 7. الفرق / الربح
+      // 8. الفرق (الربح)
       {
         field: 'profit',
         headerText: isAr ? 'الفرق (الربح)' : 'Profit',
         width: 'w-32',
-        align: 'left',
+        align: 'center',
         isMonetary: true,
         render: (r) => {
           const p = Number(r.profit ?? 0);
           return (
             <span
-              className={`font-mono font-black text-[12.5px] ${
+              className={`font-mono font-black text-[13px] ${
                 p >= 0 ? 'text-[#078B61]' : 'text-rose-600'
               }`}
               dir="ltr"
@@ -291,16 +303,36 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
           );
         },
       },
-    ],
-    [isAr],
-  );
 
-  const actionMenuItems: AccountingActionMenuItem[] = useMemo(
-    () => [
-      { label: isAr ? 'تعديل' : 'Edit', icon: IconEdit, onClick: (row: any) => openEditor(row) },
-      { label: isAr ? 'حذف' : 'Delete', icon: IconTrash, color: 'red', onClick: (row: any) => setDeleteTarget(row) },
+      // 9. الإجراءات (زر تعديل وزر حذف مباشرة بدون قائمة ثلاث نقاط)
+      {
+        field: 'actions',
+        headerText: isAr ? 'الإجراءات' : 'Actions',
+        width: 'w-24',
+        align: 'center',
+        render: (r) => (
+          <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => openEditor(r)}
+              title={isAr ? 'تعديل' : 'Edit'}
+              className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-orange-50 hover:border-orange-200 text-slate-600 hover:text-[#F45A0A] flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+            >
+              <IconEdit size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(r)}
+              title={isAr ? 'حذف' : 'Delete'}
+              className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-600 hover:text-rose-600 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+            >
+              <IconTrash size={14} />
+            </button>
+          </div>
+        ),
+      },
     ],
-    [isAr],
+    [isAr, kind],
   );
 
   return (
@@ -382,13 +414,14 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
 
 
 
-      {/* ── 3. AccountingGrid (إخفاء شريط الإجراءات والبحث المكرر للحصول على جدول فائق النقاء) ── */}
+      {/* ── 3. AccountingGrid ── */}
       <AccountingGrid
         gridKey={`service_${kind}_grid`}
         data={filtered}
         columnDefs={columnDefs}
         loading={loading}
-        actionMenuItems={actionMenuItems}
+        actionMenuItems={[]}
+        hideSelectionCheckbox={true}
         hideHeaderCard={true}
         hideActionsButton={true}
         onRowDoubleClick={(row: any) => openEditor(row)}

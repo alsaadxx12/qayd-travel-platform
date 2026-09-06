@@ -1637,12 +1637,14 @@ export class TicketsService {
     const coreCfg = parseCfg('core_accounts_mapping');
     const tripTypeUp = String(ticket.tripType || 'TICKET').toUpperCase();
     const revKeyByTrip: Record<string, string> = {
-      TICKET: 'flightRevenueAccountId', FLIGHT: 'flightRevenueAccountId', BAGGAGE: 'flightRevenueAccountId',
+      TICKET: 'flightRevenueAccountId', FLIGHT: 'flightRevenueAccountId',
+      BAGGAGE: 'baggageRevenueAccountId',
       VISA: 'visaRevenueAccountId', HOTEL: 'hotelRevenueAccountId',
       REISSUE: 'reissueRevenueAccountId', CHANGE: 'reissueRevenueAccountId',
+      REFUND: 'refundsAccountId',
       GROUP_FARE: 'groupRevenueAccountId', GROUP: 'groupRevenueAccountId',
     };
-    const cfgKey = revKeyByTrip[tripTypeUp];
+    const cfgKey = isRefund ? 'refundsAccountId' : revKeyByTrip[tripTypeUp];
     let configuredRevenueId: string | null = cfgKey ? (svcCfg[cfgKey] || (cfgKey === 'groupRevenueAccountId' ? coreCfg.groupRevenueAccountId : null) || null) : null;
     if (configuredRevenueId) {
       const exists = await this.prisma.account.findFirst({ where: { id: configuredRevenueId, companyId }, select: { id: true } });

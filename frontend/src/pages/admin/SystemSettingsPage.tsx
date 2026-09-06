@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Paper, TextInput, Button, Select, Checkbox, Textarea, Badge, SegmentedControl, ColorInput, Slider, Switch, Tabs, Progress } from '@mantine/core';
+import { Paper, TextInput, Button, Select, Checkbox, Textarea, Badge, SegmentedControl, ColorInput, Slider, Switch, Tabs, Progress, Loader } from '@mantine/core';
 import { useFont, FONT_OPTIONS, type FontId } from '../../hooks/useFont';
 import {
   IconSettings,
@@ -2080,24 +2080,77 @@ export const SystemSettingsPage: React.FC = () => {
                     />
                   </div>
 
-                  {/* 12. الحساب الختامي للكروبات (إيراد الكروبات) */}
-                  <div className="space-y-1 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-emerald-300 transition-colors shadow-2xs">
-                    <div className="flex items-center justify-between">
-                      <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                        <IconUsers size={15} className="text-[#F45A0A]" />
-                        الحساب الختامي للكروبات
-                      </label>
-                      <span className="text-[10.5px] text-slate-500 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
-                        المقترح: 4105
-                      </span>
-                    </div>
-                    <SearchableCombobox
-                      options={accountOptionsWithParent}
-                      value={coreAccounts.groupRevenueAccountId}
-                      onChange={(val) => setCoreAccounts(p => ({ ...p, groupRevenueAccountId: val || '' }))}
-                      placeholder="اختر حساب إيراد الكروبات..."
-                    />
+                </div>
+              </div>
+
+              {/* Card: الحسابات الختامية للخدمات — إيراد كل خدمة يُقيَّد في حسابه */}
+              <div className="bg-white text-slate-800 rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                      <IconCashBanknote size={18} className="text-[#F45A0A]" />
+                      الحسابات الختامية للخدمات (حساب الإيراد لكل خدمة)
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-medium mt-1">
+                      إليها يُقيَّد ربح كل خدمة في القيود اليومية. اضغط «إنشاء وربط» لتُنشأ الحسابات القياسية في شجرة الحسابات وتُربط تلقائياً، أو اختر لكلٍّ حسابه يدوياً.
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await accountsApi.ensureServiceClosingAccounts();
+                        resetSharedAccounts();
+                        const fresh = await accountsApi.getFlat(undefined, undefined, true);
+                        setAccountsList(Array.isArray(fresh) ? fresh : []);
+                        const cfg = await fetchPrintTemplate('services_accounts_mapping');
+                        if (cfg?.config) setServicesAccounts((p) => ({ ...p, ...cfg.config }));
+                        showSuccessNotification('تم', `أُنشئ ${res.createdCount} حساباً ورُبطت الحسابات الختامية`);
+                      } catch (e: any) {
+                        showErrorNotification('تعذّر الإنشاء', e?.message || '');
+                      }
+                    }}
+                    className="h-9 px-3.5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shrink-0 shadow-2xs"
+                  >
+                    <IconPlus size={15} /> إنشاء وربط الحسابات القياسية
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { key: 'flightRevenueAccountId', label: 'إيراد تذاكر الطيران' },
+                    { key: 'visaRevenueAccountId', label: 'إيراد التأشيرات والفيزا' },
+                    { key: 'hotelRevenueAccountId', label: 'إيراد الحجوزات الفندقية' },
+                    { key: 'reissueRevenueAccountId', label: 'إيراد تغيير التذاكر' },
+                    { key: 'refundsAccountId', label: 'إيراد استرجاع التذاكر' },
+                    { key: 'baggageRevenueAccountId', label: 'إيراد بيع الوزن' },
+                    { key: 'groupRevenueAccountId', label: 'إيراد الكروبات والسياحة' },
+                  ].map((svc) => (
+                    <div key={svc.key} className="space-y-1 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-orange-200 transition-colors shadow-2xs">
+                      <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <IconCashBanknote size={14} className="text-[#F45A0A]" />
+                        {svc.label}
+                      </label>
+                      <SearchableCombobox
+                        options={accountOptionsWithParent}
+                        value={(servicesAccounts as any)[svc.key] || ''}
+                        onChange={(val) => setServicesAccounts((p) => ({ ...p, [svc.key]: val || '' }))}
+                        placeholder="اختر حساب الإيراد..."
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={isSavingServicesAccounts}
+                    onClick={handleSaveServicesAccounts}
+                    className="h-10 px-5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 text-white text-[13px] font-black cursor-pointer flex items-center gap-2 shadow-2xs"
+                  >
+                    {isSavingServicesAccounts ? <Loader size={15} color="white" /> : <IconDeviceFloppy size={16} />}
+                    حفظ الحسابات الختامية
+                  </button>
                 </div>
               </div>
 

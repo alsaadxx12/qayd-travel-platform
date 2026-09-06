@@ -95,6 +95,12 @@ export class AccountsController {
     return this.accountsService.importTree(req.user.companyId, dto.accounts || [], dto.wipeExisting ?? true);
   }
 
+  @Post('ensure-service-closing-accounts')
+  @ApiOperation({ summary: 'إنشاء الحسابات الختامية (الإيراد) لكل خدمة إن غابت وربطها في الإعدادات' })
+  async ensureServiceClosingAccounts(@Req() req: any) {
+    return this.accountsService.ensureServiceClosingAccounts(req.user.companyId);
+  }
+
   @Delete('wipe-all')
   @ApiOperation({ summary: 'مسح شجرة الحسابات بالكامل للشركة' })
   async wipeAll(@Req() req: any) {

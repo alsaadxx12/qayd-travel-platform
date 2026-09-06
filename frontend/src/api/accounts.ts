@@ -85,6 +85,11 @@ export const accountsApi = {
     return Array.isArray(data) ? data : [];
   },
 
+  /** إنشاء الحسابات الختامية (الإيراد) لكل خدمة إن غابت وربطها في الإعدادات. */
+  ensureServiceClosingAccounts: async (): Promise<{ linked: Record<string, string>; created: string[]; createdCount: number }> => {
+    return apiRequest('/accounts/ensure-service-closing-accounts', { method: 'POST', body: JSON.stringify({}) });
+  },
+
   getById: async (id: string): Promise<any> => {
     return apiRequest(`/accounts/${id}`);
   },

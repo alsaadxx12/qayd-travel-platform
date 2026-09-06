@@ -2107,4 +2107,70 @@ export class AccountsService {
       suppliersCreated: suppCreated,
     };
   }
+
+  /**
+   * إنشاء وربط الحسابات الختامية (الإيراد) لكل خدمة.
+   *
+   * شجرة الحسابات كانت تحوي آباءَ إيرادٍ بلا أوراقٍ للخدمات، فكان ربح كل خدمة
+   * يُقيَّد في حسابٍ عام. هنا تُنشأ ورقةُ إيرادٍ لكل خدمة تحت «إيراد النشاط الخدمي»
+   * إن غابت، وتُربَط في إعدادات services_accounts_mapping (وحساب الكروبات في
+   * core_accounts_mapping أيضاً) — فيُقيَّد ربح كل خدمة في حسابها الختامي الصحيح.
+   */
+  async ensureServiceClosingAccounts(companyId: string) {
+    const SERVICES = [
+      { key: 'flightRevenueAccountId', code: '401101', name: 'إيراد تذاكر الطيران' },
+      { key: 'visaRevenueAccountId', code: '401102', name: 'إيراد التأشيرات والفيزا' },
+      { key: 'hotelRevenueAccountId', code: '401103', name: 'إيراد الحجوزات الفندقية' },
+      { key: 'reissueRevenueAccountId', code: '401104', name: 'إيراد تغيير التذاكر' },
+      { key: 'refundsAccountId', code: '401105', name: 'إيراد استرجاع التذاكر' },
+      { key: 'baggageRevenueAccountId', code: '401106', name: 'إيراد بيع الوزن' },
+      { key: 'groupRevenueAccountId', code: '401107', name: 'إيراد الكروبات والسياحة' },
+    ];
+
+    // الأب: «إيراد النشاط الخدمي» (4011) أو أي حساب إيرادٍ أب، وإلا يُنشأ.
+    let parent =
+      (await this.prisma.account.findFirst({ where: { companyId, code: '4011' }, select: { id: true, level: true } })) ||
+      (await this.prisma.account.findFirst({ where: { companyId, type: 'REVENUE' as any, isParent: true }, orderBy: { code: 'asc' }, select: { id: true, level: true } }));
+    if (!parent) {
+      const created = await this.prisma.account.create({
+        data: { companyId, code: '4011', nameAr: 'إيراد النشاط الخدمي', type: 'REVENUE' as any, isParent: true, level: 1 },
+        select: { id: true, level: true },
+      });
+      parent = created;
+    } else if (!(await this.prisma.account.findFirst({ where: { id: parent.id, isParent: true } }))) {
+      await this.prisma.account.update({ where: { id: parent.id }, data: { isParent: true } });
+    }
+
+    const result: Record<string, string> = {};
+    const created: string[] = [];
+    for (const s of SERVICES) {
+      let acc = await this.prisma.account.findFirst({
+        where: { companyId, OR: [{ code: s.code }, { nameAr: s.name }] },
+        select: { id: true },
+      });
+      if (!acc) {
+        acc = await this.prisma.account.create({
+          data: { companyId, code: s.code, nameAr: s.name, type: 'REVENUE' as any, isParent: false, level: (parent.level || 1) + 1, parentId: parent.id },
+          select: { id: true },
+        });
+        created.push(s.name);
+      }
+      result[s.key] = acc.id;
+    }
+
+    // الربط: دمج المفاتيح في services_accounts_mapping دون مسّ بقية الإعداد.
+    const upsertConfig = async (docType: string, patch: Record<string, any>) => {
+      const row = await this.prisma.printTemplate.findFirst({ where: { companyId, docType } });
+      let cfg: any = {};
+      try { cfg = row ? JSON.parse(row.config || '{}') : {}; } catch { cfg = {}; }
+      const merged = { ...cfg, ...patch };
+      if (row) await this.prisma.printTemplate.update({ where: { id: row.id }, data: { config: JSON.stringify(merged) } });
+      else await this.prisma.printTemplate.create({ data: { companyId, docType, name: docType, config: JSON.stringify(merged) } });
+    };
+    await upsertConfig('services_accounts_mapping', result);
+    await upsertConfig('core_accounts_mapping', { groupRevenueAccountId: result.groupRevenueAccountId });
+
+    this.flatCache.clear?.();
+    return { linked: result, created, createdCount: created.length };
+  }
 }
