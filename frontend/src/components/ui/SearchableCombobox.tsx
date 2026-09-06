@@ -36,6 +36,7 @@ interface SearchableComboboxProps {
   maxRendered?: number;
   maxListHeight?: number;
   size?: 'xs' | 'sm' | 'md';
+  centered?: boolean;
 }
 
 /*
@@ -88,8 +89,10 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   maxRendered = 80,
   maxListHeight = 280,
   size = 'md',
+  centered = false,
 }) => {
   const isCompact = size === 'xs' || size === 'sm';
+  const isCentered = centered || className.includes('text-center');
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
@@ -272,7 +275,7 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
         }`}
       >
         {/* Right side in RTL: Search / Custom icon + Display Value / Search Input */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className={`flex items-center gap-2 min-w-0 flex-1 ${isCentered ? 'justify-center' : ''}`}>
           <div className="shrink-0 text-slate-400">
             {leftIcon || <Search size={isCompact ? 13 : 15} />}
           </div>
@@ -293,18 +296,18 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
               placeholder={displayLabel || placeholder}
               className={`w-full bg-transparent ${
                 isCompact ? 'text-xs font-bold' : 'text-[14px] font-semibold'
-              } text-slate-900 outline-none placeholder:text-[#9CA3AF]`}
+              } text-slate-900 outline-none placeholder:text-[#9CA3AF] ${isCentered ? 'text-center' : ''}`}
               role="combobox"
               aria-expanded={isOpen}
               aria-controls={listId}
             />
           ) : (
             <span
-              className={`${
+              className={`w-full ${
                 isCompact ? 'text-xs font-bold' : 'text-[14px] font-semibold'
               } truncate block ${
                 displayLabel ? 'text-slate-900' : 'text-[#9CA3AF]'
-              }`}
+              } ${isCentered ? 'text-center' : ''}`}
             >
               {displayLabel || placeholder}
             </span>

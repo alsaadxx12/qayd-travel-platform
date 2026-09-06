@@ -2062,11 +2062,11 @@ export const SystemSettingsPage: React.FC = () => {
                   </div>
 
                   {/* 11. حساب أب الأطراف الخارجية (خارج الميزانية) */}
-                  <div className="space-y-1 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-emerald-300 transition-colors shadow-2xs md:col-span-2">
+                  <div className="space-y-1 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-emerald-300 transition-colors shadow-2xs">
                     <div className="flex items-center justify-between">
                       <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
                         <IconBuildingBank size={15} className="text-purple-700" />
-                        حساب أب الأطراف الخارجية (بورصة / مكاتب / عملاء — خارج الميزانية)
+                        حساب أب الأطراف الخارجية
                       </label>
                       <span className="text-[10.5px] text-slate-500 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
                         المقترح: 9
@@ -2078,20 +2078,17 @@ export const SystemSettingsPage: React.FC = () => {
                       onChange={(val) => setCoreAccounts(p => ({ ...p, externalPartiesParentAccountId: val || '' }))}
                       placeholder="اختر الحساب الأب للأطراف الخارجية..."
                     />
-                    <p className="text-[10px] text-slate-500 font-medium mt-1">
-                      حساباتهم (البورصة، المكاتب الوسيطة، العملاء) تُدرج تحته ولا تُحتسب ضمن الموجودات أو المطلوبات — رقابية بحتة.
-                    </p>
                   </div>
 
                   {/* 12. الحساب الختامي للكروبات (إيراد الكروبات) */}
-                  <div className="space-y-1 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-[#F45A0A] transition-colors shadow-2xs md:col-span-2">
+                  <div className="space-y-1 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200/80 hover:border-emerald-300 transition-colors shadow-2xs">
                     <div className="flex items-center justify-between">
                       <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
                         <IconUsers size={15} className="text-[#F45A0A]" />
-                        الحساب الختامي للكروبات (إيراد تذاكر الكروبات)
+                        الحساب الختامي للكروبات
                       </label>
                       <span className="text-[10.5px] text-slate-500 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
-                        المقترح: 4105 / كروبات
+                        المقترح: 4105
                       </span>
                     </div>
                     <SearchableCombobox
@@ -2100,9 +2097,6 @@ export const SystemSettingsPage: React.FC = () => {
                       onChange={(val) => setCoreAccounts(p => ({ ...p, groupRevenueAccountId: val || '' }))}
                       placeholder="اختر حساب إيراد الكروبات..."
                     />
-                    <p className="text-[10px] text-slate-500 font-medium mt-1">
-                      إليه يُقيَّد ربح مبيعات الكروبات في القيود اليومية — كي لا يختلط بإيراد تذاكر الطيران.
-                    </p>
                   </div>
                 </div>
               </div>

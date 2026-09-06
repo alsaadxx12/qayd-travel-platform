@@ -100,8 +100,8 @@ export const AccountSearchField: React.FC<Props> = ({
             if (allowCustomValue) onPick({ id: null, name: e.target.value });
           }}
           placeholder={placeholder}
-          className={inputClass}
-          style={{ paddingInlineStart: 30 }}
+          className={`${inputClass} text-center`}
+          style={{ paddingInlineStart: 30, paddingInlineEnd: 30 }}
         />
       </div>
 

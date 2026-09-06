@@ -47,6 +47,7 @@ import {
   Check,
   Sparkles,
   Info,
+  RotateCcw,
 } from 'lucide-react';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
@@ -92,7 +93,7 @@ const money = (v: number, c = 'USD') => `${fmt(v)} ${c === 'USD' ? '$' : 'IQD'}`
 const num = (raw: any) => Number(String(raw ?? '').replace(/,/g, '')) || 0;
 
 const inputClass =
-  'w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white hover:border-[#D1D5DB] focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-2 focus:border-[#F45A0A] transition-colors duration-150';
+  'w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white hover:border-[#D1D5DB] focus:bg-white text-xs font-bold text-slate-900 focus:outline-none focus:border-2 focus:border-[#F45A0A] transition-colors duration-150 text-center';
 
 const Field: React.FC<{
   label: string;
@@ -1647,6 +1648,26 @@ const PassengerTable: React.FC<{
     setExpandedRowIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const togglePaxConfirmation = async (e: React.MouseEvent, pax: GroupPassenger) => {
+    e.stopPropagation();
+    const nextState = pax.state === 'CONFIRMED' ? 'RESERVED' : 'CONFIRMED';
+    const cleanPrice = Number(pax.salePrice) || 0;
+    const isCash = pax.payType !== 'CREDIT';
+    const hadFullPaid = Number(pax.collectedAmount || 0) >= Number(pax.salePrice || 0);
+    const newCollected = isCash && hadFullPaid ? cleanPrice : Number(pax.collectedAmount || 0);
+    await run(
+      () =>
+        tourGroupsApi.updatePassenger(g.id, pax.id, {
+          state: nextState,
+          salePrice: cleanPrice,
+          collectedAmount: newCollected,
+        }),
+      nextState === 'CONFIRMED'
+        ? (isAr ? `تم اعتماد المسافر «${pax.passengerName}»` : `Confirmed "${pax.passengerName}"`)
+        : (isAr ? `تم رفع الاعتماد عن «${pax.passengerName}»` : `Unconfirmed "${pax.passengerName}"`),
+    );
+  };
+
   const th = 'px-3 py-2 text-[11px] font-bold text-slate-600 whitespace-nowrap select-none text-center bg-slate-50/90 tracking-wide border-b border-slate-200';
   const td = 'px-3 py-2 text-[12px] whitespace-nowrap text-center align-middle';
 
@@ -1656,20 +1677,22 @@ const PassengerTable: React.FC<{
         <thead>
           <tr>
             <th className={th}>{isAr ? 'المسافر' : 'Passenger'}</th>
+            <th className={th}>{isAr ? 'المستفيد' : 'Beneficiary'}</th>
             <th className={th}>{isAr ? 'الرحلة / الخدمة' : 'Trip / Service'}</th>
             <th className={th}>{isAr ? 'المورد' : 'Supplier'}</th>
             <th className={th}>{isAr ? 'شراء' : 'Buy'}</th>
             <th className={th}>{isAr ? 'بيع' : 'Sale'}</th>
             <th className={th}>{isAr ? 'الربح' : 'Profit'}</th>
             <th className={th}>{isAr ? 'الحالة' : 'Status'}</th>
-            <th className={`${th} w-32`}>{isAr ? 'إجراءات' : 'Actions'}</th>
+            <th className={`${th} w-36`}>{isAr ? 'إجراءات' : 'Actions'}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {passengers.map((p) => {
             const isExpanded = !!expandedRowIds[p.id];
+            const isConfirmed = p.state === 'CONFIRMED';
             const cancelled = p.state === 'CANCELLED';
-            const done = p.services.length > 0 && p.services.every((s) => s.status === 'COMPLETE');
+            const done = isConfirmed || (p.services.length > 0 && p.services.every((s) => s.status === 'COMPLETE'));
             const sale = Number(p.salePrice) || 0;
             const paid = Number(p.collectedAmount) || 0;
             const due = sale - paid;
@@ -1728,10 +1751,13 @@ const PassengerTable: React.FC<{
                     cancelled ? 'opacity-50 bg-slate-50/60' : ''
                   }`}
                 >
+                  {/* المسافر */}
                   <td className={td}>
                     <div className="flex items-center justify-center gap-2 min-w-0">
                       {cancelled ? (
                         <Ban size={14} className="text-slate-400 shrink-0" />
+                      ) : isConfirmed ? (
+                        <CheckCheck size={14} className="text-emerald-600 shrink-0" />
                       ) : done ? (
                         <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
                       ) : (
@@ -1749,6 +1775,20 @@ const PassengerTable: React.FC<{
                       </div>
                     </div>
                   </td>
+
+                  {/* المستفيد التابع له المسافر */}
+                  <td className={td}>
+                    <div className="inline-flex items-center justify-center gap-1.5 min-w-0 max-w-[160px] mx-auto bg-slate-50/80 hover:bg-white px-2.5 py-1 rounded-lg border border-slate-200/80 transition-colors shadow-2xs">
+                      <Folder size={12} className="text-[#F45A0A] shrink-0" />
+                      <span
+                        className="font-bold text-slate-800 text-[11.5px] truncate"
+                        title={p.customerName || (isAr ? 'بدون مستفيد' : 'No Beneficiary')}
+                      >
+                        {p.customerName || (isAr ? 'بدون مستفيد' : '—')}
+                      </span>
+                    </div>
+                  </td>
+
                   <td className={td}>
                     <span className="font-medium text-slate-800 text-[11.5px] truncate block max-w-[170px] mx-auto" title={serviceName}>
                       {serviceName}
@@ -1770,21 +1810,67 @@ const PassengerTable: React.FC<{
                       {money(profit, p.currency || g.currency)}
                     </span>
                   </td>
-                  <td className={td}>
-                    <span
-                      className={`text-[10px] font-bold rounded-md px-2 py-0.5 border inline-block ${
+                  <td className={td} onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      disabled={cancelled}
+                      onClick={(e) => togglePaxConfirmation(e, p)}
+                      title={
                         cancelled
-                          ? 'bg-slate-100 text-slate-500 border-slate-200'
-                          : done
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                          ? undefined
+                          : isConfirmed
+                          ? (isAr ? 'معتمد — انقر لرفع الاعتماد' : 'Confirmed — Click to unconfirm')
+                          : (isAr ? 'معلّق — انقر للاعتماد' : 'Pending — Click to confirm')
+                      }
+                      className={`text-[10.5px] font-black rounded-md px-2.5 py-1 border inline-flex items-center justify-center gap-1 transition-all ${
+                        cancelled
+                          ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
+                          : isConfirmed
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:scale-105 cursor-pointer shadow-2xs'
+                          : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 hover:scale-105 cursor-pointer shadow-2xs'
                       }`}
                     >
-                      {cancelled ? (isAr ? 'ملغى' : 'Cancelled') : done ? (isAr ? 'مكتمل' : 'Complete') : (isAr ? 'معلّق' : 'Pending')}
-                    </span>
+                      {cancelled ? (
+                        <>
+                          <Ban size={11} className="text-slate-400" />
+                          <span>{isAr ? 'ملغى' : 'Cancelled'}</span>
+                        </>
+                      ) : isConfirmed ? (
+                        <>
+                          <CheckCheck size={11} className="text-emerald-700" />
+                          <span>{isAr ? 'معتمد' : 'Confirmed'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock size={11} className="text-amber-600" />
+                          <span>{isAr ? 'معلّق' : 'Pending'}</span>
+                        </>
+                      )}
+                    </button>
                   </td>
                   <td className={td} onClick={(e) => e.stopPropagation()}>
                     <div className="inline-flex items-center justify-center gap-1.5">
+                      {/* زر رفع الاعتماد أو الاعتماد السريع */}
+                      {!cancelled && (
+                        <button
+                          type="button"
+                          onClick={(e) => togglePaxConfirmation(e, p)}
+                          title={
+                            isConfirmed
+                              ? (isAr ? 'رفع الاعتماد عن المسافر' : 'Unconfirm passenger')
+                              : (isAr ? 'اعتماد المسافر' : 'Confirm passenger')
+                          }
+                          className={`h-7 px-2 rounded-lg border inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs ${
+                            isConfirmed
+                              ? 'text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-300'
+                              : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border-emerald-300'
+                          }`}
+                        >
+                          {isConfirmed ? <RotateCcw size={11} /> : <CheckCheck size={11} />}
+                          <span>{isConfirmed ? (isAr ? 'رفع الاعتماد' : 'Unconfirm') : (isAr ? 'اعتماد' : 'Confirm')}</span>
+                        </button>
+                      )}
+
                       {/* زر تعديل */}
                       <button
                         type="button"
@@ -1813,7 +1899,7 @@ const PassengerTable: React.FC<{
                 {/* التفاصيل الثانوية القابلة للفتح */}
                 {isExpanded && (
                   <tr className="bg-slate-50/70 border-b border-slate-200 text-xs">
-                    <td colSpan={8} className="p-2.5">
+                    <td colSpan={9} className="p-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
                         <div className="flex items-center gap-4 flex-wrap text-xs">
                           {/* موظف الإصدار */}
@@ -3585,6 +3671,7 @@ const PassengerModal: React.FC<{
                 {/* 3. النظام * */}
                 <Field label={isAr ? 'النظام *' : 'System *'}>
                   <SearchableCombobox
+                    centered
                     value={d.priceSystemId}
                     onChange={(val) => {
                       const sel = g.priceSystems.find((s) => s.id === val);
@@ -3617,7 +3704,7 @@ const PassengerModal: React.FC<{
                         }}
                         dir="ltr"
                         placeholder="0"
-                        className="w-full bg-transparent font-mono font-black text-xs text-slate-900 outline-none text-end tabular-nums"
+                        className="w-full bg-transparent font-mono font-black text-xs text-slate-900 outline-none text-center tabular-nums"
                       />
                     </div>
                     <button
@@ -3681,6 +3768,7 @@ const PassengerModal: React.FC<{
                 {/* 6. السداد * */}
                 <Field label={isAr ? 'السداد *' : 'Payment *'}>
                   <SearchableCombobox
+                    centered
                     value={d.payType}
                     onChange={(v) => {
                       const nextPayType = v || 'CASH';
@@ -3707,6 +3795,7 @@ const PassengerModal: React.FC<{
                 {d.payType === 'CASH' && (
                   <Field label={isAr ? 'الطريقة' : 'Method'}>
                     <SearchableCombobox
+                      centered
                       value={d.paymentMethod || 'CASH_HAND'}
                       onChange={(val) => {
                         const nextMethod = val || 'CASH_HAND';
@@ -3734,6 +3823,7 @@ const PassengerModal: React.FC<{
                     className={d.paymentMethod === 'MASTER' ? 'sm:col-span-1' : 'sm:col-span-2'}
                   >
                     <SearchableCombobox
+                      centered
                       value={d.paymentAccountId || ''}
                       onChange={(v) => setD((prev: any) => ({ ...prev, paymentAccountId: v }))}
                       options={d.paymentMethod === 'MASTER' ? masterAccounts : cashAccounts}
@@ -3767,6 +3857,7 @@ const PassengerModal: React.FC<{
                 {/* 10. موظف الإصدار * */}
                 <Field label={isAr ? 'موظف الإصدار *' : 'Issuer *'}>
                   <SearchableCombobox
+                    centered
                     value={d.agent || currentUserAgent}
                     onChange={(val) => setD({ ...d, agent: val || currentUserAgent })}
                     options={issuerComboboxOptions}
@@ -4297,10 +4388,14 @@ const AuditPassengersModal: React.FC<{
     updateRowById(row.id, { isSaving: true });
     try {
       const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+      const isCash = row.originalPax.payType !== 'CREDIT';
+      const hadFullPaid = Number(row.originalPax.collectedAmount || 0) >= Number(row.originalPax.salePrice || 0);
+      const newCollected = isCash && hadFullPaid ? cleanPrice : Number(row.originalPax.collectedAmount || 0);
       await tourGroupsApi.updatePassenger(g.id, row.id, {
         passengerName: row.passengerName.trim(),
         passport: row.passport.trim(),
         salePrice: cleanPrice,
+        collectedAmount: newCollected,
         customerName: row.customerName,
         customerId: row.customerId,
         customerAccountId: row.customerAccountId,
@@ -4309,7 +4404,20 @@ const AuditPassengersModal: React.FC<{
         isAr ? 'تم الحفظ' : 'Saved',
         isAr ? `تم حفظ بيانات «${row.passengerName}» بنجاح.` : `Passenger "${row.passengerName}" updated.`,
       );
-      updateRowById(row.id, { isSaving: false, salePrice: cleanPrice });
+      updateRowById(row.id, {
+        isSaving: false,
+        salePrice: cleanPrice,
+        originalPax: {
+          ...row.originalPax,
+          passengerName: row.passengerName.trim(),
+          passport: row.passport.trim(),
+          salePrice: cleanPrice,
+          collectedAmount: newCollected,
+          customerName: row.customerName,
+          customerId: row.customerId,
+          customerAccountId: row.customerAccountId,
+        },
+      });
       await onUpdated();
       advanceToNextRow(row.id);
     } catch (e: any) {
@@ -4323,10 +4431,14 @@ const AuditPassengersModal: React.FC<{
     updateRowById(row.id, { isSaving: true });
     try {
       const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+      const isCash = row.originalPax.payType !== 'CREDIT';
+      const hadFullPaid = Number(row.originalPax.collectedAmount || 0) >= Number(row.originalPax.salePrice || 0);
+      const newCollected = isCash && hadFullPaid ? cleanPrice : Number(row.originalPax.collectedAmount || 0);
       await tourGroupsApi.updatePassenger(g.id, row.id, {
         passengerName: row.passengerName.trim(),
         passport: row.passport.trim(),
         salePrice: cleanPrice,
+        collectedAmount: newCollected,
         state: 'CONFIRMED',
         customerName: row.customerName,
         customerId: row.customerId,
@@ -4336,12 +4448,72 @@ const AuditPassengersModal: React.FC<{
         isAr ? 'تم اعتماد السعر' : 'Price Confirmed',
         isAr ? `تم تأكيد واعتماد سعر المسافر «${row.passengerName}» بنجاح.` : `Confirmed price for "${row.passengerName}".`,
       );
-      updateRowById(row.id, { isSaving: false, state: 'CONFIRMED', salePrice: cleanPrice });
+      updateRowById(row.id, {
+        isSaving: false,
+        state: 'CONFIRMED',
+        salePrice: cleanPrice,
+        originalPax: {
+          ...row.originalPax,
+          passengerName: row.passengerName.trim(),
+          passport: row.passport.trim(),
+          salePrice: cleanPrice,
+          collectedAmount: newCollected,
+          state: 'CONFIRMED',
+          customerName: row.customerName,
+          customerId: row.customerId,
+          customerAccountId: row.customerAccountId,
+        },
+      });
       await onUpdated();
       advanceToNextRow(row.id);
     } catch (e: any) {
       updateRowById(row.id, { isSaving: false });
       showErrorNotification(isAr ? 'تعذّر الاعتماد' : 'Confirmation failed', e?.message || '');
+    }
+  };
+
+  const handleUnconfirmRow = async (row: AuditRowState) => {
+    if (!row || row.isSaving) return;
+    updateRowById(row.id, { isSaving: true });
+    try {
+      const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+      const isCash = row.originalPax.payType !== 'CREDIT';
+      const hadFullPaid = Number(row.originalPax.collectedAmount || 0) >= Number(row.originalPax.salePrice || 0);
+      const newCollected = isCash && hadFullPaid ? cleanPrice : Number(row.originalPax.collectedAmount || 0);
+      await tourGroupsApi.updatePassenger(g.id, row.id, {
+        passengerName: row.passengerName.trim(),
+        passport: row.passport.trim(),
+        salePrice: cleanPrice,
+        collectedAmount: newCollected,
+        state: 'RESERVED',
+        customerName: row.customerName,
+        customerId: row.customerId,
+        customerAccountId: row.customerAccountId,
+      });
+      showSuccessNotification(
+        isAr ? 'تم رفع الاعتماد' : 'Confirmation Revoked',
+        isAr ? `تم رفع الاعتماد عن المسافر «${row.passengerName}» وإعادته إلى قيد التدقيق.` : `Revoked confirmation for "${row.passengerName}".`,
+      );
+      updateRowById(row.id, {
+        isSaving: false,
+        state: 'RESERVED',
+        salePrice: cleanPrice,
+        originalPax: {
+          ...row.originalPax,
+          passengerName: row.passengerName.trim(),
+          passport: row.passport.trim(),
+          salePrice: cleanPrice,
+          collectedAmount: newCollected,
+          state: 'RESERVED',
+          customerName: row.customerName,
+          customerId: row.customerId,
+          customerAccountId: row.customerAccountId,
+        },
+      });
+      await onUpdated();
+    } catch (e: any) {
+      updateRowById(row.id, { isSaving: false });
+      showErrorNotification(isAr ? 'تعذّر رفع الاعتماد' : 'Failed to unconfirm', e?.message || '');
     }
   };
 
@@ -4380,10 +4552,14 @@ const AuditPassengersModal: React.FC<{
     try {
       for (const row of pending) {
         const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+        const isCash = row.originalPax.payType !== 'CREDIT';
+        const hadFullPaid = Number(row.originalPax.collectedAmount || 0) >= Number(row.originalPax.salePrice || 0);
+        const newCollected = isCash && hadFullPaid ? cleanPrice : Number(row.originalPax.collectedAmount || 0);
         await tourGroupsApi.updatePassenger(g.id, row.id, {
           passengerName: row.passengerName.trim(),
           passport: row.passport.trim(),
           salePrice: cleanPrice,
+          collectedAmount: newCollected,
           state: 'CONFIRMED',
           customerName: row.customerName,
           customerId: row.customerId,
@@ -4405,6 +4581,77 @@ const AuditPassengersModal: React.FC<{
     }
   };
 
+  const handleBatchUnconfirm = async () => {
+    const confirmedRows = filteredRows.filter((r) => r.state === 'CONFIRMED');
+    if (confirmedRows.length === 0) return;
+    setBatchConfirming(true);
+    try {
+      for (const row of confirmedRows) {
+        const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+        const isCash = row.originalPax.payType !== 'CREDIT';
+        const hadFullPaid = Number(row.originalPax.collectedAmount || 0) >= Number(row.originalPax.salePrice || 0);
+        const newCollected = isCash && hadFullPaid ? cleanPrice : Number(row.originalPax.collectedAmount || 0);
+        await tourGroupsApi.updatePassenger(g.id, row.id, {
+          passengerName: row.passengerName.trim(),
+          passport: row.passport.trim(),
+          salePrice: cleanPrice,
+          collectedAmount: newCollected,
+          state: 'RESERVED',
+          customerName: row.customerName,
+          customerId: row.customerId,
+          customerAccountId: row.customerAccountId,
+        });
+      }
+      setRows((prev) =>
+        prev.map((r) => (confirmedRows.some((p) => p.id === r.id) ? { ...r, state: 'RESERVED' } : r)),
+      );
+      showSuccessNotification(
+        isAr ? 'تم رفع الاعتماد الجماعي' : 'Batch Unconfirmed',
+        isAr ? `تم رفع الاعتماد عن ${confirmedRows.length} مسافر بنجاح.` : `Revoked confirmation for ${confirmedRows.length} passengers.`,
+      );
+      await onUpdated();
+    } catch (e: any) {
+      showErrorNotification(isAr ? 'تعذّر رفع الاعتماد' : 'Batch unconfirm failed', e?.message || '');
+    } finally {
+      setBatchConfirming(false);
+    }
+  };
+
+  const handleClose = async () => {
+    const pendingChanges = rows.filter((r) => {
+      const clean = Number(String(r.salePrice).replace(/,/g, '')) || 0;
+      const orig = Number(r.originalPax.salePrice) || 0;
+      return (
+        clean !== orig ||
+        r.passengerName.trim() !== (r.originalPax.passengerName || '').trim() ||
+        r.passport.trim() !== (r.originalPax.passport || '').trim()
+      );
+    });
+    if (pendingChanges.length > 0) {
+      for (const r of pendingChanges) {
+        try {
+          const cleanPrice = Number(String(r.salePrice).replace(/,/g, '')) || 0;
+          const isCash = r.originalPax.payType !== 'CREDIT';
+          const hadFullPaid = Number(r.originalPax.collectedAmount || 0) >= Number(r.originalPax.salePrice || 0);
+          const newCollected = isCash && hadFullPaid ? cleanPrice : Number(r.originalPax.collectedAmount || 0);
+          await tourGroupsApi.updatePassenger(g.id, r.id, {
+            passengerName: r.passengerName.trim(),
+            passport: r.passport.trim(),
+            salePrice: cleanPrice,
+            collectedAmount: newCollected,
+            customerName: r.customerName,
+            customerId: r.customerId,
+            customerAccountId: r.customerAccountId,
+          });
+        } catch {
+          // ignore
+        }
+      }
+      await onUpdated();
+    }
+    onClose();
+  };
+
   const totalPassengers = rows.length;
   const confirmedCount = rows.filter((r) => r.state === 'CONFIRMED').length;
   const pendingCount = totalPassengers - confirmedCount;
@@ -4416,7 +4663,7 @@ const AuditPassengersModal: React.FC<{
   return (
     <Modal
       opened={opened}
-      onClose={onClose}
+      onClose={handleClose}
       size="1420px"
       centered
       radius="xl"
@@ -4670,6 +4917,20 @@ const AuditPassengersModal: React.FC<{
                 {batchConfirming ? <Loader size={12} color="white" /> : <CheckCheck size={14} />}
                 <span>{isAr ? 'اعتماد الكل' : 'Confirm All'}</span>
               </button>
+
+              {/* زر رفع اعتماد المعروضين بنقرة واحدة */}
+              {filteredRows.some((r) => r.state === 'CONFIRMED') && (
+                <button
+                  type="button"
+                  disabled={batchConfirming}
+                  onClick={handleBatchUnconfirm}
+                  className="h-8 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-black cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
+                  title={isAr ? 'رفع الاعتماد عن جميع الأسعار المعتمدة المعروضة' : 'Revoke confirmation for all visible'}
+                >
+                  {batchConfirming ? <Loader size={12} color="orange" /> : <RotateCcw size={13} />}
+                  <span>{isAr ? 'رفع اعتماد الكل' : 'Unconfirm All'}</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -4782,6 +5043,11 @@ const AuditPassengersModal: React.FC<{
                                   handleSaveRow(r);
                                 }
                               }}
+                              onBlur={() => {
+                                if (r.passengerName.trim() !== (r.originalPax.passengerName || '').trim()) {
+                                  handleSaveRow(r);
+                                }
+                              }}
                               className="w-full h-[32px] px-2 font-black text-xs text-slate-900 bg-transparent hover:bg-slate-50 focus:bg-white focus:border-[#F45A0A] border border-transparent focus:border rounded-lg outline-none transition-colors text-center"
                               placeholder={isAr ? 'اسم المسافر...' : 'Passenger name...'}
                             />
@@ -4798,6 +5064,11 @@ const AuditPassengersModal: React.FC<{
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 e.preventDefault();
+                                handleSaveRow(r);
+                              }
+                            }}
+                            onBlur={() => {
+                              if (r.passport.trim() !== (r.originalPax.passport || '').trim()) {
                                 handleSaveRow(r);
                               }
                             }}
@@ -4824,7 +5095,7 @@ const AuditPassengersModal: React.FC<{
                         </td>
                       )}
 
-                      {/* سعر البيع - موسط وحجم مطابق لارتفاع السطر */}
+                      {/* سعر البيع - موسط وحجم مطابق لارتفاع السطر مع حفظ تلقائي عند الخروج onBlur */}
                       {visibleColumns.salePrice && (
                         <td className={`${td} text-center`}>
                           <div className="inline-flex items-center gap-1.5 justify-center">
@@ -4843,6 +5114,13 @@ const AuditPassengersModal: React.FC<{
                                   handleSaveRow(r);
                                 }
                               }}
+                              onBlur={() => {
+                                const clean = Number(String(r.salePrice).replace(/,/g, '')) || 0;
+                                const original = Number(r.originalPax.salePrice) || 0;
+                                if (clean !== original) {
+                                  handleSaveRow(r);
+                                }
+                              }}
                               dir="ltr"
                               className="w-24 h-[32px] px-2 text-center font-mono font-black text-xs rounded-lg border border-slate-200 bg-white focus:bg-orange-50/20 focus:border-2 focus:border-[#F45A0A] outline-none shadow-2xs tabular-nums text-slate-900 transition-colors"
                               placeholder="0"
@@ -4854,16 +5132,32 @@ const AuditPassengersModal: React.FC<{
                         </td>
                       )}
 
-                      {/* حالة السعر - موسط */}
+                      {/* حالة السعر - موسط وقابل للنقر للتبديل السريع */}
                       {visibleColumns.status && (
                         <td className={`${td} text-center`}>
-                          <span
-                            className={`text-[10.5px] font-black px-2.5 py-1 rounded-md border inline-flex items-center justify-center gap-1 ${
+                          <button
+                            type="button"
+                            disabled={isCancelled}
+                            onClick={() => {
+                              if (isConfirmed) {
+                                handleUnconfirmRow(r);
+                              } else {
+                                handleConfirmRow(r);
+                              }
+                            }}
+                            title={
                               isCancelled
-                                ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                ? undefined
                                 : isConfirmed
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                                ? (isAr ? 'سعر معتمد — انقر لرفع الاعتماد' : 'Confirmed — Click to unconfirm')
+                                : (isAr ? 'سعر معلّق — انقر للاعتماد' : 'Pending — Click to confirm')
+                            }
+                            className={`text-[10.5px] font-black px-2.5 py-1 rounded-md border inline-flex items-center justify-center gap-1 transition-all ${
+                              isCancelled
+                                ? 'bg-slate-100 text-slate-600 border-slate-200 cursor-not-allowed'
+                                : isConfirmed
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:scale-105 cursor-pointer shadow-2xs'
+                                : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 hover:scale-105 cursor-pointer shadow-2xs'
                             }`}
                           >
                             {isConfirmed ? (
@@ -4879,7 +5173,7 @@ const AuditPassengersModal: React.FC<{
                                 <span>{isAr ? 'معلّق' : 'Pending'}</span>
                               </>
                             )}
-                          </span>
+                          </button>
                         </td>
                       )}
 
@@ -4892,21 +5186,34 @@ const AuditPassengersModal: React.FC<{
                         </td>
                       )}
 
-                      {/* الإجراءات: اعتماد، حفظ، وتعديل كامل - موسط */}
+                      {/* الإجراءات: اعتماد / رفع الاعتماد، حفظ، وتعديل كامل - موسط */}
                       {visibleColumns.actions && (
                         <td className={`${td} text-center`} onClick={(e) => e.stopPropagation()}>
                           <div className="inline-flex items-center justify-center gap-1.5">
-                            {/* زر اعتماد وتأكيد السعر */}
-                            <button
-                              type="button"
-                              disabled={r.isSaving || isConfirmed}
-                              onClick={() => handleConfirmRow(r)}
-                              title={isAr ? 'اعتماد وتأكيد السعر والانتقال للتالي' : 'Confirm price & advance'}
-                              className="h-7 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 text-emerald-800 text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
-                            >
-                              <CheckCheck size={12} className="text-emerald-700" />
-                              <span>{isAr ? 'اعتماد' : 'Confirm'}</span>
-                            </button>
+                            {/* زر اعتماد أو رفع الاعتماد عن السعر */}
+                            {isConfirmed ? (
+                              <button
+                                type="button"
+                                disabled={r.isSaving}
+                                onClick={() => handleUnconfirmRow(r)}
+                                title={isAr ? 'رفع الاعتماد وإعادة المسافر إلى قيد التدقيق' : 'Revoke confirmation'}
+                                className="h-7 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 disabled:opacity-50 text-amber-800 text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
+                              >
+                                {r.isSaving ? <Loader size={11} color="orange" /> : <RotateCcw size={11} />}
+                                <span>{isAr ? 'رفع الاعتماد' : 'Unconfirm'}</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={r.isSaving}
+                                onClick={() => handleConfirmRow(r)}
+                                title={isAr ? 'اعتماد وتأكيد السعر والانتقال للتالي' : 'Confirm price & advance'}
+                                className="h-7 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 text-emerald-800 text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
+                              >
+                                {r.isSaving ? <Loader size={11} color="teal" /> : <CheckCheck size={12} className="text-emerald-700" />}
+                                <span>{isAr ? 'اعتماد' : 'Confirm'}</span>
+                              </button>
+                            )}
 
                             {/* زر حفظ التعديلات */}
                             <button
@@ -4952,7 +5259,7 @@ const AuditPassengersModal: React.FC<{
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="h-8 px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
             >
               {isAr ? 'إغلاق النافذة' : 'Close'}
