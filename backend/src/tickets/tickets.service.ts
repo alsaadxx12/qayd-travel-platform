@@ -1003,7 +1003,7 @@ export class TicketsService {
     if (operationType === 'REFUNDS') {
       opFilter = Prisma.sql`AND (t."tripType" = 'REFUND' OR t.status = 'REFUNDED' OR t."invoiceNumber" LIKE 'REF-%')`;
     } else if (operationType === 'TICKETS') {
-      opFilter = Prisma.sql`AND NOT (t."tripType" = 'REFUND' OR t.status = 'REFUNDED' OR t."invoiceNumber" LIKE 'REF-%') AND COALESCE(t."tripType", '') NOT IN ('VISA', 'HOTEL', 'GROUP')`;
+      opFilter = Prisma.sql`AND NOT (t."tripType" = 'REFUND' OR t.status = 'REFUNDED' OR t."invoiceNumber" LIKE 'REF-%') AND COALESCE(t."tripType", '') NOT IN ('VISA', 'HOTEL', 'GROUP', 'BAGGAGE', 'REISSUE', 'CHANGE') AND t."invoiceNumber" NOT ILIKE '%-WGT-%' AND t."invoiceNumber" NOT ILIKE '%-HTL-%' AND t."invoiceNumber" NOT ILIKE '%-CHG-%' AND t."invoiceNumber" NOT ILIKE '%-REIS-%'`;
     } else if (operationType === 'VISAS') {
       opFilter = Prisma.sql`AND (t."tripType" = 'VISA' OR t."invoiceNumber" ILIKE 'VISA%')`;
     } else if (operationType === 'GROUPS') {
