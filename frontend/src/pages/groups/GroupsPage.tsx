@@ -9,8 +9,7 @@ import {
   Armchair,
   CheckCircle2,
   Clock,
-  Coins,
-  TrendingUp,
+
   Lock,
   Unlock,
   FolderOpen,
@@ -22,7 +21,7 @@ import {
   Filter,
   ArrowUpRight,
   Check,
-  Receipt,
+
   User,
 } from 'lucide-react';
 import { Loader, Modal, Tooltip } from '@mantine/core';
@@ -137,23 +136,6 @@ export const GroupsPage: React.FC = () => {
     return result;
   }, [rows, search, statusFilter, currencyFilter]);
 
-  const totals = useMemo(
-    () =>
-      rows.reduce(
-        (a, g) => ({
-          groups: a.groups + 1,
-          sold: a.sold + g.summary.sold,
-          seats: a.seats + g.summary.seats,
-          sales: a.sales + g.summary.sales,
-          collected: a.collected + (g.summary.collected || 0),
-          cost: a.cost + (g.summary.actualCost || 0),
-          outstanding: a.outstanding + g.summary.outstanding,
-          profit: a.profit + g.summary.actualProfit,
-        }),
-        { groups: 0, sold: 0, seats: 0, sales: 0, collected: 0, cost: 0, outstanding: 0, profit: 0 },
-      ),
-    [rows],
-  );
 
   const openCount = useMemo(() => rows.filter((g) => g.openSale).length, [rows]);
   const closedCount = useMemo(() => rows.filter((g) => !g.openSale).length, [rows]);
@@ -211,109 +193,6 @@ export const GroupsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* ── 2. بطاقات المؤشرات المالية والتشغيلية (KPIs) ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-          {/* بطاقة 1: الكروبات */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500">{isAr ? 'الكروبات' : 'Groups'}</span>
-              <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
-                <Users size={16} />
-              </div>
-            </div>
-            <div className="mt-2">
-              <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
-                {totals.groups}
-              </div>
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mt-1">
-                <span>{isAr ? 'المسافرون' : 'Pax'}</span>
-                <span className="font-mono text-[#F45A0A] font-black" dir="ltr">
-                  {totals.sold}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* بطاقة 2: المبيعات */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500">{isAr ? 'المبيعات' : 'Sales'}</span>
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-                <Coins size={16} />
-              </div>
-            </div>
-            <div className="mt-2">
-              <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
-                ${fmt(totals.sales)}
-              </div>
-              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mt-1">
-                <span>{isAr ? 'المحصّل' : 'Collected'}</span>
-                <span className="font-mono text-emerald-700 font-black" dir="ltr">
-                  ${fmt(totals.collected)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* بطاقة 3: التكلفة الفعلية */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500">{isAr ? 'التكلفة الفعلية' : 'Actual Cost'}</span>
-              <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
-                <Receipt size={16} />
-              </div>
-            </div>
-            <div className="mt-2">
-              <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
-                ${fmt(totals.cost)}
-              </div>
-              <div className="text-[11px] font-bold text-slate-500 mt-1">
-                {isAr ? 'إجمالي تكاليف الكروبات' : 'Total group costs'}
-              </div>
-            </div>
-          </div>
-
-          {/* بطاقة 4: الذمم غير المحصلة */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500">{isAr ? 'الذمم' : 'Outstanding'}</span>
-              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-                <Clock size={16} />
-              </div>
-            </div>
-            <div className="mt-2">
-              <div className="text-2xl font-black text-amber-700 font-mono tracking-tight" dir="ltr">
-                ${fmt(totals.outstanding)}
-              </div>
-              <div className="text-[11px] font-bold text-amber-700/80 mt-1">
-                {isAr ? 'قيد التحصيل' : 'Pending'}
-              </div>
-            </div>
-          </div>
-
-          {/* بطاقة 5: صافي الربح الفعلي */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between hover:border-orange-200 transition-all">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-500">{isAr ? 'صافي الربح' : 'Net Profit'}</span>
-              <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
-                <TrendingUp size={16} />
-              </div>
-            </div>
-            <div className="mt-2">
-              <div
-                className={`text-2xl font-black font-mono tracking-tight ${
-                  totals.profit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
-                }`}
-                dir="ltr"
-              >
-                ${fmt(totals.profit)}
-              </div>
-              <div className="text-[11px] font-bold text-slate-500 mt-1">
-                {isAr ? 'الربح الفعلي' : 'Actual profit'}
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* ── 3. شريط أدوات البحث والتصفية والعرض ── */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-3 flex items-center justify-between gap-3 flex-wrap">
