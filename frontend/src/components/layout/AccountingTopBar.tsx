@@ -5,6 +5,7 @@ import { GlobalSearch } from './topbar/GlobalSearch';
 import { NotificationCenter } from './topbar/NotificationCenter';
 import { UserMenu } from './topbar/UserMenu';
 import { PerformanceInspector } from './topbar/PerformanceInspector';
+import { EmployeeWalletWidget } from './topbar/EmployeeWalletWidget';
 import { FinancialVoucherForm } from '../vouchers/FinancialVoucherForm';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useLanguageStore } from '../../store/useLanguageStore';
@@ -111,6 +112,9 @@ export const AccountingTopBar: React.FC<AccountingTopBarProps> = () => {
             />
           </button>
         </Tooltip>
+
+        {/* محفظة أرباح الموظف الحالي */}
+        <EmployeeWalletWidget />
 
         {/* Network profiler — badge shows how many calls crossed the slow threshold */}
         <PerformanceInspector />

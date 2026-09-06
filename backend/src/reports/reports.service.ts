@@ -1355,4 +1355,19 @@ export class ReportsService {
 
     return { rows, totals, defaultEmployeeMargin };
   }
+
+  /**
+   * حصّة الموظف الحالي من الأرباح — لمحفظة الشريط العلوي. تعيد ربحَه الإجمالي
+   * وحصّته وهامشَه ضمن المدة (أو تراكمياً بلا مدة)، مطابقةً باسم موظّف الإصدار.
+   */
+  async getMyProfitShare(companyId: string, userName?: string, startDate?: string, endDate?: string) {
+    const name = String(userName || '').trim();
+    if (!name) return { profit: 0, share: 0, margin: 0, docCount: 0 };
+    const all = await this.getEmployeeProfits(companyId, undefined, startDate, endDate);
+    const norm = (s: string) => String(s || '').trim();
+    const row = all.rows.find((r) => norm(r.employeeName) === name);
+    return row
+      ? { profit: row.totalProfit, share: row.employeeShare, margin: row.employeeMargin, docCount: row.docCount }
+      : { profit: 0, share: 0, margin: all.defaultEmployeeMargin, docCount: 0 };
+  }
 }

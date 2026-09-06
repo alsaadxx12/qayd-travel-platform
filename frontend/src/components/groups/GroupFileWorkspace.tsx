@@ -35,6 +35,7 @@ import {
   FolderPlus,
   UserPlus,
   ArrowRight,
+  ArrowLeft,
   MoreVertical,
   Edit2,
   History,
@@ -107,7 +108,7 @@ const Field: React.FC<{
   </div>
 );
 
-/* ── الملخّص المالي والتشغيلي: 4 بطاقات بدون مقاعد ── */
+/* ── الملخّص المالي والتشغيلي: 5 بطاقات موحدة ومتوازنة بصرياً ── */
 const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) => {
   const s = g.summary;
   const C = g.currency;
@@ -115,22 +116,22 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
       {/* 1. إجمالي المسافرين */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
+      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-orange-200 shadow-2xs p-4 flex flex-col justify-between transition-all">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-500">{isAr ? 'المسافرون' : 'Passengers'}</span>
           <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
             <Users size={16} />
           </div>
         </div>
-        <div className="mt-2">
-          <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+        <div className="mt-2.5">
+          <div className="text-[26px] font-black text-slate-900 font-mono tracking-tight" dir="ltr">
             {g.passengers.length}
           </div>
-          <div className="flex items-center justify-between text-[11px] font-bold mt-1">
-            <span className="text-emerald-700 font-mono">
+          <div className="flex items-center justify-between text-[11px] font-bold mt-1.5 pt-1.5 border-t border-slate-100">
+            <span className="text-emerald-700 font-mono bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
               {s.complete} {isAr ? 'مكتمل' : 'Complete'}
             </span>
-            <span className="text-amber-700 font-mono">
+            <span className="text-amber-700 font-mono bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
               {s.notComplete} {isAr ? 'معلّق' : 'Pending'}
             </span>
           </div>
@@ -138,86 +139,95 @@ const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) =>
       </div>
 
       {/* 2. المبيعات والتحصيل */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
+      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-emerald-200 shadow-2xs p-4 flex flex-col justify-between transition-all">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-500">{isAr ? 'المبيعات والتحصيل' : 'Sales'}</span>
           <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
             <Coins size={16} />
           </div>
         </div>
-        <div className="mt-2">
-          <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+        <div className="mt-2.5">
+          <div className="text-[26px] font-black text-slate-900 font-mono tracking-tight" dir="ltr">
             {money(s.sales, C)}
           </div>
-          <div className="flex items-center justify-between text-[11px] font-bold mt-1">
-            <span className="text-emerald-700 font-mono" dir="ltr">
-              {isAr ? 'محصل:' : 'Paid:'} {money(s.collected, C)}
+          <div className="flex items-center justify-between text-[11px] font-bold mt-1.5 pt-1.5 border-t border-slate-100">
+            <span className="text-slate-400 font-sans text-[10.5px]">{isAr ? 'المحصّل الفعلي:' : 'Paid:'}</span>
+            <span className="text-emerald-700 font-mono font-black bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60" dir="ltr">
+              {money(s.collected, C)}
             </span>
           </div>
         </div>
       </div>
 
-      {/* 3. التكلفة الفعلية والمقدرة للكروب */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
+      {/* 3. التكلفة الإجمالية */}
+      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-slate-300 shadow-2xs p-4 flex flex-col justify-between transition-all">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-500">{isAr ? 'التكلفة الإجمالية' : 'Total Cost'}</span>
           <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
             <Receipt size={16} />
           </div>
         </div>
-        <div className="mt-2">
-          <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+        <div className="mt-2.5">
+          <div className="text-[26px] font-black text-slate-900 font-mono tracking-tight" dir="ltr">
             {money(s.actualCost > 0 || (s.buy + s.globalBuy + s.expenses > 0) ? s.actualCost : s.plannedCost, C)}
           </div>
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mt-1 font-mono" dir="ltr">
-            <span>{isAr ? 'شراء:' : 'Buy:'} {money(s.buy + s.globalBuy > 0 ? s.buy + s.globalBuy : Math.max(0, s.plannedCost - s.expenses), C)}</span>
-            <span>{isAr ? 'مصاريف:' : 'Exp:'} {money(s.expenses, C)}</span>
+          <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-500 mt-1.5 pt-1.5 border-t border-slate-100 font-mono" dir="ltr">
+            <span className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+              {isAr ? 'شراء: ' : 'Buy: '}{money(s.buy + s.globalBuy > 0 ? s.buy + s.globalBuy : Math.max(0, s.plannedCost - s.expenses), C)}
+            </span>
+            <span className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+              {isAr ? 'مصاريف: ' : 'Exp: '}{money(s.expenses, C)}
+            </span>
           </div>
         </div>
       </div>
 
       {/* 4. الذمم المتبقية */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
+      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-amber-200 shadow-2xs p-4 flex flex-col justify-between transition-all">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-slate-500">{isAr ? 'الذمم المتبقية' : 'Outstanding'}</span>
           <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
             <Banknote size={16} />
           </div>
         </div>
-        <div className="mt-2">
-          <div className={`text-2xl font-black font-mono tracking-tight ${s.outstanding > 0 ? 'text-amber-700' : 'text-slate-400'}`} dir="ltr">
+        <div className="mt-2.5">
+          <div className={`text-[26px] font-black font-mono tracking-tight ${s.outstanding > 0 ? 'text-amber-700' : 'text-slate-400'}`} dir="ltr">
             {money(s.outstanding, C)}
           </div>
-          <div className="text-[11px] font-bold text-slate-400 mt-1">
-            {s.outstanding > 0 ? (isAr ? 'مستحق على العملاء' : 'Pending payment') : (isAr ? 'لا توجد ذمم' : 'No dues')}
+          <div className="flex items-center justify-between text-[11px] font-bold mt-1.5 pt-1.5 border-t border-slate-100">
+            <span className={`px-2 py-0.5 rounded text-[10.5px] ${s.outstanding > 0 ? 'bg-amber-50 text-amber-800 border border-amber-200/70 font-bold' : 'text-slate-400 font-medium'}`}>
+              {s.outstanding > 0 ? (isAr ? 'مستحق على العملاء' : 'Pending payment') : (isAr ? 'لا توجد ذمم' : 'No dues')}
+            </span>
           </div>
         </div>
       </div>
 
       {/* 5. صافي الأرباح */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col justify-between">
+      <div className="bg-gradient-to-b from-orange-50/30 via-white to-white rounded-xl border border-orange-200/90 shadow-2xs p-4 flex flex-col justify-between transition-all">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500">{isAr ? 'صافي الربح' : 'Net Profit'}</span>
-          <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
+          <span className="text-xs font-black text-[#F45A0A]">{isAr ? 'صافي الربح' : 'Net Profit'}</span>
+          <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-200">
             <TrendingUp size={16} />
           </div>
         </div>
-        <div className="mt-2">
+        <div className="mt-2.5">
           {(() => {
             const hasActual = s.actualCost > 0 || (s.buy + s.globalBuy + s.expenses > 0);
             const profitVal = hasActual ? s.actualProfit : s.plannedProfit;
             return (
               <>
                 <div
-                  className={`text-2xl font-black font-mono tracking-tight ${
+                  className={`text-[26px] font-black font-mono tracking-tight ${
                     profitVal >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
                   }`}
                   dir="ltr"
                 >
                   {money(profitVal, C)}
                 </div>
-                <div className="text-[11px] font-bold text-slate-500 mt-1">
-                  {isAr ? (hasActual ? 'الربح الفعلي' : 'الربح المحسوب') : (hasActual ? 'Actual profit' : 'Calculated profit')}
+                <div className="flex items-center justify-between text-[11px] font-bold mt-1.5 pt-1.5 border-t border-orange-100">
+                  <span className="text-[10.5px] font-bold text-orange-800 bg-orange-100/70 px-2 py-0.5 rounded border border-orange-200/60 font-mono">
+                    {isAr ? (hasActual ? 'الربح الفعلي' : 'الربح المحسوب') : (hasActual ? 'Actual profit' : 'Calculated profit')}
+                  </span>
                 </div>
               </>
             );
@@ -534,23 +544,6 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                   <Calendar size={12} className="text-slate-400" />
                   <span>{g?.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : (isAr ? 'بلا تاريخ سفر' : 'no date')}</span>
                 </span>
-                <span>•</span>
-                <span className="inline-flex items-center gap-1.5 bg-slate-50 px-2.5 py-0.5 rounded-md border border-slate-200 text-[11px]">
-                  <User size={11} className="text-slate-400" />
-                  <span className="text-slate-500 font-sans">{isAr ? 'مدخل البيانات:' : 'Entry:'}</span>
-                  <span className="text-slate-800 font-bold">{g?.createdByName || currentUserName}</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5 bg-orange-50/80 px-2.5 py-0.5 rounded-md border border-orange-200 text-[#F45A0A] text-[11px]">
-                  <UserCheck size={11} className="text-[#F45A0A]" />
-                  <span className="text-orange-600 font-sans">{isAr ? 'موظف الإصدار:' : 'Issuer:'}</span>
-                  <span className="font-bold">
-                    {(g as any)?.agent ||
-                      (g?.notes?.startsWith('AGENT:') ? g.notes.replace('AGENT:', '').trim() : '') ||
-                      g?.passengers?.find((p) => p.agent)?.agent ||
-                      g?.createdByName ||
-                      currentUserName}
-                  </span>
-                </span>
               </p>
             </div>
           </div>
@@ -617,9 +610,11 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
             <button
               type="button"
               onClick={onClose}
-              className="h-[38px] w-[38px] rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800 flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+              title={isAr ? 'رجوع' : 'Back'}
+              className="h-[38px] px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs text-xs font-black"
             >
-              <X size={18} />
+              {direction === 'rtl' ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
+              <span>{isAr ? 'رجوع' : 'Back'}</span>
             </button>
           </div>
         </div>
@@ -925,9 +920,9 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                           className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs transition-all hover:border-orange-200"
                         >
                           {/* شريط ترويسة ملف المستفيد */}
-                          <div className="p-3 sm:p-3.5 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+                          <div className="p-3 sm:p-3.5 bg-gradient-to-r from-slate-50 via-white to-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200/60 text-[#F45A0A] flex items-center justify-center shrink-0">
+                              <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200/80 text-[#F45A0A] flex items-center justify-center shrink-0 shadow-2xs">
                                 <Folder size={16} />
                               </div>
                               <div className="min-w-0">
@@ -935,7 +930,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                                   <span className="font-black text-xs sm:text-sm text-slate-900 truncate">
                                     {bg.name}
                                   </span>
-                                  <span className="text-[11px] font-black font-mono px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-700 shrink-0">
+                                  <span className="text-[11px] font-black font-mono px-2 py-0.5 rounded-full bg-orange-50 text-[#F45A0A] border border-orange-200/70 shrink-0">
                                     {bg.passengers.length} {isAr ? 'مسافر' : 'pax'}
                                   </span>
                                 </div>
@@ -957,7 +952,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                                 <span className="text-slate-400 font-sans text-[11px] font-bold">
                                   {isAr ? 'التكلفة علينا:' : 'Our Cost:'}
                                 </span>
-                                <span className="text-slate-800 font-black">
+                                <span className="text-slate-700 font-black">
                                   {money(bg.totalCost, g.currency)}
                                 </span>
                               </div>
@@ -976,7 +971,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                               <div
                                 className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border font-mono tabular-nums shadow-2xs ${
                                   bg.totalProfit >= 0
-                                    ? 'bg-orange-50 text-[#F45A0A] border-orange-200/80'
+                                    ? 'bg-orange-50 text-[#F45A0A] border-orange-200'
                                     : 'bg-rose-50 text-rose-700 border-rose-200'
                                 }`}
                               >
@@ -1519,26 +1514,26 @@ const PassengerTable: React.FC<{
   onEditPax: (p: GroupPassenger) => void;
 }> = ({ g, passengers, isAr, run, onEditPax }) => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const th = 'px-3 py-2.5 text-[11px] font-black text-slate-600 whitespace-nowrap select-none';
-  const td = 'px-3 py-2 text-[12px] whitespace-nowrap';
+  const th = 'px-3 py-3 text-[11.5px] font-black text-slate-700 whitespace-nowrap select-none text-center bg-slate-100/90 tracking-wide';
+  const td = 'px-3 py-2.5 text-[12px] whitespace-nowrap text-center align-middle';
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
-      <table className="w-full border-collapse text-start">
+      <table className="w-full border-collapse">
         <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200 text-start">
-            <th className={`${th} w-10 text-center`}>#</th>
-            <th className={`${th} text-start`}>{isAr ? 'المسافر' : 'Passenger'}</th>
-            <th className={`${th} text-start`}>{isAr ? 'الخدمة / البكج' : 'Package / Service'}</th>
-            <th className={`${th} text-start`}>{isAr ? 'المورد' : 'Supplier'}</th>
-            <th className={`${th} text-center`}>{isAr ? 'الحالة' : 'Status'}</th>
-            <th className={`${th} text-end`}>{isAr ? 'سعر الشراء' : 'Buy Cost'}</th>
-            <th className={`${th} text-end`}>{isAr ? 'سعر البيع' : 'Sale Price'}</th>
-            <th className={`${th} text-end`}>{isAr ? 'المحصّل' : 'Collected'}</th>
-            <th className={`${th} text-end`}>{isAr ? 'المتبقي' : 'Due'}</th>
-            <th className={`${th} text-end`}>{isAr ? 'الربح' : 'Profit'}</th>
-            <th className={`${th} text-start`}>{isAr ? 'موظف الإصدار' : 'Issuer'}</th>
-            <th className={`${th} text-center w-24`}>{isAr ? 'إجراءات' : 'Actions'}</th>
+          <tr className="border-b-2 border-slate-200">
+            <th className={`${th} w-10`}>#</th>
+            <th className={th}>{isAr ? 'المسافر' : 'Passenger'}</th>
+            <th className={th}>{isAr ? 'الخدمة / البكج' : 'Package / Service'}</th>
+            <th className={th}>{isAr ? 'المورد' : 'Supplier'}</th>
+            <th className={th}>{isAr ? 'الحالة' : 'Status'}</th>
+            <th className={th}>{isAr ? 'سعر الشراء' : 'Buy Cost'}</th>
+            <th className={th}>{isAr ? 'سعر البيع' : 'Sale Price'}</th>
+            <th className={th}>{isAr ? 'المحصّل' : 'Collected'}</th>
+            <th className={th}>{isAr ? 'المتبقي' : 'Due'}</th>
+            <th className={th}>{isAr ? 'الربح' : 'Profit'}</th>
+            <th className={th}>{isAr ? 'موظف الإصدار' : 'Issuer'}</th>
+            <th className={`${th} w-24`}>{isAr ? 'إجراءات' : 'Actions'}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -1598,15 +1593,15 @@ const PassengerTable: React.FC<{
                 }}
                 onDoubleClick={() => onEditPax(p)}
                 title={isAr ? 'انقر بالزر الأيمن أو مرتين لتعديل بيانات المسافر' : 'Right-click or double-click to edit passenger'}
-                className={`transition-colors hover:bg-orange-50/50 cursor-pointer select-none group ${
+                className={`transition-colors hover:bg-orange-50/40 cursor-pointer select-none group ${
                   cancelled ? 'opacity-50 bg-slate-50/60' : ''
                 }`}
               >
-                <td className={`${td} text-center font-mono text-[11px] font-bold text-slate-400`}>
+                <td className={`${td} font-mono text-[11px] font-bold text-slate-400`}>
                   {idx + 1}
                 </td>
-                <td className={`${td} text-start`}>
-                  <div className="flex items-center gap-2 min-w-0">
+                <td className={td}>
+                  <div className="flex items-center justify-center gap-2 min-w-0">
                     {cancelled ? (
                       <Ban size={14} className="text-slate-400 shrink-0" />
                     ) : done ? (
@@ -1614,7 +1609,7 @@ const PassengerTable: React.FC<{
                     ) : (
                       <Clock size={14} className="text-amber-500 shrink-0" />
                     )}
-                    <div className="min-w-0">
+                    <div className="text-center min-w-0">
                       <span className="font-black text-slate-900 truncate block group-hover:text-[#F45A0A] transition-colors">
                         {p.passengerName}
                       </span>
@@ -1626,17 +1621,17 @@ const PassengerTable: React.FC<{
                     </div>
                   </div>
                 </td>
-                <td className={`${td} text-start`}>
-                  <span className="font-bold text-slate-800 text-[11.5px] truncate block max-w-[160px]" title={serviceName}>
+                <td className={td}>
+                  <span className="font-bold text-slate-800 text-[11.5px] truncate block max-w-[170px] mx-auto" title={serviceName}>
                     {serviceName}
                   </span>
                 </td>
-                <td className={`${td} text-start`}>
-                  <span className="font-bold text-slate-600 text-[11px] truncate block max-w-[130px]" title={supplierName || '—'}>
+                <td className={td}>
+                  <span className="font-bold text-slate-600 text-[11px] truncate block max-w-[130px] mx-auto" title={supplierName || '—'}>
                     {supplierName || '—'}
                   </span>
                 </td>
-                <td className={`${td} text-center`}>
+                <td className={td}>
                   <span
                     className={`text-[10px] font-black rounded-md px-2 py-0.5 border inline-block ${
                       cancelled
@@ -1649,37 +1644,47 @@ const PassengerTable: React.FC<{
                     {cancelled ? (isAr ? 'ملغى' : 'Cancelled') : done ? (isAr ? 'مكتمل' : 'Complete') : (isAr ? 'معلّق' : 'Pending')}
                   </span>
                 </td>
-                <td className={`${td} text-end font-mono font-bold text-slate-700 tabular-nums`} dir="ltr">
+                <td className={`${td} font-mono font-bold text-slate-700 tabular-nums`} dir="ltr">
                   {cost > 0 ? money(cost, p.currency || g.currency) : '—'}
                 </td>
-                <td className={`${td} text-end font-mono font-black text-slate-900 tabular-nums`} dir="ltr">
+                <td className={`${td} font-mono font-black text-slate-900 tabular-nums`} dir="ltr">
                   {money(sale, p.currency || g.currency)}
                 </td>
-                <td className={`${td} text-end font-mono font-black text-emerald-700 tabular-nums`} dir="ltr">
-                  {money(paid, p.currency || g.currency)}
+                <td className={`${td} font-mono font-black tabular-nums`} dir="ltr">
+                  <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/70 inline-block">
+                    {money(paid, p.currency || g.currency)}
+                  </span>
                 </td>
-                <td className={`${td} text-end font-mono font-black tabular-nums ${due > 0 ? 'text-rose-600' : 'text-slate-400'}`} dir="ltr">
-                  {due > 0 ? money(due, p.currency || g.currency) : '—'}
+                <td className={`${td} font-mono font-black tabular-nums`} dir="ltr">
+                  {due > 0 ? (
+                    <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 inline-block">
+                      {money(due, p.currency || g.currency)}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 font-bold">—</span>
+                  )}
                 </td>
-                <td className={`${td} text-end font-mono font-black tabular-nums ${profit >= 0 ? 'text-slate-900' : 'text-rose-600'}`} dir="ltr">
-                  {money(profit, p.currency || g.currency)}
+                <td className={`${td} font-mono font-black tabular-nums`} dir="ltr">
+                  <span className={`px-2 py-0.5 rounded border inline-block ${profit >= 0 ? 'text-[#F45A0A] bg-orange-50 border-orange-200/80' : 'text-rose-700 bg-rose-50 border-rose-200'}`}>
+                    {money(profit, p.currency || g.currency)}
+                  </span>
                 </td>
-                <td className={`${td} text-start`}>
+                <td className={td}>
                   {p.agent || g.createdByName ? (
-                    <span className="text-[10.5px] font-bold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200/80 inline-block truncate max-w-[120px]" title={p.agent || g.createdByName}>
+                    <span className="text-[11px] font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200 inline-block truncate max-w-[130px]" title={p.agent || g.createdByName}>
                       {p.agent || g.createdByName}
                     </span>
                   ) : (
                     <span className="text-slate-400 text-[11px]">—</span>
                   )}
                 </td>
-                <td className={`${td} text-center`} onClick={(e) => e.stopPropagation()}>
-                  <div className="inline-flex items-center gap-1">
+                <td className={td} onClick={(e) => e.stopPropagation()}>
+                  <div className="inline-flex items-center justify-center gap-1">
                     <button
                       type="button"
                       onClick={() => onEditPax(p)}
                       title={isAr ? 'تعديل بيانات المسافر (أو كليك يمين)' : 'Edit passenger (or right-click)'}
-                      className="w-7 h-7 rounded-lg text-[#F45A0A] hover:bg-orange-50 border border-transparent hover:border-orange-200 inline-flex items-center justify-center cursor-pointer transition-colors"
+                      className="w-7 h-7 rounded-lg text-[#F45A0A] hover:bg-orange-100/70 border border-orange-200/60 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
                     >
                       <Edit2 size={13} />
                     </button>
@@ -1688,7 +1693,7 @@ const PassengerTable: React.FC<{
                         type="button"
                         onClick={() => run(() => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'CANCELLED' }), isAr ? 'أُلغي الحجز' : 'Cancelled')}
                         title={isAr ? 'إلغاء الحجز' : 'Cancel'}
-                        className="w-7 h-7 rounded-lg text-amber-500 hover:bg-amber-50 border border-transparent hover:border-amber-200 inline-flex items-center justify-center cursor-pointer transition-colors"
+                        className="w-7 h-7 rounded-lg text-amber-600 hover:bg-amber-100/70 border border-amber-200/60 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
                       >
                         <Ban size={13} />
                       </button>
@@ -1697,7 +1702,7 @@ const PassengerTable: React.FC<{
                         type="button"
                         onClick={() => run(() => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'RESERVED' }), isAr ? 'تم تفعيل الحجز' : 'Restored')}
                         title={isAr ? 'استعادة الحجز' : 'Restore'}
-                        className="w-7 h-7 rounded-lg text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-200 inline-flex items-center justify-center cursor-pointer transition-colors"
+                        className="w-7 h-7 rounded-lg text-emerald-600 hover:bg-emerald-100/70 border border-emerald-200/60 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
                       >
                         <CheckCircle2 size={13} />
                       </button>
@@ -1706,7 +1711,7 @@ const PassengerTable: React.FC<{
                       type="button"
                       onClick={() => setConfirmDeleteId(p.id)}
                       title={isAr ? 'حذف نهائي' : 'Delete'}
-                      className="w-7 h-7 rounded-lg text-rose-500 hover:bg-rose-50 border border-transparent hover:border-rose-200 inline-flex items-center justify-center cursor-pointer transition-colors"
+                      className="w-7 h-7 rounded-lg text-rose-600 hover:bg-rose-100/70 border border-rose-200/60 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
                     >
                       <Trash2 size={13} />
                     </button>
@@ -4491,12 +4496,12 @@ const AuditPassengersModal: React.FC<{
             <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-200">
               <tr className="text-start">
                 <th className={`${th} w-10 text-center`}>#</th>
-                <th className={`${th} text-start`}>{isAr ? 'اسم المسافر' : 'Passenger Name'}</th>
+                <th className={`${th} text-center`}>{isAr ? 'اسم المسافر' : 'Passenger Name'}</th>
                 {visibleColumns.passport && (
-                  <th className={`${th} text-start w-36`}>{isAr ? 'رقم الجواز' : 'Passport'}</th>
+                  <th className={`${th} text-center w-36`}>{isAr ? 'رقم الجواز' : 'Passport'}</th>
                 )}
                 {visibleColumns.beneficiary && (
-                  <th className={`${th} text-start w-64`}>{isAr ? 'المستفيد التابع له (ملف الحساب)' : 'Assigned Beneficiary'}</th>
+                  <th className={`${th} text-center w-64`}>{isAr ? 'المستفيد التابع له (ملف الحساب)' : 'Assigned Beneficiary'}</th>
                 )}
                 {visibleColumns.salePrice && (
                   <th className={`${th} text-center w-40`}>{isAr ? 'سعر البيع' : 'Sale Price'}</th>
@@ -4505,7 +4510,7 @@ const AuditPassengersModal: React.FC<{
                   <th className={`${th} text-center w-28`}>{isAr ? 'حالة السعر' : 'Price Status'}</th>
                 )}
                 {visibleColumns.agent && (
-                  <th className={`${th} text-start w-32`}>{isAr ? 'موظف الإصدار' : 'Issuer'}</th>
+                  <th className={`${th} text-center w-32`}>{isAr ? 'موظف الإصدار' : 'Issuer'}</th>
                 )}
                 {visibleColumns.actions && (
                   <th className={`${th} text-center w-48`}>{isAr ? 'إجراءات التدقيق' : 'Audit Actions'}</th>

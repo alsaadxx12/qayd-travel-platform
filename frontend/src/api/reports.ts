@@ -223,3 +223,18 @@ export function getEmployeeProfits(params?: { startDate?: string; endDate?: stri
   const suffix = q.toString() ? `?${q.toString()}` : '';
   return apiRequest<EmployeeProfitsResponse>(`/api/reports/employee-profits${suffix}`, { noCache: true, timeoutMs: 20000 });
 }
+
+export interface MyProfitShare {
+  profit: number;
+  share: number;
+  margin: number;
+  docCount: number;
+}
+
+export function getMyProfitShare(params?: { startDate?: string; endDate?: string }) {
+  const q = new URLSearchParams();
+  if (params?.startDate) q.set('startDate', params.startDate);
+  if (params?.endDate) q.set('endDate', params.endDate);
+  const suffix = q.toString() ? `?${q.toString()}` : '';
+  return apiRequest<MyProfitShare>(`/api/reports/my-profit-share${suffix}`, { ttl: 60_000 });
+}

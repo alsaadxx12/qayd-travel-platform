@@ -75,4 +75,14 @@ export class ReportsController {
   ) {
     return this.reportsService.getEmployeeProfits(req.user.companyId, branchId, startDate, endDate);
   }
+
+  @Get('my-profit-share')
+  @ApiOperation({ summary: 'حصّة الموظف الحالي من الأرباح — لمحفظة الشريط العلوي' })
+  async getMyProfitShare(
+    @Req() req: any,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getMyProfitShare(req.user.companyId, req.user?.name, startDate, endDate);
+  }
 }

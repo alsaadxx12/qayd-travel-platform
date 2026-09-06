@@ -17,6 +17,8 @@ const money = (n: number) => `${fmt(n)} $`;
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const yearStartISO = () => `${new Date().getFullYear()}-01-01`;
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+const MONTHS_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 export const EmployeeProfitsPage: React.FC = () => {
   const { language, direction } = useLanguageStore();
@@ -28,6 +30,31 @@ export const EmployeeProfitsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState(yearStartISO());
   const [endDate, setEndDate] = useState(todayISO());
+  const now = new Date();
+  const [monthPick, setMonthPick] = useState<number | 'ALL'>('ALL');
+
+  // اختيار شهرٍ من السنة الحالية يضبط المدى على أول الشهر إلى آخره.
+  const pickMonth = (m: number | 'ALL') => {
+    setMonthPick(m);
+    if (m === 'ALL') {
+      setStartDate(yearStartISO());
+      setEndDate(todayISO());
+      return;
+    }
+    const y = now.getFullYear();
+    setStartDate(iso(new Date(y, m, 1)));
+    setEndDate(iso(new Date(y, m + 1, 0)));
+  };
+
+  const setPeriod = (kind: 'thisMonth' | 'lastMonth' | 'thisYear') => {
+    const y = now.getFullYear();
+    if (kind === 'thisMonth') pickMonth(now.getMonth());
+    else if (kind === 'lastMonth') {
+      const m = now.getMonth() - 1;
+      if (m < 0) { setMonthPick('ALL'); setStartDate(iso(new Date(y - 1, 11, 1))); setEndDate(iso(new Date(y - 1, 11, 31))); }
+      else pickMonth(m);
+    } else { pickMonth('ALL'); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,9 +109,9 @@ export const EmployeeProfitsPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2 h-[38px] shadow-2xs">
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-full bg-transparent text-[12px] font-bold text-slate-800 outline-none font-mono" dir="ltr" />
+              <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setMonthPick("ALL"); }} className="h-full bg-transparent text-[12px] font-bold text-slate-800 outline-none font-mono" dir="ltr" />
               <span className="text-slate-300">→</span>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="h-full bg-transparent text-[12px] font-bold text-slate-800 outline-none font-mono" dir="ltr" />
+              <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setMonthPick("ALL"); }} className="h-full bg-transparent text-[12px] font-bold text-slate-800 outline-none font-mono" dir="ltr" />
             </div>
             <button
               type="button"
@@ -115,6 +142,40 @@ export const EmployeeProfitsPage: React.FC = () => {
               </div>
             );
           })}
+        </div>
+
+        {/* ── فلترة الأشهر والفترات ── */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-2.5 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-black text-slate-500 px-1">{isAr ? 'الفترة:' : 'Period:'}</span>
+          {[
+            { k: 'thisMonth' as const, l: isAr ? 'هذا الشهر' : 'This month' },
+            { k: 'lastMonth' as const, l: isAr ? 'الشهر الماضي' : 'Last month' },
+            { k: 'thisYear' as const, l: isAr ? 'كل السنة' : 'This year' },
+          ].map((b) => (
+            <button
+              key={b.k}
+              type="button"
+              onClick={() => setPeriod(b.k)}
+              className="h-8 px-3 rounded-lg border border-slate-200 bg-white text-[11.5px] font-black text-slate-600 hover:bg-orange-50 hover:text-[#F45A0A] hover:border-orange-200 cursor-pointer transition-colors"
+            >
+              {b.l}
+            </button>
+          ))}
+          <span className="w-px h-6 bg-slate-200 mx-1" />
+          <div className="flex items-center gap-1 flex-wrap">
+            {MONTHS_AR.map((mn, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => pickMonth(i)}
+                className={`h-7 px-2 rounded-md text-[10.5px] font-black cursor-pointer transition-colors border ${
+                  monthPick === i ? 'bg-[#F45A0A] text-white border-[#F45A0A]' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {isAr ? mn : mn.slice(0, 3)}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ── البحث ── */}
