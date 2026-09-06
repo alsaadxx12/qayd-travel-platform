@@ -709,10 +709,14 @@ export class TicketsService {
       LEFT JOIN suppliers s ON s.id = t.supplier_id
       LEFT JOIN airlines a ON a.id = t.airline_id
       WHERE t."companyId" = ${companyId}
-        AND COALESCE(t."tripType", '') NOT IN ('VISA', 'REFUND')
+        AND COALESCE(t."tripType", '') NOT IN ('VISA', 'REFUND', 'BAGGAGE', 'HOTEL', 'REISSUE', 'CHANGE')
         AND t.status IS DISTINCT FROM 'REFUNDED'
         AND t."invoiceNumber" NOT LIKE 'REF-%'
         AND t."invoiceNumber" NOT ILIKE 'VISA%'
+        AND t."invoiceNumber" NOT ILIKE '%-WGT-%'
+        AND t."invoiceNumber" NOT ILIKE '%-HTL-%'
+        AND t."invoiceNumber" NOT ILIKE '%-CHG-%'
+        AND t."invoiceNumber" NOT ILIKE '%-REIS-%'
         ${branchFilter}
         ${dateFilter}
       ORDER BY t."createdAt" DESC
