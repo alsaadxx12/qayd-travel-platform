@@ -1001,163 +1001,54 @@ export const TicketsPage: React.FC = () => {
       dir={direction}
       style={{ fontFamily: language === 'ar' ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'IBM Plex Sans', system-ui, sans-serif" }}
     >
-      {/* ── 1. KPI CARDS + LOTTIE ANIMATION (Responsive compact flex/grid) ── */}
-      <div className="flex flex-col xl:flex-row gap-2 sm:gap-2.5 items-stretch">
-        {/* KPI Cards */}
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-2.5">
-          {/* Card 1: Total Sales */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[12px] px-3.5 py-2 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between mb-0.5">
-              <span className="text-[11.5px] font-bold text-slate-800">{t('tickets.totalSales')}</span>
-              <div className="w-[26px] h-[26px] rounded-[7px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-                <Banknote size={14} strokeWidth={1.85} />
-              </div>
-            </div>
-            <div>
-              {ticketsLoading ? (
-                <div className="grid grid-cols-2 gap-2 animate-pulse">
-                  <div className="space-y-1">
-                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-3.5 w-16 bg-slate-200/70 rounded" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-3.5 w-20 bg-slate-200/70 rounded" />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 items-baseline">
-                  <div className="flex items-baseline gap-1" dir="ltr">
-                    <span className="text-[14px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight">
-                      ${kpis.totalSellUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-1" dir="ltr">
-                    <span className="text-[13px] sm:text-[14px] font-black font-mono text-[#111827] tabular-nums leading-tight">
-                      {kpis.totalSellIQD.toLocaleString()}
-                    </span>
-                    <span className="text-[9.5px] font-mono font-bold text-slate-400">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* Card 2: Total Buy Cost */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[12px] px-3.5 py-2 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between mb-0.5">
-              <span className="text-[11.5px] font-bold text-slate-800">{t('tickets.totalCost')}</span>
-              <div className="w-[26px] h-[26px] rounded-[7px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-                <ReceiptText size={14} strokeWidth={1.85} />
-              </div>
-            </div>
-            <div>
-              {ticketsLoading ? (
-                <div className="grid grid-cols-2 gap-2 animate-pulse">
-                  <div className="space-y-1">
-                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-3.5 w-16 bg-slate-200/70 rounded" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-3.5 w-20 bg-slate-200/70 rounded" />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 items-baseline">
-                  <div className="flex items-baseline gap-1" dir="ltr">
-                    <span className="text-[14px] sm:text-[15px] font-black font-mono text-[#111827] tabular-nums leading-tight">
-                      ${kpis.totalBuyUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-1" dir="ltr">
-                    <span className="text-[13px] sm:text-[14px] font-black font-mono text-[#111827] tabular-nums leading-tight">
-                      {kpis.totalBuyIQD.toLocaleString()}
-                    </span>
-                    <span className="text-[9.5px] font-mono font-bold text-slate-400">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
-                  </div>
-                </div>
-              )}
-            </div>
+      {/* ── 1. PAGE HEADER (Title + Action Buttons) ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3 bg-white rounded-[14px] border border-[#E5E7EB] px-4 sm:px-6 py-3.5 shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="w-[40px] h-[40px] rounded-[11px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center font-bold shadow-2xs shrink-0">
+            <Plane size={20} strokeWidth={2} />
           </div>
-
-          {/* Card 3: Net Profit */}
-          <div className="bg-white border border-[#E5E7EB] rounded-[12px] px-3.5 py-2 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition-all sm:col-span-2 md:col-span-1">
-            <div className="flex items-center justify-between mb-0.5">
-              <span className="text-[11.5px] font-bold text-slate-800">{t('tickets.netProfit')}</span>
-              <div className="w-[26px] h-[26px] rounded-[7px] bg-[#FFF3E8] text-[#F45A0A] flex items-center justify-center shrink-0">
-                <TrendingUp size={14} strokeWidth={1.85} />
-              </div>
-            </div>
-            <div>
-              {ticketsLoading ? (
-                <div className="grid grid-cols-2 gap-2 animate-pulse">
-                  <div className="space-y-1">
-                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-3.5 w-16 bg-slate-200/70 rounded" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="h-2 w-10 bg-slate-200/70 rounded" />
-                    <div className="h-3.5 w-20 bg-slate-200/70 rounded" />
-                  </div>
-                </div>
-              ) : canViewProfits ? (
-                <div className="grid grid-cols-2 gap-2 items-baseline">
-                  <div className="flex items-baseline gap-1" dir="ltr">
-                    <span className={`text-[14px] sm:text-[15px] font-black font-mono tabular-nums leading-tight ${kpis.totalProfitUSD > 0 ? 'text-[#078B61]' : kpis.totalProfitUSD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
-                      {kpis.totalProfitUSD > 0 ? `+$${kpis.totalProfitUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : kpis.totalProfitUSD < 0 ? `-$${Math.abs(kpis.totalProfitUSD).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `$0.00`}
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-1" dir="ltr">
-                    <span className={`text-[13px] sm:text-[14px] font-black font-mono tabular-nums leading-tight ${kpis.totalProfitIQD > 0 ? 'text-[#078B61]' : kpis.totalProfitIQD < 0 ? 'text-[#DC2626]' : 'text-slate-800'}`}>
-                      {kpis.totalProfitIQD > 0 ? `+${kpis.totalProfitIQD.toLocaleString()}` : kpis.totalProfitIQD < 0 ? `-${Math.abs(kpis.totalProfitIQD).toLocaleString()}` : `0`}
-                    </span>
-                    <span className="text-[9.5px] font-mono font-bold text-slate-400">{language === 'ar' ? 'د.ع' : 'IQD'}</span>
-                  </div>
-                </div>
-              ) : (
-                <span className="text-[12px] text-slate-400 font-mono">{t('tickets.unauthorized')}</span>
-              )}
-            </div>
+          <div>
+            <h1 className="font-bold text-[18px] text-[#111827] leading-tight">{t('tickets.title')}</h1>
+            <p className="text-[12px] text-[#64748B] font-medium mt-0.5">{language === 'ar' ? 'إدارة فواتير تذاكر الطيران والمبيعات' : 'Manage flight ticket invoices & sales'}</p>
           </div>
         </div>
 
-        {/* Hidden File Input for Direct AI Ticket Upload */}
-        <input
-          type="file"
-          ref={ticketFileInputRef}
-          accept="application/pdf,image/*,.txt,.doc,.docx"
-          onChange={handleTicketFileSelected}
-          className="hidden"
-        />
+        <div className="flex items-center gap-2">
+          {/* Hidden File Input for Direct AI Ticket Upload */}
+          <input
+            type="file"
+            ref={ticketFileInputRef}
+            accept="application/pdf,image/*,.txt,.doc,.docx"
+            onChange={handleTicketFileSelected}
+            className="hidden"
+          />
 
-        {/* Lottie Animation — Compact (left side in RTL, click directly opens file chooser dialog) */}
-        <div
-          onClick={() => {
-            ticketFileInputRef.current?.click();
-          }}
-          className="relative hidden xl:flex flex-col w-[110px] shrink-0 bg-white border border-[#E5E7EB] hover:border-[#F45A0A] rounded-[12px] shadow-2xs items-center justify-center overflow-hidden px-1.5 py-1 cursor-pointer group transition-all"
-          onMouseEnter={() => lottieRef.current?.play()}
-          onMouseLeave={() => {
-            lottieRef.current?.stop();
-          }}
-          title={language === 'ar' ? '📸 انقر مباشرة لاختيار ملف التذكرة أو الصق لقطة الشاشة (Ctrl+V)' : '📸 Click directly to select ticket file or paste screenshot (Ctrl+V)'}
-        >
-          <div className="w-[36px] h-[36px] flex items-center justify-center -mt-1">
-            <Lottie
-              lottieRef={lottieRef}
-              src={aiSpiderAnimation}
-              loop={true}
-              autoplay={false}
-              className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-110"
-            />
+          {/* AI Import Dropdown */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => ticketFileInputRef.current?.click()}
+              className="h-[40px] px-3.5 rounded-[9px] bg-white border border-[#FED7AA] hover:bg-[#FFF3E8] text-[#F45A0A] font-bold text-[13px] shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title={language === 'ar' ? '📸 استيراد تذكرة بالذكاء الاصطناعي' : '📸 AI Ticket Import'}
+            >
+              <Sparkles size={16} strokeWidth={2} />
+              <span>{language === 'ar' ? 'تذكرة AI' : 'AI Ticket'}</span>
+            </button>
           </div>
 
-          {/* Floating Action Badge */}
-          <div className="w-full flex items-center justify-center gap-1 bg-white/95 group-hover:bg-[#FFF3E8] border border-slate-200 group-hover:border-[#F45A0A]/30 py-0.5 px-1 rounded-[6px] text-[9px] font-bold text-slate-700 group-hover:text-[#F45A0A] transition-all shadow-2xs backdrop-blur-xs mt-0.5">
-            <Sparkles size={10} className="text-[#F45A0A] shrink-0" />
-            <span className="truncate">{language === 'ar' ? 'تذكرة (AI)' : 'AI Ticket'}</span>
-          </div>
+          {/* New Ticket Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setEditingTicketData(null);
+              setModalOpen(true);
+            }}
+            className="h-[40px] px-4 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-bold text-[13px] shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Plus size={16} strokeWidth={2.4} />
+            <span>{t('tickets.newInvoice')}</span>
+          </button>
         </div>
       </div>
 
@@ -1257,17 +1148,6 @@ export const TicketsPage: React.FC = () => {
                 <span>{language === 'ar' ? 'كروب فير' : 'Group Fare'}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingTicketData(null);
-                  setModalOpen(true);
-                }}
-                className="flex-1 sm:flex-initial h-[38px] px-3.5 sm:px-4 rounded-[9px] bg-[#F45A0A] hover:bg-[#DD4F05] active:scale-[0.98] text-white font-semibold text-[12.5px] sm:text-[13px] shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
-              >
-                <Plus size={15} strokeWidth={2.4} />
-                <span>{t('tickets.newInvoice')}</span>
-              </button>
 
               <button
                 type="button"

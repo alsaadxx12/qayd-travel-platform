@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader, Modal } from '@mantine/core';
 import {
   IconPlus,
@@ -380,36 +380,7 @@ export const ServiceListPage: React.FC<{ kind: ServiceKindId }> = ({ kind }) => 
         </div>
       </div>
 
-      {/* ── 2. Stat Cards (تصميم نقي موحد حسب النظام: فواتير | مشتريات | مبيعات | ربح صافي) ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Card 1: عدد الفواتير */}
-        <StatCard
-          label={isAr ? 'الفواتير' : 'Invoices'}
-          value={formatNum(totals.count)}
-          subValue={isAr ? 'فاتورة مسجلة' : 'Recorded'}
-        />
 
-        {/* Card 2: المشتريات */}
-        <StatCard
-          label={isAr ? 'المشتريات' : 'Cost'}
-          value={`$${formatNum(totals.buy)}`}
-          subValue={isAr ? 'كلفة الشراء' : 'Total Cost'}
-        />
-
-        {/* Card 3: المبيعات */}
-        <StatCard
-          label={isAr ? 'المبيعات' : 'Sales'}
-          value={`$${formatNum(totals.sell)}`}
-          subValue={isAr ? 'إجمالي البيع' : 'Total Revenue'}
-        />
-
-        {/* Card 4: الربح الصافي */}
-        <StatCard
-          label={isAr ? 'الربح الصافي' : 'Net Profit'}
-          value={`+$${formatNum(totals.profit)}`}
-          subValue={isAr ? 'الربح' : 'Net Profit'}
-        />
-      </div>
 
       {/* ── 3. AccountingGrid (إخفاء شريط الإجراءات والبحث المكرر للحصول على جدول فائق النقاء) ── */}
       <AccountingGrid
