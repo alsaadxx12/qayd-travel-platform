@@ -285,6 +285,12 @@ export class TourGroupsService {
 
   async remove(companyId: string, id: string, userId?: string) {
     const g = await this.assertGroup(companyId, id);
+    // قيود مسافري الكروب مربوطةٌ بمرجعٍ نصّي (GRP-{paxId}) لا بمفتاحٍ يتتالى حذفه،
+    // فتُحذف صراحةً قبل حذف الكروب وإلا بقيت يتيمةً في القيود اليومية.
+    const paxIds = (await this.prisma.groupPassenger.findMany({ where: { groupId: id }, select: { id: true } })).map((p) => p.id);
+    if (paxIds.length) {
+      await this.prisma.journalEntry.deleteMany({ where: { companyId, reference: { in: paxIds.map((pid) => `GRP-${pid}`) } } });
+    }
     await this.prisma.tourGroup.delete({ where: { id } });
     await this.audit(companyId, userId, 'GROUP_DELETE', id, { groupName: g.groupName });
     return { deleted: true };
