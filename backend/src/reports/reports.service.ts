@@ -1296,13 +1296,30 @@ export class ReportsService {
       : {};
     const branchFilter = branchId && branchId !== 'ALL' ? { branchId } : {};
 
-    const [tickets, marginRow] = await Promise.all([
+    // مسافرو الكروبات الجديدة جدولٌ مستقل لا تذاكر — يُنسبون لمُنشئ الكروب.
+    const paxDateFilter = start || end ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } : {};
+    const [tickets, marginRow, groupPassengers] = await Promise.all([
       this.prisma.ticket.findMany({
         where: { companyId, status: { not: 'CANCELLED' }, ...branchFilter, ...dateFilter },
         select: { employeeName: true, profit: true, netSell: true, totalSell: true, netBuy: true, totalBuy: true, tripType: true },
       }),
       this.prisma.printTemplate.findFirst({ where: { companyId, docType: 'employee_profit_margins' } }),
+      this.prisma.groupPassenger.findMany({
+        where: {
+          state: { not: 'CANCELLED' },
+          group: { companyId, ...(branchId && branchId !== 'ALL' ? { branchId } : {}) },
+          ...paxDateFilter,
+        },
+        select: { salePrice: true, services: { select: { finalBuy: true } }, group: { select: { createdById: true } } },
+      }),
     ]);
+
+    // اسم مُنشئ الكروب (موظّف الإصدار للكروب) من معرّفه.
+    const creatorIds = Array.from(new Set(groupPassengers.map((p) => p.group?.createdById).filter(Boolean))) as string[];
+    const creators = creatorIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, name: true } })
+      : [];
+    const creatorName = new Map<string, string>(creators.map((u) => [u.id, u.name || '']));
 
     let marginByName: Record<string, number> = {};
     let defaultEmployeeMargin = 0;
@@ -1323,6 +1340,19 @@ export class ReportsService {
       row.totalSales += Number(t.netSell ?? t.totalSell) || 0;
       row.totalBuy += Number(t.netBuy ?? t.totalBuy) || 0;
       row.totalProfit += Number(t.profit) || 0;
+      map.set(name, row);
+    }
+
+    // ربح مسافر الكروب = سعر البيع − مجموع الشراء الفعلي؛ يُنسب لمُنشئ الكروب.
+    for (const gp of groupPassengers) {
+      const name = norm(creatorName.get(gp.group?.createdById || '')) || 'غير محدّد';
+      const buy = (gp.services || []).reduce((a, s) => a + (s.finalBuy !== null && s.finalBuy !== undefined ? Number(s.finalBuy) : 0), 0);
+      const sale = Number(gp.salePrice) || 0;
+      const row = map.get(name) || { employeeName: name, docCount: 0, totalSales: 0, totalBuy: 0, totalProfit: 0 };
+      row.docCount += 1;
+      row.totalSales += sale;
+      row.totalBuy += buy;
+      row.totalProfit += sale - buy;
       map.set(name, row);
     }
 
