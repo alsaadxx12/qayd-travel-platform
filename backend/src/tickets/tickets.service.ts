@@ -1548,7 +1548,7 @@ export class TicketsService {
       || String(ticket.reference || '').toUpperCase().includes('VISA')
       || String(ticket.airline || '').toUpperCase().includes('VISA');
 
-    const [userRecord, custAccountResult, suppAccountResult, cbAccountResult, revRecord] = await Promise.all([
+    const [userRecord, custAccountResult, suppAccountResult, cbAccountResult, revRecord, acctMapRows] = await Promise.all([
       // منشئ القيد يجب أن يكون مستخدماً حقيقياً (مفتاحٌ أجنبي): يُتحقَّق من userId
       // ويُستبدل بأول مستخدمٍ في الشركة إن لم يوجد (كمستخدم التطوير الوهمي)،
       // فلا يفشل ترحيل القيد بصمتٍ لأي نوع مستند.
@@ -1617,7 +1617,37 @@ export class TicketsService {
         });
         return preferred || this.prisma.account.findFirst({ where: { companyId, type: 'REVENUE' } });
       })(),
+      // إعدادات الربط المحاسبي: الحساب الختامي لكل خدمة يُقرأ منها لا من رموزٍ مثبَّتة.
+      this.prisma.printTemplate.findMany({
+        where: { companyId, docType: { in: ['services_accounts_mapping', 'core_accounts_mapping'] } },
+        select: { docType: true, config: true },
+      }),
     ]);
+
+    // الحساب الختامي (الإيراد) المضبوط في الإعدادات لهذه الخدمة — إن وُجد وصحّ
+    // استُعمل بدل الرمز المثبَّت، فيُقيَّد ربح كل خدمة في حسابها الصحيح.
+    const parseCfg = (dt: string) => {
+      try {
+        return JSON.parse((acctMapRows.find((r: any) => r.docType === dt)?.config) || '{}') || {};
+      } catch {
+        return {};
+      }
+    };
+    const svcCfg = parseCfg('services_accounts_mapping');
+    const coreCfg = parseCfg('core_accounts_mapping');
+    const tripTypeUp = String(ticket.tripType || 'TICKET').toUpperCase();
+    const revKeyByTrip: Record<string, string> = {
+      TICKET: 'flightRevenueAccountId', FLIGHT: 'flightRevenueAccountId', BAGGAGE: 'flightRevenueAccountId',
+      VISA: 'visaRevenueAccountId', HOTEL: 'hotelRevenueAccountId',
+      REISSUE: 'reissueRevenueAccountId', CHANGE: 'reissueRevenueAccountId',
+      GROUP_FARE: 'groupRevenueAccountId', GROUP: 'groupRevenueAccountId',
+    };
+    const cfgKey = revKeyByTrip[tripTypeUp];
+    let configuredRevenueId: string | null = cfgKey ? (svcCfg[cfgKey] || (cfgKey === 'groupRevenueAccountId' ? coreCfg.groupRevenueAccountId : null) || null) : null;
+    if (configuredRevenueId) {
+      const exists = await this.prisma.account.findFirst({ where: { id: configuredRevenueId, companyId }, select: { id: true } });
+      configuredRevenueId = exists?.id || null;
+    }
 
     // userRecord صار مستخدماً حقيقياً دائماً؛ لا نعود إلى userId الذي قد يكون وهمياً.
     const createdById = userRecord?.id;
@@ -1647,7 +1677,8 @@ export class TicketsService {
       cashboxAccountId = defCb?.id || null;
     }
 
-    const revenueAccountId = revRecord?.id || null;
+    // المضبوط في الإعدادات أولاً، ثم الرمز المثبَّت بديلاً.
+    const revenueAccountId = configuredRevenueId || revRecord?.id || null;
     const resolvedCustomerName = ticket.customerName?.trim() || '';
 
     /*
