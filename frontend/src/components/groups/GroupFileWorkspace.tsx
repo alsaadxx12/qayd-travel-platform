@@ -46,6 +46,7 @@ import {
   SlidersHorizontal,
   Check,
   Sparkles,
+  Info,
 } from 'lucide-react';
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
@@ -108,130 +109,110 @@ const Field: React.FC<{
   </div>
 );
 
-/* ── الملخّص المالي والتشغيلي: 5 بطاقات موحدة ومتوازنة بصرياً ── */
+/* ── الملخّص المالي والتشغيلي: 4 بطاقات مدمجة وسريعة القراءة ── */
 const SummaryBlock: React.FC<{ g: TourGroup; isAr: boolean }> = ({ g, isAr }) => {
   const s = g.summary;
   const C = g.currency;
+  const totalCostVal = s.actualCost > 0 || (s.buy + s.globalBuy + s.expenses > 0) ? s.actualCost : s.plannedCost;
+  const hasActual = s.actualCost > 0 || (s.buy + s.globalBuy + s.expenses > 0);
+  const profitVal = hasActual ? s.actualProfit : s.plannedProfit;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-      {/* 1. إجمالي المسافرين */}
-      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-orange-200 shadow-2xs p-4 flex flex-col justify-between transition-all">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+      {/* 1. المسافرون */}
+      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-orange-200 shadow-2xs p-2.5 px-3 flex flex-col justify-between transition-all">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500">{isAr ? 'المسافرون' : 'Passengers'}</span>
-          <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
-            <Users size={16} />
+          <span className="text-[11px] font-bold text-slate-500">{isAr ? 'المسافرون' : 'Passengers'}</span>
+          <div className="w-6 h-6 rounded-md bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-100">
+            <Users size={13} />
           </div>
         </div>
-        <div className="mt-2.5">
-          <div className="text-[26px] font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+        <div className="mt-1">
+          <div className="text-[20px] sm:text-[22px] font-black text-slate-900 font-mono tracking-tight leading-tight" dir="ltr">
             {g.passengers.length}
           </div>
-          <div className="flex items-center justify-between text-[11px] font-bold mt-1.5 pt-1.5 border-t border-slate-100">
-            <span className="text-emerald-700 font-mono bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60">
-              {s.complete} {isAr ? 'مكتمل' : 'Complete'}
-            </span>
-            <span className="text-amber-700 font-mono bg-amber-50 px-2 py-0.5 rounded border border-amber-200/60">
-              {s.notComplete} {isAr ? 'معلّق' : 'Pending'}
-            </span>
+          <div className="flex items-center gap-1.5 text-[11px] mt-0.5 text-slate-500">
+            {s.notComplete > 0 ? (
+              <span className="text-amber-700 font-mono font-bold">
+                {s.notComplete} {isAr ? 'معلّق' : 'Pending'}
+              </span>
+            ) : (
+              <span className="font-mono text-slate-500">
+                {s.complete} {isAr ? 'مكتمل' : 'Complete'}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 2. المبيعات والتحصيل */}
-      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-emerald-200 shadow-2xs p-4 flex flex-col justify-between transition-all">
+      {/* 2. المبيعات */}
+      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-emerald-200 shadow-2xs p-2.5 px-3 flex flex-col justify-between transition-all">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500">{isAr ? 'المبيعات والتحصيل' : 'Sales'}</span>
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-            <Coins size={16} />
+          <span className="text-[11px] font-bold text-slate-500">{isAr ? 'المبيعات' : 'Sales'}</span>
+          <div className="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+            <Coins size={13} />
           </div>
         </div>
-        <div className="mt-2.5">
-          <div className="text-[26px] font-black text-slate-900 font-mono tracking-tight" dir="ltr">
+        <div className="mt-1">
+          <div className="text-[20px] sm:text-[22px] font-black text-slate-900 font-mono tracking-tight leading-tight" dir="ltr">
             {money(s.sales, C)}
           </div>
-          <div className="flex items-center justify-between text-[11px] font-bold mt-1.5 pt-1.5 border-t border-slate-100">
-            <span className="text-slate-400 font-sans text-[10.5px]">{isAr ? 'المحصّل الفعلي:' : 'Paid:'}</span>
-            <span className="text-emerald-700 font-mono font-black bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60" dir="ltr">
-              {money(s.collected, C)}
+          <div className="flex items-center gap-1.5 text-[11px] mt-0.5">
+            {s.outstanding > 0 ? (
+              <span className="text-amber-800 font-mono bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200/80 font-bold text-[10.5px]">
+                {isAr ? 'متبقي: ' : 'Due: '}{money(s.outstanding, C)}
+              </span>
+            ) : (
+              <span className="text-emerald-700 font-mono bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200/70 font-bold text-[10.5px]">
+                {isAr ? 'مدفوع بالكامل' : 'Paid'}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. التكلفة */}
+      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-slate-300 shadow-2xs p-2.5 px-3 flex flex-col justify-between transition-all">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold text-slate-500">{isAr ? 'التكلفة' : 'Cost'}</span>
+          <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
+            <Receipt size={13} />
+          </div>
+        </div>
+        <div className="mt-1">
+          <div className="text-[20px] sm:text-[22px] font-black text-slate-900 font-mono tracking-tight leading-tight" dir="ltr">
+            {money(totalCostVal, C)}
+          </div>
+          <div className="flex items-center gap-1.5 text-[11px] mt-0.5 text-slate-400">
+            <span className="font-mono text-slate-500">
+              {isAr ? 'إجمالي التكاليف' : 'Total costs'}
             </span>
           </div>
         </div>
       </div>
 
-      {/* 3. التكلفة الإجمالية */}
-      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-slate-300 shadow-2xs p-4 flex flex-col justify-between transition-all">
+      {/* 4. الربح */}
+      <div className="bg-gradient-to-b from-orange-50/15 via-white to-white rounded-xl border border-orange-200/90 shadow-2xs p-2.5 px-3 flex flex-col justify-between transition-all">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500">{isAr ? 'التكلفة الإجمالية' : 'Total Cost'}</span>
-          <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
-            <Receipt size={16} />
+          <span className="text-[11px] font-black text-[#F45A0A]">{isAr ? 'الربح' : 'Profit'}</span>
+          <div className="w-6 h-6 rounded-md bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-200">
+            <TrendingUp size={13} />
           </div>
         </div>
-        <div className="mt-2.5">
-          <div className="text-[26px] font-black text-slate-900 font-mono tracking-tight" dir="ltr">
-            {money(s.actualCost > 0 || (s.buy + s.globalBuy + s.expenses > 0) ? s.actualCost : s.plannedCost, C)}
+        <div className="mt-1">
+          <div
+            className={`text-[20px] sm:text-[22px] font-black font-mono tracking-tight leading-tight ${
+              profitVal >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
+            }`}
+            dir="ltr"
+          >
+            {money(profitVal, C)}
           </div>
-          <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-500 mt-1.5 pt-1.5 border-t border-slate-100 font-mono" dir="ltr">
-            <span className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
-              {isAr ? 'شراء: ' : 'Buy: '}{money(s.buy + s.globalBuy > 0 ? s.buy + s.globalBuy : Math.max(0, s.plannedCost - s.expenses), C)}
-            </span>
-            <span className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
-              {isAr ? 'مصاريف: ' : 'Exp: '}{money(s.expenses, C)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. الذمم المتبقية */}
-      <div className="bg-white rounded-xl border border-slate-200/90 hover:border-amber-200 shadow-2xs p-4 flex flex-col justify-between transition-all">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-500">{isAr ? 'الذمم المتبقية' : 'Outstanding'}</span>
-          <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-            <Banknote size={16} />
-          </div>
-        </div>
-        <div className="mt-2.5">
-          <div className={`text-[26px] font-black font-mono tracking-tight ${s.outstanding > 0 ? 'text-amber-700' : 'text-slate-400'}`} dir="ltr">
-            {money(s.outstanding, C)}
-          </div>
-          <div className="flex items-center justify-between text-[11px] font-bold mt-1.5 pt-1.5 border-t border-slate-100">
-            <span className={`px-2 py-0.5 rounded text-[10.5px] ${s.outstanding > 0 ? 'bg-amber-50 text-amber-800 border border-amber-200/70 font-bold' : 'text-slate-400 font-medium'}`}>
-              {s.outstanding > 0 ? (isAr ? 'مستحق على العملاء' : 'Pending payment') : (isAr ? 'لا توجد ذمم' : 'No dues')}
+          <div className="flex items-center gap-1.5 text-[11px] mt-0.5">
+            <span className={`font-mono font-bold ${profitVal >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'}`}>
+              {profitVal >= 0 ? (isAr ? 'صافي الربح' : 'Net profit') : (isAr ? 'خسارة' : 'Loss')}
             </span>
           </div>
-        </div>
-      </div>
-
-      {/* 5. صافي الأرباح */}
-      <div className="bg-gradient-to-b from-orange-50/30 via-white to-white rounded-xl border border-orange-200/90 shadow-2xs p-4 flex flex-col justify-between transition-all">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-black text-[#F45A0A]">{isAr ? 'صافي الربح' : 'Net Profit'}</span>
-          <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center border border-orange-200">
-            <TrendingUp size={16} />
-          </div>
-        </div>
-        <div className="mt-2.5">
-          {(() => {
-            const hasActual = s.actualCost > 0 || (s.buy + s.globalBuy + s.expenses > 0);
-            const profitVal = hasActual ? s.actualProfit : s.plannedProfit;
-            return (
-              <>
-                <div
-                  className={`text-[26px] font-black font-mono tracking-tight ${
-                    profitVal >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
-                  }`}
-                  dir="ltr"
-                >
-                  {money(profitVal, C)}
-                </div>
-                <div className="flex items-center justify-between text-[11px] font-bold mt-1.5 pt-1.5 border-t border-orange-100">
-                  <span className="text-[10.5px] font-bold text-orange-800 bg-orange-100/70 px-2 py-0.5 rounded border border-orange-200/60 font-mono">
-                    {isAr ? (hasActual ? 'الربح الفعلي' : 'الربح المحسوب') : (hasActual ? 'Actual profit' : 'Calculated profit')}
-                  </span>
-                </div>
-              </>
-            );
-          })()}
         </div>
       </div>
     </div>
@@ -267,6 +248,9 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string, boolean>>({});
   const [psModal, setPsModal] = useState<Partial<GroupPriceSystem> | null>(null);
   const [chargeModal, setChargeModal] = useState<'GLOBAL_PURCHASE' | 'EXPENSE' | null>(null);
+  const [psExpanded, setPsExpanded] = useState(false);
+  const [chargesExpanded, setChargesExpanded] = useState(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   // الإشعارات المنبثقة معطَّلة في النظام كلّه، فأخطاء الحفظ كانت تختفي بصمت
   const [errorMsg, setErrorMsg] = useState('');
   const [editGroupModalOpen, setEditGroupModalOpen] = useState(false);
@@ -520,85 +504,106 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
 
   return (
     <div className="fixed inset-0 z-[9998] bg-[#F8FAFC] flex flex-col font-sans" dir={direction}>
-      {/* ── 1. الترويسة ── */}
+      {/* ── 1. الترويسة الموحدة والموجزة ── */}
       <div className="bg-white border-b border-slate-200 shadow-2xs shrink-0">
-        <div className="max-w-[1600px] mx-auto w-full px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200/80 text-[#F45A0A] flex items-center justify-center shrink-0">
-              <Users size={20} strokeWidth={2.4} />
+        <div className="max-w-[1600px] mx-auto w-full px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200/80 text-[#F45A0A] flex items-center justify-center shrink-0">
+              <Users size={18} strokeWidth={2.4} />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="font-black text-sm sm:text-base text-slate-900 truncate">{g?.groupName || '…'}</h2>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-orange-50 text-[#F45A0A] border border-orange-200/70 font-mono" dir="ltr">
-                  {g?.currency || 'USD'}
-                </span>
-              </div>
-              <p className="text-xs font-bold text-slate-500 mt-0.5 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1">
-                  <MapPin size={12} className="text-[#F45A0A]" />
-                  <span>{g?.country || '—'}</span>
-                </span>
-                <span>•</span>
-                <span className="inline-flex items-center gap-1 font-mono" dir="ltr">
-                  <Calendar size={12} className="text-slate-400" />
-                  <span>{g?.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : (isAr ? 'بلا تاريخ سفر' : 'no date')}</span>
-                </span>
-              </p>
+            {/* السطر الرئيسي الموحد: BGW-IST · 06/09/2026 · USD · البيع مفتوح */}
+            <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
+                {g?.groupName || '…'}
+              </h2>
+              <span className="text-slate-300 font-bold">•</span>
+              <span className="text-xs font-medium text-slate-500 font-mono" dir="ltr">
+                {g?.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : (isAr ? 'بلا تاريخ' : 'No date')}
+              </span>
+              <span className="text-slate-300 font-bold">•</span>
+              <span className="text-xs font-semibold text-slate-500 font-mono" dir="ltr">
+                {g?.currency || 'USD'}
+              </span>
+              <span className="text-slate-300 font-bold">•</span>
+              {g && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () => tourGroupsApi.update(g.id, { openSale: !g.openSale }),
+                      g.openSale ? (isAr ? 'أُغلق البيع' : 'Sale closed') : isAr ? 'فُتح البيع' : 'Sale opened',
+                    )
+                  }
+                  className={`h-6 px-2.5 rounded-full text-[11px] font-black cursor-pointer inline-flex items-center gap-1 border transition-all ${
+                    g.openSale
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
+                      : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
+                  }`}
+                  title={isAr ? 'انقر لتغيير حالة البيع' : 'Click to toggle sale status'}
+                >
+                  {g.openSale ? <Unlock size={11} /> : <Lock size={11} />}
+                  <span>{g.openSale ? (isAr ? 'البيع مفتوح' : 'Sale Open') : isAr ? 'البيع مقفل' : 'Sale Closed'}</span>
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {g && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  run(
-                    () => tourGroupsApi.update(g.id, { openSale: !g.openSale }),
-                    g.openSale ? (isAr ? 'أُغلق البيع' : 'Sale closed') : isAr ? 'فُتح البيع' : 'Sale opened',
-                  )
-                }
-                className={`h-[38px] px-3.5 rounded-xl text-xs font-black cursor-pointer flex items-center gap-1.5 border transition-all shadow-2xs ${
-                  g.openSale
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
-                    : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
-                }`}
-              >
-                {g.openSale ? <Unlock size={14} /> : <Lock size={14} />}
-                <span>{g.openSale ? (isAr ? 'البيع مفتوح' : 'Sale Open') : isAr ? 'البيع مقفل' : 'Sale Closed'}</span>
-              </button>
-            )}
-            {g && (
-              <Menu shadow="md" width={190} position={direction === 'rtl' ? 'bottom-start' : 'bottom-end'}>
+              <Menu shadow="md" width={220} position={direction === 'rtl' ? 'bottom-start' : 'bottom-end'}>
                 <Menu.Target>
                   <button
                     type="button"
-                    title={isAr ? 'إجراءات الكروب' : 'Group actions'}
-                    className="h-[38px] w-[38px] rounded-xl border border-slate-200 bg-white hover:bg-orange-50 hover:border-orange-200 hover:text-[#F45A0A] text-slate-600 flex items-center justify-center cursor-pointer transition-all shadow-2xs"
+                    title={isAr ? 'تفاصيل العملية والإجراءات' : 'Operation details & actions'}
+                    className="h-[36px] px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs text-xs font-bold"
                   >
-                    <MoreVertical size={18} />
+                    <MoreVertical size={16} />
+                    <span>{isAr ? 'تفاصيل العملية' : 'Details'}</span>
                   </button>
                 </Menu.Target>
-                <Menu.Dropdown className="!rounded-xl !p-1.5 !border !border-slate-200 shadow-xl font-sans" dir={direction}>
+                <Menu.Dropdown className="!rounded-xl !p-2 !border !border-slate-200 shadow-xl font-sans" dir={direction}>
+                  <div className="p-2 bg-slate-50 rounded-lg text-xs space-y-1.5 mb-1.5 border border-slate-200/60">
+                    <div className="flex justify-between items-center text-slate-500">
+                      <span>{isAr ? 'موظف الإصدار:' : 'Issuer:'}</span>
+                      <span className="font-bold text-slate-800 truncate max-w-[110px]">{editGroupData.agent || (g.passengers?.[0]?.agent) || g.createdByName || '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-500">
+                      <span>{isAr ? 'مدخل البيانات:' : 'Data Entry:'}</span>
+                      <span className="font-bold text-slate-800 truncate max-w-[110px]">{g.createdByName || currentUserName || 'مدير النظام'}</span>
+                    </div>
+                    {g.country && (
+                      <div className="flex justify-between items-center text-slate-500">
+                        <span>{isAr ? 'الوجهة:' : 'Country:'}</span>
+                        <span className="font-bold text-slate-800">{g.country}</span>
+                      </div>
+                    )}
+                  </div>
                   <Menu.Item
-                    leftSection={<Edit2 size={15} className="text-[#F45A0A]" />}
+                    leftSection={<Info size={14} className="text-blue-600" />}
+                    onClick={() => setDetailsModalOpen(true)}
+                    className="!text-xs !font-bold !text-slate-800 !py-2 hover:!bg-blue-50/70"
+                  >
+                    {isAr ? 'عرض كافة التفاصيل' : 'Full Details'}
+                  </Menu.Item>
+                  <Menu.Item
+                    leftSection={<Edit2 size={14} className="text-[#F45A0A]" />}
                     onClick={() => setEditGroupModalOpen(true)}
                     className="!text-xs !font-bold !text-slate-800 !py-2 hover:!bg-orange-50/70"
                   >
                     {isAr ? 'تعديل الكروب' : 'Edit Group'}
                   </Menu.Item>
                   <Menu.Item
-                    leftSection={<History size={15} className="text-blue-600" />}
+                    leftSection={<History size={14} className="text-purple-600" />}
                     onClick={() => setAuditLogOpen(true)}
-                    className="!text-xs !font-bold !text-slate-800 !py-2 hover:!bg-blue-50/70"
+                    className="!text-xs !font-bold !text-slate-800 !py-2 hover:!bg-purple-50/70"
                   >
                     {isAr ? 'سجل التعديلات' : 'Audit Log'}
                   </Menu.Item>
                   <Menu.Divider />
                   <Menu.Item
                     color="red"
-                    leftSection={<Trash2 size={15} className="text-rose-600" />}
+                    leftSection={<Trash2 size={14} className="text-rose-600" />}
                     onClick={() => setDeleteGroupConfirmOpen(true)}
                     className="!text-xs !font-bold !text-rose-600 !py-2 hover:!bg-rose-50"
                   >
@@ -611,9 +616,9 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
               type="button"
               onClick={onClose}
               title={isAr ? 'رجوع' : 'Back'}
-              className="h-[38px] px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs text-xs font-black"
+              className="h-[36px] px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs text-xs font-black"
             >
-              {direction === 'rtl' ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
+              {direction === 'rtl' ? <ArrowRight size={15} /> : <ArrowLeft size={15} />}
               <span>{isAr ? 'رجوع' : 'Back'}</span>
             </button>
           </div>
@@ -641,188 +646,231 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
               {/* ١) الملخّص المالي والتشغيلي */}
               <SummaryBlock g={g} isAr={isAr} />
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
-                {/* ٢) أنظمة الأسعار */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 space-y-3">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <Coins size={16} className="text-[#F45A0A]" />
-                      <h3 className="font-black text-xs sm:text-sm text-slate-900">
-                        {isAr ? 'أنظمة الأسعار' : 'Price Systems'}
-                      </h3>
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-slate-100 text-slate-700 font-mono">
-                        {g.priceSystems.length}
+              {/* ٢ & ٣) أنظمة السفر والمصاريف المشتركة — بطاقات مدمجة قابلة للفتح */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+                {/* أنظمة السفر */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden transition-all">
+                  <div
+                    onClick={() => setPsExpanded((v) => !v)}
+                    className="p-2 sm:px-3 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/70 transition-colors select-none"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-md bg-orange-50 border border-orange-100 text-[#F45A0A] flex items-center justify-center shrink-0">
+                        <Coins size={13} />
+                      </div>
+                      <span className="font-bold text-xs text-slate-900 shrink-0">
+                        {isAr ? 'أنظمة السفر' : 'Price Systems'}
                       </span>
+                      <span className="text-[11px] font-mono text-slate-500">
+                        ({g.priceSystems.length})
+                      </span>
+                      {g.priceSystems.length > 0 && (
+                        <span className="text-[11px] font-semibold text-slate-500 truncate font-mono hidden sm:inline-block">
+                          — {g.priceSystems[0].name} ({money(g.priceSystems[0].salePrice, g.priceSystems[0].currency)})
+                        </span>
+                      )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setPsModal({ name: '', currency: g.currency, salePrice: 0, items: [] })}
-                      className="h-8 px-3 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black cursor-pointer flex items-center gap-1 shadow-2xs"
-                    >
-                      <Plus size={14} />
-                      <span>{isAr ? 'نظام جديد' : 'New'}</span>
-                    </button>
+
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => setPsModal({ name: '', currency: g.currency, salePrice: 0, items: [] })}
+                        className="h-6.5 px-2.5 rounded-md bg-orange-50 text-[#F45A0A] hover:bg-orange-100 text-[11px] font-bold cursor-pointer flex items-center gap-1 border border-orange-200/70 transition-colors"
+                      >
+                        <Plus size={12} />
+                        <span>{isAr ? 'نظام جديد' : 'New'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPsExpanded((v) => !v)}
+                        className="w-6.5 h-6.5 rounded text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
+                        title={psExpanded ? (isAr ? 'طي' : 'Collapse') : (isAr ? 'عرض التفاصيل' : 'Expand')}
+                      >
+                        {psExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </button>
+                    </div>
                   </div>
 
-                  {g.priceSystems.length === 0 ? (
-                    <div className="py-8 text-center space-y-1">
-                      <p className="text-xs font-black text-slate-600">
-                        {isAr ? 'لا يوجد نظام أسعار' : 'No price systems'}
-                      </p>
-                      <p className="text-[11px] font-bold text-slate-400">
-                        {isAr ? 'أضف نظام أسعار لتحديد سعر البيع وبنود الخدمات التلقائية.' : 'Add price systems to define sales pricing.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {g.priceSystems.map((ps) => (
-                        <div key={ps.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 space-y-2 hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-2">
-                              <span className="font-black text-xs text-slate-900">{ps.name}</span>
-                              <span className="text-xs font-mono font-black text-slate-900 bg-white border border-slate-200 rounded-md px-2 py-0.5" dir="ltr">
-                                {money(ps.salePrice, ps.currency)}
-                              </span>
-                              {!ps.active && (
-                                <span className="text-[10px] font-bold bg-slate-200 text-slate-600 rounded px-1.5 py-0.5">
-                                  {isAr ? 'معطَّل' : 'inactive'}
+                  {psExpanded && (
+                    <div className="p-3 border-t border-slate-100 bg-slate-50/40 space-y-2">
+                      {g.priceSystems.length === 0 ? (
+                        <div className="py-2.5 text-center text-xs font-bold text-slate-400">
+                          {isAr ? 'لا يوجد نظام أسعار مسجل حالياً' : 'No price systems registered'}
+                        </div>
+                      ) : (
+                        g.priceSystems.map((ps) => (
+                          <div key={ps.id} className="rounded-xl border border-slate-200 bg-white p-2.5 space-y-2 hover:border-orange-200 transition-colors">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-xs text-slate-900">{ps.name}</span>
+                                <span className="text-xs font-mono font-black text-slate-900 bg-slate-50 border border-slate-200 rounded-md px-2 py-0.5" dir="ltr">
+                                  {money(ps.salePrice, ps.currency)}
+                                </span>
+                                {!ps.active && (
+                                  <span className="text-[10px] font-bold bg-slate-200 text-slate-600 rounded px-1.5 py-0.5">
+                                    {isAr ? 'معطَّل' : 'inactive'}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setPsModal({ ...ps, items: ps.items.map((i) => ({ ...i })) })}
+                                  className="h-6 px-2 rounded-lg border border-slate-200 bg-white text-xs font-bold text-[#F45A0A] hover:bg-orange-50 cursor-pointer"
+                                >
+                                  {isAr ? 'تعديل' : 'Edit'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => run(() => tourGroupsApi.removePriceSystem(g.id, ps.id))}
+                                  className="h-6 w-6 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center cursor-pointer"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                              {ps.items.map((it, i) => {
+                                const meta = KIND_META[it.kind] || KIND_META.PACKAGE;
+                                const Icon = meta.icon;
+                                return (
+                                  <span
+                                    key={i}
+                                    className={`inline-flex items-center gap-1 text-[11px] font-bold border rounded-lg px-2 py-0.5 ${meta.color}`}
+                                  >
+                                    <Icon size={12} />
+                                    <span>{isAr ? meta.ar : it.kind}</span>
+                                    <span className="font-mono text-slate-900 font-black" dir="ltr">
+                                      {money(it.expectedBuy, it.currency || ps.currency)}
+                                    </span>
+                                    {it.supplierName && <span className="text-slate-600">({it.supplierName})</span>}
+                                  </span>
+                                );
+                              })}
+                              {ps.items.length === 0 && (
+                                <span className="text-[11px] font-bold text-slate-400">
+                                  {isAr ? 'بلا بنود خدمات' : 'No service items'}
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setPsModal({ ...ps, items: ps.items.map((i) => ({ ...i })) })}
-                                className="h-7 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-[#F45A0A] hover:bg-orange-50 cursor-pointer"
-                              >
-                                {isAr ? 'تعديل' : 'Edit'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => run(() => tourGroupsApi.removePriceSystem(g.id, ps.id))}
-                                className="h-7 w-7 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center cursor-pointer"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
                           </div>
-
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {ps.items.map((it, i) => {
-                              const meta = KIND_META[it.kind] || KIND_META.PACKAGE;
-                              const Icon = meta.icon;
-                              return (
-                                <span
-                                  key={i}
-                                  className={`inline-flex items-center gap-1 text-[11px] font-bold border rounded-lg px-2 py-1 ${meta.color}`}
-                                >
-                                  <Icon size={12} />
-                                  <span>{isAr ? meta.ar : it.kind}</span>
-                                  <span className="font-mono text-slate-900 font-black" dir="ltr">
-                                    {money(it.expectedBuy, it.currency || ps.currency)}
-                                  </span>
-                                  {it.supplierName && <span className="text-slate-600">({it.supplierName})</span>}
-                                </span>
-                              );
-                            })}
-                            {ps.items.length === 0 && (
-                              <span className="text-[11px] font-bold text-slate-400">
-                                {isAr ? 'بلا بنود خدمات' : 'No service items'}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
 
-                {/* ٣) المشتريات والمصاريف */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 space-y-3">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <Banknote size={16} className="text-[#F45A0A]" />
-                      <h3 className="font-black text-xs sm:text-sm text-slate-900">
-                        {isAr ? 'المصاريف والمشتريات' : 'Purchases & Expenses'}
-                      </h3>
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-slate-100 text-slate-700 font-mono">
-                        {g.charges.length}
+                {/* المصاريف والمشتريات المشتركة */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden transition-all">
+                  <div
+                    onClick={() => setChargesExpanded((v) => !v)}
+                    className="p-2 sm:px-3 flex items-center justify-between gap-2 cursor-pointer hover:bg-slate-50/70 transition-colors select-none"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                        <Banknote size={13} />
+                      </div>
+                      <span className="font-bold text-xs text-slate-900 shrink-0">
+                        {isAr ? 'المصاريف المشتركة' : 'Shared Expenses'}
                       </span>
+                      <span className="text-[11px] font-mono text-slate-500">
+                        ({g.charges.length})
+                      </span>
+                      {g.charges.length > 0 && (
+                        <span className="text-[11px] font-semibold text-slate-500 truncate font-mono hidden sm:inline-block" dir="ltr">
+                          — {money((g.summary?.expenses || 0) + (g.summary?.globalBuy || 0), g.currency)}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1.5">
+
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => setChargeModal('GLOBAL_PURCHASE')}
-                        className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:border-[#F45A0A] hover:text-[#F45A0A] cursor-pointer shadow-2xs"
+                        className="h-6.5 px-2 rounded-md border border-slate-200 bg-white text-[11px] font-bold text-slate-700 hover:text-[#F45A0A] hover:border-orange-200 cursor-pointer shadow-2xs"
                       >
-                        + {isAr ? 'شراء عام' : 'Purchase'}
+                        + {isAr ? 'شراء' : 'Purchase'}
                       </button>
                       <button
                         type="button"
                         onClick={() => setChargeModal('EXPENSE')}
-                        className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:border-rose-400 hover:text-rose-600 cursor-pointer shadow-2xs"
+                        className="h-6.5 px-2 rounded-md border border-slate-200 bg-white text-[11px] font-bold text-slate-700 hover:text-rose-600 hover:border-rose-200 cursor-pointer shadow-2xs"
                       >
                         + {isAr ? 'مصروف' : 'Expense'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChargesExpanded((v) => !v)}
+                        className="w-6.5 h-6.5 rounded text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
+                        title={chargesExpanded ? (isAr ? 'طي' : 'Collapse') : (isAr ? 'عرض التفاصيل' : 'Expand')}
+                      >
+                        {chargesExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                       </button>
                     </div>
                   </div>
 
-                  {g.charges.length === 0 ? (
-                    <div className="py-8 text-center space-y-1">
-                      <p className="text-xs font-black text-slate-600">
-                        {isAr ? 'لا توجد مصاريف عامة' : 'No global charges'}
-                      </p>
-                      <p className="text-[11px] font-bold text-slate-400">
-                        {isAr ? 'أضف مصاريف الدعاية أو استئجار الباصات والتكاليف المشتركة.' : 'Add bus rental, marketing, or general tour expenses.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-slate-100">
-                      {g.charges.map((c) => (
-                        <div key={c.id} className="flex items-center justify-between gap-2 py-2 text-xs">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span
-                              className={`text-[10.5px] font-black rounded-md px-2 py-0.5 border shrink-0 ${
-                                c.chargeType === 'EXPENSE'
-                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                  : 'bg-sky-50 text-sky-800 border-sky-200'
-                              }`}
-                            >
-                              {c.chargeType === 'EXPENSE' ? (isAr ? 'مصروف' : 'EXP') : isAr ? 'شراء' : 'BUY'}
-                            </span>
-                            <span className="font-black text-slate-900 truncate">{c.category}</span>
-                            {c.supplierName && <span className="text-slate-500 truncate">({c.supplierName})</span>}
-                          </div>
-                          <div className="flex items-center gap-2.5 shrink-0">
-                            <span className="font-mono font-black text-slate-900" dir="ltr">
-                              {money(c.amount, c.currency)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => run(() => tourGroupsApi.removeCharge(g.id, c.id))}
-                              className="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center cursor-pointer"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
+                  {chargesExpanded && (
+                    <div className="p-3 border-t border-slate-100 bg-slate-50/40 space-y-1.5">
+                      {g.charges.length === 0 ? (
+                        <div className="py-2.5 text-center text-xs font-bold text-slate-400">
+                          {isAr ? 'لا توجد مصاريف مشتركة مسجلة' : 'No shared charges recorded'}
                         </div>
-                      ))}
+                      ) : (
+                        <div className="divide-y divide-slate-100 bg-white rounded-xl border border-slate-200 px-3">
+                          {g.charges.map((c) => (
+                            <div key={c.id} className="flex items-center justify-between gap-2 py-2 text-xs">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className={`text-[10px] font-black rounded-md px-1.5 py-0.5 border shrink-0 ${
+                                    c.chargeType === 'EXPENSE'
+                                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                      : 'bg-sky-50 text-sky-800 border-sky-200'
+                                  }`}
+                                >
+                                  {c.chargeType === 'EXPENSE' ? (isAr ? 'مصروف' : 'EXP') : isAr ? 'شراء' : 'BUY'}
+                                </span>
+                                <span className="font-black text-slate-900 truncate">{c.category}</span>
+                                {c.supplierName && <span className="text-slate-500 truncate">({c.supplierName})</span>}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-mono font-black text-slate-900" dir="ltr">
+                                  {money(c.amount, c.currency)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => run(() => tourGroupsApi.removeCharge(g.id, c.id))}
+                                  className="h-6 w-6 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center cursor-pointer"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* ٤) المسافرون وخدماتهم */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+              {/* ٤) قسم المسافرين — حاوية رئيسية واحدة بدون تداخل بطاقات */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                {/* ترويسة قسم المسافرين الرئيسية */}
+                <div className="p-3 sm:px-4 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2.5">
                   <div className="flex items-center gap-2">
                     <Users size={16} className="text-[#F45A0A]" />
-                    <h3 className="font-black text-xs sm:text-sm text-slate-900">
+                    <h3 className="font-bold text-xs sm:text-sm text-slate-900">
                       {isAr ? 'المسافرون' : 'Passengers'}
                     </h3>
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-orange-50 text-[#F45A0A] border border-orange-200/70 font-mono" dir="ltr">
-                      {g.passengers.length} {isAr ? 'مسافراً' : 'pax'}
+                    <span className="text-xs font-mono font-bold text-slate-500" dir="ltr">
+                      ({g.passengers.length})
                     </span>
+                    {beneficiaryGroups.length === 1 && beneficiaryGroups[0].passengers.length > 1 && beneficiaryGroups[0].name !== 'الركاب المباشرون' && (
+                      <span className="text-xs text-slate-500 font-medium truncate max-w-[200px]">
+                        • {beneficiaryGroups[0].name}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {!g.openSale && (
@@ -834,7 +882,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                             isAr ? 'فُتح البيع — يمكنك الآن إضافة المسافرين' : 'Sale opened',
                           )
                         }
-                        className="h-8 px-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-[11.5px] font-black cursor-pointer flex items-center gap-1.5 hover:bg-emerald-100"
+                        className="h-[32px] px-2.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer flex items-center gap-1.5 hover:bg-emerald-100"
                         title={isAr ? 'البيع مقفل — افتحه لإضافة المسافرين' : 'Open the sale first'}
                       >
                         <Unlock size={13} />
@@ -846,63 +894,55 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                       disabled={!g.passengers || g.passengers.length === 0}
                       onClick={() => setAuditModalOpen(true)}
                       title={!g.passengers || g.passengers.length === 0 ? (isAr ? 'لا يوجد مسافرون لتدقيقهم' : 'No passengers to audit') : ''}
-                      className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-orange-50/70 hover:border-orange-300 disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 hover:text-[#F45A0A] text-xs font-black cursor-pointer flex items-center gap-1.5 transition-colors shadow-2xs"
+                      className="h-[32px] px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 text-xs font-bold cursor-pointer flex items-center gap-1.5 transition-colors shadow-2xs"
                     >
-                      <CheckCheck size={14} className="text-[#F45A0A]" />
-                      <span>{isAr ? 'تدقيق المسافرين والأسعار' : 'Audit Passengers'}</span>
+                      <CheckCheck size={14} className="text-slate-500" />
+                      <span>{isAr ? 'تدقيق الأسعار' : 'Audit'}</span>
                     </button>
                     <button
                       type="button"
                       disabled={!g.openSale}
                       onClick={() => setBeneficiaryModalOpen(true)}
                       title={!g.openSale ? (isAr ? 'البيع مقفل — افتح البيع أولاً' : 'Sale is closed — open it first') : ''}
-                      className="h-8 px-3 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-[#F45A0A] text-xs font-black cursor-pointer flex items-center gap-1.5 transition-colors shadow-2xs"
+                      className="h-[32px] px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:bg-slate-100 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-700 text-xs font-bold cursor-pointer flex items-center gap-1.5 transition-colors shadow-2xs"
                     >
-                      <FolderPlus size={14} />
-                      <span>{isAr ? 'إضافة مستفيد جديد' : 'New Beneficiary'}</span>
+                      <FolderPlus size={14} className="text-slate-500" />
+                      <span>{isAr ? 'إضافة مستفيد' : 'New Beneficiary'}</span>
                     </button>
                     <button
                       type="button"
                       disabled={!g.openSale}
                       onClick={() => setPaxModal({ open: true, initialCustomer: null })}
                       title={!g.openSale ? (isAr ? 'البيع مقفل — افتح البيع أولاً' : 'Sale is closed — open it first') : ''}
-                      className="h-8 px-3.5 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                      className="h-[32px] px-3.5 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-xs transition-all"
                     >
-                      <UserPlus size={14} />
+                      <UserPlus size={14} strokeWidth={2.2} />
                       <span>{isAr ? 'إضافة مسافر' : 'Add Passenger'}</span>
                     </button>
                   </div>
                 </div>
 
-                {beneficiaryGroups.length === 0 ? (
-                  <div className="py-12 text-center space-y-2.5">
+                {beneficiaryGroups.length === 0 || g.passengers.length === 0 ? (
+                  <div className="py-12 text-center space-y-2.5 p-4">
                     <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#F45A0A] mx-auto flex items-center justify-center">
                       <Users size={22} />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-sm font-black text-slate-700">
-                        {isAr ? 'لا يوجد مسافرون أو ملفات مستفيدين مسجلة بعد' : 'No passengers or beneficiary files yet'}
+                      <p className="text-sm font-bold text-slate-700">
+                        {isAr ? 'لا يوجد مسافرون مسجلون بعد' : 'No passengers registered yet'}
                       </p>
-                      <p className="text-xs font-bold text-slate-400 max-w-md mx-auto">
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">
                         {isAr
-                          ? 'يمكنك إضافة ملف مستفيد مستقل لكل جهة أو شركة والبدء بإضافة مسافريها، أو إضافة مسافرين مباشرة.'
-                          : 'Create a beneficiary file for each customer/company, or add passengers directly.'}
+                          ? 'يمكنك إضافة مسافرين مباشرة أو تصنيفهم حسب ملفات المستفيدين والشركات.'
+                          : 'You can add passengers directly or organize them by beneficiary files.'}
                       </p>
                     </div>
                     {g.openSale && (
                       <div className="flex items-center justify-center gap-2 pt-1">
                         <button
                           type="button"
-                          onClick={() => setBeneficiaryModalOpen(true)}
-                          className="h-8 px-3.5 rounded-xl border border-orange-200 bg-orange-50 text-[#F45A0A] text-xs font-black hover:bg-orange-100 flex items-center gap-1.5 cursor-pointer transition-colors"
-                        >
-                          <FolderPlus size={14} />
-                          <span>{isAr ? 'إضافة مستفيد جديد' : 'New Beneficiary'}</span>
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => setPaxModal({ open: true, initialCustomer: null })}
-                          className="h-8 px-3.5 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          className="h-8 px-4 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
                         >
                           <UserPlus size={14} />
                           <span>{isAr ? 'إضافة مسافر' : 'Add Passenger'}</span>
@@ -910,111 +950,73 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                       </div>
                     )}
                   </div>
+                ) : beneficiaryGroups.length <= 1 ? (
+                  /* إذا كانت مجموعة واحدة: عرض الجدول مباشرة بدون بطاقات متداخلة أو تكرار الاسم */
+                  <PassengerTable
+                    g={g}
+                    passengers={g.passengers}
+                    isAr={isAr}
+                    supplierOptions={supplierOptions}
+                    run={run}
+                    onEditPax={(pax) => {
+                      const bg = beneficiaryGroups[0];
+                      setPaxModal({
+                        open: true,
+                        initialCustomer: bg
+                          ? {
+                              name: bg.name,
+                              accountId: bg.accountId,
+                              id: bg.customerId,
+                              agent: pax.agent || undefined,
+                            }
+                          : null,
+                        editingPassenger: pax,
+                      });
+                    }}
+                  />
                 ) : (
-                  <div className="space-y-3">
+                  /* إذا كانت عدة مجموعات مستفيدين: فواصل أنيقة وموجزة بدون بطاقات متداخلة */
+                  <div className="divide-y divide-slate-100">
                     {beneficiaryGroups.map((bg) => {
                       const isExpanded = expandedBeneficiaries[bg.key] !== false;
                       return (
-                        <div
-                          key={bg.key}
-                          className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-2xs transition-all hover:border-orange-200"
-                        >
-                          {/* شريط ترويسة ملف المستفيد */}
-                          <div className="p-3 sm:p-3.5 bg-gradient-to-r from-slate-50 via-white to-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200/80 text-[#F45A0A] flex items-center justify-center shrink-0 shadow-2xs">
-                                <Folder size={16} />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-black text-xs sm:text-sm text-slate-900 truncate">
-                                    {bg.name}
-                                  </span>
-                                  <span className="text-[11px] font-black font-mono px-2 py-0.5 rounded-full bg-orange-50 text-[#F45A0A] border border-orange-200/70 shrink-0">
-                                    {bg.passengers.length} {isAr ? 'مسافر' : 'pax'}
-                                  </span>
-                                </div>
-                                {bg.accountId && (
-                                  <span className="text-[10px] font-bold text-slate-400 block truncate">
-                                    {isAr ? 'حساب مالي مسجل' : 'Linked Account'}
-                                  </span>
-                                )}
-                              </div>
+                        <div key={bg.key} className="transition-all">
+                          {/* شريط ملف المستفيد — صف مدمج بدون تكرار زر إضافة مسافر */}
+                          <div
+                            onClick={() =>
+                              setExpandedBeneficiaries((prev) => ({
+                                ...prev,
+                                [bg.key]: isExpanded ? false : true,
+                              }))
+                            }
+                            className="px-3.5 py-2 bg-slate-50/70 border-b border-slate-200/80 flex items-center justify-between gap-2 cursor-pointer select-none hover:bg-slate-100/70 transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Folder size={14} className="text-slate-500 shrink-0" />
+                              <span className="font-bold text-xs text-slate-900 truncate">
+                                {bg.name}
+                              </span>
+                              <span className="text-[11px] font-mono text-slate-500">
+                                ({bg.passengers.length} {isAr ? 'مسافر' : 'pax'})
+                              </span>
+                              {bg.totalDue > 0 && (
+                                <span className="text-[10.5px] font-mono font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200" dir="ltr">
+                                  {isAr ? 'متبقي: ' : 'Due: '}{money(bg.totalDue, g.currency)}
+                                </span>
+                              )}
                             </div>
 
-                            {/* مؤشرات مالية وأزرار ملف المستفيد: التكلفة علينا، على المستفيد، الربح، والمحصل */}
-                            <div className="flex items-center flex-wrap gap-2">
-                              {/* ١. التكلفة علينا */}
-                              <div
-                                className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums shadow-2xs"
-                                title={isAr ? `التكلفة علينا (فعلي: ${money(bg.totalActualCost, g.currency)} | متوقع: ${money(bg.totalPlannedCost, g.currency)})` : 'Cost to us'}
-                              >
-                                <span className="text-slate-400 font-sans text-[11px] font-bold">
-                                  {isAr ? 'التكلفة علينا:' : 'Our Cost:'}
-                                </span>
-                                <span className="text-slate-700 font-black">
-                                  {money(bg.totalCost, g.currency)}
-                                </span>
-                              </div>
-
-                              {/* ٢. على المستفيد (إجمالي المبيعات) */}
-                              <div className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums shadow-2xs">
-                                <span className="text-slate-400 font-sans text-[11px] font-bold">
-                                  {isAr ? 'على المستفيد:' : 'Beneficiary:'}
-                                </span>
-                                <span className="text-slate-900 font-black">
-                                  {money(bg.totalSale, g.currency)}
-                                </span>
-                              </div>
-
-                              {/* ٣. صافي الربح */}
-                              <div
-                                className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg border font-mono tabular-nums shadow-2xs ${
-                                  bg.totalProfit >= 0
-                                    ? 'bg-orange-50 text-[#F45A0A] border-orange-200'
-                                    : 'bg-rose-50 text-rose-700 border-rose-200'
-                                }`}
-                              >
-                                <TrendingUp size={13} className={bg.totalProfit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'} />
-                                <span className="font-sans text-[11px] font-bold">
-                                  {isAr ? 'الربح:' : 'Profit:'}
-                                </span>
-                                <span className="font-black">
-                                  {money(bg.totalProfit, g.currency)}
-                                </span>
-                              </div>
-
-                              {/* ٤. المحصل */}
-                              <div className="flex items-center gap-1.5 text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-mono tabular-nums shadow-2xs">
-                                <span className="text-slate-400 font-sans text-[11px] font-bold">
-                                  {isAr ? 'المحصل:' : 'Paid:'}
-                                </span>
-                                <span className="text-emerald-700 font-black">
-                                  {money(bg.totalPaid, g.currency)}
-                                </span>
-                              </div>
-
-                              {/* ٥. المتبقي إن وجد */}
-                              {bg.totalDue > 0 && (
-                                <div className="flex items-center gap-1.5 text-xs font-bold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 font-mono tabular-nums shadow-2xs">
-                                  <span className="text-rose-500 font-sans text-[11px] font-bold">
-                                    {isAr ? 'المتبقي:' : 'Due:'}
-                                  </span>
-                                  <span className="text-rose-700 font-black">
-                                    {money(bg.totalDue, g.currency)}
-                                  </span>
-                                </div>
-                              )}
-
+                            <div className="flex items-center gap-1.5 shrink-0">
                               <button
                                 type="button"
-                                onClick={() =>
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setExpandedBeneficiaries((prev) => ({
                                     ...prev,
                                     [bg.key]: isExpanded ? false : true,
-                                  }))
-                                }
-                                className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 flex items-center justify-center cursor-pointer"
+                                  }));
+                                }}
+                                className="w-6 h-6 rounded text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
                                 title={isExpanded ? (isAr ? 'طي' : 'Collapse') : (isAr ? 'توسيع' : 'Expand')}
                               >
                                 {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -1024,38 +1026,31 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
 
                           {/* قائمة المسافرين التابعين لهذا المستفيد */}
                           {isExpanded && (
-                            <div className="p-3 bg-white space-y-2">
-                              {bg.passengers.length === 0 ? (
-                                <div className="py-5 text-center space-y-1 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                                  <p className="text-xs font-black text-slate-600">
-                                    {isAr ? 'لا يوجد مسافرون مسجلون لهذا المستفيد بعد' : 'No passengers under this file yet'}
-                                  </p>
-                                  <p className="text-[11px] font-bold text-slate-400">
-                                    {isAr ? 'اضغط على «إضافة مسافر لهذا المستفيد» لتسجيل المسافرين' : 'Click "Add Traveler" above to start'}
-                                  </p>
-                                </div>
-                              ) : (
-                                <PassengerTable
-                                  g={g}
-                                  passengers={bg.passengers}
-                                  isAr={isAr}
-                                  supplierOptions={supplierOptions}
-                                  run={run}
-                                  onEditPax={(pax) => {
-                                    setPaxModal({
-                                      open: true,
-                                      initialCustomer: {
-                                        name: bg.name,
-                                        accountId: bg.accountId,
-                                        id: bg.customerId,
-                                        agent: pax.agent || undefined,
-                                      },
-                                      editingPassenger: pax,
-                                    });
-                                  }}
-                                />
-                              )}
-                            </div>
+                            bg.passengers.length === 0 ? (
+                              <div className="py-4 text-center text-xs text-slate-400">
+                                {isAr ? 'لا يوجد مسافرون مسجلون لهذا المستفيد' : 'No passengers registered'}
+                              </div>
+                            ) : (
+                              <PassengerTable
+                                g={g}
+                                passengers={bg.passengers}
+                                isAr={isAr}
+                                supplierOptions={supplierOptions}
+                                run={run}
+                                onEditPax={(pax) => {
+                                  setPaxModal({
+                                    open: true,
+                                    initialCustomer: {
+                                      name: bg.name,
+                                      accountId: bg.accountId,
+                                      id: bg.customerId,
+                                      agent: pax.agent || undefined,
+                                    },
+                                    editingPassenger: pax,
+                                  });
+                                }}
+                              />
+                            )
                           )}
                         </div>
                       );
@@ -1161,6 +1156,138 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
             return !!ok;
           }}
         />
+      )}
+
+      {/* ── نافذة تفاصيل العملية والكروب ── */}
+      {g && detailsModalOpen && (
+        <Modal
+          opened={detailsModalOpen}
+          onClose={() => setDetailsModalOpen(false)}
+          centered
+          size={540}
+          withCloseButton={false}
+          zIndex={10050}
+          classNames={{
+            content: '!rounded-2xl border border-slate-200 shadow-2xl',
+            body: '!p-5',
+          }}
+        >
+          <div className="space-y-4 font-sans" dir={direction}>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200/80 text-[#F45A0A] flex items-center justify-center">
+                  <Info size={18} strokeWidth={2.4} />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm sm:text-base text-slate-900">
+                    {isAr ? 'تفاصيل العملية والكروب' : 'Operation & Group Details'}
+                  </h3>
+                  <p className="text-[11px] font-bold text-slate-400">
+                    {g.groupName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailsModalOpen(false)}
+                className="w-8 h-8 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+                <div>
+                  <span className="text-slate-400 block mb-0.5 font-bold">{isAr ? 'اسم الكروب / المعرف' : 'Group Name'}</span>
+                  <span className="font-black text-slate-900 text-xs sm:text-sm">{g.groupName}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block mb-0.5 font-bold">{isAr ? 'حالة البيع' : 'Sale Status'}</span>
+                  <span
+                    className={`inline-flex items-center gap-1 font-black px-2 py-0.5 rounded-full text-[11px] ${
+                      g.openSale
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                        : 'bg-amber-50 text-amber-800 border border-amber-200'
+                    }`}
+                  >
+                    {g.openSale ? (isAr ? 'البيع مفتوح' : 'Open') : (isAr ? 'البيع مقفل' : 'Closed')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 bg-white p-3 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-slate-400 block mb-0.5 font-bold">{isAr ? 'موظف الإصدار' : 'Issuing Employee'}</span>
+                  <span className="font-bold text-slate-800">{editGroupData.agent || (g.passengers?.[0]?.agent) || g.createdByName || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block mb-0.5 font-bold">{isAr ? 'مدخل البيانات' : 'Data Entry User'}</span>
+                  <span className="font-bold text-slate-800">{g.createdByName || currentUserName || 'مدير النظام'}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/70">
+                <div>
+                  <span className="text-slate-400 block mb-0.5 font-bold">{isAr ? 'الوجهة / الدولة' : 'Destination'}</span>
+                  <span className="font-bold text-slate-800">{g.country || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block mb-0.5 font-bold">{isAr ? 'تاريخ السفر' : 'Travel Date'}</span>
+                  <span className="font-mono font-bold text-slate-800" dir="ltr">
+                    {g.travelDate ? new Date(g.travelDate).toLocaleDateString('en-GB') : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block mb-0.5 font-bold">{isAr ? 'العملة' : 'Currency'}</span>
+                  <span className="font-mono font-bold text-[#F45A0A]" dir="ltr">{g.currency}</span>
+                </div>
+              </div>
+
+              {g.notes && (
+                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                  <span className="text-slate-400 block mb-0.5 font-bold">{isAr ? 'ملاحظات الكروب' : 'Notes'}</span>
+                  <p className="text-slate-700 font-medium whitespace-pre-wrap">{g.notes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailsModalOpen(false);
+                  setAuditLogOpen(true);
+                }}
+                className="h-9 px-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                <History size={14} className="text-purple-600" />
+                <span>{isAr ? 'سجل التعديلات' : 'Audit Log'}</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailsModalOpen(false);
+                    setEditGroupModalOpen(true);
+                  }}
+                  className="h-9 px-4 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-[#F45A0A] text-xs font-black flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Edit2 size={13} />
+                  <span>{isAr ? 'تعديل الكروب' : 'Edit'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailsModalOpen(false)}
+                  className="h-9 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 cursor-pointer"
+                >
+                  {isAr ? 'إغلاق' : 'Close'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ── نافذة تعديل بيانات الكروب ── */}
@@ -1504,7 +1631,7 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
   );
 };
 
-/* ── جدول المسافرين: سطر واحد لكل مسافر، لا أسطر فرعية، كليك يمين للتعديل ── */
+/* ── جدول المسافرين: أعمدة أساسية موجزة وتفاصيل ثانوية قابلة للفتح ── */
 const PassengerTable: React.FC<{
   g: TourGroup;
   passengers: GroupPassenger[];
@@ -1514,30 +1641,33 @@ const PassengerTable: React.FC<{
   onEditPax: (p: GroupPassenger) => void;
 }> = ({ g, passengers, isAr, run, onEditPax }) => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const th = 'px-3 py-3 text-[11.5px] font-black text-slate-700 whitespace-nowrap select-none text-center bg-slate-100/90 tracking-wide';
-  const td = 'px-3 py-2.5 text-[12px] whitespace-nowrap text-center align-middle';
+  const [expandedRowIds, setExpandedRowIds] = useState<Record<string, boolean>>({});
+
+  const toggleRow = (id: string) => {
+    setExpandedRowIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const th = 'px-3 py-2 text-[11px] font-bold text-slate-600 whitespace-nowrap select-none text-center bg-slate-50/90 tracking-wide border-b border-slate-200';
+  const td = 'px-3 py-2 text-[12px] whitespace-nowrap text-center align-middle';
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
+    <div className="overflow-x-auto">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b-2 border-slate-200">
-            <th className={`${th} w-10`}>#</th>
+          <tr>
             <th className={th}>{isAr ? 'المسافر' : 'Passenger'}</th>
-            <th className={th}>{isAr ? 'الخدمة / البكج' : 'Package / Service'}</th>
+            <th className={th}>{isAr ? 'الرحلة / الخدمة' : 'Trip / Service'}</th>
             <th className={th}>{isAr ? 'المورد' : 'Supplier'}</th>
-            <th className={th}>{isAr ? 'الحالة' : 'Status'}</th>
-            <th className={th}>{isAr ? 'سعر الشراء' : 'Buy Cost'}</th>
-            <th className={th}>{isAr ? 'سعر البيع' : 'Sale Price'}</th>
-            <th className={th}>{isAr ? 'المحصّل' : 'Collected'}</th>
-            <th className={th}>{isAr ? 'المتبقي' : 'Due'}</th>
+            <th className={th}>{isAr ? 'شراء' : 'Buy'}</th>
+            <th className={th}>{isAr ? 'بيع' : 'Sale'}</th>
             <th className={th}>{isAr ? 'الربح' : 'Profit'}</th>
-            <th className={th}>{isAr ? 'موظف الإصدار' : 'Issuer'}</th>
-            <th className={`${th} w-24`}>{isAr ? 'إجراءات' : 'Actions'}</th>
+            <th className={th}>{isAr ? 'الحالة' : 'Status'}</th>
+            <th className={`${th} w-32`}>{isAr ? 'إجراءات' : 'Actions'}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {passengers.map((p, idx) => {
+          {passengers.map((p) => {
+            const isExpanded = !!expandedRowIds[p.id];
             const cancelled = p.state === 'CANCELLED';
             const done = p.services.length > 0 && p.services.every((s) => s.status === 'COMPLETE');
             const sale = Number(p.salePrice) || 0;
@@ -1585,139 +1715,168 @@ const PassengerTable: React.FC<{
             }
 
             return (
-              <tr
-                key={p.id}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  onEditPax(p);
-                }}
-                onDoubleClick={() => onEditPax(p)}
-                title={isAr ? 'انقر بالزر الأيمن أو مرتين لتعديل بيانات المسافر' : 'Right-click or double-click to edit passenger'}
-                className={`transition-colors hover:bg-orange-50/40 cursor-pointer select-none group ${
-                  cancelled ? 'opacity-50 bg-slate-50/60' : ''
-                }`}
-              >
-                <td className={`${td} font-mono text-[11px] font-bold text-slate-400`}>
-                  {idx + 1}
-                </td>
-                <td className={td}>
-                  <div className="flex items-center justify-center gap-2 min-w-0">
-                    {cancelled ? (
-                      <Ban size={14} className="text-slate-400 shrink-0" />
-                    ) : done ? (
-                      <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                    ) : (
-                      <Clock size={14} className="text-amber-500 shrink-0" />
-                    )}
-                    <div className="text-center min-w-0">
-                      <span className="font-black text-slate-900 truncate block group-hover:text-[#F45A0A] transition-colors">
-                        {p.passengerName}
-                      </span>
-                      {p.passport && (
-                        <span className="text-[10px] font-mono font-bold text-slate-400 block truncate" dir="ltr">
-                          {p.passport}
-                        </span>
+              <React.Fragment key={p.id}>
+                <tr
+                  onClick={() => toggleRow(p.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    onEditPax(p);
+                  }}
+                  onDoubleClick={() => onEditPax(p)}
+                  title={isAr ? 'انقر لعرض التفاصيل أو مرتين لتعديل بيانات المسافر' : 'Click to expand details or double-click to edit'}
+                  className={`transition-colors hover:bg-orange-50/40 cursor-pointer select-none group ${
+                    cancelled ? 'opacity-50 bg-slate-50/60' : ''
+                  }`}
+                >
+                  <td className={td}>
+                    <div className="flex items-center justify-center gap-2 min-w-0">
+                      {cancelled ? (
+                        <Ban size={14} className="text-slate-400 shrink-0" />
+                      ) : done ? (
+                        <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                      ) : (
+                        <Clock size={14} className="text-amber-500 shrink-0" />
                       )}
+                      <div className="text-center min-w-0">
+                        <span className="font-bold text-slate-900 truncate block group-hover:text-[#F45A0A] transition-colors">
+                          {p.passengerName}
+                        </span>
+                        {p.passport && (
+                          <span className="text-[10px] font-mono text-slate-400 block truncate" dir="ltr">
+                            {p.passport}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td className={td}>
-                  <span className="font-bold text-slate-800 text-[11.5px] truncate block max-w-[170px] mx-auto" title={serviceName}>
-                    {serviceName}
-                  </span>
-                </td>
-                <td className={td}>
-                  <span className="font-bold text-slate-600 text-[11px] truncate block max-w-[130px] mx-auto" title={supplierName || '—'}>
-                    {supplierName || '—'}
-                  </span>
-                </td>
-                <td className={td}>
-                  <span
-                    className={`text-[10px] font-black rounded-md px-2 py-0.5 border inline-block ${
-                      cancelled
-                        ? 'bg-slate-100 text-slate-500 border-slate-200'
-                        : done
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}
-                  >
-                    {cancelled ? (isAr ? 'ملغى' : 'Cancelled') : done ? (isAr ? 'مكتمل' : 'Complete') : (isAr ? 'معلّق' : 'Pending')}
-                  </span>
-                </td>
-                <td className={`${td} font-mono font-bold text-slate-700 tabular-nums`} dir="ltr">
-                  {cost > 0 ? money(cost, p.currency || g.currency) : '—'}
-                </td>
-                <td className={`${td} font-mono font-black text-slate-900 tabular-nums`} dir="ltr">
-                  {money(sale, p.currency || g.currency)}
-                </td>
-                <td className={`${td} font-mono font-black tabular-nums`} dir="ltr">
-                  <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/70 inline-block">
-                    {money(paid, p.currency || g.currency)}
-                  </span>
-                </td>
-                <td className={`${td} font-mono font-black tabular-nums`} dir="ltr">
-                  {due > 0 ? (
-                    <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 inline-block">
-                      {money(due, p.currency || g.currency)}
+                  </td>
+                  <td className={td}>
+                    <span className="font-medium text-slate-800 text-[11.5px] truncate block max-w-[170px] mx-auto" title={serviceName}>
+                      {serviceName}
                     </span>
-                  ) : (
-                    <span className="text-slate-400 font-bold">—</span>
-                  )}
-                </td>
-                <td className={`${td} font-mono font-black tabular-nums`} dir="ltr">
-                  <span className={`px-2 py-0.5 rounded border inline-block ${profit >= 0 ? 'text-[#F45A0A] bg-orange-50 border-orange-200/80' : 'text-rose-700 bg-rose-50 border-rose-200'}`}>
-                    {money(profit, p.currency || g.currency)}
-                  </span>
-                </td>
-                <td className={td}>
-                  {p.agent || g.createdByName ? (
-                    <span className="text-[11px] font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-md border border-slate-200 inline-block truncate max-w-[130px]" title={p.agent || g.createdByName}>
-                      {p.agent || g.createdByName}
+                  </td>
+                  <td className={td}>
+                    <span className="font-medium text-slate-600 text-[11px] truncate block max-w-[130px] mx-auto" title={supplierName || '—'}>
+                      {supplierName || '—'}
                     </span>
-                  ) : (
-                    <span className="text-slate-400 text-[11px]">—</span>
-                  )}
-                </td>
-                <td className={td} onClick={(e) => e.stopPropagation()}>
-                  <div className="inline-flex items-center justify-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => onEditPax(p)}
-                      title={isAr ? 'تعديل بيانات المسافر (أو كليك يمين)' : 'Edit passenger (or right-click)'}
-                      className="w-7 h-7 rounded-lg text-[#F45A0A] hover:bg-orange-100/70 border border-orange-200/60 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+                  </td>
+                  <td className={`${td} font-mono font-bold text-slate-600 tabular-nums`} dir="ltr">
+                    {cost > 0 ? money(cost, p.currency || g.currency) : '—'}
+                  </td>
+                  <td className={`${td} font-mono font-black text-slate-900 tabular-nums`} dir="ltr">
+                    {money(sale, p.currency || g.currency)}
+                  </td>
+                  <td className={`${td} font-mono font-black tabular-nums`} dir="ltr">
+                    <span className={`font-bold ${profit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'}`}>
+                      {money(profit, p.currency || g.currency)}
+                    </span>
+                  </td>
+                  <td className={td}>
+                    <span
+                      className={`text-[10px] font-bold rounded-md px-2 py-0.5 border inline-block ${
+                        cancelled
+                          ? 'bg-slate-100 text-slate-500 border-slate-200'
+                          : done
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}
                     >
-                      <Edit2 size={13} />
-                    </button>
-                    {!cancelled ? (
+                      {cancelled ? (isAr ? 'ملغى' : 'Cancelled') : done ? (isAr ? 'مكتمل' : 'Complete') : (isAr ? 'معلّق' : 'Pending')}
+                    </span>
+                  </td>
+                  <td className={td} onClick={(e) => e.stopPropagation()}>
+                    <div className="inline-flex items-center justify-center gap-1.5">
+                      {/* زر تعديل */}
                       <button
                         type="button"
-                        onClick={() => run(() => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'CANCELLED' }), isAr ? 'أُلغي الحجز' : 'Cancelled')}
-                        title={isAr ? 'إلغاء الحجز' : 'Cancel'}
-                        className="w-7 h-7 rounded-lg text-amber-600 hover:bg-amber-100/70 border border-amber-200/60 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+                        onClick={() => onEditPax(p)}
+                        title={isAr ? 'تعديل بيانات المسافر' : 'Edit passenger'}
+                        className="h-7 px-2.5 rounded-lg text-[#F45A0A] bg-orange-50/80 hover:bg-orange-100 border border-orange-200/90 inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
                       >
-                        <Ban size={13} />
+                        <Edit2 size={12} />
+                        <span>{isAr ? 'تعديل' : 'Edit'}</span>
                       </button>
-                    ) : (
+
+                      {/* زر حذف */}
                       <button
                         type="button"
-                        onClick={() => run(() => tourGroupsApi.updatePassenger(g.id, p.id, { state: 'RESERVED' }), isAr ? 'تم تفعيل الحجز' : 'Restored')}
-                        title={isAr ? 'استعادة الحجز' : 'Restore'}
-                        className="w-7 h-7 rounded-lg text-emerald-600 hover:bg-emerald-100/70 border border-emerald-200/60 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+                        onClick={() => setConfirmDeleteId(p.id)}
+                        title={isAr ? 'حذف المسافر' : 'Delete passenger'}
+                        className="h-7 px-2.5 rounded-lg text-rose-600 bg-rose-50/80 hover:bg-rose-100 border border-rose-200/90 inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
                       >
-                        <CheckCircle2 size={13} />
+                        <Trash2 size={12} />
+                        <span>{isAr ? 'حذف' : 'Delete'}</span>
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteId(p.id)}
-                      title={isAr ? 'حذف نهائي' : 'Delete'}
-                      className="w-7 h-7 rounded-lg text-rose-600 hover:bg-rose-100/70 border border-rose-200/60 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                    </div>
+                  </td>
+                </tr>
+
+                {/* التفاصيل الثانوية القابلة للفتح */}
+                {isExpanded && (
+                  <tr className="bg-slate-50/70 border-b border-slate-200 text-xs">
+                    <td colSpan={8} className="p-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                        <div className="flex items-center gap-4 flex-wrap text-xs">
+                          {/* موظف الإصدار */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-400 font-bold">{isAr ? 'موظف الإصدار:' : 'Issuer:'}</span>
+                            <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                              {p.agent || g.createdByName || (isAr ? 'مدير النظام' : 'System Admin')}
+                            </span>
+                          </div>
+
+                          {/* المحصل */}
+                          <div className="flex items-center gap-1.5 font-mono">
+                            <span className="text-slate-400 font-sans font-bold">{isAr ? 'المحصل:' : 'Paid:'}</span>
+                            <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/60" dir="ltr">
+                              {money(paid, p.currency || g.currency)}
+                            </span>
+                          </div>
+
+                          {/* المتبقي */}
+                          <div className="flex items-center gap-1.5 font-mono">
+                            <span className="text-slate-400 font-sans font-bold">{isAr ? 'المتبقي:' : 'Due:'}</span>
+                            <span
+                              className={`font-black px-2 py-0.5 rounded border ${
+                                due > 0 ? 'text-rose-700 bg-rose-50 border-rose-200' : 'text-slate-500 bg-slate-100 border-slate-200'
+                              }`}
+                              dir="ltr"
+                            >
+                              {due > 0 ? money(due, p.currency || g.currency) : isAr ? 'خالص' : 'Settled'}
+                            </span>
+                          </div>
+
+                          {/* الجواز */}
+                          {p.passport && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-400 font-bold">{isAr ? 'الجواز:' : 'Passport:'}</span>
+                              <span className="font-mono font-bold text-slate-700" dir="ltr">
+                                {p.passport}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* الملاحظات */}
+                          {p.notes && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-400 font-bold">{isAr ? 'ملاحظات:' : 'Notes:'}</span>
+                              <span className="text-slate-700 font-medium">{p.notes}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => onEditPax(p)}
+                          className="h-7 px-2.5 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 text-[#F45A0A] text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Edit2 size={12} />
+                          <span>{isAr ? 'تعديل البيانات الكاملة' : 'Edit full details'}</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             );
           })}
         </tbody>
@@ -3137,7 +3296,7 @@ const PassengerModal: React.FC<{
     reader.readAsDataURL(file);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (andClose = false) => {
     if (busy || !d.passengerName.trim() || !d.priceSystemId) return;
     const nameToAdd = d.passengerName.trim();
     const resolvedAgent = String(d.agent || currentUserAgent || '').trim();
@@ -3150,7 +3309,7 @@ const PassengerModal: React.FC<{
       transferImage: transferImage || null,
     });
     if (ok) {
-      if (isEditing) {
+      if (isEditing || andClose) {
         onClose();
       } else {
         setAddedCount((c) => c + 1);
@@ -3168,12 +3327,27 @@ const PassengerModal: React.FC<{
     }
   };
 
+  const selectedPriceSystem = useMemo(() => {
+    return g.priceSystems.find((s) => s.id === d.priceSystemId) || null;
+  }, [g.priceSystems, d.priceSystemId]);
+
+  const selectedPsItems = selectedPriceSystem?.items || [];
+  const totalExpectedCost = useMemo(() => {
+    return selectedPsItems.reduce(
+      (a: number, it: any) => a + (Number(String(it.expectedBuy).replace(/,/g, '')) || 0),
+      0,
+    );
+  }, [selectedPsItems]);
+
+  const numericSalePrice = Number(String(d.salePrice || 0).replace(/,/g, '')) || 0;
+  const expectedProfit = numericSalePrice - totalExpectedCost;
+
   return (
     <Modal
       opened
       onClose={onClose}
       centered
-      size={620}
+      size={1040}
       withCloseButton={false}
       zIndex={10050}
       classNames={{
@@ -3181,19 +3355,20 @@ const PassengerModal: React.FC<{
         body: '!p-5',
       }}
     >
-      <div className="space-y-3.5 font-sans" dir={direction}>
-        <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-          <div className="flex items-center gap-2">
+      <div className="space-y-4 font-sans" dir={direction}>
+        {/* ترويسة النافذة */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#F45A0A] flex items-center justify-center">
               <User size={16} />
             </div>
             <div>
               <h3 className="font-black text-sm text-slate-900">
-                {isEditing ? (isAr ? 'تعديل بيانات المسافر' : 'Edit Passenger') : (isAr ? 'إضافة مسافر' : 'Add Passenger')}
+                {isEditing ? (isAr ? 'تعديل مسافر' : 'Edit Passenger') : (isAr ? 'إضافة مسافر' : 'Add Passenger')}
               </h3>
               {!isEditing && addedCount > 0 && (
                 <p className="text-[10.5px] font-bold text-emerald-600">
-                  {isAr ? `أُضيف ${addedCount} مسافرين في هذه الجلسة` : `${addedCount} passengers added`}
+                  {isAr ? `أُضيف ${addedCount} مسافر` : `${addedCount} passengers added`}
                 </p>
               )}
             </div>
@@ -3201,41 +3376,24 @@ const PassengerModal: React.FC<{
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center cursor-pointer"
-            title={isAr ? 'إغلاق النافذة' : 'Close'}
+            className="w-8 h-8 rounded-xl border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center cursor-pointer transition-colors"
+            title={isAr ? 'إغلاق' : 'Close'}
           >
             <X size={15} />
           </button>
         </div>
 
-        {initialCustomer?.name && (
-          <div className="rounded-xl border border-orange-200 bg-orange-50/60 px-3.5 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Folder size={15} className="text-[#F45A0A]" />
-              <span className="text-xs font-bold text-slate-700">
-                {isAr ? 'ملف المستفيد المحجوز له:' : 'Beneficiary Booking File:'}
-              </span>
-              <span className="text-xs font-black text-[#F45A0A]">
-                {initialCustomer.name}
-              </span>
-            </div>
-            <span className="text-[10.5px] font-bold text-slate-500 font-mono">
-              {isAr ? 'ملف مستفيد محدد' : 'Locked File'}
-            </span>
-          </div>
-        )}
-
         {lastAddedName && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 flex items-center justify-between">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
-              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-              <span className="text-xs font-black text-emerald-800 truncate">
+              <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+              <span className="text-xs font-bold text-emerald-800 truncate">
                 {isAr
                   ? `تم حفظ المسافر «${lastAddedName}» بنجاح! يمكنك إدخال المسافر التالي مباشرةً.`
                   : `Passenger "${lastAddedName}" saved! You can add next traveler directly.`}
               </span>
             </div>
-            <span className="text-[11px] font-black text-emerald-700 font-mono bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">
+            <span className="text-[11px] font-bold text-emerald-700 font-mono bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">
               {isAr ? `المضافين: ${addedCount}` : `Added: ${addedCount}`}
             </span>
           </div>
@@ -3247,331 +3405,391 @@ const PassengerModal: React.FC<{
           </div>
         )}
 
-        {/* الشريط العلوي: مدخل البيانات وموظف الإصدار كحقول واضحة */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 relative z-20">
-          <Field label={isAr ? 'مدخل البيانات' : 'Data Entry'}>
-            <input
-              type="text"
-              readOnly
-              value={editingPassenger ? ((editingPassenger as any).createdByName || editingPassenger.agent || currentUserAgent) : currentUserAgent}
-              className={`${inputClass} !bg-slate-100/80 !text-slate-700 cursor-not-allowed select-none font-bold`}
-              title={isAr ? 'مدخل البيانات محدد تلقائياً ولا يمكن تغييره' : 'Fixed entry user'}
-            />
-          </Field>
-          <Field label={isAr ? 'موظف الإصدار / المصدر *' : 'Issuing Employee / Issuer *'}>
-            <SearchableCombobox
-              value={d.agent || currentUserAgent}
-              onChange={(val) => setD({ ...d, agent: val || currentUserAgent })}
-              options={issuerComboboxOptions}
-              placeholder={isAr ? 'اختر موظف الإصدار...' : 'Select issuing employee...'}
-              allowCustomValue
-            />
-          </Field>
-        </div>
-
-        <Field label={isAr ? 'نظام الأسعار *' : 'Price System *'} className="relative z-10">
-          <SearchableCombobox
-            value={d.priceSystemId}
-            onChange={(val) => {
-              const sel = g.priceSystems.find((s) => s.id === val);
-              setD({
-                ...d,
-                priceSystemId: val,
-                salePrice: sel ? Number(sel.salePrice) : d.salePrice,
-                currency: sel?.currency || d.currency || g.currency || 'USD',
-              });
-            }}
-            options={activeSystems.map((s) => ({
-              value: s.id,
-              label: Number(s.salePrice) > 0 ? `${s.name} — ${money(s.salePrice, s.currency)}` : s.name,
-            }))}
-            placeholder=""
-          />
-        </Field>
-
-        {/* تكلفة الخدمات المتوقّعة للنظام المختار — تُنشأ للمسافر تلقائياً (تخطيط، لا شراء فعلي بعد) */}
-        {(() => {
-          const sel = g.priceSystems.find((s) => s.id === d.priceSystemId);
-          const items = sel?.items || [];
-          if (!items.length) return null;
-          const total = items.reduce((a: number, it: any) => a + (Number(String(it.expectedBuy).replace(/,/g, '')) || 0), 0);
-          return (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100/70 border-b border-slate-200">
-                <span className="text-[11px] font-black text-slate-600">{isAr ? 'التكلفة المتوقّعة للخدمات' : 'Expected service cost'}</span>
-                <span className="text-[10px] font-bold text-slate-400">{isAr ? 'تُنشأ تلقائياً — تُدخَل تكلفتها الفعلية لاحقاً' : 'auto-created, actual cost set later'}</span>
+        {/* الهيكل الرئيسي: حاوية الملخص المالي الجانبي + مجموعات الحقول */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4.5 items-start">
+          {/* ١) ملخص مالي جانبي (في اليمين في نمط RTL) */}
+          <div className="lg:col-span-4 space-y-3 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/90">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+              <div className="flex items-center gap-1.5">
+                <Receipt size={14} className="text-[#F45A0A]" />
+                <span className="font-black text-xs text-slate-800">
+                  {isAr ? 'الملخص المالي' : 'Financial Summary'}
+                </span>
               </div>
-              <div className="divide-y divide-slate-100">
-                {items.map((it: any, i: number) => {
-                  const meta = KIND_META[it.kind] || KIND_META.PACKAGE;
-                  const Icon = meta.icon;
-                  return (
-                    <div key={i} className="flex items-center justify-between gap-2 px-3 py-1.5 text-[11.5px]">
-                      <span className="inline-flex items-center gap-1.5 font-bold text-slate-700">
-                        <Icon size={12} className="text-[#F45A0A]" />
-                        {isAr ? meta.ar : it.kind}
-                        {it.supplierName && <span className="text-slate-400 font-normal">· {it.supplierName}</span>}
-                      </span>
-                      <span className="font-mono font-black text-slate-600" dir="ltr">{money(it.expectedBuy, it.currency || sel?.currency)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex items-center justify-between px-3 py-1.5 bg-orange-50/60 border-t border-orange-100">
-                <span className="text-[11px] font-black text-[#F45A0A]">{isAr ? 'إجمالي التكلفة المتوقّعة' : 'Total expected cost'}</span>
-                <span className="text-[12px] font-mono font-black text-[#F45A0A]" dir="ltr">{money(total, sel?.currency)}</span>
-              </div>
+              <span className="text-[10.5px] font-mono font-bold bg-white text-slate-600 px-2 py-0.5 rounded border border-slate-200" dir="ltr">
+                {d.currency || g.currency || 'USD'}
+              </span>
             </div>
-          );
-        })()}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <Field label={isAr ? 'اسم المسافر *' : 'Passenger *'}>
-            <input
-              ref={passengerInputRef}
-              value={d.passengerName}
-              onChange={(e) => setD({ ...d, passengerName: e.target.value })}
-              className={inputClass}
-              placeholder=""
-              autoFocus
-            />
-          </Field>
-          <Field
-            label={isAr ? 'العميل / الحساب' : 'Customer'}
-            action={
-              <button
-                type="button"
-                onClick={() => setAccountFinder({ open: true, query: d.customerName || '' })}
-                className="h-[20px] px-1.5 text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
-                title={isAr ? 'البحث المتقدم في كل الحسابات' : 'Advanced Account Search'}
-              >
-                <Search size={11} />
-                <span>{isAr ? 'بحث متقدم' : 'Search'}</span>
-              </button>
-            }
-          >
-            <AccountSearchField
-              value={d.customerName}
-              direction={direction}
-              inputClass={inputClass}
-              onPick={(pick: AccountPick) =>
-                setD({
-                  ...d,
-                  customerName: pick.name,
-                  customerId: null,
-                  customerAccountId: pick.id,
-                })
-              }
-            />
-          </Field>
-          <Field label={isAr ? 'الجواز' : 'Passport'}>
-            <input
-              value={d.passport}
-              onChange={(e) => setD({ ...d, passport: e.target.value })}
-              dir="ltr"
-              className={`${inputClass} font-mono`}
-              placeholder=""
-            />
-          </Field>
+            {/* الأرقام المالية الثلاثة الأساسية: البيع، التكلفة، الربح */}
+            <div className="space-y-2">
+              <div className="bg-white rounded-xl p-2.5 border border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">
+                  {isAr ? 'البيع' : 'Sale'}
+                </span>
+                <span className="text-sm font-black font-mono text-slate-900 tabular-nums" dir="ltr">
+                  {money(numericSalePrice, d.currency || g.currency)}
+                </span>
+              </div>
 
-          <Field label={isAr ? 'سعر البيع *' : 'Sale Price *'}>
-            <div className="flex items-center gap-1.5">
-              <div className="flex-1 flex items-center h-[46px] rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white hover:border-[#D1D5DB] focus-within:bg-white focus-within:border-2 focus-within:border-[#F45A0A] px-3.5 transition-colors">
-                <input
-                  value={formatWithCommas(d.salePrice ?? '')}
-                  onChange={(e) => {
-                    const raw = e.target.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
-                    const parts = raw.split('.');
-                    const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : raw;
-                    setD({ ...d, salePrice: clean });
-                  }}
+              <div className="bg-white rounded-xl p-2.5 border border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">
+                  {isAr ? 'التكلفة' : 'Cost'}
+                </span>
+                <span className="text-sm font-black font-mono text-slate-700 tabular-nums" dir="ltr">
+                  {money(totalExpectedCost, d.currency || g.currency)}
+                </span>
+              </div>
+
+              <div className={`rounded-xl p-2.5 border flex items-center justify-between ${
+                expectedProfit >= 0 ? 'bg-orange-50/60 border-orange-200' : 'bg-rose-50 border-rose-200'
+              }`}>
+                <span className="text-xs font-black text-slate-800">
+                  {isAr ? 'الربح' : 'Profit'}
+                </span>
+                <span
+                  className={`text-sm font-black font-mono tabular-nums ${
+                    expectedProfit >= 0 ? 'text-[#F45A0A]' : 'text-rose-600'
+                  }`}
                   dir="ltr"
-                  placeholder="0"
-                  className="w-full bg-transparent font-mono font-black text-xs text-slate-900 outline-none text-end tabular-nums"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  setD({
-                    ...d,
-                    currency: (d.currency || g.currency || 'USD') === 'USD' ? 'IQD' : 'USD',
-                  })
-                }
-                className="h-[46px] px-3.5 rounded-[11px] text-xs font-black font-mono flex items-center justify-center border border-orange-200 bg-orange-50 hover:bg-orange-100 text-[#F45A0A] transition-all cursor-pointer select-none shrink-0 shadow-2xs"
-                title={isAr ? 'انقر للتبديل بين USD و IQD' : 'Toggle USD / IQD'}
-              >
-                {(d.currency || g.currency || 'USD') === 'USD' ? 'USD' : 'IQD'}
-              </button>
-            </div>
-          </Field>
-
-          <Field
-            label={isAr ? 'نوع السداد *' : 'Payment Term *'}
-            className={d.payType === 'CREDIT' ? 'sm:col-span-2' : ''}
-          >
-            <SearchableCombobox
-              value={d.payType}
-              onChange={(v) => {
-                const nextPayType = v || 'CASH';
-                setD((prev: any) => ({
-                  ...prev,
-                  payType: nextPayType,
-                  paymentAccountId:
-                    nextPayType === 'CASH'
-                      ? prev.paymentMethod === 'MASTER'
-                        ? defaultMasterAccount?.value
-                        : matchedEmployeeCashbox?.value
-                      : null,
-                }));
-              }}
-              options={[
-                { value: 'CASH', label: isAr ? 'نقدي' : 'Cash' },
-                { value: 'CREDIT', label: isAr ? 'آجل' : 'Credit' },
-              ]}
-              clearable={false}
-            />
-          </Field>
-
-          {d.payType === 'CASH' && (
-            <Field label={isAr ? 'طريقة السداد' : 'Receiving Method'}>
-              <SearchableCombobox
-                value={d.paymentMethod || 'CASH_HAND'}
-                onChange={(val) => {
-                  const nextMethod = val || 'CASH_HAND';
-                  const nextAccountId =
-                    nextMethod === 'MASTER' ? defaultMasterAccount?.value : matchedEmployeeCashbox?.value;
-                  setD((prev: any) => ({
-                    ...prev,
-                    paymentMethod: nextMethod,
-                    paymentAccountId: nextAccountId || null,
-                  }));
-                }}
-                options={[
-                  { value: 'CASH_HAND', label: isAr ? 'كاش (نقداً)' : 'Cash' },
-                  { value: 'MASTER', label: isAr ? 'ماستر (دفع إلكتروني)' : 'Master / Card' },
-                ]}
-                clearable={false}
-              />
-            </Field>
-          )}
-
-          {d.payType === 'CASH' && (
-            <Field
-              label={
-                d.paymentMethod === 'MASTER'
-                  ? (isAr ? 'حساب الماستر / البنك المستلم' : 'Master Account')
-                  : (isAr ? 'صندوق الاستلام (المرتبط بالموظف)' : 'Receiving Cashbox')
-              }
-              className="sm:col-span-2"
-            >
-              <SearchableCombobox
-                value={d.paymentAccountId || ''}
-                onChange={(v) => setD((prev: any) => ({ ...prev, paymentAccountId: v }))}
-                options={d.paymentMethod === 'MASTER' ? masterAccounts : cashAccounts}
-                placeholder={
-                  d.paymentMethod === 'MASTER'
-                    ? (isAr ? 'اختر حساب الماستر' : 'Select Master')
-                    : (isAr ? 'اختر الصندوق المستلم' : 'Select Cashbox')
-                }
-                allowCustomValue
-              />
-            </Field>
-          )}
-        </div>
-
-        {d.payType === 'CASH' && d.paymentMethod === 'MASTER' && (
-          <div className="rounded-xl border border-orange-200/80 bg-orange-50/25 p-3 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                <FileCheck2 size={15} className="text-[#F45A0A]" />
-                <span>{isAr ? 'إرفاق وصل تسديد الماستر' : 'Master Payment Receipt'}</span>
-              </label>
-              {transferImage && (
-                <button
-                  type="button"
-                  onClick={() => setTransferImage(null)}
-                  className="text-[11px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
                 >
-                  <Trash2 size={12} />
-                  <span>{isAr ? 'حذف الوصل' : 'Remove'}</span>
-                </button>
-              )}
+                  {money(expectedProfit, d.currency || g.currency)}
+                </span>
+              </div>
             </div>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-
-            {!transferImage ? (
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-orange-200 hover:border-[#F45A0A] bg-white hover:bg-orange-50/40 rounded-xl p-3.5 flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all text-center group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center group-hover:scale-105 transition-transform">
-                  <UploadCloud size={16} />
+            {/* البنود المضمنة */}
+            {selectedPsItems.length > 0 ? (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-2.5 py-1.5 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-slate-700">{isAr ? 'البنود المضمنة' : 'Included Items'}</span>
+                  <span className="font-mono font-bold text-slate-500">({selectedPsItems.length})</span>
                 </div>
-                <p className="text-xs font-bold text-slate-700">
-                  {isAr ? 'اضغط لرفع صورة إشعار أو وصل تسديد الماستر' : 'Upload payment receipt'}
-                </p>
-                <p className="text-[10px] text-slate-400 font-mono">
-                  PNG, JPG, WEBP, PDF (max 5MB)
-                </p>
+                <div className="divide-y divide-slate-100 max-h-[140px] overflow-y-auto [scrollbar-width:thin]">
+                  {selectedPsItems.map((it: any, i: number) => {
+                    const meta = KIND_META[it.kind] || KIND_META.PACKAGE;
+                    const Icon = meta.icon;
+                    return (
+                      <div key={i} className="flex items-center justify-between gap-1.5 px-2.5 py-1.5 text-[11px]">
+                        <span className="inline-flex items-center gap-1.5 font-bold text-slate-700 truncate min-w-0">
+                          <Icon size={12} className="text-[#F45A0A] shrink-0" />
+                          <span className="truncate">{isAr ? meta.ar : it.kind}</span>
+                          {it.supplierName && <span className="text-slate-400 font-normal truncate">({it.supplierName})</span>}
+                        </span>
+                        <span className="font-mono font-bold text-slate-700 shrink-0" dir="ltr">
+                          {money(it.expectedBuy, it.currency || selectedPriceSystem?.currency)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between p-2.5 bg-white border border-orange-200 rounded-xl">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {transferImage.startsWith('data:application/pdf') ? (
-                    <div className="w-9 h-9 rounded-lg bg-orange-100 text-[#F45A0A] flex items-center justify-center shrink-0">
-                      <FileText size={18} />
-                    </div>
-                  ) : (
-                    <img
-                      src={transferImage}
-                      alt="receipt"
-                      className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0 cursor-pointer hover:opacity-90"
-                      onClick={() => setPreviewModalOpen(true)}
-                    />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-xs font-black text-slate-900 truncate">
-                      {isAr ? 'تم إرفاق وصل السداد' : 'Receipt attached'}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewModalOpen(true)}
-                      className="text-[11px] font-bold text-[#F45A0A] hover:underline cursor-pointer flex items-center gap-1 mt-0.5"
-                    >
-                      <Eye size={12} />
-                      <span>{isAr ? 'معاينة الوصل' : 'View receipt'}</span>
-                    </button>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="h-7 px-2.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer shrink-0"
-                >
-                  {isAr ? 'تغيير' : 'Change'}
-                </button>
+              <div className="bg-white rounded-xl p-3 border border-slate-200 text-center text-xs text-slate-400">
+                {isAr ? 'اختر النظام لعرض البنود' : 'Select a system'}
               </div>
             )}
 
-            <Field label={isAr ? 'رقم الوصل / الإشعار' : 'Voucher / Receipt #'}>
-              <input
-                value={d.voucherNumber || ''}
-                onChange={(e) => setD({ ...d, voucherNumber: e.target.value })}
-                className={inputClass}
-                placeholder={isAr ? 'رقم الإشعار أو المعاملة (اختياري)' : 'Reference / Voucher #'}
-              />
-            </Field>
+            {/* إرفاق وصل السداد إذا كانت الطريقة ماستر */}
+            {d.payType === 'CASH' && d.paymentMethod === 'MASTER' && (
+              <div className="bg-white rounded-xl border border-orange-200 p-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1">
+                    <FileCheck2 size={13} className="text-[#F45A0A]" />
+                    <span>{isAr ? 'وصل تسديد الماستر' : 'Master Receipt'}</span>
+                  </span>
+                  {transferImage && (
+                    <button
+                      type="button"
+                      onClick={() => setTransferImage(null)}
+                      className="text-[10.5px] font-bold text-rose-600 hover:text-rose-700 cursor-pointer"
+                    >
+                      {isAr ? 'حذف' : 'Remove'}
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                {!transferImage ? (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full border border-dashed border-orange-200 hover:border-[#F45A0A] bg-orange-50/40 rounded-lg p-2 text-center text-[11px] font-bold text-[#F45A0A] cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <UploadCloud size={14} />
+                    <span>{isAr ? 'إرفاق صورة الوصل' : 'Attach Receipt'}</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center justify-between p-1.5 bg-orange-50/40 rounded-lg border border-orange-200 text-[11px]">
+                    <span className="font-bold text-emerald-700 truncate">{isAr ? 'تم إرفاق الوصل' : 'Attached'}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewModalOpen(true)}
+                      className="text-[#F45A0A] font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                    >
+                      <Eye size={12} />
+                      <span>{isAr ? 'معاينة' : 'View'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        )}
 
+          {/* ٢) مجموعات الحقول المنظمة في اليسار */}
+          <div className="lg:col-span-8 space-y-4">
+            {/* المجموعة 1: معلومات المسافر */}
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2 pb-1 text-xs font-black text-slate-800 border-b border-slate-100">
+                <User size={14} className="text-[#F45A0A]" />
+                <span>{isAr ? 'معلومات المسافر' : 'Passenger Info'}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 1. المسافر * */}
+                <Field label={isAr ? 'المسافر *' : 'Passenger *'}>
+                  <input
+                    ref={passengerInputRef}
+                    value={d.passengerName}
+                    onChange={(e) => setD({ ...d, passengerName: e.target.value })}
+                    className={inputClass}
+                    placeholder={isAr ? 'أدخل الاسم' : 'Enter name'}
+                    autoFocus
+                  />
+                </Field>
+
+                {/* 2. الجواز */}
+                <Field label={isAr ? 'الجواز' : 'Passport'}>
+                  <input
+                    value={d.passport}
+                    onChange={(e) => setD({ ...d, passport: e.target.value })}
+                    dir="ltr"
+                    className={`${inputClass} font-mono`}
+                    placeholder="A1234567"
+                  />
+                </Field>
+              </div>
+            </div>
+
+            {/* المجموعة 2: تفاصيل البيع */}
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2 pb-1 text-xs font-black text-slate-800 border-b border-slate-100">
+                <Coins size={14} className="text-[#F45A0A]" />
+                <span>{isAr ? 'تفاصيل البيع' : 'Sale Details'}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 3. النظام * */}
+                <Field label={isAr ? 'النظام *' : 'System *'}>
+                  <SearchableCombobox
+                    value={d.priceSystemId}
+                    onChange={(val) => {
+                      const sel = g.priceSystems.find((s) => s.id === val);
+                      setD({
+                        ...d,
+                        priceSystemId: val,
+                        salePrice: sel ? Number(sel.salePrice) : d.salePrice,
+                        currency: sel?.currency || d.currency || g.currency || 'USD',
+                      });
+                    }}
+                    options={activeSystems.map((s) => ({
+                      value: s.id,
+                      label: Number(s.salePrice) > 0 ? `${s.name} — ${money(s.salePrice, s.currency)}` : s.name,
+                    }))}
+                    placeholder={isAr ? 'اختر النظام' : 'Select system'}
+                  />
+                </Field>
+
+                {/* 4. سعر البيع * */}
+                <Field label={isAr ? 'سعر البيع *' : 'Sale Price *'}>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex-1 flex items-center h-[46px] rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white hover:border-[#D1D5DB] focus-within:bg-white focus-within:border-2 focus-within:border-[#F45A0A] px-3.5 transition-colors">
+                      <input
+                        value={formatWithCommas(d.salePrice ?? '')}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+                          const parts = raw.split('.');
+                          const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : raw;
+                          setD({ ...d, salePrice: clean });
+                        }}
+                        dir="ltr"
+                        placeholder="0"
+                        className="w-full bg-transparent font-mono font-black text-xs text-slate-900 outline-none text-end tabular-nums"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setD({
+                          ...d,
+                          currency: (d.currency || g.currency || 'USD') === 'USD' ? 'IQD' : 'USD',
+                        })
+                      }
+                      className="h-[46px] px-3.5 rounded-[11px] text-xs font-black font-mono flex items-center justify-center border border-orange-200 bg-orange-50 hover:bg-orange-100 text-[#F45A0A] transition-all cursor-pointer select-none shrink-0 shadow-2xs"
+                      title={isAr ? 'انقر للتبديل بين USD و IQD' : 'Toggle USD / IQD'}
+                    >
+                      {(d.currency || g.currency || 'USD') === 'USD' ? 'USD' : 'IQD'}
+                    </button>
+                  </div>
+                </Field>
+
+                {/* 5. العميل */}
+                <Field
+                  label={isAr ? 'العميل' : 'Customer'}
+                  className="sm:col-span-2"
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => setAccountFinder({ open: true, query: d.customerName || '' })}
+                      className="h-[20px] px-1.5 text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
+                      title={isAr ? 'البحث المتقدم في كل الحسابات' : 'Advanced Account Search'}
+                    >
+                      <Search size={11} />
+                      <span>{isAr ? 'بحث متقدم' : 'Search'}</span>
+                    </button>
+                  }
+                >
+                  <AccountSearchField
+                    value={d.customerName}
+                    direction={direction}
+                    scope="CUSTOMER"
+                    inputClass={inputClass}
+                    placeholder={isAr ? 'اختر الحساب' : 'Select account'}
+                    onPick={(pick: AccountPick) =>
+                      setD({
+                        ...d,
+                        customerName: pick.name,
+                        customerId: null,
+                        customerAccountId: pick.id,
+                      })
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+
+            {/* المجموعة 3: السداد */}
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2 pb-1 text-xs font-black text-slate-800 border-b border-slate-100">
+                <Banknote size={14} className="text-[#F45A0A]" />
+                <span>{isAr ? 'السداد' : 'Payment'}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 6. السداد * */}
+                <Field label={isAr ? 'السداد *' : 'Payment *'}>
+                  <SearchableCombobox
+                    value={d.payType}
+                    onChange={(v) => {
+                      const nextPayType = v || 'CASH';
+                      setD((prev: any) => ({
+                        ...prev,
+                        payType: nextPayType,
+                        paymentAccountId:
+                          nextPayType === 'CASH'
+                            ? prev.paymentMethod === 'MASTER'
+                              ? defaultMasterAccount?.value
+                              : matchedEmployeeCashbox?.value
+                            : null,
+                      }));
+                    }}
+                    options={[
+                      { value: 'CASH', label: isAr ? 'نقدي' : 'Cash' },
+                      { value: 'CREDIT', label: isAr ? 'آجل' : 'Credit' },
+                    ]}
+                    clearable={false}
+                  />
+                </Field>
+
+                {/* 7. الطريقة (عند الدفع نقدي) */}
+                {d.payType === 'CASH' && (
+                  <Field label={isAr ? 'الطريقة' : 'Method'}>
+                    <SearchableCombobox
+                      value={d.paymentMethod || 'CASH_HAND'}
+                      onChange={(val) => {
+                        const nextMethod = val || 'CASH_HAND';
+                        const nextAccountId =
+                          nextMethod === 'MASTER' ? defaultMasterAccount?.value : matchedEmployeeCashbox?.value;
+                        setD((prev: any) => ({
+                          ...prev,
+                          paymentMethod: nextMethod,
+                          paymentAccountId: nextAccountId || null,
+                        }));
+                      }}
+                      options={[
+                        { value: 'CASH_HAND', label: isAr ? 'كاش (نقداً)' : 'Cash' },
+                        { value: 'MASTER', label: isAr ? 'ماستر (دفع إلكتروني)' : 'Master' },
+                      ]}
+                      clearable={false}
+                    />
+                  </Field>
+                )}
+
+                {/* 8. صندوق الاستلام (عند الدفع نقدي) */}
+                {d.payType === 'CASH' && (
+                  <Field
+                    label={isAr ? 'صندوق الاستلام' : 'Cashbox'}
+                    className={d.paymentMethod === 'MASTER' ? 'sm:col-span-1' : 'sm:col-span-2'}
+                  >
+                    <SearchableCombobox
+                      value={d.paymentAccountId || ''}
+                      onChange={(v) => setD((prev: any) => ({ ...prev, paymentAccountId: v }))}
+                      options={d.paymentMethod === 'MASTER' ? masterAccounts : cashAccounts}
+                      placeholder={isAr ? 'اختر الصندوق' : 'Select cashbox'}
+                      allowCustomValue
+                    />
+                  </Field>
+                )}
+
+                {/* 9. رقم الإشعار (عند الدفع ماستر) */}
+                {d.payType === 'CASH' && d.paymentMethod === 'MASTER' && (
+                  <Field label={isAr ? 'رقم الإشعار' : 'Reference #'}>
+                    <input
+                      value={d.voucherNumber || ''}
+                      onChange={(e) => setD({ ...d, voucherNumber: e.target.value })}
+                      className={inputClass}
+                      placeholder="REF-000"
+                    />
+                  </Field>
+                )}
+              </div>
+            </div>
+
+            {/* المجموعة 4: تفاصيل إضافية (أقل بروزاً وبشكل هادئ) */}
+            <div className="space-y-2.5 bg-slate-50/60 p-3 rounded-xl border border-slate-200/70">
+              <div className="flex items-center gap-2 pb-1 text-xs font-bold text-slate-500 border-b border-slate-200/60">
+                <UserCheck size={14} className="text-slate-400" />
+                <span>{isAr ? 'تفاصيل إضافية' : 'Additional Details'}</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 10. موظف الإصدار * */}
+                <Field label={isAr ? 'موظف الإصدار *' : 'Issuer *'}>
+                  <SearchableCombobox
+                    value={d.agent || currentUserAgent}
+                    onChange={(val) => setD({ ...d, agent: val || currentUserAgent })}
+                    options={issuerComboboxOptions}
+                    placeholder={isAr ? 'اختر الموظف' : 'Select employee'}
+                    allowCustomValue
+                  />
+                </Field>
+
+                {/* 11. مدخل البيانات */}
+                <Field label={isAr ? 'مدخل البيانات' : 'Data Entry'}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={editingPassenger ? ((editingPassenger as any).createdByName || editingPassenger.agent || currentUserAgent) : currentUserAgent}
+                    className={`${inputClass} !bg-slate-100/90 !text-slate-700 cursor-not-allowed select-none font-bold`}
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* الشريط السفلي: الأزرار المختصرة والهادئة */}
         <div className="flex items-center justify-between gap-2.5 pt-3 border-t border-slate-100 flex-wrap">
           <div className="flex items-center gap-2">
             {addedCount > 0 && (
@@ -3581,33 +3799,44 @@ const PassengerModal: React.FC<{
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* زر هادئ: إلغاء */}
             <button
               type="button"
               onClick={onClose}
-              className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              className="h-[40px] px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
             >
-              {addedCount > 0 ? (isAr ? 'إنهاء وإغلاق' : 'Done & Close') : (isAr ? 'إلغاء' : 'Cancel')}
+              {isAr ? 'إلغاء' : 'Cancel'}
             </button>
+
+            {/* زر ثانوي: حفظ وإضافة آخر (فقط في وضع الإضافة) */}
+            {!isEditing && (
+              <button
+                type="button"
+                disabled={busy || !d.passengerName.trim() || !d.priceSystemId}
+                onClick={() => handleSave(false)}
+                className="h-[40px] px-4.5 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-[#F45A0A] disabled:opacity-50 text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5"
+              >
+                <UserPlus size={14} />
+                <span>{isAr ? 'حفظ وإضافة آخر' : 'Save & Add Next'}</span>
+              </button>
+            )}
+
+            {/* الزر الأساسي: حفظ */}
             <button
               type="button"
               disabled={busy || !d.passengerName.trim() || !d.priceSystemId}
-              onClick={handleSave}
-              className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs flex items-center gap-1.5"
+              onClick={() => handleSave(true)}
+              className="h-[40px] px-6 rounded-xl bg-[#F45A0A] hover:bg-[#DD4F05] disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer shadow-2xs flex items-center gap-1.5 transition-colors"
             >
               {busy ? (
                 <>
                   <Loader size={13} color="white" />
                   <span>{isAr ? 'جارٍ الحفظ…' : 'Saving…'}</span>
                 </>
-              ) : isEditing ? (
-                <>
-                  <Save size={14} />
-                  <span>{isAr ? 'حفظ التعديلات' : 'Save Changes'}</span>
-                </>
               ) : (
                 <>
-                  <UserPlus size={14} />
-                  <span>{isAr ? 'حفظ وإضافة مسافر آخر' : 'Save & Add Next'}</span>
+                  <Save size={14} />
+                  <span>{isAr ? 'حفظ' : 'Save'}</span>
                 </>
               )}
             </button>
@@ -4181,8 +4410,8 @@ const AuditPassengersModal: React.FC<{
   const pendingCount = totalPassengers - confirmedCount;
   const totalSales = rows.reduce((acc, r) => acc + (Number(String(r.salePrice).replace(/,/g, '')) || 0), 0);
 
-  const th = 'px-3 py-2.5 text-[11px] font-black text-slate-600 whitespace-nowrap select-none';
-  const td = 'px-3 py-2 text-[12px] whitespace-nowrap';
+  const th = 'px-3 py-2 text-[11px] font-black text-slate-600 whitespace-nowrap select-none text-center';
+  const td = 'px-3 py-1.5 text-[12px] whitespace-nowrap text-center align-middle';
 
   return (
     <Modal
@@ -4205,7 +4434,7 @@ const AuditPassengersModal: React.FC<{
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
         },
         header: {
-          padding: '14px 20px',
+          padding: '12px 20px',
           borderBottom: '1px solid #E2E8F0',
           backgroundColor: '#FFFFFF',
           flexShrink: 0,
@@ -4221,9 +4450,9 @@ const AuditPassengersModal: React.FC<{
         },
       }}
       title={
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center shrink-0 shadow-2xs">
-            <CheckCheck size={22} strokeWidth={2.4} />
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center shrink-0 shadow-2xs">
+            <CheckCheck size={20} strokeWidth={2.4} />
           </div>
           <div>
             <h3 className="font-black text-sm sm:text-base text-slate-900 flex items-center gap-2">
@@ -4232,11 +4461,6 @@ const AuditPassengersModal: React.FC<{
                 {totalPassengers} {isAr ? 'مسافر' : 'passengers'}
               </span>
             </h3>
-            <p className="text-[11px] font-bold text-slate-500 mt-0.5">
-              {isAr
-                ? 'مراجعة وتعديل أسعار البيع، بيانات المسافر والجواز، نقل المسافرين بين المستفيدين، واعتماد الأسعار'
-                : 'Review & edit sale prices, passenger details, move travelers between beneficiaries, and confirm pricing.'}
-            </p>
           </div>
         </div>
       }
@@ -4492,9 +4716,9 @@ const AuditPassengersModal: React.FC<{
 
         {/* ── 3. جدول تدقيق المسافرين القابل للتخصيص والتعديل ── */}
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
-          <table className="w-full border-collapse text-start">
+          <table className="w-full border-collapse">
             <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-200">
-              <tr className="text-start">
+              <tr className="text-center">
                 <th className={`${th} w-10 text-center`}>#</th>
                 <th className={`${th} text-center`}>{isAr ? 'اسم المسافر' : 'Passenger Name'}</th>
                 {visibleColumns.passport && (
@@ -4504,7 +4728,7 @@ const AuditPassengersModal: React.FC<{
                   <th className={`${th} text-center w-64`}>{isAr ? 'المستفيد التابع له (ملف الحساب)' : 'Assigned Beneficiary'}</th>
                 )}
                 {visibleColumns.salePrice && (
-                  <th className={`${th} text-center w-40`}>{isAr ? 'سعر البيع' : 'Sale Price'}</th>
+                  <th className={`${th} text-center w-36`}>{isAr ? 'سعر البيع' : 'Sale Price'}</th>
                 )}
                 {visibleColumns.status && (
                   <th className={`${th} text-center w-28`}>{isAr ? 'حالة السعر' : 'Price Status'}</th>
@@ -4540,12 +4764,12 @@ const AuditPassengersModal: React.FC<{
                         {idx + 1}
                       </td>
 
-                      {/* المسافر مع أيقونة مسافر أنيقة وحقل قابل للتعديل المباشر */}
-                      <td className={`${td} text-start`}>
-                        <div className="flex items-center gap-2 min-w-0">
-                          {/* أيقونة المسافر المخصصة (Passenger Icon) */}
-                          <div className="w-8 h-8 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center shrink-0 border border-orange-200/70 shadow-2xs">
-                            <User size={15} strokeWidth={2.4} />
+                      {/* المسافر مع أيقونة مسافر أنيقة وحقل قابل للتعديل المباشر - موسط */}
+                      <td className={`${td} text-center`}>
+                        <div className="flex items-center justify-center gap-1.5 min-w-0 max-w-xs mx-auto">
+                          {/* أيقونة المسافر المخصصة */}
+                          <div className="w-7 h-7 rounded-lg bg-orange-50 text-[#F45A0A] flex items-center justify-center shrink-0 border border-orange-200/70 shadow-2xs">
+                            <User size={13} strokeWidth={2.4} />
                           </div>
                           {/* حقل اسم المسافر قابل للتعديل */}
                           <div className="min-w-0 flex-1">
@@ -4558,16 +4782,16 @@ const AuditPassengersModal: React.FC<{
                                   handleSaveRow(r);
                                 }
                               }}
-                              className="w-full h-[32px] px-2 font-black text-xs text-slate-900 bg-transparent hover:bg-slate-50 focus:bg-white focus:border-[#F45A0A] border border-transparent focus:border rounded-lg outline-none transition-colors"
+                              className="w-full h-[32px] px-2 font-black text-xs text-slate-900 bg-transparent hover:bg-slate-50 focus:bg-white focus:border-[#F45A0A] border border-transparent focus:border rounded-lg outline-none transition-colors text-center"
                               placeholder={isAr ? 'اسم المسافر...' : 'Passenger name...'}
                             />
                           </div>
                         </div>
                       </td>
 
-                      {/* رقم الجواز - قابل للتعديل */}
+                      {/* رقم الجواز - موسط وقابل للتعديل */}
                       {visibleColumns.passport && (
-                        <td className={`${td} text-start`}>
+                        <td className={`${td} text-center`}>
                           <input
                             value={r.passport}
                             onChange={(e) => updateRowById(r.id, { passport: e.target.value.toUpperCase() })}
@@ -4578,17 +4802,18 @@ const AuditPassengersModal: React.FC<{
                               }
                             }}
                             dir="ltr"
-                            className="w-full max-w-[120px] h-[32px] px-2 font-mono font-bold text-xs text-slate-700 bg-transparent hover:bg-slate-50 focus:bg-white focus:border-[#F45A0A] border border-transparent focus:border rounded-lg outline-none transition-colors text-start"
+                            className="w-full max-w-[120px] h-[32px] px-2 font-mono font-bold text-xs text-slate-700 bg-transparent hover:bg-slate-50 focus:bg-white focus:border-[#F45A0A] border border-transparent focus:border rounded-lg outline-none transition-colors text-center mx-auto"
                             placeholder="A00000000"
                           />
                         </td>
                       )}
 
-                      {/* المستفيد التابع له - يبيّن المستفيد بوضوح مع إمكانية النقل */}
+                      {/* المستفيد التابع له - موسط وبنفس ارتفاع السطر size="sm" */}
                       {visibleColumns.beneficiary && (
-                        <td className={`${td} text-start`}>
-                          <div className="w-56 sm:w-64">
+                        <td className={`${td} text-center`}>
+                          <div className="w-56 sm:w-60 mx-auto">
                             <SearchableCombobox
+                              size="sm"
                               value={r.customerName}
                               onChange={(val) => handleBeneficiaryChange(r.id, val || '')}
                               options={beneficiaryOptions}
@@ -4599,7 +4824,7 @@ const AuditPassengersModal: React.FC<{
                         </td>
                       )}
 
-                      {/* سعر البيع - حقل قابل للتعديل مع دعم Enter السريع */}
+                      {/* سعر البيع - موسط وحجم مطابق لارتفاع السطر */}
                       {visibleColumns.salePrice && (
                         <td className={`${td} text-center`}>
                           <div className="inline-flex items-center gap-1.5 justify-center">
@@ -4619,7 +4844,7 @@ const AuditPassengersModal: React.FC<{
                                 }
                               }}
                               dir="ltr"
-                              className="w-28 h-[34px] px-2 text-center font-mono font-black text-xs rounded-lg border border-slate-200 bg-white focus:bg-orange-50/20 focus:border-2 focus:border-[#F45A0A] outline-none shadow-2xs tabular-nums text-slate-900 transition-colors"
+                              className="w-24 h-[32px] px-2 text-center font-mono font-black text-xs rounded-lg border border-slate-200 bg-white focus:bg-orange-50/20 focus:border-2 focus:border-[#F45A0A] outline-none shadow-2xs tabular-nums text-slate-900 transition-colors"
                               placeholder="0"
                             />
                             <span className="font-mono font-bold text-[11px] text-slate-400">
@@ -4629,11 +4854,11 @@ const AuditPassengersModal: React.FC<{
                         </td>
                       )}
 
-                      {/* حالة السعر */}
+                      {/* حالة السعر - موسط */}
                       {visibleColumns.status && (
                         <td className={`${td} text-center`}>
                           <span
-                            className={`text-[10.5px] font-black px-2.5 py-1 rounded-md border inline-flex items-center gap-1 ${
+                            className={`text-[10.5px] font-black px-2.5 py-1 rounded-md border inline-flex items-center justify-center gap-1 ${
                               isCancelled
                                 ? 'bg-slate-100 text-slate-600 border-slate-200'
                                 : isConfirmed
@@ -4658,19 +4883,19 @@ const AuditPassengersModal: React.FC<{
                         </td>
                       )}
 
-                      {/* موظف الإصدار */}
+                      {/* موظف الإصدار - موسط */}
                       {visibleColumns.agent && (
-                        <td className={`${td} text-start`}>
-                          <span className="text-[11px] font-bold text-slate-600 truncate block max-w-[120px]" title={r.agent}>
+                        <td className={`${td} text-center`}>
+                          <span className="text-[11px] font-bold text-slate-600 truncate block max-w-[120px] mx-auto text-center" title={r.agent}>
                             {r.agent || '—'}
                           </span>
                         </td>
                       )}
 
-                      {/* الإجراءات: اعتماد، حفظ، وتعديل كامل */}
+                      {/* الإجراءات: اعتماد، حفظ، وتعديل كامل - موسط */}
                       {visibleColumns.actions && (
                         <td className={`${td} text-center`} onClick={(e) => e.stopPropagation()}>
-                          <div className="inline-flex items-center gap-1.5">
+                          <div className="inline-flex items-center justify-center gap-1.5">
                             {/* زر اعتماد وتأكيد السعر */}
                             <button
                               type="button"
@@ -4716,25 +4941,19 @@ const AuditPassengersModal: React.FC<{
         </div>
 
         {/* ── 4. الشريط السفلي للنافذة ── */}
-        <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between shrink-0 bg-white px-2 py-1.5 rounded-xl">
-          <div className="flex items-center gap-3 text-xs text-slate-500 font-bold">
+        <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between shrink-0 bg-white px-3 py-2 rounded-xl">
+          <div className="flex items-center gap-3 text-xs text-slate-600 font-black">
             <span>
               {isAr
                 ? `عرض ${filteredRows.length} من أصل ${totalPassengers} مسافر`
                 : `Showing ${filteredRows.length} of ${totalPassengers} passengers`}
-            </span>
-            <span className="text-slate-300">|</span>
-            <span className="text-slate-400 font-normal">
-              {isAr
-                ? '💡 اضغط Enter في حقل السعر للحفظ والانتقال المباشر للسطر التالي'
-                : '💡 Press Enter on price input to save and move to next row'}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="h-9 px-6 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+              className="h-8 px-5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
             >
               {isAr ? 'إغلاق النافذة' : 'Close'}
             </button>

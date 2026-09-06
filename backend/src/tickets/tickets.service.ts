@@ -523,7 +523,11 @@ export class TicketsService {
     if (netSellAmount > 0 && isCash && !relations.cashboxAccountId) {
       throw new BadRequestException('لا يمكن ترحيل البيع النقدي من دون ربط حساب الصندوق أو البنك');
     }
-    if (!isVisa && !isRefund && !relations.airlineId) {
+    // شركة الطيران تلزم تذاكرَ الطيران وحدها؛ الخدمات الأخرى (وزن، فندق، فيزا،
+    // تغيير، استرجاع، كروب فير) تُخزَّن تذاكرَ بأنواعٍ لا تحتاج شركة طيران.
+    const tripType = String(dto.tripType || 'TICKET').toUpperCase();
+    const isFlightTicket = tripType === 'TICKET' || tripType === 'FLIGHT' || tripType === '';
+    if (isFlightTicket && !relations.airlineId) {
       throw new BadRequestException('لا يمكن ترحيل التذكرة من دون ربط شركة الطيران');
     }
     if (!relations.branchId) {
@@ -1545,8 +1549,12 @@ export class TicketsService {
       || String(ticket.airline || '').toUpperCase().includes('VISA');
 
     const [userRecord, custAccountResult, suppAccountResult, cbAccountResult, revRecord] = await Promise.all([
-      // User ID
-      userId ? Promise.resolve({ id: userId }) : this.prisma.user.findFirst({ where: { companyId } }),
+      // منشئ القيد يجب أن يكون مستخدماً حقيقياً (مفتاحٌ أجنبي): يُتحقَّق من userId
+      // ويُستبدل بأول مستخدمٍ في الشركة إن لم يوجد (كمستخدم التطوير الوهمي)،
+      // فلا يفشل ترحيل القيد بصمتٍ لأي نوع مستند.
+      (userId
+        ? this.prisma.user.findFirst({ where: { id: userId }, select: { id: true } }).then((u) => u || this.prisma.user.findFirst({ where: { companyId }, select: { id: true } }))
+        : this.prisma.user.findFirst({ where: { companyId }, select: { id: true } })),
       // Customer Account
       (async () => {
         if (ticket.customerAccountId) return ticket.customerAccountId;
@@ -1611,7 +1619,8 @@ export class TicketsService {
       })(),
     ]);
 
-    const createdById = userRecord?.id || userId;
+    // userRecord صار مستخدماً حقيقياً دائماً؛ لا نعود إلى userId الذي قد يكون وهمياً.
+    const createdById = userRecord?.id;
     if (!createdById) return;
 
     let customerAccountId = custAccountResult;

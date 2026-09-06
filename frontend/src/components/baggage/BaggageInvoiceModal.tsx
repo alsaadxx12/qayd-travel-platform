@@ -12,6 +12,7 @@ import {
 import { SearchableCombobox } from '../ui/SearchableCombobox';
 import { SegmentedDatePicker } from '../ui/SegmentedDatePicker';
 import { AccountFinderModal, type AccountFinderResult } from '../common/AccountFinderModal';
+import { AccountSearchField } from '../groups/AccountSearchField';
 import { ticketsApi, type TicketData } from '../../api/tickets';
 import { partnersApi, type Customer, type Supplier } from '../../api/partners';
 import { accountsApi } from '../../api/accounts';
@@ -99,6 +100,8 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
 
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  // الإشعارات المنبثقة معطّلة في النظام كلّه، فأخطاء التحقق كانت تختفي بصمت — تُعرض هنا.
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Dropdown options from backend
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -110,21 +113,12 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
   useEffect(() => {
     if (!opened) return;
 
-    partnersApi
-      .getCustomers()
-      .then((res: any) => setCustomers(Array.isArray(res) ? res : res?.data || []))
-      .catch(() => undefined);
-
-    partnersApi
-      .getSuppliers()
-      .then((res: any) => setSuppliers(Array.isArray(res) ? res : res?.data || []))
-      .catch(() => undefined);
-
+    // الصناديق فقط من الخادم (فئة CASH) بدل تحميل آلاف الحسابات لتصفيتها محلياً.
     accountsApi
-      .getFlat(undefined, undefined, true)
+      .getFlat(undefined, 'CASH', true)
       .then((res: any) => {
         const list = Array.isArray(res) ? res : res?.data || [];
-        setCashboxes(list.filter((a: any) => a.category === 'CASH' && !a.isParent));
+        setCashboxes(list.filter((a: any) => !a.isParent));
       })
       .catch(() => undefined);
 
@@ -165,7 +159,8 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
             id: p.id || `pax-${idx + 1}`,
             name: p.name || '',
             passportNumber: p.documentNumber || p.ticketNumber || '',
-            weight: Number(p.charge || 0) || 20,
+            // الوزن من الكتلة المعلَّمة (السجلات الجديدة)، وإلا من charge (القديمة).
+            weight: Number((extras.weights && extras.weights[idx]) ?? p.charge ?? 0) || 20,
             unit: 'KG',
             fareBuy: Number(p.fareBuy || 0),
             fareSell: Number(p.fareSell || 0),
@@ -290,37 +285,11 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
 
   // ── Save Baggage Invoice ──
   const handleSave = async () => {
-    if (!customerName.trim()) {
-      showErrorNotification(
-        isAr ? 'المستفيد مطلوب' : 'Beneficiary is required',
-        isAr ? 'يرجى تحديد اسم المستفيد' : 'Please select beneficiary'
-      );
-      return;
-    }
-
-    if (!pnr.trim()) {
-      showErrorNotification(
-        isAr ? 'رمز PNR مطلوب' : 'PNR is required',
-        isAr ? 'يرجى إدخال رمز الحجز PNR' : 'Please enter PNR'
-      );
-      return;
-    }
-
-    if (totals.totalSell <= 0) {
-      showErrorNotification(
-        isAr ? 'سعر البيع مطلوب' : 'Sale price required',
-        isAr ? 'يرجى إدخال سعر بيع الوزن للمسافرين' : 'Enter sale price'
-      );
-      return;
-    }
-
-    if (paymentType === 'DEBIT' && !cashboxAccountId && cashboxes.length > 0) {
-      showErrorNotification(
-        isAr ? 'الصندوق مطلوب' : 'Cashbox required',
-        isAr ? 'يرجى تحديد صندوق القبض' : 'Select cashbox'
-      );
-      return;
-    }
+    setErrorMsg('');
+    if (!customerName.trim()) { setErrorMsg(isAr ? 'المستفيد مطلوب — حدّد اسم المستفيد.' : 'Beneficiary is required.'); return; }
+    if (!pnr.trim()) { setErrorMsg(isAr ? 'رمز الحجز PNR مطلوب.' : 'PNR is required.'); return; }
+    if (totals.totalSell <= 0) { setErrorMsg(isAr ? 'أدخل سعر بيع الوزن للمسافرين.' : 'Enter the sale price.'); return; }
+    if (paymentType === 'DEBIT' && !cashboxAccountId && cashboxes.length > 0) { setErrorMsg(isAr ? 'حدّد صندوق القبض.' : 'Select a cashbox.'); return; }
 
     let resolvedCustomerAccountId = customerAccountId;
     let resolvedCustomerId = customerId;
@@ -356,7 +325,9 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
         pnr: pnr.trim().toUpperCase(),
         fareBuy: Number(p.fareBuy || 0),
         fareSell: Number(p.fareSell || 0),
-        charge: Number(p.weight || 0),
+        // الوزن يُحفظ في الكتلة المعلَّمة لا في charge — فحقل charge يُضاف إلى
+        // مبلغَي البيع والشراء في القيد، فوضع الوزن فيه كان يضخّم الفاتورة بالكيلوات.
+        charge: 0,
         status: 'مؤكد',
       };
     });
@@ -364,6 +335,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
     const extrasData = {
       quantity: totals.totalWeight,
       totalWeight: totals.totalWeight,
+      weights: passengers.map((p) => Number(p.weight || 0)),
       pnr: pnr.trim().toUpperCase(),
       serviceType: 'BAGGAGE',
     };
@@ -414,6 +386,7 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
       onSuccess?.();
       onClose();
     } catch (err: any) {
+      setErrorMsg((isAr ? 'تعذّر حفظ الفاتورة: ' : 'Save failed: ') + (err?.message || ''));
       showErrorNotification(
         isAr ? 'تعذّر حفظ فاتورة الوزن' : 'Failed to save baggage invoice',
         err?.message || (isAr ? 'حدث خطأ' : 'An error occurred')
@@ -553,64 +526,69 @@ export const BaggageInvoiceModal: React.FC<Props> = ({
 
             {/* ── القسم الأول: الفاتورة وأطرافها ── */}
             <div className="p-4 space-y-3">
-              
+
+              {errorMsg && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 flex items-center justify-between gap-3">
+                  <span className="text-[12.5px] font-bold text-rose-700">{errorMsg}</span>
+                  <button type="button" onClick={() => setErrorMsg('')} className="text-rose-500 hover:text-rose-700 cursor-pointer shrink-0"><X size={15} /></button>
+                </div>
+              )}
+
               {/* Row 1: 4 Main Fields - All 46px Height, Aligned Labels */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Beneficiary */}
+                {/* Beneficiary — بحثٌ في الخادم عند الكتابة (بلا تحميل آلاف العملاء) */}
                 <div>
-                  <SearchableCombobox
-                    label={isAr ? 'المستفيد / العميل *' : 'Beneficiary *'}
-                    labelAction={
-                      <button
-                        type="button"
-                        onClick={() => setAccountFinder({ open: true, query: customerName, scope: 'CUSTOMER' })}
-                        className="h-[20px] px-1.5 text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
-                      >
-                        <Search size={11} />
-                        <span>{isAr ? 'بحث متقدم' : 'Search'}</span>
-                      </button>
-                    }
+                  <div className="flex items-center justify-between gap-2 min-h-[20px] mb-[7px]">
+                    <label className="block text-[12.5px] font-medium text-[#6B7280] leading-[20px] truncate">
+                      {isAr ? 'المستفيد / العميل *' : 'Beneficiary *'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setAccountFinder({ open: true, query: customerName, scope: 'CUSTOMER' })}
+                      className="h-[20px] px-1.5 text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
+                    >
+                      <Search size={11} />
+                      <span>{isAr ? 'بحث متقدم' : 'Search'}</span>
+                    </button>
+                  </div>
+                  <AccountSearchField
                     value={customerName}
-                    onChange={(val) => {
-                      setCustomerName(val || '');
-                      const match = customers.find((c) => c.nameAr === val || c.nameEn === val);
-                      if (match) {
-                        setCustomerId(match.id);
-                        setCustomerAccountId(match.accountId || match.account?.id || '');
-                      }
+                    direction={direction}
+                    scope="CUSTOMER"
+                    inputClass="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white text-xs font-bold text-slate-900 outline-none focus:border-2 focus:border-[#F45A0A] focus:bg-white transition-all"
+                    onPick={(pick) => {
+                      setCustomerName(pick.name);
+                      setCustomerAccountId(pick.id || '');
+                      setCustomerId(pick.id || '');
                     }}
-                    options={customerOptions}
-                    placeholder=""
-                    allowCustomValue
                   />
                 </div>
 
-                {/* Supplier */}
+                {/* Supplier — بحثٌ في الخادم عند الكتابة */}
                 <div>
-                  <SearchableCombobox
-                    label={isAr ? 'المورد / شركة الطيران' : 'Supplier / Airline'}
-                    labelAction={
-                      <button
-                        type="button"
-                        onClick={() => setAccountFinder({ open: true, query: supplierAccountName, scope: 'SUPPLIER' })}
-                        className="h-[20px] px-1.5 text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
-                      >
-                        <Search size={11} />
-                        <span>{isAr ? 'بحث متقدم' : 'Search'}</span>
-                      </button>
-                    }
+                  <div className="flex items-center justify-between gap-2 min-h-[20px] mb-[7px]">
+                    <label className="block text-[12.5px] font-medium text-[#6B7280] leading-[20px] truncate">
+                      {isAr ? 'المورد / شركة الطيران' : 'Supplier / Airline'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setAccountFinder({ open: true, query: supplierAccountName, scope: 'SUPPLIER' })}
+                      className="h-[20px] px-1.5 text-[10.5px] font-bold text-[#F45A0A] hover:text-[#dd4f05] flex items-center gap-1 cursor-pointer bg-orange-50 hover:bg-orange-100 rounded border border-orange-200 transition-colors"
+                    >
+                      <Search size={11} />
+                      <span>{isAr ? 'بحث متقدم' : 'Search'}</span>
+                    </button>
+                  </div>
+                  <AccountSearchField
                     value={supplierAccountName}
-                    onChange={(val) => {
-                      setSupplierAccountName(val || '');
-                      const match = suppliers.find((s) => s.nameAr === val || s.nameEn === val);
-                      if (match) {
-                        setSupplierId(match.id);
-                        setSupplierAccountId(match.accountId || match.account?.id || '');
-                      }
+                    direction={direction}
+                    scope="SUPPLIER"
+                    inputClass="w-full h-[46px] px-3.5 rounded-[11px] border border-[#E5E7EB] bg-[#FAFAFA] hover:bg-white text-xs font-bold text-slate-900 outline-none focus:border-2 focus:border-[#F45A0A] focus:bg-white transition-all"
+                    onPick={(pick) => {
+                      setSupplierAccountName(pick.name);
+                      setSupplierAccountId(pick.id || '');
+                      setSupplierId(pick.id || '');
                     }}
-                    options={supplierOptions}
-                    placeholder=""
-                    allowCustomValue
                   />
                 </div>
 

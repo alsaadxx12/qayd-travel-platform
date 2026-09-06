@@ -35,6 +35,7 @@ interface SearchableComboboxProps {
   displayValue?: string;
   maxRendered?: number;
   maxListHeight?: number;
+  size?: 'xs' | 'sm' | 'md';
 }
 
 /*
@@ -86,7 +87,9 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
   displayValue,
   maxRendered = 80,
   maxListHeight = 280,
+  size = 'md',
 }) => {
+  const isCompact = size === 'xs' || size === 'sm';
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
@@ -256,7 +259,9 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
           if (!disabled) setIsOpen(!isOpen);
         }}
         onKeyDown={handleKeyDown}
-        className={`w-full h-[46px] px-3.5 rounded-[11px] border transition-colors duration-150 flex items-center justify-between cursor-pointer select-none ${
+        className={`w-full ${
+          isCompact ? 'h-[32px] px-2.5 rounded-lg' : 'h-[46px] px-3.5 rounded-[11px]'
+        } border transition-colors duration-150 flex items-center justify-between cursor-pointer select-none ${
           disabled
             ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
             : isOpen
@@ -267,9 +272,9 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
         }`}
       >
         {/* Right side in RTL: Search / Custom icon + Display Value / Search Input */}
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <div className="shrink-0 text-slate-400">
-            {leftIcon || <Search size={15} />}
+            {leftIcon || <Search size={isCompact ? 13 : 15} />}
           </div>
 
           {isOpen ? (
@@ -286,14 +291,18 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
               }}
               onClick={(e) => e.stopPropagation()}
               placeholder={displayLabel || placeholder}
-              className="w-full bg-transparent text-[14px] font-semibold text-slate-900 outline-none placeholder:text-[#9CA3AF]"
+              className={`w-full bg-transparent ${
+                isCompact ? 'text-xs font-bold' : 'text-[14px] font-semibold'
+              } text-slate-900 outline-none placeholder:text-[#9CA3AF]`}
               role="combobox"
               aria-expanded={isOpen}
               aria-controls={listId}
             />
           ) : (
             <span
-              className={`text-[14px] font-semibold truncate block ${
+              className={`${
+                isCompact ? 'text-xs font-bold' : 'text-[14px] font-semibold'
+              } truncate block ${
                 displayLabel ? 'text-slate-900' : 'text-[#9CA3AF]'
               }`}
             >
@@ -303,18 +312,18 @@ export const SearchableCombobox: React.FC<SearchableComboboxProps> = ({
         </div>
 
         {/* Left side in RTL: Clear button + Chevron Arrow */}
-        <div className="flex items-center gap-1.5 shrink-0 text-slate-400">
+        <div className="flex items-center gap-1 shrink-0 text-slate-400">
           {clearable && displayLabel && !disabled && (
             <button
               type="button"
               onClick={handleClear}
-              className="p-1 rounded-md hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
+              className="p-0.5 rounded-md hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
             >
-              <X size={13} />
+              <X size={isCompact ? 11 : 13} />
             </button>
           )}
           <ChevronDown
-            size={16}
+            size={isCompact ? 13 : 16}
             className={`transition-transform duration-200 ${
               isOpen ? 'rotate-180 text-[#F45A0A]' : 'text-slate-400'
             }`}
