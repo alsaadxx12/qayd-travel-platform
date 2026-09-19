@@ -249,7 +249,13 @@ export const AddonsStoreModal: React.FC<AddonsStoreModalProps> = ({ opened, onCl
       // Save to localStorage
       const configMap: Record<string, boolean> = {};
       next.forEach(a => { configMap[a.id] = a.isEnabled; });
-      localStorage.setItem('app_addons_config', JSON.stringify(configMap));
+      try {
+        localStorage.setItem('app_addons_config', JSON.stringify(configMap));
+        const cards = JSON.parse(localStorage.getItem('app_addons_cards_config') || '{}');
+        cards[id] = configMap[id];
+        localStorage.setItem('app_addons_cards_config', JSON.stringify(cards));
+        window.dispatchEvent(new Event('app_addons_updated'));
+      } catch {}
 
       return next;
     });

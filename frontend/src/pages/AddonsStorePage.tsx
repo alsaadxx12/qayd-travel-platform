@@ -176,6 +176,10 @@ export const AddonsStorePage: React.FC = () => {
       const next = { ...prev, [id]: !prev[id] };
       try {
         localStorage.setItem('app_addons_cards_config', JSON.stringify(next));
+        const cfg = JSON.parse(localStorage.getItem('app_addons_config') || '{}');
+        cfg[id] = next[id];
+        localStorage.setItem('app_addons_config', JSON.stringify(cfg));
+        window.dispatchEvent(new Event('app_addons_updated'));
       } catch {}
       if (next[id]) {
         showSuccessNotification(

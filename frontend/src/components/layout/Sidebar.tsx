@@ -314,16 +314,59 @@ export const Sidebar: React.FC = () => {
     return true;
   };
 
+  // ── HR / Employee Management Addon State ──
+  const getHrAddonState = (): boolean => {
+    try {
+      const cards = localStorage.getItem('app_addons_cards_config');
+      if (cards) {
+        const parsed = JSON.parse(cards);
+        if (parsed.hr_employee_management !== undefined) {
+          return Boolean(parsed.hr_employee_management);
+        }
+      }
+      const config = localStorage.getItem('app_addons_config');
+      if (config) {
+        const parsed = JSON.parse(config);
+        if (parsed.hr_employee_management !== undefined) {
+          return Boolean(parsed.hr_employee_management);
+        }
+      }
+    } catch {}
+    return true;
+  };
+
+  const [isHrAddonEnabled, setIsHrAddonEnabled] = useState<boolean>(getHrAddonState);
+
+  useEffect(() => {
+    const handleAddonUpdate = () => {
+      setIsHrAddonEnabled(getHrAddonState());
+    };
+
+    window.addEventListener('storage', handleAddonUpdate);
+    window.addEventListener('app_addons_updated', handleAddonUpdate);
+    return () => {
+      window.removeEventListener('storage', handleAddonUpdate);
+      window.removeEventListener('app_addons_updated', handleAddonUpdate);
+    };
+  }, []);
+
   const [sidebarSearch, setSidebarSearch] = useState('');
 
   const visibleSections = useMemo(() => {
     return sections
+      .filter((section) => {
+        // Hide employee management section if HR addon is disabled
+        if (section.key === 'employees' && !isHrAddonEnabled) {
+          return false;
+        }
+        return true;
+      })
       .map((section) => ({
         ...section,
         items: section.items.filter((item) => hasItemPermission(item)),
       }))
       .filter((section) => section.items.length > 0);
-  }, [sections, user, isRootPlatformAdmin, isWildcard, hasPermission]);
+  }, [sections, user, isRootPlatformAdmin, isWildcard, hasPermission, isHrAddonEnabled]);
 
   const filteredVisibleSections = useMemo(() => {
     if (!sidebarSearch.trim()) return visibleSections;
