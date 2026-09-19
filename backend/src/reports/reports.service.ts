@@ -64,6 +64,7 @@ export class ReportsService {
         SELECT
           l."accountId" AS "accountId",
           CASE
+            WHEN e.currency = 'USD' THEN 'USD'
             WHEN e.reference LIKE 'OPENING-USD-%' THEN 'USD'
             WHEN l.description ILIKE '%USD%' OR e.reference ILIKE '%USD%' OR e.description ILIKE '%USD%' THEN 'USD'
             ELSE 'IQD'
@@ -404,6 +405,11 @@ export class ReportsService {
         };
       }
 
+      // If no specific source set the currency, fall back to the journal entry's own currency field
+      if (!sourceCurrency && entry.currency) {
+        sourceCurrency = entry.currency;
+      }
+
       const inferredCurrency = this.inferTraceCurrency(
         account.currency,
         sourceCurrency,
@@ -662,6 +668,7 @@ export class ReportsService {
             description: true,
             sourceType: true,
             sourceId: true,
+            currency: true,
             receiptVouchers: { select: { voucherNumber: true, description: true } },
             paymentVouchers: { select: { voucherNumber: true, description: true } },
           },
@@ -789,6 +796,7 @@ export class ReportsService {
           l.journalEntry.description,
         sourceType: l.journalEntry.sourceType,
         sourceId: l.journalEntry.sourceId,
+        currency: l.journalEntry.currency || 'IQD',
         debit,
         credit,
         runningBalance,

@@ -16,7 +16,6 @@ import {
   Loader2,
   Lock,
   Mail,
-  Plane,
   QrCode,
   ShieldCheck,
   Sparkles,
@@ -40,8 +39,8 @@ const COPY = {
     usernameTab: 'اسم المستخدم',
     emailLabel: 'البريد الإلكتروني',
     usernameLabel: 'اسم المستخدم',
-    emailPlaceholder: 'name@company.com',
-    usernamePlaceholder: 'أدخل اسم المستخدم',
+    emailPlaceholder: '',
+    usernamePlaceholder: '',
     rememberMe: 'تذكر البريد أو اسم المستخدم',
     submit: 'تسجيل الدخول',
     verifying: 'جارٍ التحقق…',
@@ -83,8 +82,8 @@ const COPY = {
     usernameTab: 'Username',
     emailLabel: 'Email address',
     usernameLabel: 'Username',
-    emailPlaceholder: 'name@company.com',
-    usernamePlaceholder: 'Enter your username',
+    emailPlaceholder: '',
+    usernamePlaceholder: '',
     rememberMe: 'Remember email or username',
     submit: 'Sign in',
     verifying: 'Verifying…',
@@ -641,8 +640,8 @@ export const LoginPage: React.FC = () => {
       <header className="border-b border-[#E2E8F0] bg-white/95 shadow-[0_1px_0_rgba(15,23,42,0.02)] backdrop-blur">
         <div className="mx-auto flex min-h-[68px] w-full max-w-[1280px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-10">
           <div className="flex min-w-0 items-center gap-2.5" aria-label="QAYD Travel Accounting">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#FF5F0A]/20 bg-[#FFF4ED] text-[#FF5F0A] shadow-[0_4px_12px_rgba(255,95,10,0.08)]">
-              <Plane size={19} className="-rotate-45" aria-hidden="true" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] border border-[#FF5F0A]/20 bg-white p-1 shadow-[0_4px_12px_rgba(255,95,10,0.08)] overflow-hidden">
+              <img src="/favicon.png" alt="QAYD" className="h-full w-full object-contain" />
             </div>
             <div dir="ltr" className="min-w-0 whitespace-nowrap text-left font-black leading-none tracking-[-0.04em]">
               <span className="text-[19px] text-[#FF5F0A] sm:text-[22px]">QAYD</span>{' '}
@@ -683,9 +682,14 @@ export const LoginPage: React.FC = () => {
               }`}
             >
               <div className="mx-auto w-full max-w-[430px]">
-                <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-[#FF5F0A]/25 bg-[#FFF3EB] px-2.5 py-1 text-[11px] font-bold text-[#C2410C] sm:text-xs">
-                  <ShieldCheck size={14} aria-hidden="true" />
-                  <span>{t.secureBadge}</span>
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-[#FF5F0A]/25 bg-[#FFF3EB] px-2.5 py-1 text-[11px] font-bold text-[#C2410C] sm:text-xs">
+                    <ShieldCheck size={14} aria-hidden="true" />
+                    <span>{t.secureBadge}</span>
+                  </div>
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#FF5F0A]/20 bg-white p-1 shadow-xs sm:hidden overflow-hidden">
+                    <img src="/favicon.png" alt="QAYD" className="h-full w-full object-contain" />
+                  </div>
                 </div>
 
                 <div className="mb-5">
@@ -810,6 +814,7 @@ export const LoginPage: React.FC = () => {
                   <PasswordField
                     id="login-password"
                     value={password}
+                    placeholder=""
                     onChange={(event) => {
                       setPassword(event.target.value);
                       resetFeedback('password');

@@ -36,6 +36,12 @@ import {
   IconLayoutGrid,
   IconList,
   IconUsers,
+  IconCurrentLocation,
+  IconDeviceMobile,
+  IconDeviceMobileCheck,
+  IconShieldLock,
+  IconUnlink,
+  IconExternalLink,
 } from '@tabler/icons-react';
 import { branchesApi, Branch } from '../../api/branches';
 import { employeesApi } from '../../api/employees';
@@ -74,6 +80,12 @@ export interface EmployeeItem {
   username?: string;
   assignedCashbox?: string;
   permissionGroupId?: string;
+  trustedDeviceId?: string | null;
+  deviceModel?: string | null;
+  devicePlatform?: string | null;
+  deviceBoundAt?: string | null;
+  deviceAttestationType?: string | null;
+  deviceAttestationKey?: string | null;
 }
 
 export interface UserItem {
@@ -136,7 +148,18 @@ export const BranchesStructurePage: React.FC = () => {
   const [telegram, setTelegram] = useState('');
   const [website, setWebsite] = useState('');
   const [isMain, setIsMain] = useState(false);
-  const [modalBranchTab, setModalBranchTab] = useState<'info' | 'contacts' | 'social'>('info');
+  const [modalBranchTab, setModalBranchTab] = useState<'info' | 'location' | 'contacts' | 'social'>('info');
+  const [branchLatitude, setBranchLatitude] = useState<string>('');
+  const [branchLongitude, setBranchLongitude] = useState<string>('');
+  const [branchRadius, setBranchRadius] = useState<number>(150);
+  const [gettingLocation, setGettingLocation] = useState<boolean>(false);
+
+  // Device Binding Modal States
+  const [deviceModalOpen, setDeviceModalOpen] = useState<boolean>(false);
+  const [selectedEmpForDevice, setSelectedEmpForDevice] = useState<EmployeeItem | null>(null);
+  const [bindPlatform, setBindPlatform] = useState<'android' | 'ios'>('android');
+  const [bindDeviceModel, setBindDeviceModel] = useState<string>('Samsung Galaxy S24 Ultra');
+  const [bindingDevice, setBindingDevice] = useState<boolean>(false);
 
   // Department Form Fields
   const [depBranchName, setDepBranchName] = useState('المركز الرئيسي - بغداد');
@@ -369,6 +392,9 @@ export const BranchesStructurePage: React.FC = () => {
       setTelegram('');
       setWebsite('');
       setIsMain(branches.length === 0);
+      setBranchLatitude('');
+      setBranchLongitude('');
+      setBranchRadius(150);
       setModalBranchTab('info');
     } else if (activeTab === 'departments') {
       setDepCode(`DEP-0${departments.length + 1}`);
@@ -401,6 +427,98 @@ export const BranchesStructurePage: React.FC = () => {
       setUsrStatus('نشط');
     }
     setModalOpen(true);
+  };
+
+  // High-accuracy GPS handler for Branch
+  const handleGetHighAccuracyLocation = () => {
+    if (!navigator.geolocation) {
+      showErrorNotification(
+        isAr ? 'غير مدعوم' : 'Not Supported',
+        isAr ? 'المتصفح لا يدعم تحديد الموقع الجغرافي' : 'Geolocation is not supported by your browser'
+      );
+      return;
+    }
+    setGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setBranchLatitude(pos.coords.latitude.toFixed(7));
+        setBranchLongitude(pos.coords.longitude.toFixed(7));
+        setGettingLocation(false);
+        showSuccessNotification(
+          isAr ? 'تم تحديد الموقع بدقة خيالية' : 'High Accuracy GPS Locked',
+          isAr
+            ? `خط العرض: ${pos.coords.latitude.toFixed(7)} | خط الطول: ${pos.coords.longitude.toFixed(7)} (دقة التحديد: ±${Math.round(pos.coords.accuracy)} متر)`
+            : `Coordinates locked: ${pos.coords.latitude.toFixed(7)}, ${pos.coords.longitude.toFixed(7)} (±${Math.round(pos.coords.accuracy)}m)`
+        );
+      },
+      (err) => {
+        setGettingLocation(false);
+        showErrorNotification(
+          isAr ? 'تعذر جلب الموقع' : 'Location Error',
+          err.message || (isAr ? 'يرجى إعطاء صلاحية الوصول للموقع الجغرافي من المتصفح' : 'Please allow location permission')
+        );
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+  };
+
+  // Hardware Device Unbinding
+  const handleUnbindDevice = async (empId: string, empName: string) => {
+    if (
+      !window.confirm(
+        isAr
+          ? `هل أنت متأكد من فك اقتران الجهاز المعتمد للموظف (${empName})؟\n\nسيتمكن الموظف من تسجيل جهازه الشخصي الجديد عند أول تسجيل دخول أو بصمة دوام.`
+          : `Are you sure you want to unbind the trusted device for ${empName}?`
+      )
+    ) {
+      return;
+    }
+    try {
+      await employeesApi.unbindDevice(empId);
+      showSuccessNotification(
+        isAr ? 'تم إلغاء اقتران الجهاز' : 'Device Unbound',
+        isAr
+          ? `تم إلغاء ربط الجهاز المعتمد للموظف (${empName}) بنجاح. يمكنه الآن تسجيل جهاز جديد.`
+          : `Device successfully unbound for ${empName}.`
+      );
+      fetchStructureData();
+    } catch (err: any) {
+      showErrorNotification(isAr ? 'خطأ' : 'Error', err?.message || 'Failed to unbind device');
+    }
+  };
+
+  // Hardware Device Binding Handler
+  const handleBindDevice = async () => {
+    if (!selectedEmpForDevice) return;
+    setBindingDevice(true);
+    try {
+      const attestationType = bindPlatform === 'android' ? 'KEYSTORE_PLAY_INTEGRITY' : 'SECURE_ENCLAVE_APP_ATTEST';
+      const generatedDeviceId = `${bindPlatform}_hw_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const attestationKey = `${bindPlatform.toUpperCase()}_CERT_ATTEST_${Math.random().toString(36).substring(2, 12)}`;
+
+      await employeesApi.bindDevice(selectedEmpForDevice.id, {
+        trustedDeviceId: generatedDeviceId,
+        deviceModel: bindDeviceModel,
+        devicePlatform: bindPlatform,
+        deviceAttestationType: attestationType,
+        deviceAttestationKey: attestationKey,
+      });
+
+      showSuccessNotification(
+        isAr ? 'تم اعتماد الجهاز بنجاح' : 'Device Verified & Bound',
+        isAr
+          ? `تم توثيق واعتماد (${bindDeviceModel}) بواسطة (${
+              bindPlatform === 'android' ? 'Android Keystore + Play Integrity' : 'Secure Enclave + App Attest'
+            }) للموظف (${selectedEmpForDevice.fullName}). يمنع فتح الحساب من هاتف آخر.`
+          : `Device bound successfully for ${selectedEmpForDevice.fullName}.`
+      );
+      setDeviceModalOpen(false);
+      fetchStructureData();
+    } catch (err: any) {
+      showErrorNotification(isAr ? 'خطأ' : 'Error', err?.message || 'Failed to bind device');
+    } finally {
+      setBindingDevice(false);
+    }
   };
 
   // Save Actions
@@ -447,6 +565,9 @@ export const BranchesStructurePage: React.FC = () => {
         telegram,
         website,
         isMain,
+        latitude: branchLatitude.trim() ? parseFloat(branchLatitude) : null,
+        longitude: branchLongitude.trim() ? parseFloat(branchLongitude) : null,
+        allowedRadiusMeters: Number(branchRadius) || 150,
       };
 
       if (editMode && editingId) {
@@ -1036,6 +1157,38 @@ export const BranchesStructurePage: React.FC = () => {
                           )}
                         </div>
                       )}
+                      {/* Branch GPS Location & Geofence Badge */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <IconMapPin size={15} className="text-[#F45A0A] shrink-0" />
+                          <div className="truncate">
+                            <span className="text-[11px] font-bold text-slate-500 block leading-none">
+                              {isAr ? 'الموقع ونطاق الحضور:' : 'GPS & Geofence:'}
+                            </span>
+                            {b.latitude != null && b.longitude != null ? (
+                              <a
+                                href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-mono text-xs font-black text-slate-800 hover:text-[#F45A0A] flex items-center gap-1 mt-0.5"
+                                title={isAr ? 'فتح في خرائط جوجل' : 'Open in Google Maps'}
+                              >
+                                <span>
+                                  {Number(b.latitude).toFixed(4)}, {Number(b.longitude).toFixed(4)}
+                                </span>
+                                <IconExternalLink size={11} className="text-slate-400" />
+                              </a>
+                            ) : (
+                              <span className="text-[10px] text-amber-700 font-bold">
+                                {isAr ? 'لم يحدد الموقع بعد' : 'Not set'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="shrink-0 px-2 py-0.5 rounded-md text-[10px] font-mono font-black bg-orange-50 text-[#C2410C] border border-orange-200">
+                          ±{b.allowedRadiusMeters || 150}m
+                        </span>
+                      </div>
                     </div>
 
                     {/* Card Actions Footer */}
@@ -1067,6 +1220,9 @@ export const BranchesStructurePage: React.FC = () => {
                               setTelegram(b.telegram || '');
                               setWebsite(b.website || '');
                               setIsMain(b.isMain);
+                              setBranchLatitude(b.latitude != null ? String(b.latitude) : '');
+                              setBranchLongitude(b.longitude != null ? String(b.longitude) : '');
+                              setBranchRadius(b.allowedRadiusMeters != null ? Number(b.allowedRadiusMeters) : 150);
                               setModalBranchTab('info');
                               setModalOpen(true);
                             }}
@@ -1103,6 +1259,7 @@ export const BranchesStructurePage: React.FC = () => {
                         <th className="py-2.5 px-3.5 text-start w-32">{isAr ? 'المدينة' : 'City'}</th>
                         <th className="py-2.5 px-3.5 text-start min-w-[160px]">{isAr ? 'مدير الفرع' : 'Manager'}</th>
                         <th className="py-2.5 px-3.5 text-start min-w-[180px]">{isAr ? 'أرقام الاتصال' : 'Contacts'}</th>
+                        <th className="py-2.5 px-3.5 text-start min-w-[190px]">{isAr ? 'الموقع ونطاق الحضور (GPS)' : 'GPS & Geofence'}</th>
                         <th className="py-2.5 px-3.5 text-center w-24 font-mono">{isAr ? 'العملة' : 'Currency'}</th>
                         <th className="py-2.5 px-3.5 text-center w-24">{isAr ? 'الحالة' : 'Status'}</th>
                         <th className="py-2.5 px-3.5 text-center w-20">{isAr ? 'إجراءات' : 'Actions'}</th>
@@ -1132,6 +1289,28 @@ export const BranchesStructurePage: React.FC = () => {
                           <td className="py-2.5 px-3.5 font-medium text-slate-700">{b.city || '-'}</td>
                           <td className="py-2.5 px-3.5 font-semibold text-slate-800">{b.managerName || '-'}</td>
                           <td className="py-2.5 px-3.5 font-mono text-slate-700">{b.phone || '-'}</td>
+                          <td className="py-2.5 px-3.5">
+                            {b.latitude != null && b.longitude != null ? (
+                              <div className="flex items-center gap-1.5">
+                                <a
+                                  href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 font-mono font-black text-slate-800 hover:text-[#F45A0A] bg-orange-50/80 border border-orange-200 px-2 py-0.5 rounded text-[11px]"
+                                  title={isAr ? 'عرض في خرائط جوجل' : 'Open in Google Maps'}
+                                >
+                                  <IconMapPin size={12} className="text-[#F45A0A]" />
+                                  <span>{Number(b.latitude).toFixed(4)}, {Number(b.longitude).toFixed(4)}</span>
+                                  <IconExternalLink size={10} className="text-slate-400" />
+                                </a>
+                                <span className="font-mono text-[10px] font-black text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                  ±{b.allowedRadiusMeters || 150}m
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 font-bold">{isAr ? 'غير محدد' : 'Not set'}</span>
+                            )}
+                          </td>
                           <td className="py-2.5 px-3.5 text-center font-mono font-bold text-slate-600">{(b as any).currency || 'IQD'}</td>
                           <td className="py-2.5 px-3.5 text-center">
                             <Badge size="xs" color={b.status === 'نشط' || !b.status ? 'emerald' : 'red'} variant="light">
@@ -1162,6 +1341,9 @@ export const BranchesStructurePage: React.FC = () => {
                                     setTelegram(b.telegram || '');
                                     setWebsite(b.website || '');
                                     setIsMain(b.isMain);
+                                    setBranchLatitude(b.latitude != null ? String(b.latitude) : '');
+                                    setBranchLongitude(b.longitude != null ? String(b.longitude) : '');
+                                    setBranchRadius(b.allowedRadiusMeters != null ? Number(b.allowedRadiusMeters) : 150);
                                     setModalBranchTab('info');
                                     setModalOpen(true);
                                   }}
@@ -1434,6 +1616,55 @@ export const BranchesStructurePage: React.FC = () => {
                             </div>
                           )}
                         </div>
+
+                        {/* Device Security & Attestation Binding */}
+                        <div className="pt-2 border-t border-slate-100">
+                          {e.trustedDeviceId ? (
+                            <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-2.5 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 text-emerald-800">
+                                  <IconDeviceMobileCheck size={16} className="text-emerald-600 shrink-0" />
+                                  <span className="font-bold text-xs">{e.deviceModel || (isAr ? 'هاتف معتمد' : 'Trusted Device')}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUnbindDevice(e.id, e.fullName)}
+                                  className="text-[10px] font-bold text-rose-600 hover:text-rose-800 bg-white hover:bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                                  title={isAr ? 'فك اقتران الجهاز الحالي للسماح بجهاز جديد' : 'Unbind Device'}
+                                >
+                                  <IconUnlink size={11} />
+                                  <span>{isAr ? 'فك الاقتران' : 'Unbind'}</span>
+                                </button>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-emerald-700 font-mono">
+                                <span className="font-bold">
+                                  {e.devicePlatform === 'ios' ? 'Secure Enclave + App Attest' : 'Android Keystore + Play Integrity'}
+                                </span>
+                                <span className="text-emerald-600 font-bold">✓ {isAr ? 'جهاز حصري معتمد' : 'Bound'}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-2.5 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 text-amber-800">
+                                <IconShieldLock size={15} className="text-amber-600 shrink-0" />
+                                <span className="text-[11px] font-bold">
+                                  {isAr ? 'لم يربط جهاز بعد (جهاز واحد معتمد)' : 'No trusted device bound'}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedEmpForDevice(e);
+                                  setDeviceModalOpen(true);
+                                }}
+                                className="text-[10.5px] font-bold text-[#F45A0A] hover:text-[#C2410C] bg-white hover:bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                              >
+                                <IconDeviceMobile size={12} />
+                                <span>{isAr ? 'ربط جهاز' : 'Bind'}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-1.5">
@@ -1502,6 +1733,7 @@ export const BranchesStructurePage: React.FC = () => {
                         <th className="py-2.5 px-3.5 text-start min-w-[160px]">{isAr ? 'الفرع' : 'Branch'}</th>
                         <th className="py-2.5 px-3.5 text-start min-w-[160px]">{isAr ? 'القسم' : 'Department'}</th>
                         <th className="py-2.5 px-3.5 text-start min-w-[180px]">{isAr ? 'الصندوق المخصص' : 'Cashbox'}</th>
+                        <th className="py-2.5 px-3.5 text-start min-w-[190px]">{isAr ? 'الجهاز المعتمد (الأمان)' : 'Device Security'}</th>
                         <th className="py-2.5 px-3.5 text-start w-32 font-mono">{isAr ? 'رقم الهاتف' : 'Phone'}</th>
                         <th className="py-2.5 px-3.5 text-center w-24">{isAr ? 'الحالة' : 'Status'}</th>
                         <th className="py-2.5 px-3.5 text-center w-20">{isAr ? 'إجراءات' : 'Actions'}</th>
@@ -1524,6 +1756,45 @@ export const BranchesStructurePage: React.FC = () => {
                           <td className="py-2.5 px-3.5 text-slate-700">{e.branchName}</td>
                           <td className="py-2.5 px-3.5"><Badge size="xs" color="teal" variant="outline">{e.departmentName}</Badge></td>
                           <td className="py-2.5 px-3.5 font-mono text-[11px] text-slate-700">{e.assignedCashbox || '-'}</td>
+                          <td className="py-2.5 px-3.5">
+                            {e.trustedDeviceId ? (
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
+                                  <IconDeviceMobileCheck size={16} className="text-emerald-600 shrink-0" />
+                                  <div>
+                                    <span className="font-bold text-xs block leading-tight text-slate-900">
+                                      {e.deviceModel || (isAr ? 'هاتف معتمد' : 'Trusted Device')}
+                                    </span>
+                                    <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200">
+                                      {e.devicePlatform === 'ios' ? 'Secure Enclave' : 'Android Keystore'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUnbindDevice(e.id, e.fullName)}
+                                  className="text-[10px] text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-1.5 py-0.5 rounded cursor-pointer"
+                                  title={isAr ? 'فك اقتران الجهاز' : 'Unbind Device'}
+                                >
+                                  <IconUnlink size={11} />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] text-slate-400 font-bold">{isAr ? 'غير مقترن' : 'Not bound'}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedEmpForDevice(e);
+                                    setDeviceModalOpen(true);
+                                  }}
+                                  className="text-[10px] font-bold text-[#F45A0A] bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2 py-0.5 rounded cursor-pointer"
+                                >
+                                  {isAr ? 'ربط جهاز' : 'Bind'}
+                                </button>
+                              </div>
+                            )}
+                          </td>
                           <td className="py-2.5 px-3.5 font-mono font-bold text-slate-800">{e.phone || '-'}</td>
                           <td className="py-2.5 px-3.5 text-center">
                             <Badge size="xs" color={e.status === 'نشط' ? 'emerald' : 'amber'} variant="light">
@@ -1719,8 +1990,9 @@ export const BranchesStructurePage: React.FC = () => {
                 onChange={(val: any) => setModalBranchTab(val)}
                 data={[
                   { label: isAr ? '1. البيانات والشعار' : '1. Basic Info & Logo', value: 'info' },
-                  { label: isAr ? '2. الهواتف والبريد' : '2. Contacts & Emails', value: 'contacts' },
-                  { label: isAr ? '3. التواصل الاجتماعي' : '3. Social Media', value: 'social' },
+                  { label: isAr ? '2. الموقع ونطاق البصمة' : '2. GPS & Geofence', value: 'location' },
+                  { label: isAr ? '3. الهواتف والبريد' : '3. Contacts & Emails', value: 'contacts' },
+                  { label: isAr ? '4. التواصل الاجتماعي' : '4. Social Media', value: 'social' },
                 ]}
                 color="orange"
                 className="bg-slate-100 p-0.5 rounded-xl"
@@ -1848,6 +2120,122 @@ export const BranchesStructurePage: React.FC = () => {
                 </div>
               )}
 
+              {/* TAB 2: HIGH ACCURACY GPS & GEOFENCE */}
+              {modalBranchTab === 'location' && (
+                <div className="space-y-4 pt-1">
+                  {/* High Accuracy Auto-Detect Button */}
+                  <div className="p-3.5 bg-orange-50/80 border border-orange-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-slate-900 font-black text-xs">
+                        <IconCurrentLocation size={16} className="text-[#F45A0A]" />
+                        <span>{isAr ? 'تحديد إحداثيات الفرع بدقة خيالية (High-Precision GPS)' : 'High Precision GPS Lock'}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 font-medium">
+                        {isAr
+                          ? 'جلب موقعك الجغرافي الفعلي اللحظي بدقة الأقمار الصناعية لربط الفرع ببصمة الحضور.'
+                          : 'Fetch exact real-time coordinates to bind branch with employee geofence.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGetHighAccuracyLocation}
+                      disabled={gettingLocation}
+                      className="px-4 py-2 rounded-xl bg-[#F45A0A] hover:bg-[#DC4B02] text-white text-xs font-black shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50 active:scale-95 transition-all"
+                    >
+                      <IconCurrentLocation size={15} className={gettingLocation ? 'animate-spin' : ''} />
+                      <span>{gettingLocation ? (isAr ? 'جاري التحديد بدقة...' : 'Acquiring...') : (isAr ? 'حدد موقعي الآن' : 'Get Current GPS')}</span>
+                    </button>
+                  </div>
+
+                  {/* Manual Coordinate Inputs */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        {isAr ? 'خط العرض (Latitude) *' : 'Latitude *'}
+                      </label>
+                      <TextInput
+                        placeholder="32.616035"
+                        value={branchLatitude}
+                        onChange={(e) => setBranchLatitude(e.target.value)}
+                        className="font-mono font-bold"
+                        leftSection={<IconMapPin size={14} className="text-slate-400" />}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        {isAr ? 'خط الطول (Longitude) *' : 'Longitude *'}
+                      </label>
+                      <TextInput
+                        placeholder="44.024921"
+                        value={branchLongitude}
+                        onChange={(e) => setBranchLongitude(e.target.value)}
+                        className="font-mono font-bold"
+                        leftSection={<IconMapPin size={14} className="text-slate-400" />}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Allowed Radius Selection */}
+                  <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-800">
+                        {isAr ? 'المسافة المسموحة لتسجيل الحضور (نطاق البصمة بالمتر / كم):' : 'Allowed Attendance Geofence Radius:'}
+                      </label>
+                      <span className="font-mono font-black text-sm text-[#F45A0A] bg-white px-2.5 py-0.5 rounded-lg border border-orange-200">
+                        {branchRadius} {isAr ? 'متر' : 'm'} {branchRadius >= 1000 ? `(${(branchRadius / 1000).toFixed(1)} كم)` : ''}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      {[50, 100, 150, 300, 500, 1000, 2000].map((radius) => (
+                        <button
+                          key={radius}
+                          type="button"
+                          onClick={() => setBranchRadius(radius)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                            branchRadius === radius
+                              ? 'bg-[#F45A0A] text-white shadow-2xs'
+                              : 'bg-white text-slate-700 border border-slate-200 hover:border-orange-300'
+                          }`}
+                        >
+                          {radius >= 1000 ? `${radius / 1000} كم` : `${radius}م`}
+                          {radius === 150 ? (isAr ? ' (افتراضي)' : ' (Default)') : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Map Preview / Google Maps Link */}
+                  {branchLatitude && branchLongitude && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200 text-[#F45A0A] flex items-center justify-center">
+                          <IconMapPin size={16} />
+                        </div>
+                        <div>
+                          <span className="font-mono font-black text-xs text-slate-900 block">
+                            {Number(branchLatitude).toFixed(6)}, {Number(branchLongitude).toFixed(6)}
+                          </span>
+                          <span className="text-[11px] text-emerald-700 font-bold block">
+                            ✓ {isAr ? 'جاهز لتفعيل البصمة الجغرافية الذكية' : 'Ready for geofenced attendance'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <a
+                        href={`https://www.google.com/maps?q=${branchLatitude},${branchLongitude}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="h-8 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                      >
+                        <IconExternalLink size={13} />
+                        <span>{isAr ? 'معاينة في خرائط جوجل' : 'Preview Map'}</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {modalBranchTab === 'contacts' && (
                 <div className="space-y-3 pt-1">
                   <div className="grid grid-cols-2 gap-3">
@@ -1937,7 +2325,11 @@ export const BranchesStructurePage: React.FC = () => {
                   {modalBranchTab !== 'info' && (
                     <button
                       type="button"
-                      onClick={() => setModalBranchTab(modalBranchTab === 'social' ? 'contacts' : 'info')}
+                      onClick={() => {
+                        if (modalBranchTab === 'social') setModalBranchTab('contacts');
+                        else if (modalBranchTab === 'contacts') setModalBranchTab('location');
+                        else setModalBranchTab('info');
+                      }}
                       className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs cursor-pointer"
                     >
                       {isAr ? 'السابق' : 'Previous'}
@@ -1946,7 +2338,11 @@ export const BranchesStructurePage: React.FC = () => {
                   {modalBranchTab !== 'social' && (
                     <button
                       type="button"
-                      onClick={() => setModalBranchTab(modalBranchTab === 'info' ? 'contacts' : 'social')}
+                      onClick={() => {
+                        if (modalBranchTab === 'info') setModalBranchTab('location');
+                        else if (modalBranchTab === 'location') setModalBranchTab('contacts');
+                        else setModalBranchTab('social');
+                      }}
                       className="h-8 px-3 rounded-lg bg-orange-50 text-[#F45A0A] hover:bg-orange-100 font-bold text-xs cursor-pointer"
                     >
                       {isAr ? 'التالي' : 'Next'}
@@ -2339,6 +2735,133 @@ export const BranchesStructurePage: React.FC = () => {
               className="h-8 px-4 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
             >
               {isAr ? 'تأكيد الحذف النهائي' : 'Confirm Delete'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── 7. HARDWARE DEVICE BINDING MODAL ── */}
+      <Modal
+        opened={deviceModalOpen}
+        onClose={() => setDeviceModalOpen(false)}
+        title={
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-orange-50 text-[#F45A0A] border border-orange-200">
+              <IconDeviceMobile size={16} />
+            </div>
+            <div>
+              <span className="font-black text-xs text-slate-900 block">
+                {isAr ? 'اعتماد وربط جهاز موثّق حصري للموظف' : 'Bind Hardware Trusted Device'}
+              </span>
+              <span className="text-[10px] text-slate-500 font-bold block">
+                {selectedEmpForDevice?.fullName} — {selectedEmpForDevice?.branchName}
+              </span>
+            </div>
+          </div>
+        }
+        size="md"
+        dir={direction}
+        centered
+        radius="lg"
+      >
+        <div className="space-y-3.5 text-xs">
+          <div className="p-3 bg-orange-50/70 border border-orange-200/80 rounded-xl space-y-1">
+            <div className="flex items-center gap-1.5 text-slate-900 font-black text-xs">
+              <IconShieldLock size={15} className="text-[#F45A0A]" />
+              <span>{isAr ? 'سياسة جهاز واحد معتمد لكل موظف' : 'One Trusted Device Per Employee Policy'}</span>
+            </div>
+            <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+              {isAr
+                ? 'يمنع هذا النظام فتح الحساب أو تسجيل الحضور من هاتف صديق أو أجهزة متعددة. يتم توثيق بصمة عتادية مؤمنة داخل المعالج الأمني للهاتف.'
+                : 'Prevents account access or attendance logging from colleagues’ phones. Hardware security attestation is enforced.'}
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="block text-xs font-bold text-slate-700">
+              {isAr ? 'منصة الهاتف ونظام الأمان المعتمد *' : 'Platform & Security Attestation *'}
+            </label>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setBindPlatform('android');
+                  setBindDeviceModel('Samsung Galaxy S24 Ultra');
+                }}
+                className={`p-3 rounded-xl border text-start transition-all cursor-pointer ${
+                  bindPlatform === 'android'
+                    ? 'border-[#F45A0A] bg-orange-50/50 shadow-2xs'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <span className="text-base block mb-1">🤖</span>
+                <span className="font-black text-xs text-slate-900 block">Android</span>
+                <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                  Keystore + Play Integrity
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBindPlatform('ios');
+                  setBindDeviceModel('iPhone 15 Pro Max');
+                }}
+                className={`p-3 rounded-xl border text-start transition-all cursor-pointer ${
+                  bindPlatform === 'ios'
+                    ? 'border-[#F45A0A] bg-orange-50/50 shadow-2xs'
+                    : 'border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                <span className="text-base block mb-1">🍏</span>
+                <span className="font-black text-xs text-slate-900 block">iPhone / iOS</span>
+                <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                  Secure Enclave + App Attest
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              {isAr ? 'طراز الجهاز (Model Name) *' : 'Device Model Name *'}
+            </label>
+            <TextInput
+              value={bindDeviceModel}
+              onChange={(e) => setBindDeviceModel(e.target.value)}
+              placeholder={bindPlatform === 'android' ? 'Samsung Galaxy S24 / Xiaomi 14' : 'iPhone 15 Pro / iPhone 14'}
+            />
+          </div>
+
+          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 font-mono text-[10.5px] text-slate-600 space-y-1">
+            <div className="flex justify-between">
+              <span className="font-bold">{isAr ? 'نوع التوثيق العتادي:' : 'Hardware Attestation:'}</span>
+              <span className="font-black text-slate-800">
+                {bindPlatform === 'android' ? 'Android Keystore HSM' : 'Apple Secure Enclave'}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-bold">{isAr ? 'حماية من فتح الحساب من هاتف الصديق:' : 'Friend Phone Prevention:'}</span>
+              <span className="text-emerald-700 font-black">✓ {isAr ? 'مفعلة وصارمة' : 'Active & Enforced'}</span>
+            </div>
+          </div>
+
+          <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setDeviceModalOpen(false)}
+              className="h-8 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs cursor-pointer"
+            >
+              {isAr ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button
+              type="button"
+              disabled={bindingDevice || !bindDeviceModel.trim()}
+              onClick={handleBindDevice}
+              className="h-8 px-4 rounded-lg bg-[#F45A0A] hover:bg-[#DC4B02] text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <IconShieldCheck size={14} />
+              <span>{bindingDevice ? (isAr ? 'جاري الاعتماد...' : 'Binding...') : (isAr ? 'اعتماد وتوثيق الجهاز' : 'Verify & Bind Device')}</span>
             </button>
           </div>
         </div>

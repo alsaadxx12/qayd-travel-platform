@@ -22,6 +22,12 @@ export class TourGroupsController {
     return this.svc.create(req.user.companyId, dto, req.user.id);
   }
 
+  @Post('sync-ledgers')
+  @ApiOperation({ summary: 'إعادة بناء كل قيود الكروبات — يصلح العملة الخاطئة' })
+  syncLedgers(@Req() req: any) {
+    return this.svc.syncAllGroupLedgers(req.user.companyId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'ملف الكروب كاملاً: الأنظمة والمشتريات والمسافرون والملخّص' })
   getOne(@Req() req: any, @Param('id') id: string) {

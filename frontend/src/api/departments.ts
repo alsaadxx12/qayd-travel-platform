@@ -14,6 +14,8 @@ export interface DepartmentData {
   branch?: { id: string; code: string; nameAr: string } | null;
 }
 
+export type Department = DepartmentData;
+
 export const departmentsApi = {
   getAll: (): Promise<DepartmentData[]> =>
     apiRequest('/departments'),

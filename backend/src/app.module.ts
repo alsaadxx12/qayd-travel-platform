@@ -33,6 +33,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { AIAssistantModule } from './ai-assistant/ai-assistant.module';
 import { StatementPortalModule } from './statement-portal/statement-portal.module';
+import { HrModule } from './hr/hr.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { StatementPortalModule } from './statement-portal/statement-portal.modul
     EmailModule,
     FiscalYearsModule,
     StatementPortalModule,
+    HrModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

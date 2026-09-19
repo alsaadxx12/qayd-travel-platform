@@ -13,6 +13,7 @@ import {
   IconAlertCircle,
   IconRefresh,
   IconInfoCircle,
+  IconUsers,
 } from '@tabler/icons-react';
 import { showSuccessNotification, showInfoNotification } from '../../utils/notifications';
 import { apiRequest } from '../../api/client';
@@ -139,6 +140,22 @@ export const AddonsStoreModal: React.FC<AddonsStoreModalProps> = ({ opened, onCl
         isEnabled: true,
         badgeText: 'تلقائي',
         features: ['إرسال كشوف الحساب تلقائياً', 'تصاميم فواتير احترافية', 'تقارير الأرباح الدورية'],
+      },
+      {
+        id: 'hr_employee_management',
+        name: 'إدارة الموظفين والدوام الذكي (HR Suite)',
+        category: 'الموارد البشرية',
+        description: 'مسيرات الرواتب، البصمة الذكية بالـ GPS وتوثيق الأجهزة المعتمدة، طلبات الإجازات، لوحة نقاط الشرف، ومسابقات الموظفين.',
+        icon: IconUsers,
+        iconColor: 'text-[#F45A0A]',
+        iconBg: 'bg-orange-50 border-orange-200',
+        cost: 'مفعلة ضمن الباقة الأساسية',
+        costUSD: 0,
+        availableQuota: 'متاح بالكامل لكافة الموظفين',
+        quotaPercentage: 100,
+        isEnabled: true,
+        badgeText: 'إدارة متكاملة ⭐',
+        features: ['مسيرات الرواتب واحتساب البدلات', 'بصمة GPS وربط الجهاز الحصري', 'الإجازات ولوحة الشرف والمسابقات'],
       },
     ];
 

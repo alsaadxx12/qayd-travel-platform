@@ -201,7 +201,7 @@ export class TourGroupsService {
       this.prisma.groupPassenger.findMany({
         where: { groupId: id },
         include: { services: true },
-        orderBy: { createdAt: 'asc' },
+        orderBy: { id: 'asc' },
       }),
     ]);
     if (!g) throw new NotFoundException('الكروب غير موجود');
@@ -523,6 +523,7 @@ export class TourGroupsService {
         postedById: createdById,
         sourceType: 'GROUP',
         sourceId: paxId,
+        currency: group.currency || 'IQD',
         lines: { create: lines },
       },
     }).catch(() => undefined);
@@ -639,6 +640,52 @@ export class TourGroupsService {
       if (u?.name) updateAgent = u.name;
     }
 
+    if (dto.buyPrice !== undefined) {
+      const cleanBuy = dec(dto.buyPrice);
+      const services = await this.prisma.groupPassengerService.findMany({
+        where: { passengerId: paxId },
+        orderBy: { id: 'asc' },
+      });
+      if (services.length === 1) {
+        const oldVal = services[0].finalBuy !== null ? dec(services[0].finalBuy) : dec(services[0].expectedBuy);
+        if (oldVal !== cleanBuy) {
+          changes.push(`سعر الشراء ${oldVal} → ${cleanBuy}`);
+        }
+        await this.prisma.groupPassengerService.update({
+          where: { id: services[0].id },
+          data: {
+            expectedBuy: new Prisma.Decimal(cleanBuy),
+            ...(services[0].finalBuy !== null && { finalBuy: new Prisma.Decimal(cleanBuy) }),
+          },
+        });
+      } else if (services.length > 1) {
+        const currentTotal = services.reduce((acc, s) => acc + (s.finalBuy !== null ? dec(s.finalBuy) : dec(s.expectedBuy)), 0);
+        if (currentTotal !== cleanBuy) {
+          changes.push(`سعر الشراء ${currentTotal} → ${cleanBuy}`);
+        }
+        const diff = cleanBuy - currentTotal;
+        const firstVal = Math.max(0, (services[0].finalBuy !== null ? dec(services[0].finalBuy) : dec(services[0].expectedBuy)) + diff);
+        await this.prisma.groupPassengerService.update({
+          where: { id: services[0].id },
+          data: {
+            expectedBuy: new Prisma.Decimal(firstVal),
+            ...(services[0].finalBuy !== null && { finalBuy: new Prisma.Decimal(firstVal) }),
+          },
+        });
+      } else {
+        changes.push(`إضافة سعر شراء: ${cleanBuy}`);
+        await this.prisma.groupPassengerService.create({
+          data: {
+            passengerId: paxId,
+            kind: 'PACKAGE',
+            expectedBuy: new Prisma.Decimal(cleanBuy),
+            currency: dto.currency || pax.currency || 'USD',
+            status: 'NOT_COMPLETE',
+          },
+        });
+      }
+    }
+
     await this.prisma.groupPassenger.update({
       where: { id: paxId },
       data: {
@@ -722,5 +769,25 @@ export class TourGroupsService {
       return this.auditAndFetch(companyId, userId, 'GROUP_SERVICE_UPDATE', groupId, { serviceId, kind: svc.kind, changes });
     }
     return this.getOne(companyId, groupId);
+  }
+
+  /** إعادة بناء كل قيود الكروبات لشركة — يصلح أي عملة خاطئة في القيود القديمة. */
+  async syncAllGroupLedgers(companyId: string) {
+    const groups = await this.prisma.tourGroup.findMany({
+      where: { companyId },
+      select: { id: true },
+    });
+    let synced = 0;
+    for (const group of groups) {
+      const passengers = await this.prisma.groupPassenger.findMany({
+        where: { groupId: group.id, state: { not: 'CANCELLED' } },
+        select: { id: true },
+      });
+      for (const pax of passengers) {
+        await this.syncPassengerLedger(companyId, group.id, pax.id).catch(() => undefined);
+        synced++;
+      }
+    }
+    return { synced, groups: groups.length };
   }
 }

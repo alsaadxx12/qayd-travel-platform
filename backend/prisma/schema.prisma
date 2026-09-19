@@ -344,6 +344,12 @@ model Company {
   printTemplates    PrintTemplate[]
   documentSequences DocumentSequence[]
   tourGroups        TourGroup[]
+  employeeSalaries  EmployeeSalary[]
+  employeeAttendances EmployeeAttendance[]
+  employeeLeaves    EmployeeLeave[]
+  employeePoints    EmployeePointRecord[]
+  employeeCompetitions EmployeeCompetition[]
+  employeeLeaveBalances EmployeeLeaveBalance[]
 
   @@index([tenantId])
   @@map("companies")
@@ -351,6 +357,8 @@ model Company {
 
 model User {
   id                 String   @id @default(uuid())
+  baseSalary         Decimal?  @default(0) @map("base_salary")
+  salaryStructure    Json?     @default("{}") @map("salary_structure")
   email              String   @unique
   password           String
   name               String
@@ -847,11 +855,14 @@ model Branch {
   instagram   String?
   telegram    String?
   website     String?
-  isMain      Boolean  @default(false)
-  status      String   @default("نشط")
-  companyId   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isMain              Boolean  @default(false)
+  status              String   @default("نشط")
+  latitude            Float?
+  longitude           Float?
+  allowedRadiusMeters Float?   @default(150)
+  companyId           String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   tenant      Tenant?      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -922,6 +933,8 @@ model Department {
 
 model Employee {
   id                String   @id @default(uuid())
+  baseSalary        Decimal?  @default(0) @map("base_salary")
+  salaryStructure   Json?     @default("{}") @map("salary_structure")
   tenantId          String?  @map("tenant_id")
   branchId          String?  @map("branch_id")
   departmentId      String?  @map("department_id")
@@ -935,16 +948,28 @@ model Employee {
   status            String   @default("نشط")
   hasUserAccount    Boolean  @default(false)
   username          String?
-  permissionGroupId String?
-  companyId         String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  permissionGroupId     String?
+  trustedDeviceId       String?   @map("trusted_device_id")
+  deviceModel           String?   @map("device_model")
+  devicePlatform        String?   @map("device_platform")
+  deviceBoundAt         DateTime? @map("device_bound_at")
+  deviceAttestationType String?   @map("device_attestation_type")
+  deviceAttestationKey  String?   @map("device_attestation_key")
+  companyId             String
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   tenant          Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   company         Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   branch          Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
   department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   permissionGroup Role?       @relation(fields: [permissionGroupId], references: [id], onDelete: SetNull)
+  salaries        EmployeeSalary[]
+  attendances     EmployeeAttendance[]
+  leaves          EmployeeLeave[]
+  points          EmployeePointRecord[]
+  wonCompetitions EmployeeCompetition[]
+  leaveBalances   EmployeeLeaveBalance[]
 
   @@index([tenantId])
   @@index([branchId])
@@ -1412,3 +1437,141 @@ model GroupPassengerService {
   @@index([passengerId, status])
   @@map("group_passenger_services")
 }
+
+model EmployeeSalary {
+  id             String    @id @default(uuid())
+  companyId      String
+  employeeId     String
+  month          String
+  baseSalary     Decimal   @default(0)
+  allowances     Decimal   @default(0)
+  bonuses        Decimal   @default(0)
+  deductions     Decimal   @default(0)
+  netSalary      Decimal   @default(0)
+  currency       String    @default("USD")
+  status         String    @default("PENDING")
+  paymentMethod  String?
+  paidAt         DateTime?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, month])
+  @@index([employeeId])
+  @@map("hr_salaries")
+}
+
+model EmployeeAttendance {
+  id            String   @id @default(uuid())
+  companyId     String
+  employeeId    String
+  date          DateTime
+  checkIn       String?
+  checkOut      String?
+  status        String   @default("PRESENT")
+  lateMinutes   Int      @default(0)
+  overtimeHours Decimal  @default(0)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, date])
+  @@index([employeeId])
+  @@map("hr_attendances")
+}
+
+model EmployeeLeave {
+  id         String    @id @default(uuid())
+  companyId  String
+  employeeId String
+  leaveType  String    @default("ANNUAL")
+  startDate  DateTime
+  endDate    DateTime
+  daysCount  Int       @default(1)
+  hoursCount Decimal   @default(0)
+  reason     String?
+  status     String    @default("PENDING")
+  approvedBy String?
+  actionDate DateTime?
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
+  @@index([employeeId])
+  @@map("hr_leaves")
+}
+
+model EmployeeLeaveBalance {
+  id               String   @id @default(uuid())
+  companyId        String
+  employeeId       String
+  year             Int      @default(2026)
+  leaveType        String   // ANNUAL, SICK, EMERGENCY, HOURLY
+  totalBalance     Decimal  @default(0)
+  usedBalance      Decimal  @default(0)
+  remainingBalance Decimal  @default(0)
+  unit             String   @default("DAYS") // DAYS, HOURS
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, employeeId, year, leaveType])
+  @@index([companyId, year])
+  @@index([employeeId])
+  @@map("hr_leave_balances")
+}
+
+model EmployeePointRecord {
+  id         String   @id @default(uuid())
+  companyId  String
+  employeeId String
+  points     Int      @default(0)
+  reason     String
+  category   String   @default("ACHIEVEMENT")
+  awardedBy  String?
+  date       DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([employeeId])
+  @@map("hr_points")
+}
+
+model EmployeeCompetition {
+  id               String    @id @default(uuid())
+  companyId        String
+  title            String
+  description      String?
+  targetType       String    @default("SALES_VOLUME")
+  targetValue      Decimal   @default(0)
+  reward           String
+  startDate        DateTime
+  endDate          DateTime
+  status           String    @default("ACTIVE")
+  winnerEmployeeId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  company        Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  winnerEmployee Employee? @relation(fields: [winnerEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@map("hr_competitions")
+}
+

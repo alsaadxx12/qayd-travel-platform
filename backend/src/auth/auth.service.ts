@@ -268,6 +268,8 @@ export class AuthService {
         name: true,
         phone: true,
         isActive: true,
+        baseSalary: true,
+        salaryStructure: true,
         createdAt: true,
         role: {
           select: {

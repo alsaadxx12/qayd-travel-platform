@@ -9,6 +9,7 @@ interface CurrencySegmentedControlProps {
   showLabel?: boolean;
   showAllOption?: boolean;
   height?: string;
+  width?: string;
 }
 
 export const CurrencySegmentedControl: React.FC<CurrencySegmentedControlProps> = ({
@@ -19,6 +20,7 @@ export const CurrencySegmentedControl: React.FC<CurrencySegmentedControlProps> =
   showLabel = true,
   showAllOption = true,
   height = 'h-[38px]',
+  width,
 }) => {
   const allRef = useRef<HTMLButtonElement>(null);
   const iqdRef = useRef<HTMLButtonElement>(null);
@@ -29,6 +31,8 @@ export const CurrencySegmentedControl: React.FC<CurrencySegmentedControlProps> =
   const isALL = value === 'ALL';
   const isIQD = value === 'IQD';
   const isUSD = value === 'USD';
+
+  const containerWidth = width || (showAllOption ? 'w-[220px]' : 'w-[160px]');
 
   return (
     <div className={`flex flex-col select-none font-sans ${className}`}>
@@ -42,7 +46,7 @@ export const CurrencySegmentedControl: React.FC<CurrencySegmentedControlProps> =
       <div
         role="radiogroup"
         aria-label="Currency Selector"
-        className={`${height} ${showAllOption ? 'w-[280px] grid-cols-3' : 'w-[200px] grid-cols-2'} p-[3px] bg-[#F1F5F9] border border-[#E2E8F0] rounded-[11px] grid gap-1 relative ${
+        className={`${height} ${containerWidth} ${showAllOption ? 'grid-cols-3' : 'grid-cols-2'} p-[3px] bg-[#F1F5F9] border border-[#E2E8F0] rounded-[11px] grid gap-1 relative ${
           disabled ? 'opacity-50 cursor-not-allowed' : ''
         }`}
       >
@@ -62,7 +66,7 @@ export const CurrencySegmentedControl: React.FC<CurrencySegmentedControlProps> =
                 : 'bg-transparent text-slate-600 font-semibold border border-transparent hover:bg-white/80 hover:text-slate-900'
             }`}
           >
-            <span className="text-[12px]">{language === 'ar' ? 'كافة العملات' : 'All Currencies'}</span>
+            <span className="text-[11.5px] whitespace-nowrap font-bold">{language === 'ar' ? 'كافة العملات' : 'All Currencies'}</span>
           </button>
         )}
 
@@ -81,7 +85,7 @@ export const CurrencySegmentedControl: React.FC<CurrencySegmentedControlProps> =
               : 'bg-transparent text-slate-600 font-semibold border border-transparent hover:bg-white/80 hover:text-slate-900'
           }`}
         >
-          <span className="font-mono text-[12px] font-bold tracking-wide" dir="ltr">IQD</span>
+          <span className="font-mono text-[11.5px] font-bold tracking-wide whitespace-nowrap" dir="ltr">IQD</span>
         </button>
 
         {/* Option 3: $ USD */}
@@ -99,7 +103,7 @@ export const CurrencySegmentedControl: React.FC<CurrencySegmentedControlProps> =
               : 'bg-transparent text-slate-600 font-semibold border border-transparent hover:bg-white/80 hover:text-slate-900'
           }`}
         >
-          <span className="font-mono text-[12px] font-bold tracking-wide" dir="ltr">$ USD</span>
+          <span className="font-mono text-[11.5px] font-bold tracking-wide whitespace-nowrap" dir="ltr">$ USD</span>
         </button>
       </div>
     </div>

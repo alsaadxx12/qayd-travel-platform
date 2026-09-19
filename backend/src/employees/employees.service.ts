@@ -67,6 +67,28 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsString()
   permissionGroupId?: string;
+
+  @IsOptional()
+  @IsString()
+  trustedDeviceId?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceModel?: string;
+
+  @IsOptional()
+  @IsString()
+  devicePlatform?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceAttestationType?: string;
+
+  @IsOptional()
+  baseSalary?: number;
+
+  @IsOptional()
+  salaryStructure?: any;
 }
 
 export class UpdateEmployeeDto {
@@ -133,6 +155,28 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsString()
   permissionGroupId?: string;
+
+  @IsOptional()
+  @IsString()
+  trustedDeviceId?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceModel?: string;
+
+  @IsOptional()
+  @IsString()
+  devicePlatform?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceAttestationType?: string;
+
+  @IsOptional()
+  baseSalary?: number;
+
+  @IsOptional()
+  salaryStructure?: any;
 }
 
 @Injectable()
@@ -262,6 +306,8 @@ export class EmployeesService {
         hasUserAccount: dto.hasUserAccount || false,
         username: dto.username,
         permissionGroupId: dto.permissionGroupId || null,
+        baseSalary: dto.baseSalary !== undefined ? dto.baseSalary : 0,
+        salaryStructure: dto.salaryStructure !== undefined ? dto.salaryStructure : {},
         companyId,
       },
     });
@@ -317,6 +363,12 @@ export class EmployeesService {
         ...(dto.hasUserAccount !== undefined && { hasUserAccount: dto.hasUserAccount }),
         ...(dto.username !== undefined && { username: dto.username }),
         ...(dto.permissionGroupId !== undefined && { permissionGroupId: dto.permissionGroupId || null }),
+        ...(dto.trustedDeviceId !== undefined && { trustedDeviceId: dto.trustedDeviceId }),
+        ...(dto.deviceModel !== undefined && { deviceModel: dto.deviceModel }),
+        ...(dto.devicePlatform !== undefined && { devicePlatform: dto.devicePlatform }),
+        ...(dto.deviceAttestationType !== undefined && { deviceAttestationType: dto.deviceAttestationType }),
+        ...(dto.baseSalary !== undefined && { baseSalary: dto.baseSalary }),
+        ...(dto.salaryStructure !== undefined && { salaryStructure: dto.salaryStructure }),
       },
     });
 
@@ -378,4 +430,144 @@ export class EmployeesService {
     });
   }
 
+  async bindDevice(id: string, companyId: string, dto: {
+    trustedDeviceId: string;
+    deviceModel: string;
+    devicePlatform: string;
+    deviceAttestationType: string;
+    deviceAttestationKey?: string;
+  }) {
+    const employee = await this.findOne(id, companyId);
+    return this.prisma.employee.update({
+      where: { id: employee.id },
+      data: {
+        trustedDeviceId: dto.trustedDeviceId,
+        deviceModel: dto.deviceModel,
+        devicePlatform: dto.devicePlatform,
+        deviceBoundAt: new Date(),
+        deviceAttestationType: dto.deviceAttestationType,
+        deviceAttestationKey: dto.deviceAttestationKey,
+      },
+    });
+  }
+
+  async unbindDevice(id: string, companyId: string) {
+    const employee = await this.findOne(id, companyId);
+    return this.prisma.employee.update({
+      where: { id: employee.id },
+      data: {
+        trustedDeviceId: null,
+        deviceModel: null,
+        devicePlatform: null,
+        deviceBoundAt: null,
+        deviceAttestationType: null,
+        deviceAttestationKey: null,
+      },
+    });
+  }
+
+  async updateSalaryStructure(id: string, companyId: string, salaryStructure: any, baseSalary?: number) {
+    const cleanId = id.replace(/^(emp_|usr_)/, '');
+
+    // 1. Try finding in Employee
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: cleanId, companyId },
+    });
+
+    if (employee) {
+      const updated = await this.prisma.employee.update({
+        where: { id: employee.id },
+        data: {
+          salaryStructure: salaryStructure || {},
+          ...(baseSalary !== undefined && { baseSalary }),
+        },
+      });
+
+      // Keep user in sync if linked
+      if (employee.email || employee.username) {
+        const matchingUser = await this.prisma.user.findFirst({
+          where: {
+            companyId,
+            OR: [
+              ...(employee.email ? [{ email: employee.email }] : []),
+              ...(employee.username ? [{ email: employee.username }] : []),
+              { name: employee.fullName },
+            ],
+          },
+        });
+        if (matchingUser) {
+          await this.prisma.user.update({
+            where: { id: matchingUser.id },
+            data: {
+              salaryStructure: salaryStructure || {},
+              ...(baseSalary !== undefined && { baseSalary }),
+            },
+          }).catch(() => {});
+        }
+      }
+
+      return { success: true, type: 'EMPLOYEE', id: employee.id, updated };
+    }
+
+    // 2. Try finding in User
+    const user = await this.prisma.user.findFirst({
+      where: { id: cleanId, companyId },
+    });
+
+    if (user) {
+      const updated = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          salaryStructure: salaryStructure || {},
+          ...(baseSalary !== undefined && { baseSalary }),
+        },
+      });
+
+      // Keep employee in sync if linked
+      const matchingEmployee = await this.prisma.employee.findFirst({
+        where: {
+          companyId,
+          OR: [
+            { email: user.email },
+            { fullName: user.name },
+          ],
+        },
+      });
+      if (matchingEmployee) {
+        await this.prisma.employee.update({
+          where: { id: matchingEmployee.id },
+          data: {
+            salaryStructure: salaryStructure || {},
+            ...(baseSalary !== undefined && { baseSalary }),
+          },
+        }).catch(() => {});
+      }
+
+      return { success: true, type: 'USER', id: user.id, updated };
+    }
+
+    throw new NotFoundException('الموظف أو المستخدم غير موجود في هذه الشركة');
+  }
+
+  async batchUpdateSalaryStructures(companyId: string, structures: Record<string, any>) {
+    if (!structures || typeof structures !== 'object') {
+      throw new BadRequestException('بيانات هياكل الرواتب غير صالحة');
+    }
+
+    const results: any[] = [];
+    for (const [key, val] of Object.entries(structures)) {
+      if (!val) continue;
+      const struct = val.structure || val;
+      const baseSalary = val.nominalSalary ?? struct?.nominalSalary;
+      try {
+        const res = await this.updateSalaryStructure(key, companyId, struct, baseSalary);
+        results.push(res);
+      } catch (e: any) {
+        // Continue on individual failure
+      }
+    }
+
+    return { success: true, count: results.length };
+  }
 }
+

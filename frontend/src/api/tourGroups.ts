@@ -36,6 +36,7 @@ export interface GroupPassenger {
   transferImage?: string | null;
   voucherNumber?: string | null; fCode?: string | null; state: string; notes?: string | null;
   services: GroupPassengerService[];
+  buyPrice?: number;
 }
 export interface TourGroup {
   id: string; groupName: string; groupType: string; country?: string | null;
@@ -73,4 +74,6 @@ export const tourGroupsApi = {
     apiRequest(`/tour-groups/${groupId}/passengers/${paxId}`, { method: 'DELETE' }),
   updateService: (groupId: string, serviceId: string, dto: Partial<GroupPassengerService> & { status?: string }): Promise<TourGroup> =>
     apiRequest(`/tour-groups/${groupId}/services/${serviceId}`, { method: 'PUT', ...J(dto) }),
+  syncLedgers: (): Promise<{ synced: number; groups: number }> =>
+    apiRequest('/tour-groups/sync-ledgers', { method: 'POST' }),
 };

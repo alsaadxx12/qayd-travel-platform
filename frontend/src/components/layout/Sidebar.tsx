@@ -36,6 +36,10 @@ import {
   ChevronDown,
   Search,
   X,
+  Award,
+  Trophy,
+  CalendarCheck,
+  UserCheck,
 } from 'lucide-react';
 import { Tooltip } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
@@ -77,6 +81,10 @@ const LUCIDE_ICON_MAP: Record<string, React.ComponentType<{ size?: number; class
   MessageSquare,
   Sparkles,
   Trash2,
+  Award,
+  Trophy,
+  CalendarCheck,
+  UserCheck,
 };
 
 const DEFAULT_SIDEBAR_SECTIONS: NavSection[] = [
@@ -124,6 +132,19 @@ const DEFAULT_SIDEBAR_SECTIONS: NavSection[] = [
     ],
   },
   {
+    key: 'employees',
+    title: 'إدارة الموظفين',
+    iconKey: 'Users',
+    items: [
+      { id: 'employee-allowances', title: 'الراتب الاسمي والمخصصات', path: '/employees/allowances', iconKey: 'Coins' },
+      { id: 'employee-salaries', title: 'الرواتب والأجور', path: '/employees/salaries', iconKey: 'Banknote' },
+      { id: 'employee-points', title: 'نقاط وتحفيز الموظفين', path: '/employees/points', iconKey: 'Award' },
+      { id: 'employee-attendance', title: 'سجل الحضور والانصراف', path: '/employees/attendance', iconKey: 'CalendarCheck' },
+      { id: 'employee-leaves', title: 'طلبات وأرصدة الإجازات', path: '/employees/leaves', iconKey: 'CalendarRange' },
+      { id: 'employee-competitions', title: 'مسابقات وتحديات الموظفين', path: '/employees/competitions', iconKey: 'Trophy' },
+    ],
+  },
+  {
     key: 'admin',
     title: 'الإدارة والرقابة',
     iconKey: 'ShieldCheck',
@@ -157,6 +178,7 @@ export const Sidebar: React.FC = () => {
       operations: false,
       accounts: false,
       reports: false,
+      employees: false,
       admin: false,
     };
     for (const section of DEFAULT_SIDEBAR_SECTIONS) {
@@ -471,7 +493,8 @@ export const Sidebar: React.FC = () => {
         {filteredVisibleSections.map((section, sIdx) => {
           const SectionIcon = LUCIDE_ICON_MAP[section.iconKey] || PlaneTakeoff;
           const isOpen = Boolean(sidebarSearch.trim()) || openSections[section.key];
-          const sectionTitle = t(`nav.${section.key}`) || section.title;
+          const rawSectionT = t(`nav.${section.key}`);
+          const sectionTitle = (rawSectionT && !rawSectionT.startsWith('nav.')) ? rawSectionT : section.title;
 
           return (
             <div key={section.key} className="space-y-1">

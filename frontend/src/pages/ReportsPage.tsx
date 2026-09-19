@@ -929,7 +929,7 @@ export const ReportsPage: React.FC = () => {
                     entryNumber: e.entryNumber || `GRP-${groupName}`,
                     totalDebit: 0,
                     totalCredit: 0,
-                    currency: (accLines[0]?.currency || e.currency || 'IQD').toUpperCase().includes('USD') ? 'USD' : 'IQD',
+                    currency: (matchedGroup?.currency || accLines[0]?.currency || e.currency || 'IQD').toUpperCase().includes('USD') ? 'USD' : 'IQD',
                     passengers: new Set<string>(),
                     entryUser: e.createdBy?.name || (isAr ? 'مدير النظام' : 'System Admin'),
                     user: e.createdBy?.name || (isAr ? 'مدير النظام' : 'System Admin'),

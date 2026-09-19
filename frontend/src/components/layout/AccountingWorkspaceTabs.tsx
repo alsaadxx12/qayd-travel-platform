@@ -50,6 +50,8 @@ const iconMap: { [key: string]: any } = {
   'branches-structure': IconBuildingStore,
   'permission-groups': IconShieldCheck,
   'system-settings': IconSettings,
+  'employee-allowances': IconWallet,
+  'employees/allowances': IconWallet,
 };
 
 export const AccountingWorkspaceTabs: React.FC = () => {

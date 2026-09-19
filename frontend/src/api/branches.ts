@@ -22,6 +22,9 @@ export interface Branch {
   website?: string;
   isMain: boolean;
   status: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  allowedRadiusMeters?: number | null;
 }
 
 export const branchesApi = {

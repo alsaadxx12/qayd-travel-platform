@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader, Menu, Modal, Select, Autocomplete } from '@mantine/core';
+import { Loader, Menu, Modal, Select, Autocomplete, Tooltip } from '@mantine/core';
 import {
   X,
   Users,
@@ -959,6 +959,8 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                     isAr={isAr}
                     supplierOptions={supplierOptions}
                     run={run}
+                    setG={setG}
+                    onChanged={onChanged}
                     onEditPax={(pax) => {
                       const bg = beneficiaryGroups[0];
                       setPaxModal({
@@ -1038,6 +1040,8 @@ export const GroupFileWorkspace: React.FC<Props> = ({ opened, groupId, onClose, 
                                 isAr={isAr}
                                 supplierOptions={supplierOptions}
                                 run={run}
+                                setG={setG}
+                                onChanged={onChanged}
                                 onEditPax={(pax) => {
                                   setPaxModal({
                                     open: true,
@@ -1640,7 +1644,9 @@ const PassengerTable: React.FC<{
   supplierOptions: Array<{ value: string; label: string; code?: string }>;
   run: (op: () => Promise<TourGroup>, ok?: string) => Promise<TourGroup | null>;
   onEditPax: (p: GroupPassenger) => void;
-}> = ({ g, passengers, isAr, run, onEditPax }) => {
+  setG: React.Dispatch<React.SetStateAction<TourGroup | null>>;
+  onChanged?: () => void;
+}> = ({ g, passengers, isAr, run, onEditPax, setG, onChanged }) => {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [expandedRowIds, setExpandedRowIds] = useState<Record<string, boolean>>({});
 
@@ -1655,17 +1661,50 @@ const PassengerTable: React.FC<{
     const isCash = pax.payType !== 'CREDIT';
     const hadFullPaid = Number(pax.collectedAmount || 0) >= Number(pax.salePrice || 0);
     const newCollected = isCash && hadFullPaid ? cleanPrice : Number(pax.collectedAmount || 0);
-    await run(
-      () =>
-        tourGroupsApi.updatePassenger(g.id, pax.id, {
-          state: nextState,
-          salePrice: cleanPrice,
-          collectedAmount: newCollected,
-        }),
-      nextState === 'CONFIRMED'
-        ? (isAr ? `تم اعتماد المسافر «${pax.passengerName}»` : `Confirmed "${pax.passengerName}"`)
-        : (isAr ? `تم رفع الاعتماد عن «${pax.passengerName}»` : `Unconfirmed "${pax.passengerName}"`),
+
+    // تحديث فوري بصري — يتحرك زر التبديل لحظياً بلا انتظار الشبكة
+    setG((prev) =>
+      prev
+        ? {
+            ...prev,
+            passengers: prev.passengers.map((p) =>
+              p.id === pax.id ? { ...p, state: nextState } : p,
+            ),
+          }
+        : prev,
     );
+
+    try {
+      const freshGroup = await tourGroupsApi.updatePassenger(g.id, pax.id, {
+        state: nextState,
+        salePrice: cleanPrice,
+        collectedAmount: newCollected,
+      });
+      setG(freshGroup);
+      onChanged?.();
+      showSuccessNotification(
+        isAr ? 'تم' : 'Done',
+        nextState === 'CONFIRMED'
+          ? (isAr ? `تم اعتماد المسافر «${pax.passengerName}»` : `Confirmed "${pax.passengerName}"`)
+          : (isAr ? `تم رفع الاعتماد عن «${pax.passengerName}»` : `Unconfirmed "${pax.passengerName}"`),
+      );
+    } catch (err: any) {
+      // استرجاع الحالة الأصلية عند فشل الطلب
+      setG((prev) =>
+        prev
+          ? {
+              ...prev,
+              passengers: prev.passengers.map((p) =>
+                p.id === pax.id ? { ...p, state: pax.state } : p,
+              ),
+            }
+          : prev,
+      );
+      showErrorNotification(
+        isAr ? 'تعذّر التنفيذ' : 'Failed',
+        err?.message || (isAr ? 'تعذّر تحديث حالة المسافر' : 'Failed to update passenger state'),
+      );
+    }
   };
 
   const th = 'px-3 py-2 text-[11px] font-bold text-slate-600 whitespace-nowrap select-none text-center bg-slate-50/90 tracking-wide border-b border-slate-200';
@@ -1683,8 +1722,7 @@ const PassengerTable: React.FC<{
             <th className={th}>{isAr ? 'شراء' : 'Buy'}</th>
             <th className={th}>{isAr ? 'بيع' : 'Sale'}</th>
             <th className={th}>{isAr ? 'الربح' : 'Profit'}</th>
-            <th className={th}>{isAr ? 'الحالة' : 'Status'}</th>
-            <th className={`${th} w-36`}>{isAr ? 'إجراءات' : 'Actions'}</th>
+            <th className={`${th} w-40 text-center`}>{isAr ? 'إجراءات' : 'Actions'}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -1811,87 +1849,70 @@ const PassengerTable: React.FC<{
                     </span>
                   </td>
                   <td className={td} onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      disabled={cancelled}
-                      onClick={(e) => togglePaxConfirmation(e, p)}
-                      title={
-                        cancelled
-                          ? undefined
-                          : isConfirmed
-                          ? (isAr ? 'معتمد — انقر لرفع الاعتماد' : 'Confirmed — Click to unconfirm')
-                          : (isAr ? 'معلّق — انقر للاعتماد' : 'Pending — Click to confirm')
-                      }
-                      className={`text-[10.5px] font-black rounded-md px-2.5 py-1 border inline-flex items-center justify-center gap-1 transition-all ${
-                        cancelled
-                          ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed'
-                          : isConfirmed
-                          ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:scale-105 cursor-pointer shadow-2xs'
-                          : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 hover:scale-105 cursor-pointer shadow-2xs'
-                      }`}
-                    >
-                      {cancelled ? (
-                        <>
-                          <Ban size={11} className="text-slate-400" />
-                          <span>{isAr ? 'ملغى' : 'Cancelled'}</span>
-                        </>
-                      ) : isConfirmed ? (
-                        <>
-                          <CheckCheck size={11} className="text-emerald-700" />
-                          <span>{isAr ? 'معتمد' : 'Confirmed'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Clock size={11} className="text-amber-600" />
-                          <span>{isAr ? 'معلّق' : 'Pending'}</span>
-                        </>
-                      )}
-                    </button>
-                  </td>
-                  <td className={td} onClick={(e) => e.stopPropagation()}>
-                    <div className="inline-flex items-center justify-center gap-1.5">
-                      {/* زر رفع الاعتماد أو الاعتماد السريع */}
-                      {!cancelled && (
+                    <div className="inline-flex items-center justify-center gap-2">
+                      {/* زر تشغيل وإطفاء الاعتماد (Toggle Switch) */}
+                      <Tooltip
+                        label={
+                          cancelled
+                            ? (isAr ? 'مسافر ملغى' : 'Cancelled')
+                            : isConfirmed
+                            ? (isAr ? 'معتمد — انقر لإلغاء الاعتماد' : 'Confirmed — Click to unconfirm')
+                            : (isAr ? 'غير معتمد — انقر للاعتماد' : 'Unconfirmed — Click to confirm')
+                        }
+                        withArrow
+                        position="top"
+                      >
                         <button
                           type="button"
+                          disabled={cancelled}
                           onClick={(e) => togglePaxConfirmation(e, p)}
-                          title={
-                            isConfirmed
-                              ? (isAr ? 'رفع الاعتماد عن المسافر' : 'Unconfirm passenger')
-                              : (isAr ? 'اعتماد المسافر' : 'Confirm passenger')
-                          }
-                          className={`h-7 px-2 rounded-lg border inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs ${
-                            isConfirmed
-                              ? 'text-amber-800 bg-amber-50 hover:bg-amber-100 border-amber-300'
-                              : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border-emerald-300'
-                          }`}
+                          aria-label={isConfirmed ? (isAr ? 'معتمد' : 'Confirmed') : (isAr ? 'غير معتمد' : 'Unconfirmed')}
+                          role="switch"
+                          aria-checked={isConfirmed}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none shadow-2xs ${
+                            isConfirmed ? 'bg-emerald-600' : 'bg-slate-300'
+                          } ${cancelled ? 'opacity-40 cursor-not-allowed' : ''}`}
                         >
-                          {isConfirmed ? <RotateCcw size={11} /> : <CheckCheck size={11} />}
-                          <span>{isConfirmed ? (isAr ? 'رفع الاعتماد' : 'Unconfirm') : (isAr ? 'اعتماد' : 'Confirm')}</span>
+                          <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-flex items-center justify-center h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                              isConfirmed
+                                ? (isAr ? '-translate-x-5' : 'translate-x-5')
+                                : 'translate-x-0'
+                            }`}
+                          >
+                            {isConfirmed ? (
+                              <Check size={11} strokeWidth={3} className="text-emerald-600" />
+                            ) : (
+                              <X size={10} strokeWidth={2.5} className="text-slate-400" />
+                            )}
+                          </span>
                         </button>
-                      )}
+                      </Tooltip>
 
-                      {/* زر تعديل */}
-                      <button
-                        type="button"
-                        onClick={() => onEditPax(p)}
-                        title={isAr ? 'تعديل بيانات المسافر' : 'Edit passenger'}
-                        className="h-7 px-2.5 rounded-lg text-[#F45A0A] bg-orange-50/80 hover:bg-orange-100 border border-orange-200/90 inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
-                      >
-                        <Edit2 size={12} />
-                        <span>{isAr ? 'تعديل' : 'Edit'}</span>
-                      </button>
+                      {/* زر التعديل - أيقونة فقط بلون مميز خاص (Brand Orange) */}
+                      <Tooltip label={isAr ? 'تعديل بيانات المسافر' : 'Edit passenger'} withArrow position="top">
+                        <button
+                          type="button"
+                          onClick={() => onEditPax(p)}
+                          aria-label={isAr ? 'تعديل بيانات المسافر' : 'Edit passenger'}
+                          className="w-7 h-7 rounded-lg bg-[#F45A0A] hover:bg-[#DD4F05] text-white inline-flex items-center justify-center cursor-pointer transition-all duration-150 shadow-2xs hover:scale-105"
+                        >
+                          <Edit2 size={13} strokeWidth={2.2} />
+                        </button>
+                      </Tooltip>
 
-                      {/* زر حذف */}
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteId(p.id)}
-                        title={isAr ? 'حذف المسافر' : 'Delete passenger'}
-                        className="h-7 px-2.5 rounded-lg text-rose-600 bg-rose-50/80 hover:bg-rose-100 border border-rose-200/90 inline-flex items-center gap-1 text-[11px] font-bold cursor-pointer transition-colors shadow-2xs"
-                      >
-                        <Trash2 size={12} />
-                        <span>{isAr ? 'حذف' : 'Delete'}</span>
-                      </button>
+                      {/* زر الحذف - أيقونة فقط بلون أحمر داكن */}
+                      <Tooltip label={isAr ? 'حذف المسافر' : 'Delete passenger'} withArrow position="top">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(p.id)}
+                          aria-label={isAr ? 'حذف المسافر' : 'Delete passenger'}
+                          className="w-7 h-7 rounded-lg bg-[#DC2626] hover:bg-[#B91C1C] text-white inline-flex items-center justify-center cursor-pointer transition-all duration-150 shadow-2xs hover:scale-105"
+                        >
+                          <Trash2 size={13} strokeWidth={2.2} />
+                        </button>
+                      </Tooltip>
                     </div>
                   </td>
                 </tr>
@@ -1899,7 +1920,7 @@ const PassengerTable: React.FC<{
                 {/* التفاصيل الثانوية القابلة للفتح */}
                 {isExpanded && (
                   <tr className="bg-slate-50/70 border-b border-slate-200 text-xs">
-                    <td colSpan={9} className="p-2.5">
+                    <td colSpan={8} className="p-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
                         <div className="flex items-center gap-4 flex-wrap text-xs">
                           {/* موظف الإصدار */}
@@ -4251,6 +4272,8 @@ interface AuditRowState {
   customerName: string;
   customerId: string | null;
   customerAccountId: string | null;
+  buyPrice: number | string;
+  originalBuyPrice?: number;
   salePrice: number | string;
   currency: string;
   state: string;
@@ -4288,6 +4311,7 @@ const AuditPassengersModal: React.FC<{
   const [visibleColumns, setVisibleColumns] = useState({
     passport: true,
     beneficiary: true,
+    buyPrice: true,
     salePrice: true,
     status: true,
     agent: false,
@@ -4308,20 +4332,43 @@ const AuditPassengersModal: React.FC<{
   useEffect(() => {
     if (g?.passengers) {
       setRows(
-        g.passengers.map((p) => ({
-          id: p.id,
-          passengerName: p.passengerName,
-          passport: p.passport || '',
-          customerName: p.customerName || '',
-          customerId: p.customerId || null,
-          customerAccountId: p.customerAccountId || null,
-          salePrice: p.salePrice !== undefined && p.salePrice !== null ? Number(p.salePrice) : 0,
-          currency: p.currency || g.currency || 'USD',
-          state: p.state || 'RESERVED',
-          agent: p.agent || g.createdByName || '',
-          originalPax: p,
-          isSaving: false,
-        })),
+        g.passengers.map((p) => {
+          let cost = 0;
+          if (Array.isArray(p.services) && p.services.length > 0) {
+            for (const sv of p.services) {
+              const fb = (sv.finalBuy !== null && sv.finalBuy !== undefined && Number(sv.finalBuy) > 0) ? Number(sv.finalBuy) : 0;
+              const eb = Number(sv.expectedBuy) || 0;
+              cost += (fb > 0 ? fb : eb);
+            }
+          } else if (p.priceSystemId && Array.isArray(g.priceSystems)) {
+            const ps = g.priceSystems.find((s) => s.id === p.priceSystemId);
+            if (ps && Array.isArray(ps.items)) {
+              for (const it of ps.items) {
+                cost += Number(it.expectedBuy) || 0;
+              }
+            }
+          }
+
+          const rawPassport = (p.passport || '').trim();
+          const cleanPassport = rawPassport === 'A00000000' ? '' : rawPassport;
+
+          return {
+            id: p.id,
+            passengerName: p.passengerName,
+            passport: cleanPassport,
+            customerName: p.customerName || '',
+            customerId: p.customerId || null,
+            customerAccountId: p.customerAccountId || null,
+            buyPrice: cost,
+            originalBuyPrice: cost,
+            salePrice: p.salePrice !== undefined && p.salePrice !== null ? Number(p.salePrice) : 0,
+            currency: p.currency || g.currency || 'USD',
+            state: p.state || 'RESERVED',
+            agent: p.agent || g.createdByName || '',
+            originalPax: p,
+            isSaving: false,
+          };
+        }),
       );
     }
   }, [g]);
@@ -4388,6 +4435,7 @@ const AuditPassengersModal: React.FC<{
     updateRowById(row.id, { isSaving: true });
     try {
       const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+      const cleanBuyPrice = Number(String(row.buyPrice).replace(/,/g, '')) || 0;
       const isCash = row.originalPax.payType !== 'CREDIT';
       const hadFullPaid = Number(row.originalPax.collectedAmount || 0) >= Number(row.originalPax.salePrice || 0);
       const newCollected = isCash && hadFullPaid ? cleanPrice : Number(row.originalPax.collectedAmount || 0);
@@ -4395,6 +4443,7 @@ const AuditPassengersModal: React.FC<{
         passengerName: row.passengerName.trim(),
         passport: row.passport.trim(),
         salePrice: cleanPrice,
+        buyPrice: cleanBuyPrice,
         collectedAmount: newCollected,
         customerName: row.customerName,
         customerId: row.customerId,
@@ -4402,16 +4451,19 @@ const AuditPassengersModal: React.FC<{
       });
       showSuccessNotification(
         isAr ? 'تم الحفظ' : 'Saved',
-        isAr ? `تم حفظ بيانات «${row.passengerName}» بنجاح.` : `Passenger "${row.passengerName}" updated.`,
+        isAr ? `تم حفظ بيانات وأسعار «${row.passengerName}» بنجاح.` : `Passenger "${row.passengerName}" updated.`,
       );
       updateRowById(row.id, {
         isSaving: false,
         salePrice: cleanPrice,
+        buyPrice: cleanBuyPrice,
+        originalBuyPrice: cleanBuyPrice,
         originalPax: {
           ...row.originalPax,
           passengerName: row.passengerName.trim(),
           passport: row.passport.trim(),
           salePrice: cleanPrice,
+          buyPrice: cleanBuyPrice,
           collectedAmount: newCollected,
           customerName: row.customerName,
           customerId: row.customerId,
@@ -4431,6 +4483,7 @@ const AuditPassengersModal: React.FC<{
     updateRowById(row.id, { isSaving: true });
     try {
       const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+      const cleanBuyPrice = Number(String(row.buyPrice).replace(/,/g, '')) || 0;
       const isCash = row.originalPax.payType !== 'CREDIT';
       const hadFullPaid = Number(row.originalPax.collectedAmount || 0) >= Number(row.originalPax.salePrice || 0);
       const newCollected = isCash && hadFullPaid ? cleanPrice : Number(row.originalPax.collectedAmount || 0);
@@ -4438,6 +4491,7 @@ const AuditPassengersModal: React.FC<{
         passengerName: row.passengerName.trim(),
         passport: row.passport.trim(),
         salePrice: cleanPrice,
+        buyPrice: cleanBuyPrice,
         collectedAmount: newCollected,
         state: 'CONFIRMED',
         customerName: row.customerName,
@@ -4446,17 +4500,20 @@ const AuditPassengersModal: React.FC<{
       });
       showSuccessNotification(
         isAr ? 'تم اعتماد السعر' : 'Price Confirmed',
-        isAr ? `تم تأكيد واعتماد سعر المسافر «${row.passengerName}» بنجاح.` : `Confirmed price for "${row.passengerName}".`,
+        isAr ? `تم تأكيد واعتماد أسعار المسافر «${row.passengerName}» بنجاح.` : `Confirmed price for "${row.passengerName}".`,
       );
       updateRowById(row.id, {
         isSaving: false,
         state: 'CONFIRMED',
         salePrice: cleanPrice,
+        buyPrice: cleanBuyPrice,
+        originalBuyPrice: cleanBuyPrice,
         originalPax: {
           ...row.originalPax,
           passengerName: row.passengerName.trim(),
           passport: row.passport.trim(),
           salePrice: cleanPrice,
+          buyPrice: cleanBuyPrice,
           collectedAmount: newCollected,
           state: 'CONFIRMED',
           customerName: row.customerName,
@@ -4477,6 +4534,7 @@ const AuditPassengersModal: React.FC<{
     updateRowById(row.id, { isSaving: true });
     try {
       const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+      const cleanBuyPrice = Number(String(row.buyPrice).replace(/,/g, '')) || 0;
       const isCash = row.originalPax.payType !== 'CREDIT';
       const hadFullPaid = Number(row.originalPax.collectedAmount || 0) >= Number(row.originalPax.salePrice || 0);
       const newCollected = isCash && hadFullPaid ? cleanPrice : Number(row.originalPax.collectedAmount || 0);
@@ -4484,6 +4542,7 @@ const AuditPassengersModal: React.FC<{
         passengerName: row.passengerName.trim(),
         passport: row.passport.trim(),
         salePrice: cleanPrice,
+        buyPrice: cleanBuyPrice,
         collectedAmount: newCollected,
         state: 'RESERVED',
         customerName: row.customerName,
@@ -4498,11 +4557,14 @@ const AuditPassengersModal: React.FC<{
         isSaving: false,
         state: 'RESERVED',
         salePrice: cleanPrice,
+        buyPrice: cleanBuyPrice,
+        originalBuyPrice: cleanBuyPrice,
         originalPax: {
           ...row.originalPax,
           passengerName: row.passengerName.trim(),
           passport: row.passport.trim(),
           salePrice: cleanPrice,
+          buyPrice: cleanBuyPrice,
           collectedAmount: newCollected,
           state: 'RESERVED',
           customerName: row.customerName,
@@ -4552,6 +4614,7 @@ const AuditPassengersModal: React.FC<{
     try {
       for (const row of pending) {
         const cleanPrice = Number(String(row.salePrice).replace(/,/g, '')) || 0;
+        const cleanBuyPrice = Number(String(row.buyPrice).replace(/,/g, '')) || 0;
         const isCash = row.originalPax.payType !== 'CREDIT';
         const hadFullPaid = Number(row.originalPax.collectedAmount || 0) >= Number(row.originalPax.salePrice || 0);
         const newCollected = isCash && hadFullPaid ? cleanPrice : Number(row.originalPax.collectedAmount || 0);
@@ -4559,6 +4622,7 @@ const AuditPassengersModal: React.FC<{
           passengerName: row.passengerName.trim(),
           passport: row.passport.trim(),
           salePrice: cleanPrice,
+          buyPrice: cleanBuyPrice,
           collectedAmount: newCollected,
           state: 'CONFIRMED',
           customerName: row.customerName,
@@ -4621,8 +4685,11 @@ const AuditPassengersModal: React.FC<{
     const pendingChanges = rows.filter((r) => {
       const clean = Number(String(r.salePrice).replace(/,/g, '')) || 0;
       const orig = Number(r.originalPax.salePrice) || 0;
+      const cleanBuy = Number(String(r.buyPrice).replace(/,/g, '')) || 0;
+      const origBuy = Number(r.originalBuyPrice ?? 0);
       return (
         clean !== orig ||
+        cleanBuy !== origBuy ||
         r.passengerName.trim() !== (r.originalPax.passengerName || '').trim() ||
         r.passport.trim() !== (r.originalPax.passport || '').trim()
       );
@@ -4631,6 +4698,7 @@ const AuditPassengersModal: React.FC<{
       for (const r of pendingChanges) {
         try {
           const cleanPrice = Number(String(r.salePrice).replace(/,/g, '')) || 0;
+          const cleanBuyPrice = Number(String(r.buyPrice).replace(/,/g, '')) || 0;
           const isCash = r.originalPax.payType !== 'CREDIT';
           const hadFullPaid = Number(r.originalPax.collectedAmount || 0) >= Number(r.originalPax.salePrice || 0);
           const newCollected = isCash && hadFullPaid ? cleanPrice : Number(r.originalPax.collectedAmount || 0);
@@ -4638,6 +4706,7 @@ const AuditPassengersModal: React.FC<{
             passengerName: r.passengerName.trim(),
             passport: r.passport.trim(),
             salePrice: cleanPrice,
+            buyPrice: cleanBuyPrice,
             collectedAmount: newCollected,
             customerName: r.customerName,
             customerId: r.customerId,
@@ -4657,8 +4726,8 @@ const AuditPassengersModal: React.FC<{
   const pendingCount = totalPassengers - confirmedCount;
   const totalSales = rows.reduce((acc, r) => acc + (Number(String(r.salePrice).replace(/,/g, '')) || 0), 0);
 
-  const th = 'px-3 py-2 text-[11px] font-black text-slate-600 whitespace-nowrap select-none text-center';
-  const td = 'px-3 py-1.5 text-[12px] whitespace-nowrap text-center align-middle';
+  const th = 'px-3 py-2.5 text-[11.5px] font-black text-slate-700 whitespace-nowrap select-none text-center bg-slate-100/90 border-b border-slate-300';
+  const td = 'px-3 py-2 text-[12px] whitespace-nowrap text-center align-middle border-e border-slate-100 last:border-e-0';
 
   return (
     <Modal
@@ -4860,16 +4929,20 @@ const AuditPassengersModal: React.FC<{
                 </button>
               </div>
 
-              {/* تخصيص الأعمدة الظاهرة */}
+              {/* تخصيص الأعمدة الظاهرة - أيقونة بدون نص */}
               <Menu shadow="md" width={200} position="bottom-end">
                 <Menu.Target>
-                  <button
-                    type="button"
-                    className="h-8 px-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
-                  >
-                    <SlidersHorizontal size={13} className="text-slate-500" />
-                    <span>{isAr ? 'تخصيص الأعمدة' : 'Columns'}</span>
-                  </button>
+                  <div>
+                    <Tooltip label={isAr ? 'تخصيص الأعمدة' : 'Toggle Columns'} withArrow position="top">
+                      <button
+                        type="button"
+                        aria-label={isAr ? 'تخصيص الأعمدة' : 'Toggle Columns'}
+                        className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer inline-flex items-center justify-center transition-colors shadow-2xs"
+                      >
+                        <SlidersHorizontal size={15} className="text-slate-600" />
+                      </button>
+                    </Tooltip>
+                  </div>
                 </Menu.Target>
                 <Menu.Dropdown dir={direction}>
                   <Menu.Label className="text-[11px] font-black">{isAr ? 'إظهار / إخفاء الأعمدة' : 'Toggle Columns'}</Menu.Label>
@@ -4884,6 +4957,12 @@ const AuditPassengersModal: React.FC<{
                     leftSection={visibleColumns.beneficiary ? <Check size={14} className="text-emerald-600" /> : <span className="w-3.5" />}
                   >
                     {isAr ? 'المستفيد التابع له' : 'Beneficiary'}
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => setVisibleColumns((c) => ({ ...c, buyPrice: !c.buyPrice }))}
+                    leftSection={visibleColumns.buyPrice ? <Check size={14} className="text-emerald-600" /> : <span className="w-3.5" />}
+                  >
+                    {isAr ? 'سعر الشراء' : 'Buy Price'}
                   </Menu.Item>
                   <Menu.Item
                     onClick={() => setVisibleColumns((c) => ({ ...c, salePrice: !c.salePrice }))}
@@ -4906,30 +4985,32 @@ const AuditPassengersModal: React.FC<{
                 </Menu.Dropdown>
               </Menu>
 
-              {/* زر اعتماد جميع المعروضين بنقرة واحدة */}
-              <button
-                type="button"
-                disabled={batchConfirming || filteredRows.filter((r) => r.state !== 'CONFIRMED').length === 0}
-                onClick={handleBatchConfirm}
-                className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
-                title={isAr ? 'اعتماد جميع الأسعار المعلقة المعروضة حالياً' : 'Batch confirm all visible pending'}
-              >
-                {batchConfirming ? <Loader size={12} color="white" /> : <CheckCheck size={14} />}
-                <span>{isAr ? 'اعتماد الكل' : 'Confirm All'}</span>
-              </button>
-
-              {/* زر رفع اعتماد المعروضين بنقرة واحدة */}
-              {filteredRows.some((r) => r.state === 'CONFIRMED') && (
+              {/* زر اعتماد جميع المعروضين بنقرة واحدة - أيقونة بدون نص */}
+              <Tooltip label={isAr ? 'اعتماد الكل' : 'Confirm All'} withArrow position="top">
                 <button
                   type="button"
-                  disabled={batchConfirming}
-                  onClick={handleBatchUnconfirm}
-                  className="h-8 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-black cursor-pointer inline-flex items-center gap-1.5 transition-colors shadow-2xs"
-                  title={isAr ? 'رفع الاعتماد عن جميع الأسعار المعتمدة المعروضة' : 'Revoke confirmation for all visible'}
+                  disabled={batchConfirming || filteredRows.filter((r) => r.state !== 'CONFIRMED').length === 0}
+                  onClick={handleBatchConfirm}
+                  aria-label={isAr ? 'اعتماد الكل' : 'Confirm All'}
+                  className="w-8 h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white cursor-pointer inline-flex items-center justify-center transition-colors shadow-2xs"
                 >
-                  {batchConfirming ? <Loader size={12} color="orange" /> : <RotateCcw size={13} />}
-                  <span>{isAr ? 'رفع اعتماد الكل' : 'Unconfirm All'}</span>
+                  {batchConfirming ? <Loader size={12} color="white" /> : <CheckCheck size={16} />}
                 </button>
+              </Tooltip>
+
+              {/* زر رفع اعتماد المعروضين بنقرة واحدة - أيقونة بدون نص */}
+              {filteredRows.some((r) => r.state === 'CONFIRMED') && (
+                <Tooltip label={isAr ? 'رفع اعتماد الكل' : 'Unconfirm All'} withArrow position="top">
+                  <button
+                    type="button"
+                    disabled={batchConfirming}
+                    onClick={handleBatchUnconfirm}
+                    aria-label={isAr ? 'رفع اعتماد الكل' : 'Unconfirm All'}
+                    className="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 cursor-pointer inline-flex items-center justify-center transition-colors shadow-2xs"
+                  >
+                    {batchConfirming ? <Loader size={12} color="orange" /> : <RotateCcw size={14} />}
+                  </button>
+                </Tooltip>
               )}
             </div>
           </div>
@@ -4978,7 +5059,7 @@ const AuditPassengersModal: React.FC<{
         {/* ── 3. جدول تدقيق المسافرين القابل للتخصيص والتعديل ── */}
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
           <table className="w-full border-collapse">
-            <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 border-b border-slate-200">
+            <thead className="sticky top-0 bg-slate-100/95 backdrop-blur-xs z-10 border-b-2 border-slate-300 shadow-2xs">
               <tr className="text-center">
                 <th className={`${th} w-10 text-center`}>#</th>
                 <th className={`${th} text-center`}>{isAr ? 'اسم المسافر' : 'Passenger Name'}</th>
@@ -4988,24 +5069,27 @@ const AuditPassengersModal: React.FC<{
                 {visibleColumns.beneficiary && (
                   <th className={`${th} text-center w-64`}>{isAr ? 'المستفيد التابع له (ملف الحساب)' : 'Assigned Beneficiary'}</th>
                 )}
+                {visibleColumns.buyPrice && (
+                  <th className={`${th} text-center w-32`}>{isAr ? 'سعر الشراء' : 'Buy Price'}</th>
+                )}
                 {visibleColumns.salePrice && (
                   <th className={`${th} text-center w-36`}>{isAr ? 'سعر البيع' : 'Sale Price'}</th>
                 )}
                 {visibleColumns.status && (
-                  <th className={`${th} text-center w-28`}>{isAr ? 'حالة السعر' : 'Price Status'}</th>
+                  <th className={`${th} text-center w-24`}>{isAr ? 'حالة السعر' : 'Price Status'}</th>
                 )}
                 {visibleColumns.agent && (
                   <th className={`${th} text-center w-32`}>{isAr ? 'موظف الإصدار' : 'Issuer'}</th>
                 )}
                 {visibleColumns.actions && (
-                  <th className={`${th} text-center w-48`}>{isAr ? 'إجراءات التدقيق' : 'Audit Actions'}</th>
+                  <th className={`${th} text-center w-28`}>{isAr ? 'إجراءات التدقيق' : 'Audit Actions'}</th>
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-200">
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400 font-bold text-xs">
+                  <td colSpan={9} className="py-12 text-center text-slate-400 font-bold text-xs">
                     {isAr ? 'لا توجد نتائج تطابق خيارات البحث والفلترة' : 'No passengers match the current search/filters'}
                   </td>
                 </tr>
@@ -5016,8 +5100,10 @@ const AuditPassengersModal: React.FC<{
                   return (
                     <tr
                       key={r.id}
-                      className={`transition-colors hover:bg-orange-50/20 ${
-                        isCancelled ? 'opacity-50 bg-slate-50' : isConfirmed ? 'bg-emerald-50/15' : ''
+                      className={`border-b border-slate-200 transition-colors hover:bg-orange-50/25 ${
+                        idx % 2 === 1 ? 'bg-slate-50/40' : 'bg-white'
+                      } ${
+                        isCancelled ? 'opacity-50 bg-slate-100/70' : isConfirmed ? 'bg-emerald-50/15' : ''
                       }`}
                     >
                       {/* # الترقيم */}
@@ -5055,7 +5141,7 @@ const AuditPassengersModal: React.FC<{
                         </div>
                       </td>
 
-                      {/* رقم الجواز - موسط وقابل للتعديل */}
+                      {/* رقم الجواز - موسط وفارغ بدون قيم تجريبية */}
                       {visibleColumns.passport && (
                         <td className={`${td} text-center`}>
                           <input
@@ -5073,8 +5159,8 @@ const AuditPassengersModal: React.FC<{
                               }
                             }}
                             dir="ltr"
-                            className="w-full max-w-[120px] h-[32px] px-2 font-mono font-bold text-xs text-slate-700 bg-transparent hover:bg-slate-50 focus:bg-white focus:border-[#F45A0A] border border-transparent focus:border rounded-lg outline-none transition-colors text-center mx-auto"
-                            placeholder="A00000000"
+                            className="w-full max-w-[120px] h-[32px] px-2 font-mono font-bold text-xs text-slate-700 bg-transparent hover:bg-slate-50 focus:bg-white focus:border-[#F45A0A] border border-slate-200/60 focus:border rounded-lg outline-none transition-colors text-center mx-auto"
+                            placeholder=""
                           />
                         </td>
                       )}
@@ -5091,6 +5177,40 @@ const AuditPassengersModal: React.FC<{
                               placeholder={isAr ? 'اختر المستفيد...' : 'Select Beneficiary...'}
                               allowCustomValue
                             />
+                          </div>
+                        </td>
+                      )}
+
+                      {/* سعر الشراء - قابل للتعديل وموسط مع حفظ فوري */}
+                      {visibleColumns.buyPrice && (
+                        <td className={`${td} text-center`}>
+                          <div className="inline-flex items-center gap-1.5 justify-center">
+                            <input
+                              value={r.buyPrice}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(/[^0-9.]/g, '');
+                                updateRowById(r.id, { buyPrice: raw });
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveRow(r);
+                                }
+                              }}
+                              onBlur={() => {
+                                const cleanBuy = Number(String(r.buyPrice).replace(/,/g, '')) || 0;
+                                const originalBuy = Number(r.originalBuyPrice ?? 0);
+                                if (cleanBuy !== originalBuy) {
+                                  handleSaveRow(r);
+                                }
+                              }}
+                              dir="ltr"
+                              className="w-24 h-[32px] px-2 text-center font-mono font-black text-xs rounded-lg border border-slate-200 bg-white focus:bg-orange-50/20 focus:border-2 focus:border-[#F45A0A] outline-none shadow-2xs tabular-nums text-slate-900 transition-colors"
+                              placeholder="0"
+                            />
+                            <span className="font-mono font-bold text-[11px] text-slate-400">
+                              {r.currency}
+                            </span>
                           </div>
                         </td>
                       )}
@@ -5132,48 +5252,48 @@ const AuditPassengersModal: React.FC<{
                         </td>
                       )}
 
-                      {/* حالة السعر - موسط وقابل للنقر للتبديل السريع */}
+                      {/* حالة السعر - زر أيقونة بدون نص موسط مع تلميح */}
                       {visibleColumns.status && (
                         <td className={`${td} text-center`}>
-                          <button
-                            type="button"
-                            disabled={isCancelled}
-                            onClick={() => {
-                              if (isConfirmed) {
-                                handleUnconfirmRow(r);
-                              } else {
-                                handleConfirmRow(r);
-                              }
-                            }}
-                            title={
+                          <Tooltip
+                            label={
                               isCancelled
-                                ? undefined
+                                ? (isAr ? 'ملغى' : 'Cancelled')
                                 : isConfirmed
                                 ? (isAr ? 'سعر معتمد — انقر لرفع الاعتماد' : 'Confirmed — Click to unconfirm')
                                 : (isAr ? 'سعر معلّق — انقر للاعتماد' : 'Pending — Click to confirm')
                             }
-                            className={`text-[10.5px] font-black px-2.5 py-1 rounded-md border inline-flex items-center justify-center gap-1 transition-all ${
-                              isCancelled
-                                ? 'bg-slate-100 text-slate-600 border-slate-200 cursor-not-allowed'
-                                : isConfirmed
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:scale-105 cursor-pointer shadow-2xs'
-                                : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 hover:scale-105 cursor-pointer shadow-2xs'
-                            }`}
+                            withArrow
+                            position="top"
                           >
-                            {isConfirmed ? (
-                              <>
-                                <CheckCircle2 size={12} className="text-emerald-600" />
-                                <span>{isAr ? 'معتمد' : 'Confirmed'}</span>
-                              </>
-                            ) : isCancelled ? (
-                              <span>{isAr ? 'ملغى' : 'Cancelled'}</span>
-                            ) : (
-                              <>
-                                <Clock size={12} className="text-amber-600" />
-                                <span>{isAr ? 'معلّق' : 'Pending'}</span>
-                              </>
-                            )}
-                          </button>
+                            <button
+                              type="button"
+                              disabled={isCancelled}
+                              onClick={() => {
+                                if (isConfirmed) {
+                                  handleUnconfirmRow(r);
+                                } else {
+                                  handleConfirmRow(r);
+                                }
+                              }}
+                              aria-label={isConfirmed ? (isAr ? 'معتمد' : 'Confirmed') : (isAr ? 'معلّق' : 'Pending')}
+                              className={`w-7 h-7 rounded-lg border inline-flex items-center justify-center transition-all ${
+                                isCancelled
+                                  ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                  : isConfirmed
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 hover:scale-105 cursor-pointer shadow-2xs'
+                                  : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100 hover:scale-105 cursor-pointer shadow-2xs'
+                              }`}
+                            >
+                              {isConfirmed ? (
+                                <CheckCircle2 size={15} className="text-emerald-600" />
+                              ) : isCancelled ? (
+                                <Ban size={13} className="text-slate-400" />
+                              ) : (
+                                <Clock size={15} className="text-amber-600" />
+                              )}
+                            </button>
+                          </Tooltip>
                         </td>
                       )}
 
@@ -5186,56 +5306,61 @@ const AuditPassengersModal: React.FC<{
                         </td>
                       )}
 
-                      {/* الإجراءات: اعتماد / رفع الاعتماد، حفظ، وتعديل كامل - موسط */}
+                      {/* الإجراءات: اعتماد / رفع الاعتماد، حفظ، وتعديل كامل - أزرار أيقونات بدون نصوص مع تلميحات */}
                       {visibleColumns.actions && (
                         <td className={`${td} text-center`} onClick={(e) => e.stopPropagation()}>
                           <div className="inline-flex items-center justify-center gap-1.5">
-                            {/* زر اعتماد أو رفع الاعتماد عن السعر */}
+                            {/* زر اعتماد أو رفع الاعتماد عن السعر - أيقونة بدون نص */}
                             {isConfirmed ? (
-                              <button
-                                type="button"
-                                disabled={r.isSaving}
-                                onClick={() => handleUnconfirmRow(r)}
-                                title={isAr ? 'رفع الاعتماد وإعادة المسافر إلى قيد التدقيق' : 'Revoke confirmation'}
-                                className="h-7 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 disabled:opacity-50 text-amber-800 text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
-                              >
-                                {r.isSaving ? <Loader size={11} color="orange" /> : <RotateCcw size={11} />}
-                                <span>{isAr ? 'رفع الاعتماد' : 'Unconfirm'}</span>
-                              </button>
+                              <Tooltip label={isAr ? 'رفع الاعتماد' : 'Revoke confirmation'} withArrow position="top">
+                                <button
+                                  type="button"
+                                  disabled={r.isSaving}
+                                  onClick={() => handleUnconfirmRow(r)}
+                                  aria-label={isAr ? 'رفع الاعتماد' : 'Revoke confirmation'}
+                                  className="w-7 h-7 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 disabled:opacity-50 text-amber-800 cursor-pointer flex items-center justify-center transition-colors shadow-2xs"
+                                >
+                                  {r.isSaving ? <Loader size={11} color="orange" /> : <RotateCcw size={12} />}
+                                </button>
+                              </Tooltip>
                             ) : (
-                              <button
-                                type="button"
-                                disabled={r.isSaving}
-                                onClick={() => handleConfirmRow(r)}
-                                title={isAr ? 'اعتماد وتأكيد السعر والانتقال للتالي' : 'Confirm price & advance'}
-                                className="h-7 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 text-emerald-800 text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
-                              >
-                                {r.isSaving ? <Loader size={11} color="teal" /> : <CheckCheck size={12} className="text-emerald-700" />}
-                                <span>{isAr ? 'اعتماد' : 'Confirm'}</span>
-                              </button>
+                              <Tooltip label={isAr ? 'اعتماد السعر' : 'Confirm price'} withArrow position="top">
+                                <button
+                                  type="button"
+                                  disabled={r.isSaving}
+                                  onClick={() => handleConfirmRow(r)}
+                                  aria-label={isAr ? 'اعتماد السعر' : 'Confirm price'}
+                                  className="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 text-emerald-800 cursor-pointer flex items-center justify-center transition-colors shadow-2xs"
+                                >
+                                  {r.isSaving ? <Loader size={11} color="teal" /> : <CheckCheck size={14} className="text-emerald-700" />}
+                                </button>
+                              </Tooltip>
                             )}
 
-                            {/* زر حفظ التعديلات */}
-                            <button
-                              type="button"
-                              disabled={r.isSaving}
-                              onClick={() => handleSaveRow(r)}
-                              title={isAr ? 'حفظ السعر والمستفيد وبيانات المسافر' : 'Save row changes'}
-                              className="h-7 px-2.5 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 disabled:opacity-50 text-[#F45A0A] text-[11px] font-black cursor-pointer flex items-center gap-1 transition-colors shadow-2xs"
-                            >
-                              {r.isSaving ? <Loader size={11} color="orange" /> : <Save size={12} />}
-                              <span>{isAr ? 'حفظ' : 'Save'}</span>
-                            </button>
+                            {/* زر حفظ التعديلات - أيقونة بدون نص */}
+                            <Tooltip label={isAr ? 'حفظ التعديلات' : 'Save changes'} withArrow position="top">
+                              <button
+                                type="button"
+                                disabled={r.isSaving}
+                                onClick={() => handleSaveRow(r)}
+                                aria-label={isAr ? 'حفظ التعديلات' : 'Save changes'}
+                                className="w-7 h-7 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 disabled:opacity-50 text-[#F45A0A] cursor-pointer flex items-center justify-center transition-colors shadow-2xs"
+                              >
+                                {r.isSaving ? <Loader size={11} color="orange" /> : <Save size={13} />}
+                              </button>
+                            </Tooltip>
 
-                            {/* زر تعديل المسافر بالكامل في نافذة مخصصة */}
-                            <button
-                              type="button"
-                              onClick={() => onEditPax(r.originalPax)}
-                              title={isAr ? 'تعديل كافة بيانات وخدمات المسافر التفصيلية' : 'Edit passenger full details'}
-                              className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
-                            >
-                              <Edit2 size={12} />
-                            </button>
+                            {/* زر تعديل المسافر بالكامل في نافذة مخصصة - أيقونة بدون نص */}
+                            <Tooltip label={isAr ? 'تعديل تفصيلي للمسافر' : 'Edit details'} withArrow position="top">
+                              <button
+                                type="button"
+                                onClick={() => onEditPax(r.originalPax)}
+                                aria-label={isAr ? 'تعديل تفصيلي للمسافر' : 'Edit details'}
+                                className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+                              >
+                                <Edit2 size={12} />
+                              </button>
+                            </Tooltip>
                           </div>
                         </td>
                       )}

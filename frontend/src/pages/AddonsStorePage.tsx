@@ -13,7 +13,10 @@ import {
   IconRefresh,
   IconPlugConnected,
   IconSparkles,
+  IconUsers,
 } from '@tabler/icons-react';
+import { useNavigate } from 'react-router-dom';
+import { useWorkspaceStore } from '../store/useWorkspaceStore';
 import { useQuery } from '@tanstack/react-query';
 import { showSuccessNotification, showInfoNotification, showErrorNotification } from '../utils/notifications';
 import { apiRequest } from '../api/client';
@@ -22,6 +25,7 @@ import { tenantsApi } from '../api/tenants';
 import { useLanguageStore } from '../store/useLanguageStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { aiAssistantApi, type AiBillingSnapshot } from '../api/aiAssistant';
+import { hrApi } from '../api/hr';
 
 export const AddonsStorePage: React.FC = () => {
   const { language, direction } = useLanguageStore();
@@ -67,7 +71,18 @@ export const AddonsStorePage: React.FC = () => {
       branches: true,
       database: true,
       transactional_email: true,
+      hr_employee_management: true,
     };
+  });
+
+  const navigate = useNavigate();
+  const { openTab } = useWorkspaceStore();
+
+  // Query real HR stats
+  const { data: hrStats } = useQuery({
+    queryKey: ['addons-hr-stats'],
+    queryFn: hrApi.getStats,
+    staleTime: 30000,
   });
 
   // Query real branches count
@@ -362,6 +377,27 @@ export const AddonsStorePage: React.FC = () => {
       isConfigurable: false,
       manageLabel: '',
     },
+    {
+      id: 'hr_employee_management',
+      nameEn: 'HR & Employee Operations Suite',
+      nameAr: 'إدارة الموظفين والرواتب والكوادر',
+      description: isAr
+        ? 'نظام شامل للموارد البشرية: مسيرات الرواتب، سجل الحضور، طلبات الإجازات، نقاط التحفيز، ومسابقات الموظفين.'
+        : 'Comprehensive HR suite: payroll management, attendance tracking, vacation requests, employee points, and sales challenges.',
+      icon: IconUsers,
+      iconColor: 'text-[#F45A0A]',
+      iconBg: 'bg-orange-50 border-orange-200',
+      tagType: 'subscription' as const,
+      tagLabel: isAr ? 'الموارد البشرية' : 'HR Suite',
+      statLabel1: isAr ? 'الموظفون النشطون' : 'Active Staff',
+      statVal1: `${hrStats?.employeesCount ?? 0} ${isAr ? 'موظف' : 'Staff'}`,
+      statLabel2: isAr ? 'حضور اليوم' : 'Today Check-ins',
+      statVal2: `${hrStats?.todayAttendanceCount ?? 0} ${isAr ? 'حاضر' : 'Present'}`,
+      statLabel3: isAr ? 'طلبات الإجازة' : 'Pending Leaves',
+      statVal3: `${hrStats?.pendingLeavesCount ?? 0} ${isAr ? 'معلق' : 'Pending'}`,
+      isConfigurable: true,
+      manageLabel: isAr ? 'فتح منظومة الموظفين' : 'Open HR Suite',
+    },
   ];
 
   return (
@@ -508,6 +544,13 @@ export const AddonsStorePage: React.FC = () => {
                       } else if (isAiAddon) {
                         setAiModalOpen(true);
                         fetchAiBilling(true);
+                      } else if (addon.id === 'hr_employee_management') {
+                        openTab({
+                          id: 'employee-salaries',
+                          title: isAr ? 'الرواتب والأجور' : 'Salaries',
+                          path: '/employees/salaries',
+                        });
+                        navigate('/employees/salaries');
                       }
                     }}
                     className="flex items-center gap-1 min-w-0 text-[10px] font-black text-orange-700 hover:text-white bg-orange-50 hover:bg-[#F45A0A] border border-orange-200/90 px-2 py-1 rounded-lg transition-all shadow-2xs cursor-pointer active:scale-95"

@@ -46,8 +46,13 @@ export const ROUTE_PERMISSION_MAP: Record<string, { code: string; title: string 
   '/feedback': { code: 'feedback.view', title: 'تذاكر الدعم والشكاوى' },
   '/feedback-tickets': { code: 'feedback.view', title: 'تذاكر الدعم والشكاوى' },
   '/help-center': { code: 'help.view', title: 'مركز المساعدة والتوثيق' },
-  '/saas-admin': { code: 'saas.view', title: 'لوحة تحكم المنصة (SaaS Super Admin)' },
   '/deleted-records': { code: 'settings.view', title: 'سجل المحذوفات' },
+  '/employees/allowances': { code: 'employees.view', title: 'الراتب الاسمي والمخصصات المالية' },
+  '/employees/salaries': { code: 'employees.view', title: 'الرواتب والأجور' },
+  '/employees/points': { code: 'employees.view', title: 'نقاط وتحفيز الموظفين' },
+  '/employees/attendance': { code: 'employees.view', title: 'سجل الحضور والانصراف' },
+  '/employees/leaves': { code: 'employees.view', title: 'طلبات الإجازات' },
+  '/employees/competitions': { code: 'employees.view', title: 'مسابقات وتحديات الموظفين' },
 };
 
 export const usePermissions = () => {

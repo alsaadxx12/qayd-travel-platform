@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MicroCache } from '../common/micro-cache';
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber } from 'class-validator';
 
 export class CreateBranchDto {
   @IsString()
@@ -72,6 +72,18 @@ export class CreateBranchDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  allowedRadiusMeters?: number;
 }
 
 export class UpdateBranchDto {
@@ -138,6 +150,18 @@ export class UpdateBranchDto {
   @IsOptional()
   @IsString()
   website?: string;
+
+  @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  allowedRadiusMeters?: number;
 
   @IsOptional()
   @IsBoolean()
@@ -333,6 +357,9 @@ export class BranchesService {
         website: dto.website,
         isMain: dto.isMain || false,
         status: dto.status || 'نشط',
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        allowedRadiusMeters: dto.allowedRadiusMeters ?? 150,
         companyId,
         tenantId: company?.tenantId || null,
       },

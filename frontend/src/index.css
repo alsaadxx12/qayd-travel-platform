@@ -682,3 +682,22 @@ aside ::-webkit-scrollbar-button {
   color: #ffffff;
 }
 
+
+
+/* Completely hide scrollbars in Mantine Modals */
+.mantine-Modal-root,
+.mantine-Modal-inner,
+.mantine-Modal-content,
+.mantine-Modal-body {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.mantine-Modal-root::-webkit-scrollbar,
+.mantine-Modal-inner::-webkit-scrollbar,
+.mantine-Modal-content::-webkit-scrollbar,
+.mantine-Modal-body::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}

@@ -54,6 +54,12 @@ const PaymentVouchersPage = lazy(() => import('./pages/PaymentVouchersPage').the
 const DeletedRecordsPage = lazy(() => import('./pages/archive/DeletedRecordsPage').then((m) => ({ default: m.DeletedRecordsPage })));
 const StatementPortalPage = lazy(() => import('./pages/portal/StatementPortalPage').then((m) => ({ default: m.StatementPortalPage })));
 const StatementQrPage = lazy(() => import('./pages/admin/StatementQrPage').then((m) => ({ default: m.StatementQrPage })));
+const SalaryAllowancesPage = lazy(() => import('./pages/employees/SalaryAllowancesPage').then((m) => ({ default: m.SalaryAllowancesPage })));
+const SalariesPage = lazy(() => import('./pages/employees/SalariesPage').then((m) => ({ default: m.SalariesPage })));
+const PointsPage = lazy(() => import('./pages/employees/PointsPage').then((m) => ({ default: m.PointsPage })));
+const AttendancePage = lazy(() => import('./pages/employees/AttendancePage').then((m) => ({ default: m.AttendancePage })));
+const LeavesPage = lazy(() => import('./pages/employees/LeavesPage').then((m) => ({ default: m.LeavesPage })));
+const CompetitionsPage = lazy(() => import('./pages/employees/CompetitionsPage').then((m) => ({ default: m.CompetitionsPage })));
 
 // Smart Root Redirect: unauthenticated users always go to /login, authenticated users go to /dashboard
 const RootRedirect: React.FC = () => {
@@ -464,6 +470,62 @@ export const App: React.FC = () => {
               element={
                 <PermissionRouteGuard routePath="/deleted-records">
                   <DeletedRecordsPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/employees/allowances"
+              element={
+                <PermissionRouteGuard routePath="/employees/allowances">
+                  <SalaryAllowancesPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/employees/salaries"
+              element={
+                <PermissionRouteGuard routePath="/employees/salaries">
+                  <SalariesPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/employees/points"
+              element={
+                <PermissionRouteGuard routePath="/employees/points">
+                  <PointsPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/employees/attendance"
+              element={
+                <PermissionRouteGuard routePath="/employees/attendance">
+                  <AttendancePage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/employees/leave-balances"
+              element={
+                <PermissionRouteGuard routePath="/employees/leaves">
+                  <LeavesPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/employees/leaves"
+              element={
+                <PermissionRouteGuard routePath="/employees/leaves">
+                  <LeavesPage />
+                </PermissionRouteGuard>
+              }
+            />
+            <Route
+              path="/employees/competitions"
+              element={
+                <PermissionRouteGuard routePath="/employees/competitions">
+                  <CompetitionsPage />
                 </PermissionRouteGuard>
               }
             />
