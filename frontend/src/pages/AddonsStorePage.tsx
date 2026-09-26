@@ -68,6 +68,8 @@ export const AddonsStorePage: React.FC = () => {
   const [waSettings, setWaSettings] = useState<WhatsAppSettingsView | null>(null);
   const [waStatus, setWaStatus] = useState<WhatsAppStatus | null>(null);
   const [waLoading, setWaLoading] = useState(false);
+  /** خطأ طلب الإعدادات يُعرض في النافذة بدل شرطاتٍ صامتة. */
+  const [waError, setWaError] = useState('');
   const [waSaving, setWaSaving] = useState(false);
   const [waTesting, setWaTesting] = useState(false);
   const [waForm, setWaForm] = useState({ phoneNumberId: '', wabaId: '', accessToken: '', appSecret: '', defaultCountryCode: '964', testTemplateName: 'hello_world', testTemplateLang: 'en_US' });
@@ -92,6 +94,7 @@ export const AddonsStorePage: React.FC = () => {
 
   const fetchWhatsApp = async (withStatus = true) => {
     setWaLoading(true);
+    setWaError('');
     try {
       const st = await whatsappApi.getSettings();
       applyWaSettings(st);
@@ -99,6 +102,7 @@ export const AddonsStorePage: React.FC = () => {
       else if (!st.configured) setWaStatus(null);
     } catch (e: any) {
       console.error('Failed to load WhatsApp settings:', e);
+      setWaError(e?.message || (isAr ? 'تعذّر جلب إعدادات واتساب من الخادم.' : 'Could not load WhatsApp settings.'));
     } finally {
       setWaLoading(false);
     }
@@ -733,6 +737,12 @@ export const AddonsStorePage: React.FC = () => {
               {[waStatus?.displayPhone || waSettings?.displayPhone, waStatus?.verifiedName || waSettings?.verifiedName, waStatus?.qualityRating].filter(Boolean).join(' · ')}
             </span>
           </div>
+          {waError && (
+            <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-rose-800 font-bold leading-snug">
+              <IconAlertCircle size={14} className="shrink-0 mt-0.5" />
+              <span>{isAr ? 'لم تصل الإعدادات من الخادم: ' : 'Settings request failed: '}{waError}</span>
+            </div>
+          )}
           {waStatus && !waStatus.ok && waStatus.error && (
             <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-rose-800 font-bold leading-snug">
               <IconAlertCircle size={14} className="shrink-0 mt-0.5" />
