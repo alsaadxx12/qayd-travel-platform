@@ -193,6 +193,24 @@ function formatApiErrorMessage(errorData: any): string {
   return '';
 }
 
+let sessionExpiryHandled = false;
+/** تُنهي الجلسة المحلية وتعيد إلى صفحة الدخول مرة واحدة، مهما تعدّدت الطلبات المرفوضة. */
+function expireSession() {
+  if (sessionExpiryHandled) return;
+  sessionExpiryHandled = true;
+  try {
+    for (const k of ['user', 'token', 'isImpersonating', 'impersonatedTenant', 'originalAdminUser', 'originalAdminToken']) {
+      localStorage.removeItem(k);
+    }
+  } catch {
+    /* لا شيء */
+  }
+  clearApiCache();
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.assign('/login?expired=1');
+  }
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit & {
@@ -288,6 +306,13 @@ export async function apiRequest<T = any>(
           errorMessage = formatApiErrorMessage(errorData) || errorMessage;
         } catch {
           // Ignore json parse error
+        }
+        // رمزٌ رفضه الخادم (انتهى، أو تبدّل السرّ بعد نشرٍ جديد): الجلسة ماتت فعلاً،
+        // والإبقاء على الصفحة يُظهر شاشاتٍ بشرطاتٍ وأخطاءً متناثرة. تُمسح الجلسة
+        // ويُعاد المستخدم إلى الدخول مرة واحدة. بوابة الكشوفات العامة لها جلستها
+        // الخاصة فلا تُعامل هكذا، وكذلك محاولة الدخول نفسها.
+        if (response.status === 401 && token && !cleanEndpoint.startsWith('/auth/login') && !cleanEndpoint.startsWith('/portal/')) {
+          expireSession();
         }
         throw new Error(errorMessage);
       }
