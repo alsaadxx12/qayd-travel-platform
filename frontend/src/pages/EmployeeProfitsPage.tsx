@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader } from '@mantine/core';
 import { Users, RefreshCw, TrendingUp, Wallet, Building2, Search, BadgePercent } from 'lucide-react';
-import { getEmployeeProfits, type EmployeeProfitRow } from '../api/reports';
+import { getEmployeeProfits, type EmployeeProfitRow, type EmployeeProfitsResponse, type Money } from '../api/reports';
+import { formatCurrency } from '../utils/currencyUtils';
+import { AccountingDateRangePicker } from '../components/common/date/AccountingDateRangePicker';
 import { matchesSearchTokens } from '../components/ui/SearchableCombobox';
 import { showErrorNotification } from '../utils/notifications';
 import { useLanguageStore } from '../store/useLanguageStore';
@@ -12,8 +14,30 @@ import { useLanguageStore } from '../store/useLanguageStore';
  * هامش الربح المحفوظ في «إعدادات النظام ← الموظفون». الأرقام إنجليزية واضحة.
  */
 
-const fmt = (n: number) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
-const money = (n: number) => `${fmt(n)} $`;
+/*
+ * كل مبلغ بعملته. كان الرقم الواحد يُلبَس رمز الدولار مهما كانت عملة المستند،
+ * فظهر كروبٌ بالدينار دولاراتٍ في هذا التقرير. الخادم يعيد الآن لكل عمود
+ * مبلغين (IQD وUSD) ويُعرض غير الصفري منهما، كلٌّ برمزه.
+ */
+const ZERO: Money = { USD: 0, IQD: 0 };
+const isZero = (m?: Money | null) => !m || (!m.IQD && !m.USD);
+/** يعرض المبلغين تحت بعضهما؛ إن كانا صفرين معاً يُعرض صفرٌ واحد بالدينار. */
+const MoneyCell: React.FC<{ value?: Money | null; tone?: string }> = ({ value, tone = '' }) => {
+  const m = value || ZERO;
+  if (isZero(m)) return <span className={`font-mono ${tone}`} dir="ltr">0</span>;
+  return (
+    <span className={`inline-flex flex-col items-end leading-tight font-mono ${tone}`} dir="ltr">
+      {m.IQD !== 0 && <span>{formatCurrency(m.IQD, 'IQD')}</span>}
+      {m.USD !== 0 && <span>{formatCurrency(m.USD, 'USD')}</span>}
+    </span>
+  );
+};
+/** سطرٌ واحد للنصوص: «50,000 IQD · $120.00». */
+const moneyText = (m?: Money | null) => {
+  const v = m || ZERO;
+  if (isZero(v)) return '0';
+  return [v.IQD !== 0 ? formatCurrency(v.IQD, 'IQD') : '', v.USD !== 0 ? formatCurrency(v.USD, 'USD') : ''].filter(Boolean).join(' · ');
+};
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const yearStartISO = () => `${new Date().getFullYear()}-01-01`;
@@ -25,7 +49,8 @@ export const EmployeeProfitsPage: React.FC = () => {
   const isAr = language === 'ar';
 
   const [rows, setRows] = useState<EmployeeProfitRow[]>([]);
-  const [totals, setTotals] = useState<any>(null);
+  const [totals, setTotals] = useState<EmployeeProfitsResponse['totals'] | null>(null);
+  const [unassigned, setUnassigned] = useState<EmployeeProfitsResponse['unassigned'] | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState(yearStartISO());
@@ -62,6 +87,7 @@ export const EmployeeProfitsPage: React.FC = () => {
       const data = await getEmployeeProfits({ startDate, endDate });
       setRows(Array.isArray(data.rows) ? data.rows : []);
       setTotals(data.totals || null);
+      setUnassigned(data.unassigned && data.unassigned.docCount > 0 ? data.unassigned : null);
     } catch (e: any) {
       showErrorNotification(isAr ? 'تعذّر جلب أرباح الموظفين' : 'Load failed', e?.message || '');
     } finally {
@@ -79,10 +105,10 @@ export const EmployeeProfitsPage: React.FC = () => {
     return rows.filter((r) => matchesSearchTokens(q, r.employeeName));
   }, [rows, search]);
 
-  const cards = [
-    { label: isAr ? 'إجمالي الأرباح' : 'Total Profit', value: fmt(totals?.totalProfit || 0), sub: isAr ? 'ربح المستندات كاملاً' : 'gross profit', icon: TrendingUp },
-    { label: isAr ? 'حصة الموظفين' : 'Employees Share', value: fmt(totals?.employeeShare || 0), sub: isAr ? 'وفق هوامش الأرباح' : 'per margins', icon: Wallet },
-    { label: isAr ? 'حصة الشركة' : 'Company Share', value: fmt(totals?.companyShare || 0), sub: isAr ? 'الباقي بعد الموظفين' : 'remainder', icon: Building2 },
+  const cards: Array<{ label: string; value: React.ReactNode; sub: string; icon: typeof TrendingUp }> = [
+    { label: isAr ? 'إجمالي الأرباح' : 'Total Profit', value: <MoneyCell value={totals?.totalProfit} />, sub: isAr ? 'ربح المستندات كاملاً' : 'gross profit', icon: TrendingUp },
+    { label: isAr ? 'حصة الموظفين' : 'Employees Share', value: <MoneyCell value={totals?.employeeShare} />, sub: isAr ? 'وفق هوامش الأرباح' : 'per margins', icon: Wallet },
+    { label: isAr ? 'حصة الشركة' : 'Company Share', value: <MoneyCell value={totals?.companyShare} />, sub: isAr ? 'الباقي بعد الموظفين' : 'remainder', icon: Building2 },
     { label: isAr ? 'عدد الموظفين' : 'Employees', value: String(rows.length), sub: `${totals?.docCount || 0} ${isAr ? 'مستنداً' : 'docs'}`, icon: Users },
   ];
 
@@ -108,11 +134,17 @@ export const EmployeeProfitsPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2 h-[38px] shadow-2xs">
-              <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setMonthPick("ALL"); }} className="h-full bg-transparent text-[12px] font-bold text-slate-800 outline-none font-mono" dir="ltr" />
-              <span className="text-slate-300">→</span>
-              <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setMonthPick("ALL"); }} className="h-full bg-transparent text-[12px] font-bold text-slate-800 outline-none font-mono" dir="ltr" />
-            </div>
+            {/* تقويم الكشوفات نفسه: شهران متجاوران، فترات جاهزة، ومدى يُختار بالنقر. */}
+            <AccountingDateRangePicker
+              withTime={false}
+              startDate={startDate}
+              endDate={endDate}
+              onChange={(start, end) => {
+                setStartDate(start.slice(0, 10));
+                setEndDate(end.slice(0, 10));
+                setMonthPick('ALL');
+              }}
+            />
             <button
               type="button"
               onClick={load}
@@ -136,7 +168,7 @@ export const EmployeeProfitsPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="mt-2">
-                  <div className="text-2xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">{c.value}</div>
+                  <div className="text-xl font-black text-slate-900 font-mono tracking-tight" dir="ltr">{c.value}</div>
                   <p className="text-[10.5px] font-bold text-[#F45A0A]/70 mt-1">{c.sub}</p>
                 </div>
               </div>
@@ -221,13 +253,15 @@ export const EmployeeProfitsPage: React.FC = () => {
                         </div>
                       </td>
                       <td className={`${td} text-center font-mono font-bold text-slate-600`}>{r.docCount}</td>
-                      <td className={`${td} text-end font-mono font-bold text-slate-700`} dir="ltr">{money(r.totalSales)}</td>
-                      <td className={`${td} text-end font-mono font-black ${r.totalProfit >= 0 ? 'text-slate-900' : 'text-rose-600'}`} dir="ltr">{money(r.totalProfit)}</td>
+                      <td className={`${td} text-end`}><MoneyCell value={r.totalSales} tone="font-bold text-slate-700" /></td>
+                      <td className={`${td} text-end`}>
+                        <MoneyCell value={r.totalProfit} tone={`font-black ${r.totalProfit.IQD < 0 || r.totalProfit.USD < 0 ? 'text-rose-600' : 'text-slate-900'}`} />
+                      </td>
                       <td className={`${td} text-center`}>
                         <span className="inline-block text-[11px] font-black bg-orange-50 text-[#F45A0A] border border-orange-200 rounded-full px-2 py-0.5 font-mono">{r.employeeMargin}%</span>
                       </td>
-                      <td className={`${td} text-end font-mono font-black text-emerald-700`} dir="ltr">{money(r.employeeShare)}</td>
-                      <td className={`${td} text-end font-mono font-black text-slate-800`} dir="ltr">{money(r.companyShare)}</td>
+                      <td className={`${td} text-end`}><MoneyCell value={r.employeeShare} tone="font-black text-emerald-700" /></td>
+                      <td className={`${td} text-end`}><MoneyCell value={r.companyShare} tone="font-black text-slate-800" /></td>
                     </tr>
                   ))
                 )}
@@ -237,17 +271,28 @@ export const EmployeeProfitsPage: React.FC = () => {
                   <tr className="bg-orange-50/60 border-t-2 border-orange-200 font-black">
                     <td className={`${td} text-start text-[#F45A0A]`}>{isAr ? 'الإجمالي' : 'Total'}</td>
                     <td className={`${td} text-center font-mono text-slate-700`}>{totals.docCount}</td>
-                    <td className={`${td} text-end font-mono text-slate-800`} dir="ltr">{money(totals.totalSales)}</td>
-                    <td className={`${td} text-end font-mono text-slate-900`} dir="ltr">{money(totals.totalProfit)}</td>
+                    <td className={`${td} text-end`}><MoneyCell value={totals.totalSales} tone="text-slate-800" /></td>
+                    <td className={`${td} text-end`}><MoneyCell value={totals.totalProfit} tone="text-slate-900" /></td>
                     <td className={`${td} text-center`}>—</td>
-                    <td className={`${td} text-end font-mono text-emerald-700`} dir="ltr">{money(totals.employeeShare)}</td>
-                    <td className={`${td} text-end font-mono text-slate-900`} dir="ltr">{money(totals.companyShare)}</td>
+                    <td className={`${td} text-end`}><MoneyCell value={totals.employeeShare} tone="text-emerald-700" /></td>
+                    <td className={`${td} text-end`}><MoneyCell value={totals.companyShare} tone="text-slate-900" /></td>
                   </tr>
                 </tfoot>
               )}
             </table>
           </div>
         </div>
+
+        {unassigned && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-[11.5px] font-bold text-amber-800 flex items-center gap-2 flex-wrap" dir={direction}>
+            <span className="font-black">{isAr ? 'خارج الجدول:' : 'Not listed:'}</span>
+            <span>
+              {isAr
+                ? `${unassigned.docCount} ${unassigned.docCount === 1 ? 'مستند' : 'مستندات'} بلا موظّف إصدار (ربحها ${moneyText(unassigned.totalProfit)}) لم تُنسب لأحد ولا تدخل في الحصص.`
+                : `${unassigned.docCount} document(s) without an issuing employee (profit ${moneyText(unassigned.totalProfit)}) are not attributed and not split.`}
+            </span>
+          </div>
+        )}
 
         <p className="text-[11px] font-bold text-slate-400 text-center">
           {isAr

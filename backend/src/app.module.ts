@@ -26,6 +26,7 @@ import { TourGroupsModule } from './tour-groups/tour-groups.module';
 import { PdfModule } from './pdf/pdf.module';
 import { SystemModule } from './system/system.module';
 import { EmailModule } from './email/email.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { FiscalYearsModule } from './fiscal-years/fiscal-years.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
@@ -71,6 +72,7 @@ import { HrModule } from './hr/hr.module';
     PdfModule,
     SystemModule,
     EmailModule,
+    WhatsAppModule,
     FiscalYearsModule,
     StatementPortalModule,
     HrModule,

@@ -27,8 +27,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     if (isTransactionPooler && !url.includes('pgbouncer=')) {
       url = `${url}${sep()}pgbouncer=true`;
     }
+    /*
+     * مجمّع المعاملات (6543) مع Prisma يكلّف الاستعلامَ الواحد نحو أربع جولات
+     * شبكية (قِيس هنا: 560 مللي ثانية للاستعلام مقابل 117 عبر منفذ الجلسة 5432
+     * من الرابط نفسه). خادمٌ دائم كهذا لا يحتاج وضع المعاملات؛ فمنفذ الجلسة هو
+     * الأصل، ويكفيه تجمّعٌ صغير لأن كل اتصالٍ فيه يحجز اتصالاً خلفياً حقيقياً.
+     */
+    const isSessionPooler = url.includes('pooler.supabase.com:5432');
     if (!url.includes('connection_limit=')) {
-      const connectionLimit = process.env.PRISMA_CONNECTION_LIMIT || '15';
+      const connectionLimit = process.env.PRISMA_CONNECTION_LIMIT || (isSessionPooler ? '8' : '15');
       const poolTimeout = process.env.PRISMA_POOL_TIMEOUT || '20';
       url = `${url}${sep()}connection_limit=${connectionLimit}&pool_timeout=${poolTimeout}`;
     }

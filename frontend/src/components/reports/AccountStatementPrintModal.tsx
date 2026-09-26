@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { fetchPrintTemplate } from '../../api/printTemplates';
 import { apiRequest } from '../../api/client';
 import { downloadStatementPdf, statementPdfToBase64, type StatementPdfPayload } from '../../api/statementPdf';
+import { whatsappApi } from '../../api/whatsapp';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 import { useLanguageStore } from '../../store/useLanguageStore';
 
@@ -1119,6 +1120,22 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
   const isEn = lang === 'en';
 
 
+  // ── بوابة واتساب السحابية: إن كانت مربوطة ومفعّلة أُرسل الكشف PDF إلى رقم الحساب
+  // مباشرة؛ وإلا بقي زرّ المشاركة القديم (فتح واتساب بنصّ الملخّص).
+  const [waGateway, setWaGateway] = useState<{ enabled: boolean; displayPhone?: string } | null>(null);
+  useEffect(() => {
+    if (!opened) return;
+    let cancelled = false;
+    whatsappApi
+      .getSettings()
+      .then((st) => { if (!cancelled) setWaGateway({ enabled: Boolean(st.configured && st.enabled), displayPhone: st.displayPhone }); })
+      .catch(() => { if (!cancelled) setWaGateway({ enabled: false }); });
+    return () => { cancelled = true; };
+  }, [opened]);
+  const [waRecipient, setWaRecipient] = useState('');
+  useEffect(() => { setWaRecipient(accountPhone || ''); }, [accountPhone, opened]);
+  const waDirect = Boolean(waGateway?.enabled);
+
   // ── Brevo Email Tracking & Progress States ──
   const [isTrackingSending, setIsTrackingSending] = useState(false);
   const [sendStatus, setSendStatus] = useState<'sending' | 'completed' | 'failed'>('sending');
@@ -1179,7 +1196,36 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
     }
   };
 
+  const handleSendWhatsAppGateway = async () => {
+    const to = waRecipient.trim();
+    if (!to) {
+      showErrorNotification(lang === 'en' ? 'No phone number' : 'لا يوجد رقم', lang === 'en' ? 'Enter the recipient WhatsApp number first.' : 'أدخل رقم واتساب المستلم أولاً.');
+      return;
+    }
+    setIsTrackingSending(true);
+    setSendStatus('sending');
+    setStats({ total: 1, sent: 0, pending: 1, failed: 0, skipped: 0 });
+    try {
+      const pdfBase64 = await statementPdfToBase64(chromiumPdfPayload());
+      const caption = lang === 'en'
+        ? `Account statement — ${accountCode ? `${accountCode} - ` : ''}${accountName}\nPeriod: ${startDate} → ${endDate}\nNet balance: ${totals.finalBalance.toLocaleString()} IQD`
+        : `كشف حساب — ${accountCode ? `${accountCode} - ` : ''}${accountName}\nالفترة: من ${startDate} إلى ${endDate}\nصافي الرصيد: ${totals.finalBalance.toLocaleString()} د.ع`;
+      const r = await whatsappApi.sendStatement({ to, accountName, accountCode, fromDate: startDate, toDate: endDate, caption, pdfBase64 });
+      setSendStatus('completed');
+      setStats({ total: 1, sent: 1, pending: 0, failed: 0, skipped: 0 });
+      showSuccessNotification(lang === 'en' ? 'Sent' : 'اكتمل الإرسال', lang === 'en' ? `Statement PDF sent on WhatsApp to ${r.to}` : `أُرسل كشف الحساب PDF عبر واتساب إلى ${r.to}`);
+    } catch (err: any) {
+      setSendStatus('failed');
+      setStats({ total: 1, sent: 0, pending: 0, failed: 1, skipped: 0 });
+      showErrorNotification(lang === 'en' ? 'Send failed' : 'فشل الإرسال', err?.message || '');
+    }
+  };
+
   const handleShareWhatsApp = () => {
+    if (waDirect) {
+      handleSendWhatsAppGateway();
+      return;
+    }
     const isEn = lang === 'en';
     const text = isEn
       ? `📄 *Account Statement Summary*\n👤 Account: ${accountCode ? `${accountCode} - ` : ''}${accountName}\n📅 Period: ${startDate} to ${endDate}\n➕ Total Debit: ${totals.totalDebit.toLocaleString()} IQD\n➖ Total Credit: ${totals.totalCredit.toLocaleString()} IQD\n💰 Net Balance: ${totals.finalBalance.toLocaleString()} IQD`
@@ -1450,6 +1496,19 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
               )}
             </button>
 
+            {waDirect && (
+              <div className="flex items-center gap-2 bg-emerald-50/60 border border-emerald-200 rounded-xl px-2.5 py-1.5" dir="ltr">
+                <IconBrandWhatsapp size={15} className="text-emerald-600 shrink-0" />
+                <input
+                  value={waRecipient}
+                  onChange={(e) => setWaRecipient(e.target.value)}
+                  placeholder={isEn ? 'Recipient WhatsApp number' : 'رقم واتساب المستلم'}
+                  className="flex-1 min-w-0 bg-transparent outline-none text-[12px] font-mono font-bold text-emerald-950 placeholder:text-emerald-700/50"
+                />
+                <span className="text-[10px] font-bold text-emerald-700 shrink-0">{waGateway?.displayPhone ? `${isEn ? 'from' : 'من'} ${waGateway.displayPhone}` : ''}</span>
+              </div>
+            )}
+
             {/* 2 Side-by-Side Action Cards (WhatsApp & Email) */}
             <div className="grid grid-cols-2 gap-2.5">
               {/* WhatsApp Share */}
@@ -1466,7 +1525,7 @@ export const AccountStatementQuickExportModal: React.FC<AccountStatementQuickExp
                     {isEn ? 'WhatsApp' : 'واتساب'}
                   </span>
                   <span className="text-[10px] text-emerald-700 block truncate font-medium">
-                    {isEn ? 'Send Summary' : 'إرسال الملخص'}
+                    {waDirect ? (isEn ? 'Send PDF via gateway' : 'إرسال PDF عبر البوابة') : (isEn ? 'Send Summary' : 'إرسال الملخص')}
                   </span>
                 </div>
               </button>

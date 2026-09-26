@@ -9,7 +9,15 @@ import { useLanguageStore } from '../../../store/useLanguageStore';
  * محفظة الموظف في الشريط العلوي: تُظهر حصّة الموظف الحالي المتراكمة من الأرباح
  * (ربح مستنداته × هامش ربحه). تُحدَّث كل بضع دقائق، والنقر يفتح تقرير الأرباح.
  */
-const fmt = (n: number) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+import { formatCurrency } from '../../../utils/currencyUtils';
+
+/** المبلغان بعملتيهما في سطرٍ واحد؛ يُخفى الصفري منهما. */
+const moneyText = (m?: MyProfitShare['share'] | null) => {
+  const v = m || { USD: 0, IQD: 0 };
+  const parts = [v.IQD ? formatCurrency(v.IQD, 'IQD') : '', v.USD ? formatCurrency(v.USD, 'USD') : ''].filter(Boolean);
+  return parts.length ? parts.join(' · ') : '0';
+};
+const hasShare = (m?: MyProfitShare['share'] | null) => !!m && (m.IQD > 0 || m.USD > 0);
 
 export const EmployeeWalletWidget: React.FC = () => {
   const { language } = useLanguageStore();
@@ -35,14 +43,14 @@ export const EmployeeWalletWidget: React.FC = () => {
   }, []);
 
   // لا تُعرض المحفظة لمن لا هامش له ولا حصّة — كي لا تزحم الشريط بلا فائدة.
-  if (!data || (data.share <= 0 && data.margin <= 0)) return null;
+  if (!data || (!hasShare(data.share) && data.margin <= 0)) return null;
 
   return (
     <Tooltip
       label={
         isAr
-          ? `حصّتك ${data.margin}% من ربحٍ إجماليّه ${fmt(data.profit)} — عبر ${data.docCount} مستنداً. انقر لتقرير الأرباح.`
-          : `Your ${data.margin}% share of ${fmt(data.profit)} profit across ${data.docCount} docs. Click for the report.`
+          ? `حصّتك ${data.margin}% من ربحٍ إجماليّه ${moneyText(data.profit)} — عبر ${data.docCount} مستنداً. انقر لتقرير الأرباح.`
+          : `Your ${data.margin}% share of ${moneyText(data.profit)} profit across ${data.docCount} docs. Click for the report.`
       }
       withArrow
       position="bottom"
@@ -55,7 +63,7 @@ export const EmployeeWalletWidget: React.FC = () => {
       >
         <Wallet size={15} strokeWidth={2.3} />
         <span className="font-mono font-black text-[12.5px] tabular-nums" dir="ltr">
-          {fmt(data.share)}
+          {moneyText(data.share)}
         </span>
         <span className="text-[10px] font-bold text-[#F45A0A]/60 hidden sm:inline">{isAr ? 'محفظتي' : 'wallet'}</span>
       </button>

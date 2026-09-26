@@ -7,12 +7,25 @@ export class CustomersSuppliersService {
   constructor(private prisma: PrismaService) {}
 
   async getCustomers(companyId: string) {
-    // 1. Fetch from Customer table (active only)
-    const customers = await this.prisma.customer.findMany({
-      where: { companyId, isActive: true },
-      include: { account: true },
-      orderBy: { nameAr: 'asc' },
-    });
+    // الجدولان معاً في جولةٍ واحدة إلى القاعدة البعيدة بدل جولتين متتاليتين.
+    const [customers, customerAccounts] = await Promise.all([
+      // 1. Fetch from Customer table (active only)
+      this.prisma.customer.findMany({
+        where: { companyId, isActive: true },
+        include: { account: true },
+        orderBy: { nameAr: 'asc' },
+      }),
+      // 2. Also fetch active non-parent leaf accounts with CUSTOMER category or customer prefix
+      this.prisma.account.findMany({
+        where: {
+          companyId,
+          category: AccountCategory.CUSTOMER,
+          isParent: false,
+          NOT: { overduePolicy: 'BLOCK', paymentMode: 'BLOCKED' },
+        },
+        orderBy: { nameAr: 'asc' },
+      }),
+    ]);
 
     const seenAccountIds = new Set<string>();
     const seenCodes = new Set<string>();
@@ -32,17 +45,6 @@ export class CustomersSuppliersService {
         accountId: c.accountId,
         source: 'customer' as const,
       });
-    });
-
-    // 2. Also fetch active non-parent leaf accounts with CUSTOMER category or customer prefix
-    const customerAccounts = await this.prisma.account.findMany({
-      where: {
-        companyId,
-        category: AccountCategory.CUSTOMER,
-        isParent: false,
-        NOT: { overduePolicy: 'BLOCK', paymentMode: 'BLOCKED' },
-      },
-      orderBy: { nameAr: 'asc' },
     });
 
     const genericHeadings = ['مدينون', 'عملاء', 'قطاع عام', 'قطاع خاص', 'قطاع مختلط', 'قطاع تعاوني'];
@@ -70,12 +72,25 @@ export class CustomersSuppliersService {
   }
 
   async getSuppliers(companyId: string) {
-    // 1. Fetch from Supplier table (active only)
-    const suppliers = await this.prisma.supplier.findMany({
-      where: { companyId, isActive: true },
-      include: { account: true },
-      orderBy: { nameAr: 'asc' },
-    });
+    // الجدولان معاً في جولةٍ واحدة إلى القاعدة البعيدة بدل جولتين متتاليتين.
+    const [suppliers, supplierAccounts] = await Promise.all([
+      // 1. Fetch from Supplier table (active only)
+      this.prisma.supplier.findMany({
+        where: { companyId, isActive: true },
+        include: { account: true },
+        orderBy: { nameAr: 'asc' },
+      }),
+      // 2. Also fetch active non-parent leaf accounts with SUPPLIER category or supplier prefix
+      this.prisma.account.findMany({
+        where: {
+          companyId,
+          category: AccountCategory.SUPPLIER,
+          isParent: false,
+          NOT: { overduePolicy: 'BLOCK', paymentMode: 'BLOCKED' },
+        },
+        orderBy: { nameAr: 'asc' },
+      }),
+    ]);
 
     const seenAccountIds = new Set<string>();
     const seenCodes = new Set<string>();
@@ -96,17 +111,6 @@ export class CustomersSuppliersService {
         accountId: s.accountId,
         source: 'supplier' as const,
       });
-    });
-
-    // 2. Also fetch active non-parent leaf accounts with SUPPLIER category or supplier prefix
-    const supplierAccounts = await this.prisma.account.findMany({
-      where: {
-        companyId,
-        category: AccountCategory.SUPPLIER,
-        isParent: false,
-        NOT: { overduePolicy: 'BLOCK', paymentMode: 'BLOCKED' },
-      },
-      orderBy: { nameAr: 'asc' },
     });
 
     const genericHeadings = [

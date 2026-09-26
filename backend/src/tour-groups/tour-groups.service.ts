@@ -165,20 +165,17 @@ export class TourGroupsService {
   };
 
   async list(companyId: string) {
-    const groups = await this.prisma.tourGroup.findMany({
-      where: { companyId },
-      include: this.fullInclude,
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
-
-    const userIds = Array.from(new Set(groups.map((g) => g.createdById).filter(Boolean))) as string[];
-    const users = userIds.length > 0
-      ? await this.prisma.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, name: true },
-        })
-      : [];
+    // أسماء المُنشئين في الجولة نفسها مع الكروبات: مستخدمو الشركة قلّة، وجلبهم
+    // كلَّهم معاً أرخص من جولةٍ ثانية بعد معرفة المعرّفات.
+    const [groups, users] = await Promise.all([
+      this.prisma.tourGroup.findMany({
+        where: { companyId },
+        include: this.fullInclude,
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      }),
+      this.prisma.user.findMany({ where: { companyId }, select: { id: true, name: true } }),
+    ]);
     const userMap = new Map<string, string>(users.map((u) => [u.id, u.name || 'مدير النظام']));
 
     return groups.map((g) => ({ 
@@ -284,15 +281,25 @@ export class TourGroupsService {
   }
 
   async remove(companyId: string, id: string, userId?: string) {
-    const g = await this.assertGroup(companyId, id);
-    // قيود مسافري الكروب مربوطةٌ بمرجعٍ نصّي (GRP-{paxId}) لا بمفتاحٍ يتتالى حذفه،
-    // فتُحذف صراحةً قبل حذف الكروب وإلا بقيت يتيمةً في القيود اليومية.
-    const paxIds = (await this.prisma.groupPassenger.findMany({ where: { groupId: id }, select: { id: true } })).map((p) => p.id);
-    if (paxIds.length) {
-      await this.prisma.journalEntry.deleteMany({ where: { companyId, reference: { in: paxIds.map((pid) => `GRP-${pid}`) } } });
-    }
-    await this.prisma.tourGroup.delete({ where: { id } });
-    await this.audit(companyId, userId, 'GROUP_DELETE', id, { groupName: g.groupName });
+    // كان الحذف خمس جولاتٍ متتالية إلى قاعدةٍ بعيدة (تحقّق، مسافرون، قيود، كروب،
+    // سجلّ) فاستغرق نحو ثلاث ثوانٍ. هنا جولةٌ واحدة: قيود مسافري الكروب — مرجعها
+    // النصّي GRP-{paxId} لا يتتالى حذفه — تُحذف والكروبُ معها في جملةٍ واحدة تعيد
+    // اسمه إن كان له وجود؛ والمسافرون وخدماتهم وأنظمته تتساقط بالحذف المتسلسل.
+    const deleted = await this.prisma.$queryRaw<Array<{ groupName: string }>>`
+      WITH pax AS (
+        SELECT gp.id FROM group_passengers gp
+        JOIN tour_groups tg ON tg.id = gp."groupId"
+        WHERE gp."groupId" = ${id} AND tg."companyId" = ${companyId}
+      ),
+      je AS (
+        DELETE FROM journal_entries
+        WHERE "companyId" = ${companyId} AND reference IN (SELECT 'GRP-' || id FROM pax)
+      )
+      DELETE FROM tour_groups WHERE id = ${id} AND "companyId" = ${companyId}
+      RETURNING "groupName"`;
+    if (!deleted.length) throw new NotFoundException('الكروب غير موجود');
+    // السجلّ لا يُنتظر: كتابته لا تغيّر النتيجة، وانتظارها جولةٌ كاملة أخرى.
+    void this.audit(companyId, userId, 'GROUP_DELETE', id, { groupName: deleted[0].groupName });
     return { deleted: true };
   }
 

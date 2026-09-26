@@ -12,6 +12,9 @@ import { showSuccessNotification, showErrorNotification } from '../../utils/noti
  * إلى مئة. تُحفظ الهوامش كإعدادٍ باسم employee_profit_margins مفتاحُه اسمُ الموظف
  * (كما يُسجَّل موظفَ إصدارٍ على المستندات)، فتقرؤها صفحة «أرباح الموظفين».
  */
+/** اسم الموظف مفتاحاً: فراغات موحَّدة بلا زوائد، مطابقاً لما يعتمده الخادم. */
+const normName = (s: string) => String(s || '').replace(/\s+/g, ' ').trim();
+
 export const EmployeesMarginsSection: React.FC = () => {
   const [employees, setEmployees] = useState<any[]>([]);
   const [margins, setMargins] = useState<Record<string, number>>({});
@@ -32,7 +35,13 @@ export const EmployeesMarginsSection: React.FC = () => {
         const list = Array.isArray(emps) ? emps : (emps as any)?.data || [];
         setEmployees(list);
         const c = (cfg as any)?.config || {};
-        setMargins(c.employees || {});
+        // المفتاح اسم الموظف بعد توحيد فراغاته — كما يطابقه الخادم في التقرير.
+        const loaded: Record<string, number> = {};
+        for (const [k, v] of Object.entries<any>(c.employees || {})) {
+          const key = normName(k);
+          if (key && v !== null && v !== undefined && v !== '') loaded[key] = Number(v);
+        }
+        setMargins(loaded);
         setDefaultMargin(Number(c.defaultEmployeeMargin) || 0);
       } catch {
         /* تُترك القيم الافتراضية */
@@ -47,10 +56,13 @@ export const EmployeesMarginsSection: React.FC = () => {
 
   const setMargin = (name: string, val: string) => {
     const n = Math.max(0, Math.min(100, Number(String(val).replace(/[^\d.]/g, '')) || 0));
-    setMargins((prev) => ({ ...prev, [name]: n }));
+    setMargins((prev) => ({ ...prev, [normName(name)]: n }));
   };
 
-  const marginOf = (name: string) => (margins[name] !== undefined && margins[name] !== null ? margins[name] : defaultMargin);
+  const marginOf = (name: string) => {
+    const m = margins[normName(name)];
+    return m !== undefined && m !== null ? m : defaultMargin;
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

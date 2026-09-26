@@ -647,14 +647,18 @@ export const GroupsPage: React.FC = () => {
                 type="button"
                 disabled={deleting}
                 onClick={async () => {
+                  // الصفّ يختفي فوراً والنافذة تُغلق، ثم يُحذف من الخادم؛ فإن أخفق
+                  // عاد الصفّ من الخادم مع رسالة. لا انتظار لجولة الحذف ثم جولة الجلب.
+                  const target = deleteTarget;
                   setDeleting(true);
+                  setRows((prev) => prev.filter((g) => g.id !== target.id));
+                  setDeleteTarget(null);
                   try {
-                    await tourGroupsApi.remove(deleteTarget.id);
-                    showSuccessNotification(isAr ? 'تم الحذف' : 'Deleted', deleteTarget.groupName);
-                    setDeleteTarget(null);
-                    load(true);
+                    await tourGroupsApi.remove(target.id);
+                    showSuccessNotification(isAr ? 'تم الحذف' : 'Deleted', target.groupName);
                   } catch (e: any) {
                     showErrorNotification(isAr ? 'تعذّر الحذف' : 'Failed', e?.message || '');
+                    load(true);
                   } finally {
                     setDeleting(false);
                   }

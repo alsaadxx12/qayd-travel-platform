@@ -3,6 +3,23 @@ import { Prisma, AccountCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseLegacySplitMarker } from '../vouchers/voucher-splits';
 
+/** مبلغٌ بعملتيه: النظام يعمل بالدينار والدولار ولا يخلطهما في رقمٍ واحد. */
+export type CurrencyCode = 'USD' | 'IQD';
+export type Money = Record<CurrencyCode, number>;
+export const zeroMoney = (): Money => ({ USD: 0, IQD: 0 });
+export const addMoney = (a: Money, b: Money): Money => ({ USD: a.USD + b.USD, IQD: a.IQD + b.IQD });
+export const mapMoney = (m: Money, f: (v: number, c: CurrencyCode) => number): Money => ({ USD: f(m.USD, 'USD'), IQD: f(m.IQD, 'IQD') });
+/** العملة من نصّها كما تُكتب في المستندات: «USD» أو «$» دولار، وما سواه دينار. */
+export const currencyOf = (c: string | null | undefined): CurrencyCode => {
+  const s = String(c || '').toUpperCase();
+  return s.includes('USD') || s.includes('$') ? 'USD' : 'IQD';
+};
+/** تحويل مبلغ بين العملتين بسعر صرف (دينار لكل دولار). سعرٌ غير معقول (≤ 1) يعني «لا تحويل». */
+export const convertMoney = (amount: number, from: CurrencyCode, to: CurrencyCode, rate: number): number => {
+  if (from === to || !(rate > 1)) return amount;
+  return from === 'USD' ? amount * rate : amount / rate;
+};
+
 @Injectable()
 export class ReportsService {
   private debtsCache = new Map<string, { data: unknown; timestamp: number }>();
@@ -1292,6 +1309,13 @@ export class ReportsService {
    * أرباح الموظفين: يجمع ربح المستندات على موظّف الإصدار، ويقسمه بين الموظف
    * والشركة وفق هامش الربح المحفوظ لكل موظف (وإلا الهامش الافتراضي). الهوامش
    * تُخزَّن كإعدادٍ باسم employee_profit_margins في مخزن القوالب.
+   *
+   * كل مبلغ بعملته: الدينار والدولار لا يُجمعان في رقمٍ واحد ولا يُلبَس أحدهما
+   * رمز الآخر. تذكرةٌ بالدينار تُعدّ ديناراً، ومسافر كروبٍ بالدينار كذلك، ولكل
+   * موظفٍ مبلغان (USD وIQD) في كل عمود.
+   *
+   * القاعدة بعيدة فكل جولةٍ إليها تُحسب: الاستعلامات الأربعة تنطلق معاً في
+   * جولةٍ واحدة بدل جولتين متتاليتين.
    */
   async getEmployeeProfits(companyId: string, branchId?: string, startDate?: string, endDate?: string) {
     const start = startDate ? new Date(startDate.includes('T') ? startDate : `${startDate}T00:00:00.000Z`) : undefined;
@@ -1306,10 +1330,10 @@ export class ReportsService {
 
     // مسافرو الكروبات الجديدة جدولٌ مستقل لا تذاكر — يُنسبون لمُنشئ الكروب.
     const paxDateFilter = start || end ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } } : {};
-    const [tickets, marginRow, groupPassengers] = await Promise.all([
+    const [tickets, marginRow, groupPassengers, users] = await Promise.all([
       this.prisma.ticket.findMany({
         where: { companyId, status: { not: 'CANCELLED' }, ...branchFilter, ...dateFilter },
-        select: { employeeName: true, profit: true, netSell: true, totalSell: true, netBuy: true, totalBuy: true, tripType: true },
+        select: { employeeName: true, currency: true, profit: true, netSell: true, totalSell: true, netBuy: true, totalBuy: true },
       }),
       this.prisma.printTemplate.findFirst({ where: { companyId, docType: 'employee_profit_margins' } }),
       this.prisma.groupPassenger.findMany({
@@ -1318,94 +1342,120 @@ export class ReportsService {
           group: { companyId, ...(branchId && branchId !== 'ALL' ? { branchId } : {}) },
           ...paxDateFilter,
         },
-        select: { salePrice: true, services: { select: { finalBuy: true } }, group: { select: { createdById: true } } },
+        select: {
+          salePrice: true,
+          currency: true,
+          services: { select: { finalBuy: true, expectedBuy: true, currency: true } },
+          group: { select: { createdById: true, exchangeRate: true } },
+        },
       }),
+      // أسماء مُنشئي الكروبات: مستخدمو الشركة قلّة، فجلبهم كلَّهم في الجولة نفسها
+      // أرخص من جولةٍ ثانية بعد معرفة المعرّفات.
+      this.prisma.user.findMany({ where: { companyId }, select: { id: true, name: true } }),
     ]);
+    const creatorName = new Map<string, string>(users.map((u) => [u.id, u.name || '']));
 
-    // اسم مُنشئ الكروب (موظّف الإصدار للكروب) من معرّفه.
-    const creatorIds = Array.from(new Set(groupPassengers.map((p) => p.group?.createdById).filter(Boolean))) as string[];
-    const creators = creatorIds.length
-      ? await this.prisma.user.findMany({ where: { id: { in: creatorIds } }, select: { id: true, name: true } })
-      : [];
-    const creatorName = new Map<string, string>(creators.map((u) => [u.id, u.name || '']));
+    // الاسم مفتاح المطابقة بين المستند وإعداد الهامش: يُوحَّد بحذف الفراغات
+    // الزائدة وضمّ المتتالية منها، فلا يضيع هامشٌ حُفظ باسمٍ ذي فراغٍ في آخره.
+    const norm = (s: string | null | undefined) => String(s || '').replace(/\s+/g, ' ').trim();
 
-    let marginByName: Record<string, number> = {};
+    const marginByName: Record<string, number> = {};
     let defaultEmployeeMargin = 0;
     try {
       const cfg = JSON.parse(marginRow?.config || '{}');
-      marginByName = cfg.employees || {};
+      for (const [k, v] of Object.entries<any>(cfg.employees || {})) {
+        const key = norm(k);
+        if (key && v !== null && v !== undefined && v !== '') marginByName[key] = Number(v);
+      }
       defaultEmployeeMargin = Number(cfg.defaultEmployeeMargin) || 0;
     } catch {
       /* إعداد غائب أو تالف — تُستعمل القيم الافتراضية */
     }
 
-    const norm = (s: string | null | undefined) => String(s || '').trim();
-    const map = new Map<string, { employeeName: string; docCount: number; totalSales: number; totalBuy: number; totalProfit: number }>();
+    type Bucket = { employeeName: string; docCount: number; totalSales: Money; totalBuy: Money; totalProfit: Money };
+    const bucket = (employeeName: string): Bucket => ({ employeeName, docCount: 0, totalSales: zeroMoney(), totalBuy: zeroMoney(), totalProfit: zeroMoney() });
+    const add = (b: Bucket, cur: CurrencyCode, sale: number, buy: number, profit: number) => {
+      b.docCount += 1;
+      b.totalSales[cur] += sale;
+      b.totalBuy[cur] += buy;
+      b.totalProfit[cur] += profit;
+    };
+
+    // مستندٌ بلا موظّف إصدار لا يُنسب لأحد: يُعدّ على حدة ولا يظهر صفّاً في
+    // الجدول ولا يدخل في حصص الموظفين — حتى لا يُقرأ ربحٌ لا صاحب له على أنه رقم.
+    const unassigned = bucket('');
+    const map = new Map<string, Bucket>();
+    const rowFor = (name: string) => {
+      if (!name) return unassigned;
+      let b = map.get(name);
+      if (!b) { b = bucket(name); map.set(name, b); }
+      return b;
+    };
+
     for (const t of tickets) {
-      const name = norm(t.employeeName) || 'غير محدّد';
-      const row = map.get(name) || { employeeName: name, docCount: 0, totalSales: 0, totalBuy: 0, totalProfit: 0 };
-      row.docCount += 1;
-      row.totalSales += Number(t.netSell ?? t.totalSell) || 0;
-      row.totalBuy += Number(t.netBuy ?? t.totalBuy) || 0;
-      row.totalProfit += Number(t.profit) || 0;
-      map.set(name, row);
+      add(
+        rowFor(norm(t.employeeName)),
+        currencyOf(t.currency),
+        Number(t.netSell ?? t.totalSell) || 0,
+        Number(t.netBuy ?? t.totalBuy) || 0,
+        Number(t.profit) || 0,
+      );
     }
 
-    // ربح مسافر الكروب = سعر البيع − مجموع الشراء الفعلي؛ يُنسب لمُنشئ الكروب.
+    // ربح مسافر الكروب = سعر البيع − كلفة خدماته: الشراء النهائي إن أُقفل،
+    // وإلا المتوقَّع (قاعدة القيود نفسها) — لا صفرٌ يجعل البيع كلَّه ربحاً.
+    // خدمةٌ بعملةٍ غير عملة البيع تُحوَّل بسعر صرف الكروب (دينار لكل دولار).
     for (const gp of groupPassengers) {
-      const name = norm(creatorName.get(gp.group?.createdById || '')) || 'غير محدّد';
-      const buy = (gp.services || []).reduce((a, s) => a + (s.finalBuy !== null && s.finalBuy !== undefined ? Number(s.finalBuy) : 0), 0);
+      const cur = currencyOf(gp.currency);
+      const rate = Number(gp.group?.exchangeRate) || 0;
+      const buy = (gp.services || []).reduce((a, sv) => {
+        const raw = sv.finalBuy !== null && sv.finalBuy !== undefined ? Number(sv.finalBuy) : Number(sv.expectedBuy) || 0;
+        return a + convertMoney(raw, currencyOf(sv.currency), cur, rate);
+      }, 0);
       const sale = Number(gp.salePrice) || 0;
-      const row = map.get(name) || { employeeName: name, docCount: 0, totalSales: 0, totalBuy: 0, totalProfit: 0 };
-      row.docCount += 1;
-      row.totalSales += sale;
-      row.totalBuy += buy;
-      row.totalProfit += sale - buy;
-      map.set(name, row);
+      add(rowFor(norm(creatorName.get(gp.group?.createdById || ''))), cur, sale, buy, sale - buy);
     }
 
     const rows = Array.from(map.values())
       .map((r) => {
         const raw = marginByName[r.employeeName];
         const employeeMargin = Math.max(0, Math.min(100, raw !== undefined && raw !== null ? Number(raw) : defaultEmployeeMargin));
-        const employeeShare = (r.totalProfit * employeeMargin) / 100;
-        return {
-          ...r,
-          employeeMargin,
-          companyMargin: 100 - employeeMargin,
-          employeeShare,
-          companyShare: r.totalProfit - employeeShare,
-        };
+        const employeeShare = mapMoney(r.totalProfit, (v) => Math.round(v * employeeMargin) / 100);
+        const companyShare = mapMoney(r.totalProfit, (v, c) => Math.round((v - employeeShare[c]) * 100) / 100);
+        return { ...r, employeeMargin, companyMargin: 100 - employeeMargin, employeeShare, companyShare };
       })
-      .sort((a, b) => b.totalProfit - a.totalProfit);
+      .sort((a, b) => b.docCount - a.docCount || a.employeeName.localeCompare(b.employeeName, 'ar'));
 
     const totals = rows.reduce(
       (acc, r) => ({
         docCount: acc.docCount + r.docCount,
-        totalSales: acc.totalSales + r.totalSales,
-        totalBuy: acc.totalBuy + r.totalBuy,
-        totalProfit: acc.totalProfit + r.totalProfit,
-        employeeShare: acc.employeeShare + r.employeeShare,
-        companyShare: acc.companyShare + r.companyShare,
+        totalSales: addMoney(acc.totalSales, r.totalSales),
+        totalBuy: addMoney(acc.totalBuy, r.totalBuy),
+        totalProfit: addMoney(acc.totalProfit, r.totalProfit),
+        employeeShare: addMoney(acc.employeeShare, r.employeeShare),
+        companyShare: addMoney(acc.companyShare, r.companyShare),
       }),
-      { docCount: 0, totalSales: 0, totalBuy: 0, totalProfit: 0, employeeShare: 0, companyShare: 0 },
+      { docCount: 0, totalSales: zeroMoney(), totalBuy: zeroMoney(), totalProfit: zeroMoney(), employeeShare: zeroMoney(), companyShare: zeroMoney() },
     );
 
-    return { rows, totals, defaultEmployeeMargin };
+    const { employeeName: _omit, ...unassignedOut } = unassigned;
+    return { rows, totals, unassigned: unassignedOut, defaultEmployeeMargin, marginByName };
   }
 
   /**
    * حصّة الموظف الحالي من الأرباح — لمحفظة الشريط العلوي. تعيد ربحَه الإجمالي
-   * وحصّته وهامشَه ضمن المدة (أو تراكمياً بلا مدة)، مطابقةً باسم موظّف الإصدار.
+   * وحصّته بكل عملة وهامشَه ضمن المدة (أو تراكمياً بلا مدة)، مطابقةً باسم موظّف الإصدار.
    */
   async getMyProfitShare(companyId: string, userName?: string, startDate?: string, endDate?: string) {
-    const name = String(userName || '').trim();
-    if (!name) return { profit: 0, share: 0, margin: 0, docCount: 0 };
+    const norm = (s: string) => String(s || '').replace(/\s+/g, ' ').trim();
+    const key = norm(userName || '');
+    if (!key) return { profit: zeroMoney(), share: zeroMoney(), margin: 0, docCount: 0 };
     const all = await this.getEmployeeProfits(companyId, undefined, startDate, endDate);
-    const norm = (s: string) => String(s || '').trim();
-    const row = all.rows.find((r) => norm(r.employeeName) === name);
-    return row
-      ? { profit: row.totalProfit, share: row.employeeShare, margin: row.employeeMargin, docCount: row.docCount }
-      : { profit: 0, share: 0, margin: all.defaultEmployeeMargin, docCount: 0 };
+    const row = all.rows.find((r) => norm(r.employeeName) === key);
+    if (row) return { profit: row.totalProfit, share: row.employeeShare, margin: row.employeeMargin, docCount: row.docCount };
+    // بلا مستندات في المدة: الهامش المعروض هامشُه المضبوط هو، لا الافتراضي.
+    const own = all.marginByName[key];
+    const margin = Math.max(0, Math.min(100, own !== undefined && own !== null ? Number(own) : all.defaultEmployeeMargin));
+    return { profit: zeroMoney(), share: zeroMoney(), margin, docCount: 0 };
   }
 }

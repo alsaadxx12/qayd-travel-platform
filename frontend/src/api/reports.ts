@@ -190,28 +190,36 @@ export function getDebtAmountTrace(accountId: string, signal?: AbortSignal) {
   );
 }
 
+/** مبلغٌ بعملتيه: الدينار والدولار لا يُجمعان في رقمٍ واحد. */
+export interface Money {
+  USD: number;
+  IQD: number;
+}
+
 export interface EmployeeProfitRow {
   employeeName: string;
   docCount: number;
-  totalSales: number;
-  totalBuy: number;
-  totalProfit: number;
+  totalSales: Money;
+  totalBuy: Money;
+  totalProfit: Money;
   employeeMargin: number;
   companyMargin: number;
-  employeeShare: number;
-  companyShare: number;
+  employeeShare: Money;
+  companyShare: Money;
 }
 
 export interface EmployeeProfitsResponse {
   rows: EmployeeProfitRow[];
   totals: {
     docCount: number;
-    totalSales: number;
-    totalBuy: number;
-    totalProfit: number;
-    employeeShare: number;
-    companyShare: number;
+    totalSales: Money;
+    totalBuy: Money;
+    totalProfit: Money;
+    employeeShare: Money;
+    companyShare: Money;
   };
+  /** مستندات بلا موظّف إصدار: تُعدّ على حدة ولا تدخل في الجدول ولا في الحصص. */
+  unassigned?: { docCount: number; totalSales: Money; totalBuy: Money; totalProfit: Money };
   defaultEmployeeMargin: number;
 }
 
@@ -225,8 +233,8 @@ export function getEmployeeProfits(params?: { startDate?: string; endDate?: stri
 }
 
 export interface MyProfitShare {
-  profit: number;
-  share: number;
+  profit: Money;
+  share: Money;
   margin: number;
   docCount: number;
 }

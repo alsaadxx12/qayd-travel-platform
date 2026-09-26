@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Switch, Badge, Modal, TextInput, Textarea, Button, Select, NumberInput } from '@mantine/core';
+import { Switch, Badge, Modal, TextInput, Textarea, Button, Select, NumberInput, PasswordInput, CopyButton, Tooltip } from '@mantine/core';
 import {
   IconBrandWhatsapp,
   IconBuildingStore,
@@ -14,6 +14,9 @@ import {
   IconPlugConnected,
   IconSparkles,
   IconUsers,
+  IconCopy,
+  IconAlertCircle,
+  IconExternalLink,
 } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
@@ -26,6 +29,7 @@ import { useLanguageStore } from '../store/useLanguageStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { aiAssistantApi, type AiBillingSnapshot } from '../api/aiAssistant';
 import { hrApi } from '../api/hr';
+import { whatsappApi, type WhatsAppSettingsView, type WhatsAppStatus } from '../api/whatsapp';
 
 export const AddonsStorePage: React.FC = () => {
   const { language, direction } = useLanguageStore();
@@ -58,6 +62,91 @@ export const AddonsStorePage: React.FC = () => {
       : 'Hello, this is a live test email confirming that the Brevo integration is successfully configured for account statements and financial reports.'
   );
   const [sendingTest, setSendingTest] = useState(false);
+
+  // ── بوابة واتساب السحابية (Meta Cloud API) ──
+  const [waModalOpen, setWaModalOpen] = useState(false);
+  const [waSettings, setWaSettings] = useState<WhatsAppSettingsView | null>(null);
+  const [waStatus, setWaStatus] = useState<WhatsAppStatus | null>(null);
+  const [waLoading, setWaLoading] = useState(false);
+  const [waSaving, setWaSaving] = useState(false);
+  const [waTesting, setWaTesting] = useState(false);
+  const [waForm, setWaForm] = useState({ phoneNumberId: '', wabaId: '', accessToken: '', appSecret: '', defaultCountryCode: '964', testTemplateName: 'hello_world', testTemplateLang: 'en_US' });
+  const [waTestPhone, setWaTestPhone] = useState('');
+  const [waTestMode, setWaTestMode] = useState<'template' | 'text'>('template');
+  /** عنوان الـWebhook على دومن الموقع كما يحسبه الخادم (الـWorker يمرّر /api إليه). */
+  const waWebhookUrl = waSettings?.webhookUrl || '';
+
+  const applyWaSettings = (st: WhatsAppSettingsView) => {
+    setWaSettings(st);
+    setWaForm((f) => ({
+      ...f,
+      phoneNumberId: st.phoneNumberId || '',
+      wabaId: st.wabaId || '',
+      accessToken: '',
+      appSecret: '',
+      defaultCountryCode: st.defaultCountryCode || '964',
+      testTemplateName: st.testTemplateName || 'hello_world',
+      testTemplateLang: st.testTemplateLang || 'en_US',
+    }));
+  };
+
+  const fetchWhatsApp = async (withStatus = true) => {
+    setWaLoading(true);
+    try {
+      const st = await whatsappApi.getSettings();
+      applyWaSettings(st);
+      if (withStatus && st.configured) setWaStatus(await whatsappApi.getStatus());
+      else if (!st.configured) setWaStatus(null);
+    } catch (e: any) {
+      console.error('Failed to load WhatsApp settings:', e);
+    } finally {
+      setWaLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWhatsApp(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSaveWhatsApp = async (enable?: boolean) => {
+    if (!waForm.phoneNumberId.trim() || (!waForm.accessToken.trim() && !waSettings?.hasAccessToken)) {
+      showErrorNotification(isAr ? 'بيانات ناقصة' : 'Missing data', isAr ? 'Phone Number ID ورمز الوصول مطلوبان.' : 'Phone Number ID and access token are required.');
+      return;
+    }
+    setWaSaving(true);
+    try {
+      const st = await whatsappApi.saveSettings({
+        ...waForm,
+        accessToken: waForm.accessToken.trim() || undefined,
+        appSecret: waForm.appSecret.trim() || undefined,
+        enabled: enable ?? waSettings?.enabled ?? true,
+      });
+      applyWaSettings(st);
+      showSuccessNotification(isAr ? 'تم الحفظ' : 'Saved', isAr ? 'حُفظت بيانات ربط واتساب. جارٍ فحص الاتصال…' : 'WhatsApp settings saved. Checking connection…');
+      setWaStatus(await whatsappApi.getStatus());
+    } catch (e: any) {
+      showErrorNotification(isAr ? 'تعذّر الحفظ' : 'Save failed', e?.message || '');
+    } finally {
+      setWaSaving(false);
+    }
+  };
+
+  const handleTestWhatsApp = async () => {
+    if (!waTestPhone.trim()) {
+      showErrorNotification(isAr ? 'تنبيه' : 'Notice', isAr ? 'أدخل رقم الهاتف الذي تريد إرسال التجربة إليه.' : 'Enter the phone number to send the test to.');
+      return;
+    }
+    setWaTesting(true);
+    try {
+      const r = await whatsappApi.sendTest({ to: waTestPhone.trim(), mode: waTestMode });
+      showSuccessNotification(isAr ? 'أُرسلت' : 'Sent', isAr ? `وصلت إلى Meta برقم رسالة ${r.messageId.slice(-10)} إلى ${r.to}` : `Accepted by Meta (id …${r.messageId.slice(-10)}) to ${r.to}`);
+    } catch (e: any) {
+      showErrorNotification(isAr ? 'فشل الإرسال' : 'Send failed', e?.message || '');
+    } finally {
+      setWaTesting(false);
+    }
+  };
 
   // Addons toggle state stored locally
   const [enabledAddons, setEnabledAddons] = useState<Record<string, boolean>>(() => {
@@ -373,13 +462,19 @@ export const AddonsStorePage: React.FC = () => {
       tagType: 'subscription' as const,
       tagLabel: isAr ? 'واتساب للأعمال' : 'WhatsApp API',
       statLabel1: isAr ? 'حالة البوابة' : 'Gateway Status',
-      statVal1: isAr ? 'جاهز للربط' : 'Ready',
-      statLabel2: isAr ? 'نوع الإرسال' : 'Messaging',
-      statVal2: isAr ? 'تذاكر وفواتير' : 'Tickets & Invoices',
-      statLabel3: isAr ? 'التسليم' : 'Delivery',
-      statVal3: isAr ? 'فوري' : 'Instant',
-      isConfigurable: false,
-      manageLabel: '',
+      statVal1: !waSettings?.configured
+        ? (isAr ? 'غير مربوطة' : 'Not linked')
+        : waStatus?.ok
+          ? (isAr ? 'متصلة ✔' : 'Connected ✔')
+          : waStatus
+            ? (isAr ? 'خطأ في الربط' : 'Link error')
+            : (isAr ? 'جارٍ الفحص…' : 'Checking…'),
+      statLabel2: isAr ? 'رقم الإرسال' : 'Sender Number',
+      statVal2: waStatus?.displayPhone || waSettings?.displayPhone || '—',
+      statLabel3: isAr ? 'جودة الرقم' : 'Quality',
+      statVal3: waStatus?.qualityRating || waSettings?.qualityRating || '—',
+      isConfigurable: true,
+      manageLabel: isAr ? 'إعدادات الربط' : 'Link settings',
     },
     {
       id: 'hr_employee_management',
@@ -548,6 +643,9 @@ export const AddonsStorePage: React.FC = () => {
                       } else if (isAiAddon) {
                         setAiModalOpen(true);
                         fetchAiBilling(true);
+                      } else if (addon.id === 'whatsapp_otp') {
+                        setWaModalOpen(true);
+                        fetchWhatsApp(true);
                       } else if (addon.id === 'hr_employee_management') {
                         openTab({
                           id: 'employee-salaries',
@@ -597,6 +695,207 @@ export const AddonsStorePage: React.FC = () => {
           <span>{isAr ? 'تحديث البيانات' : 'Refresh Data'}</span>
         </button>
       </div>
+
+      {/* ── WhatsApp Cloud API (Meta) Link Modal ── */}
+      <Modal
+        opened={waModalOpen}
+        onClose={() => setWaModalOpen(false)}
+        size="md"
+        centered
+        radius="xl"
+        title={
+          <div className="flex items-center gap-2 text-slate-900 font-black text-sm">
+            <IconBrandWhatsapp size={19} className="text-emerald-600" />
+            <span>{isAr ? 'ربط واتساب (Meta Cloud API)' : 'WhatsApp (Meta Cloud API)'}</span>
+          </div>
+        }
+      >
+        <div
+          className="space-y-3 text-xs"
+          dir={direction}
+          style={{ fontFamily: isAr ? "'IBM Plex Sans Arabic', system-ui, sans-serif" : "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif" }}
+        >
+          {/* الحالة */}
+          <div className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${waStatus?.ok ? 'bg-emerald-50 border-emerald-200' : waSettings?.configured ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-200'}`}>
+            <span className="inline-flex items-center gap-1.5 font-black text-slate-900">
+              <span className={`w-2 h-2 rounded-full ${waStatus?.ok ? 'bg-emerald-500 animate-pulse' : waSettings?.configured ? 'bg-rose-500' : 'bg-slate-400'}`}></span>
+              <span>
+                {waLoading
+                  ? (isAr ? 'جارٍ الفحص…' : 'Checking…')
+                  : !waSettings?.configured
+                    ? (isAr ? 'غير مربوطة' : 'Not linked')
+                    : waStatus?.ok
+                      ? (isAr ? 'متصلة' : 'Connected')
+                      : (isAr ? 'فشل الفحص' : 'Check failed')}
+              </span>
+            </span>
+            <span className="font-mono font-bold text-slate-700 truncate" dir="ltr">
+              {[waStatus?.displayPhone || waSettings?.displayPhone, waStatus?.verifiedName || waSettings?.verifiedName, waStatus?.qualityRating].filter(Boolean).join(' · ')}
+            </span>
+          </div>
+          {waStatus && !waStatus.ok && waStatus.error && (
+            <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-rose-800 font-bold leading-snug">
+              <IconAlertCircle size={14} className="shrink-0 mt-0.5" />
+              <span>{waStatus.error}</span>
+            </div>
+          )}
+
+          {/* 1. بيانات الربط */}
+          <div className="rounded-xl border border-slate-200 p-3 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-black text-slate-900">{isAr ? '١. بيانات الربط' : '1. Credentials'}</span>
+              <a href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 hover:underline">
+                <IconExternalLink size={12} />
+                <span>{isAr ? 'لوحة Meta' : 'Meta dashboard'}</span>
+              </a>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <TextInput
+                size="xs"
+                autoComplete="off"
+                name="wa-field"
+                label="Phone Number ID"
+                required
+                value={waForm.phoneNumberId}
+                onChange={(e) => setWaForm({ ...waForm, phoneNumberId: e.currentTarget.value })}
+                styles={{ input: { fontFamily: 'monospace', fontWeight: 700, direction: 'ltr' } }}
+              />
+              <TextInput
+                size="xs"
+                autoComplete="off"
+                name="wa-field"
+                label="Business Account ID"
+                value={waForm.wabaId}
+                onChange={(e) => setWaForm({ ...waForm, wabaId: e.currentTarget.value })}
+                styles={{ input: { fontFamily: 'monospace', fontWeight: 700, direction: 'ltr' } }}
+              />
+              <PasswordInput
+                size="xs"
+                autoComplete="new-password"
+                name="wa-secret"
+                className="col-span-2"
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>Access Token</span>
+                    {waSettings?.hasAccessToken && <Badge size="xs" color="teal" variant="light">{isAr ? `محفوظ ${waSettings.accessTokenMasked.slice(-4)}` : `saved ${waSettings.accessTokenMasked.slice(-4)}`}</Badge>}
+                  </span>
+                }
+                required={!waSettings?.hasAccessToken}
+                value={waForm.accessToken}
+                onChange={(e) => setWaForm({ ...waForm, accessToken: e.currentTarget.value })}
+                styles={{ innerInput: { fontFamily: 'monospace', direction: 'ltr' } }}
+              />
+              <PasswordInput
+                size="xs"
+                autoComplete="new-password"
+                name="wa-secret"
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    <span>App Secret</span>
+                    {waSettings?.hasAppSecret && <Badge size="xs" color="teal" variant="light">{isAr ? 'محفوظ' : 'saved'}</Badge>}
+                  </span>
+                }
+                value={waForm.appSecret}
+                onChange={(e) => setWaForm({ ...waForm, appSecret: e.currentTarget.value })}
+                styles={{ innerInput: { fontFamily: 'monospace', direction: 'ltr' } }}
+              />
+              <TextInput
+                size="xs"
+                autoComplete="off"
+                name="wa-field"
+                label={isAr ? 'رمز الدولة' : 'Country code'}
+                value={waForm.defaultCountryCode}
+                onChange={(e) => setWaForm({ ...waForm, defaultCountryCode: e.currentTarget.value })}
+                styles={{ input: { fontFamily: 'monospace', fontWeight: 700, direction: 'ltr' } }}
+              />
+            </div>
+            <p className="text-[10.5px] text-slate-500 font-medium leading-snug">
+              {isAr
+                ? 'المعرّفان من WhatsApp ← API Setup. الرمز الدائم من Business Settings ← System Users. الحقل الفارغ يُبقي المحفوظ.'
+                : 'IDs: WhatsApp → API Setup. Permanent token: Business Settings → System Users. Empty fields keep saved values.'}
+            </p>
+            <div className="flex items-center justify-between gap-2 flex-wrap pt-0.5">
+              <div className="flex items-center gap-2">
+                <Button size="xs" color="teal" loading={waSaving} onClick={() => handleSaveWhatsApp(true)} leftSection={<IconCheck size={14} />} className="font-black">
+                  {isAr ? 'حفظ وفحص' : 'Save & check'}
+                </Button>
+                <Button size="xs" variant="subtle" color="gray" loading={waLoading} onClick={() => fetchWhatsApp(true)} leftSection={<IconRefresh size={14} />} className="font-bold">
+                  {isAr ? 'فحص' : 'Check'}
+                </Button>
+              </div>
+              {waSettings?.configured && (
+                <Switch
+                  size="xs"
+                  color="teal"
+                  checked={Boolean(waSettings.enabled)}
+                  onChange={(e) => handleSaveWhatsApp(e.currentTarget.checked)}
+                  label={<span className="text-[11px] font-black">{isAr ? 'مفعّلة' : 'Enabled'}</span>}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* 2. Webhook */}
+          <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+            <span className="font-black text-slate-900 block">{isAr ? '٢. Webhook' : '2. Webhook'}</span>
+            {[
+              { label: 'Callback URL', value: waWebhookUrl },
+              { label: 'Verify Token', value: waSettings?.verifyToken || '' },
+            ].map((row) => (
+              <div key={row.label} className="flex items-center gap-2">
+                <span className="text-[10.5px] font-bold text-slate-500 w-20 shrink-0">{row.label}</span>
+                <code className="flex-1 min-w-0 truncate bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-mono text-slate-900" dir="ltr" title={row.value}>{row.value || '—'}</code>
+                <CopyButton value={row.value}>
+                  {({ copied, copy }) => (
+                    <Tooltip label={copied ? (isAr ? 'نُسخ' : 'Copied') : (isAr ? 'نسخ' : 'Copy')} withArrow>
+                      <button type="button" onClick={copy} className="w-7 h-7 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 flex items-center justify-center text-slate-600 cursor-pointer">
+                        {copied ? <IconCheck size={14} className="text-emerald-600" /> : <IconCopy size={14} />}
+                      </button>
+                    </Tooltip>
+                  )}
+                </CopyButton>
+              </div>
+            ))}
+            <p className="text-[10.5px] text-slate-500 font-medium leading-snug">
+              {isAr ? 'تُلصق في WhatsApp ← Configuration ← Webhook مع الاشتراك في messages. يلزم عنوان الخادم العام.' : 'Paste under WhatsApp → Configuration → Webhook and subscribe to messages. Needs the public API URL.'}
+            </p>
+          </div>
+
+          {/* 3. تجربة */}
+          <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+            <span className="font-black text-slate-900 block">{isAr ? '٣. رسالة تجريبية' : '3. Test message'}</span>
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
+              <TextInput
+                size="xs"
+                autoComplete="off"
+                name="wa-field"
+                label={isAr ? 'رقم المستلم' : 'Recipient'}
+                value={waTestPhone}
+                onChange={(e) => setWaTestPhone(e.currentTarget.value)}
+                styles={{ input: { fontFamily: 'monospace', fontWeight: 700, direction: 'ltr' } }}
+              />
+              <Select
+                size="xs"
+                label={isAr ? 'النوع' : 'Type'}
+                w={130}
+                data={[
+                  { value: 'template', label: isAr ? 'قالب' : 'Template' },
+                  { value: 'text', label: isAr ? 'نص' : 'Text' },
+                ]}
+                value={waTestMode}
+                onChange={(v) => setWaTestMode((v as 'template' | 'text') || 'template')}
+                allowDeselect={false}
+              />
+              <Button size="xs" color="orange" loading={waTesting} disabled={!waSettings?.configured} onClick={handleTestWhatsApp} leftSection={<IconSend size={14} />} className="font-black">
+                {isAr ? 'إرسال' : 'Send'}
+              </Button>
+            </div>
+            <p className="text-[10.5px] text-slate-500 font-medium leading-snug">
+              {isAr ? 'القالب يصل دائماً؛ النص فقط خلال 24 ساعة من رسالة العميل. قبل الاعتماد: خمسة أرقام مسموحة فقط.' : 'Template always delivers; text only within 24h of a customer message. Before approval: 5 allowed numbers only.'}
+            </p>
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Brevo Account & Test Email Modal ── */}
       <Modal

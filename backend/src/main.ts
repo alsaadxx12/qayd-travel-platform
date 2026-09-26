@@ -10,7 +10,9 @@ import { json, urlencoded } from 'express';
 import compression from 'compression';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: توقيع Webhook واتساب (X-Hub-Signature-256) يُحسب على الجسم الخام
+  // كما وصل، لا على JSON بعد إعادة تسلسله.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // خلف موازن التحميل يصل الطلب كله من عنوان الموازن نفسه؛ الوثوق بالوسيط الأول
   // يجعل حدَّ المعدل يحاسب عنوانَ العميل الحقيقي من X-Forwarded-For لا الموازن.
